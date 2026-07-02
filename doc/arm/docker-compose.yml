@@ -1,0 +1,60 @@
+
+services:
+  frontend:
+    image: spfantop/fantetic-terminal-frontend:latest
+    container_name: fantetic-terminal-frontend
+    ports:
+      - "18111:80"
+    depends_on:
+      - backend
+      # - remote-gateway
+    networks:
+      - fantetic-terminal-network
+
+  backend:
+    image: spfantop/fantetic-terminal-backend:latest
+    container_name: fantetic-terminal-backend
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      # REMOTE_GATEWAY_API_BASE: http://remote-gateway:9090
+    volumes:
+      - ./data:/app/data
+    networks:
+      - fantetic-terminal-network
+
+  # remote-gateway:
+  #   image: spfantop/fantetic-terminal-remote-gateway:latest
+  #   container_name: fantetic-terminal-remote-gateway
+  #   environment:
+  #     GUACD_HOST: guacd
+  #     GUACD_PORT: 4822
+  #     REMOTE_GATEWAY_API_PORT: 9090
+  #     REMOTE_GATEWAY_WS_PORT: 8080
+  #     FRONTEND_URL: http://frontend
+  #     MAIN_BACKEND_URL: http://backend:3001
+  #     NODE_ENV: production
+  #   networks:
+  #     - fantetic-terminal-network
+  #   depends_on:
+  #     - guacd
+  #     - backend
+
+  # guacd:
+  #   image: guacamole/guacd:latest
+  #   container_name: fantetic-terminal-guacd
+  #   networks:
+  #     - fantetic-terminal-network
+  #   restart: unless-stopped
+
+networks:
+  fantetic-terminal-network:
+    driver: bridge
+    name: fantetic-terminal-network
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: fd01::/80    
+          gateway: fd01::1    
