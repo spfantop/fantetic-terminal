@@ -11,6 +11,7 @@ export function useSystemSettings() {
     settings,
     language: storeLanguage,
     timezone: storeTimezone,
+    statusMonitorEnabledBoolean,
     statusMonitorIntervalSecondsNumber,
     dockerManagerEnabledBoolean,
     dockerDefaultExpandBoolean, // Assuming this comes from settings store
@@ -86,6 +87,7 @@ export function useSystemSettings() {
   };
 
   // --- Status Monitor ---
+  const statusMonitorEnabled = ref(true);
   const statusMonitorIntervalLocal = ref(3);
   const statusMonitorLoading = ref(false);
   const statusMonitorMessage = ref('');
@@ -100,7 +102,10 @@ export function useSystemSettings() {
       if (isNaN(intervalValue) || intervalValue < 1 || !Number.isInteger(intervalValue)) {
         throw new Error(t('settings.statusMonitor.error.invalidInterval'));
       }
-      await settingsStore.updateSetting('statusMonitorIntervalSeconds', String(intervalValue));
+      await settingsStore.updateMultipleSettings({
+        statusMonitorEnabled: statusMonitorEnabled.value ? 'true' : 'false',
+        statusMonitorIntervalSeconds: String(intervalValue),
+      });
       statusMonitorMessage.value = t('settings.statusMonitor.success.saved');
       statusMonitorSuccess.value = true;
     } catch (error: any) {
@@ -148,6 +153,7 @@ export function useSystemSettings() {
   // Watch for changes in settings from the store and update local refs
   watch(settings, (newSettings) => {
     if (newSettings) {
+      statusMonitorEnabled.value = newSettings.statusMonitorEnabled !== 'false';
       statusMonitorIntervalLocal.value = parseInt(newSettings.statusMonitorIntervalSeconds || '3', 10);
       dockerManagerEnabled.value = newSettings.dockerManagerEnabled !== 'false';
       dockerInterval.value = parseInt(newSettings.dockerStatusIntervalSeconds || '2', 10);
@@ -165,6 +171,10 @@ export function useSystemSettings() {
   // Sync local dockerExpandDefault with the store's boolean getter
   watch(dockerDefaultExpandBoolean, (newValue) => {
     dockerExpandDefault.value = newValue;
+  }, { immediate: true });
+
+  watch(statusMonitorEnabledBoolean, (newValue) => {
+    statusMonitorEnabled.value = newValue;
   }, { immediate: true });
 
   // Sync local statusMonitorIntervalLocal with the store's number getter
@@ -200,6 +210,7 @@ export function useSystemSettings() {
     handleUpdateTimezone,
 
     // Status Monitor
+    statusMonitorEnabled,
     statusMonitorIntervalLocal,
     statusMonitorLoading,
     statusMonitorMessage,

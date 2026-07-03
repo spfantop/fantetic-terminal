@@ -252,6 +252,20 @@
   </h3>
   <form @submit.prevent="handleUpdateStatusMonitorInterval" class="space-y-4">
     <div>
+      <label class="inline-flex items-center gap-2 text-sm text-foreground cursor-pointer select-none" for="statusMonitorEnabled">
+        <input
+          id="statusMonitorEnabled"
+          v-model="statusMonitorEnabled"
+          type="checkbox"
+          class="h-4 w-4 rounded border-border text-primary focus:ring-primary cursor-pointer"
+        >
+        <span>{{ t('settings.statusMonitor.enabledLabel') }}</span>
+      </label>
+      <small class="block mt-1 text-xs text-text-secondary">
+        {{ t('settings.statusMonitor.enabledHint') }}
+      </small>
+    </div>
+    <div>
       <label for="statusMonitorInterval" class="block text-sm font-medium text-text-secondary mb-1">
         {{ t('settings.statusMonitor.refreshIntervalLabel') }}
       </label>
@@ -262,7 +276,8 @@
         min="1"
         step="1"
         required
-        class="w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+        :disabled="!statusMonitorEnabled"
+        class="w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:opacity-60 disabled:cursor-not-allowed"
       >
       <small class="block mt-1 text-xs text-text-secondary">
         {{ t('settings.statusMonitor.refreshIntervalHint') }}
@@ -420,6 +435,7 @@ const {
 } = workspaceSettings;
 
 const {
+  statusMonitorEnabled,
   statusMonitorIntervalLocal,
   statusMonitorMessage,
   statusMonitorSuccess,

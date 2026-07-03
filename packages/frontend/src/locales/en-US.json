@@ -630,6 +630,7 @@
     "title": "Server Status",
     "errorPrefix": "Error:",
     "loading": "Waiting for data...",
+    "disabled": "Server status monitoring is disabled",
     "cpuModelLabel": "CPU Model:",
     "osLabel": "OS:",
     "cpuLabel": "CPU:",
@@ -1005,6 +1006,8 @@
     },
     "statusMonitor": {
       "title": "Status Monitor Settings",
+      "enabledLabel": "Enable server status monitoring",
+      "enabledHint": "When disabled, server status, route, and resource monitoring requests are stopped.",
       "refreshIntervalLabel": "Status Refresh Interval (seconds):",
       "refreshIntervalHint": "How often to fetch server CPU, memory, disk, etc. status (minimum 1).",
       "saveButton": "Save Status Monitor Settings",
@@ -1287,6 +1290,7 @@
   "workspaceConnectionList": {
     "untagged": "Untagged",
     "searchPlaceholder": "Search name or host...",
+    "searchPlaceholderWithFolder": "Search connections, folders, or tags...",
     "noResults": "No connections found matching \"{searchTerm}\".",
     "allConnectionsTaggedSuccess": "All connections tagged successfully.",
     "noConnectionsToTag": "No connections to tag.",

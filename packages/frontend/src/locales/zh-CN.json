@@ -630,6 +630,7 @@
     "title": "服务器状态",
     "errorPrefix": "错误:",
     "loading": "等待数据...",
+    "disabled": "服务器状态监控已关闭",
     "cpuModelLabel": "CPU 型号:",
     "osLabel": "系统:",
     "cpuLabel": "CPU:",
@@ -1000,6 +1001,8 @@
     },
     "statusMonitor": {
       "title": "状态监控设置",
+      "enabledLabel": "启用服务器状态监控",
+      "enabledHint": "关闭后不再请求服务器状态、路由和资源监控数据。",
       "refreshIntervalLabel": "状态刷新间隔 (秒):",
       "refreshIntervalHint": "获取服务器 CPU、内存、磁盘等状态的频率（最小为 1）。",
       "saveButton": "保存状态监控设置",
@@ -1291,6 +1294,7 @@
   "workspaceConnectionList": {
     "untagged": "未标记",
     "searchPlaceholder": "搜索名称或主机...",
+    "searchPlaceholderWithFolder": "搜索名称、主机、标签或文件夹...",
     "noResults": "未找到匹配 \"{searchTerm}\" 的连接。",
     "allConnectionsTaggedSuccess": "所有连接已成功添加标签。",
     "noConnectionsToTag": "没有需要添加标签的连接。",

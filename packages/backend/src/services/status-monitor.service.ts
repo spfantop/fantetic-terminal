@@ -772,6 +772,12 @@ export class StatusMonitorService {
     const state = this.clientStates.get(sessionId);
     if (!state || !state.sshClient || state.statusIntervalId) return;
 
+    const enabled = await settingsService.isStatusMonitorEnabled();
+    if (!enabled) {
+      this.stopStatusPolling(sessionId);
+      return;
+    }
+
     let intervalMs: number;
     try {
       const intervalSeconds = await settingsService.getStatusMonitorIntervalSeconds();
@@ -795,6 +801,20 @@ export class StatusMonitorService {
       state.statusIntervalId = undefined;
       this.inFlightSessions.delete(sessionId);
       this.dataAggregator.cleanup(sessionId);
+    }
+  }
+
+  async syncPollingWithEnabledSetting(): Promise<void> {
+    const enabled = await settingsService.isStatusMonitorEnabled();
+    for (const [sessionId, state] of this.clientStates.entries()) {
+      if (!enabled) {
+        this.stopStatusPolling(sessionId);
+        continue;
+      }
+
+      if (state.sshClient && state.ws.readyState === WebSocket.OPEN && !state.statusIntervalId) {
+        await this.startStatusPolling(sessionId);
+      }
     }
   }
 

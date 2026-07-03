@@ -1159,7 +1159,9 @@
             "success": {
                 "saved": "ステータスモニター設定を保存しました。"
             },
-            "title": "ステータスモニター設定"
+            "title": "ステータスモニター設定",
+            "enabledLabel": "サーバーステータス監視を有効にする",
+            "enabledHint": "無効にすると、サーバーステータス、ルート、リソース監視データの取得を停止します。"
         },
         "title": "設定",
         "twoFactor": {
@@ -1300,6 +1302,7 @@
         "gigaBytesPerSecond": "GB/秒",
         "kiloBytesPerSecond": "KB/秒",
         "loading": "データを待機中...",
+        "disabled": "サーバーステータス監視は無効です",
         "megaBytes": "MB",
         "megaBytesPerSecond": "MB/秒",
         "memoryLabel": "メモリ:",
@@ -1596,6 +1599,7 @@
     "workspaceConnectionList": {
         "noResults": "\"{searchTerm}\"に一致する接続は見つかりませんでした。",
         "searchPlaceholder": "名前またはホストを検索...",
+        "searchPlaceholderWithFolder": "接続、フォルダー、タグを検索...",
         "untagged": "タグなし",
         "allConnectionsTaggedSuccess": "すべての接続にタグが正常に追加されました。",
         "noConnectionsToTag": "タグ付けする接続はありません。",

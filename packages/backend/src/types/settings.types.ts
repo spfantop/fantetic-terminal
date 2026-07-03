@@ -66,6 +66,7 @@ export interface UpdateCaptchaSettingsDto {
 export interface AppSettings {
     sidebar?: SidebarConfig;
     captcha?: CaptchaSettings;
+    statusMonitorEnabled?: boolean; // 是否启用状态监控
     showStatusMonitorIpAddress?: boolean; // 是否在状态监视器中显示IP地址
     // 可以添加其他设置模块，例如：
     // security?: SecuritySettings;

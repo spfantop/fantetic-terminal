@@ -67,6 +67,7 @@ interface SettingsState {
   dockerManagerEnabled?: string; // 'true' or 'false' - Docker 管理器控制开关
   dockerStatusIntervalSeconds?: string; //  Docker 状态刷新间隔 (秒)
   dockerDefaultExpand?: string; //  Docker 默认展开详情 'true' or 'false'
+  statusMonitorEnabled?: string; // 'true' or 'false' - 状态监控控制开关
   statusMonitorIntervalSeconds?: string; //  状态监控轮询间隔 (秒)
   workspaceSidebarPersistent?: string; //  工作区侧边栏是否固定 'true' or 'false'
   sidebarPaneWidths?: string; //  存储各侧边栏组件宽度的 JSON 字符串
@@ -179,7 +180,10 @@ export const useSettingsStore = defineStore('settings', () => {
       if (settings.value.dockerDefaultExpand === undefined) {
           settings.value.dockerDefaultExpand = 'false'; // 默认不展开
       }
-      //  Status Monitor interval default
+      //  Status Monitor defaults
+      if (settings.value.statusMonitorEnabled === undefined) {
+          settings.value.statusMonitorEnabled = 'true'; // 默认启用状态监控
+      }
       if (settings.value.statusMonitorIntervalSeconds === undefined) {
           settings.value.statusMonitorIntervalSeconds = '3'; // 默认 3 秒
       }
@@ -412,7 +416,7 @@ export const useSettingsStore = defineStore('settings', () => {
         'language', 'ipWhitelist', 'maxLoginAttempts', 'loginBanDuration',
         'showPopupFileEditor', 'showPopupFileManager', 'shareFileEditorTabs', 'ipWhitelistEnabled', // +++  showPopupFileManager +++
         'autoCopyOnSelect', 'dockerManagerEnabled', 'dockerStatusIntervalSeconds', 'dockerDefaultExpand',
-        'statusMonitorIntervalSeconds', // +++ 状态监控间隔键 +++
+        'statusMonitorEnabled', 'statusMonitorIntervalSeconds', // +++ 状态监控设置键 +++
         'workspaceSidebarPersistent', // +++ 侧边栏固定键 +++
         'sidebarPaneWidths', // +++ 侧边栏宽度对象键 +++
         'fileManagerRowSizeMultiplier', // +++ 文件管理器行大小键 +++
@@ -529,7 +533,7 @@ export const useSettingsStore = defineStore('settings', () => {
         'language', 'ipWhitelist', 'maxLoginAttempts', 'loginBanDuration',
         'showPopupFileEditor', 'showPopupFileManager', 'shareFileEditorTabs', 'ipWhitelistEnabled', // +++  showPopupFileManager +++
         'autoCopyOnSelect', 'dockerManagerEnabled', 'dockerStatusIntervalSeconds', 'dockerDefaultExpand',
-        'statusMonitorIntervalSeconds', // +++ 状态监控间隔键 +++
+        'statusMonitorEnabled', 'statusMonitorIntervalSeconds', // +++ 状态监控设置键 +++
         'workspaceSidebarPersistent', // +++ 侧边栏固定键 +++
         'sidebarPaneWidths', // +++ 侧边栏宽度对象键 +++
         'fileManagerRowSizeMultiplier', // +++ 文件管理器行大小键 +++
@@ -802,6 +806,10 @@ export const useSettingsStore = defineStore('settings', () => {
       return settings.value.dockerDefaultExpand === 'true';
   });
 
+  const statusMonitorEnabledBoolean = computed(() => {
+      return settings.value.statusMonitorEnabled !== 'false';
+  });
+
   //  Getter for Status Monitor interval, returning number
   const statusMonitorIntervalSecondsNumber = computed(() => {
       const val = parseInt(settings.value.statusMonitorIntervalSeconds || '3', 10);
@@ -917,6 +925,7 @@ export const useSettingsStore = defineStore('settings', () => {
     autoCopyOnSelectBoolean,
     dockerManagerEnabledBoolean,
     dockerDefaultExpandBoolean, // +++ 暴露 Docker 默认展开 getter +++
+    statusMonitorEnabledBoolean, // +++ 暴露状态监控启用 getter +++
     statusMonitorIntervalSecondsNumber, // +++ 暴露状态监控间隔 getter +++
     workspaceSidebarPersistentBoolean, // +++ 暴露侧边栏固定 getter +++
     getSidebarPaneWidth, // +++ 暴露获取特定面板宽度的 getter +++

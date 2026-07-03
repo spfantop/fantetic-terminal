@@ -1,7 +1,9 @@
 import { ref, readonly, watch, type Ref, type ComputedRef } from 'vue';
 import type { ServerStatus } from '../types/server.types';
 import type { ConnectionRoutePlan, MessagePayload, WebSocketMessage } from '../types/websocket.types';
+import { storeToRefs } from 'pinia';
 import { useLayoutStore } from '../stores/layout.store';
+import { useSettingsStore } from '../stores/settings.store';
 import { debugLog } from './useDebugLog';
 
 export interface StatusMonitorDependencies {
@@ -11,6 +13,9 @@ export interface StatusMonitorDependencies {
 
 export function createStatusMonitorManager(sessionId: string, wsDeps: StatusMonitorDependencies) {
   const { onMessage, isConnected } = wsDeps;
+  const layoutStore = useLayoutStore();
+  const settingsStore = useSettingsStore();
+  const { statusMonitorEnabledBoolean } = storeToRefs(settingsStore);
   const MAX_HISTORY_POINTS = 60;
 
   const serverStatus = ref<ServerStatus | null>(null);
@@ -110,6 +115,10 @@ export function createStatusMonitorManager(sessionId: string, wsDeps: StatusMoni
   let unregisterRoutePlan: (() => void) | null = null;
 
   const registerStatusHandlers = () => {
+    if (!statusMonitorEnabledBoolean.value) {
+      debugLog(`[会话 ${sessionId}][状态监控模块] 状态监控已关闭，跳过注册处理器。`);
+      return;
+    }
     if (unregisterUpdate || unregisterError || unregisterLegacyError || unregisterRoutePlan) {
       debugLog(`[会话 ${sessionId}][状态监控模块] 处理器已注册，跳过。`);
       return;
@@ -139,10 +148,9 @@ export function createStatusMonitorManager(sessionId: string, wsDeps: StatusMoni
     }
   };
 
-  watch(isConnected, (newValue, oldValue) => {
-    debugLog(`[会话 ${sessionId}][状态监控模块] 连接状态变化: ${oldValue} -> ${newValue}`);
-    if (newValue) {
-      const layoutStore = useLayoutStore();
+  watch([isConnected, statusMonitorEnabledBoolean], ([connected, enabled], [wasConnected]) => {
+    debugLog(`[会话 ${sessionId}][状态监控模块] 状态变化: connected=${connected}, enabled=${enabled}`);
+    if (connected && enabled) {
       if (layoutStore.usedPanes.has('statusMonitor')) {
         registerStatusHandlers();
       } else {
@@ -151,12 +159,14 @@ export function createStatusMonitorManager(sessionId: string, wsDeps: StatusMoni
     } else {
       unregisterAllStatusHandlers();
       serverStatus.value = null;
-      if (oldValue === true) {
+      routePlan.value = null;
+      if (!enabled) {
+        statusError.value = null;
+      } else if (wasConnected === true) {
         statusError.value = '连接已断开';
       }
     }
   });
-
   const cleanup = () => {
     unregisterAllStatusHandlers();
     if (pendingFrameId !== null && typeof window !== 'undefined') {

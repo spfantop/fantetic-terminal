@@ -5,6 +5,11 @@
       <span class="status-state__title">{{ t('layout.noActiveSession.title') }}</span>
     </div>
 
+    <div v-else-if="!statusMonitorEnabledBoolean" class="status-state">
+      <i class="fas fa-toggle-off status-state__icon"></i>
+      <span class="status-state__title">{{ t('statusMonitor.disabled') }}</span>
+    </div>
+
     <div v-else-if="currentStatusError" class="status-state status-state--error">
       <i class="fas fa-exclamation-triangle status-state__icon"></i>
       <span class="status-state__title">{{ t('statusMonitor.errorPrefix') }} {{ currentStatusError }}</span>
@@ -292,7 +297,7 @@ const settingsStore = useSettingsStore();
 const connectionsStore = useConnectionsStore();
 const uiNotificationsStore = useUiNotificationsStore();
 const { sessions } = storeToRefs(sessionStore);
-const { statusMonitorShowIpBoolean } = storeToRefs(settingsStore);
+const { statusMonitorEnabledBoolean, statusMonitorShowIpBoolean } = storeToRefs(settingsStore);
 const isCpuCoreModalVisible = ref(false);
 const isProcessModalVisible = ref(false);
 const statusMonitorRootRef = ref<HTMLElement | null>(null);

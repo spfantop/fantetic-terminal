@@ -249,6 +249,7 @@ export const ensureDefaultSettingsExist = async (db: sqlite3.Database): Promise<
         dockerManagerEnabled: 'true',
         dockerStatusIntervalSeconds: '5',
         dockerDefaultExpand: 'false',
+        statusMonitorEnabled: 'true',
         statusMonitorIntervalSeconds: '3',
         [SIDEBAR_CONFIG_KEY]: JSON.stringify(defaultSidebarPanesStructure),
         [CAPTCHA_CONFIG_KEY]: JSON.stringify(defaultCaptchaSettings),

@@ -4,7 +4,7 @@ import { storeToRefs } from 'pinia';
 
 import { useI18n } from 'vue-i18n';
 
-import { useConnectionsStore, ConnectionInfo } from '../stores/connections.store';
+import { useConnectionsStore, ConnectionInfo, type ConnectionFolderInfo } from '../stores/connections.store';
 import { useTagsStore, TagInfo } from '../stores/tags.store'; // 确保 TagInfo 已导入
 import { useSessionStore } from '../stores/session.store';
 import { useFocusSwitcherStore } from '../stores/focusSwitcher.store';
@@ -31,9 +31,11 @@ const uiNotificationsStore = useUiNotificationsStore(); // +++ 修正实例化�
 const settingsStore = useSettingsStore(); // 实例化设置 store
 const { showConfirmDialog } = useConfirmDialog();
 
-const { connections, isLoading: connectionsLoading, error: connectionsError } = storeToRefs(connectionsStore);
+const props = withDefaults(defineProps<{ folderMode?: boolean }>(), { folderMode: false });
+const { connections, folders, isLoading: connectionsLoading, error: connectionsError, isFoldersLoading } = storeToRefs(connectionsStore);
 const { tags, isLoading: tagsLoading, error: tagsError } = storeToRefs(tagsStore);
 const { showConnectionTagsBoolean } = storeToRefs(settingsStore); // 获取设置项
+const shouldUseFolderMode = computed(() => props.folderMode);
 
 // 搜索词
 const searchTerm = ref('');
@@ -87,34 +89,85 @@ const expandedGroupsSignature = computed(() => JSON.stringify(expandedGroups.val
 const highlightedIndex = ref(-1); // -1 表示没有高亮项
 const listAreaRef = ref<HTMLElement | null>(null); // 列表容器的 ref
 
-// 计算属性：扁平化的、当前可见的连接列表（用于键盘导航）
-// 注意：这个 flatVisibleConnections 依赖于 filteredAndGroupedConnections 和 expandedGroups
-// 当 showConnectionTagsBoolean 为 false 时，它不会被直接使用，但键盘导航逻辑依赖它
-const flatVisibleConnections = computed(() => {
-  const flatList: ConnectionInfo[] = [];
-  // 如果显示标签，则只包含展开分组的连接
-  if (showConnectionTagsBoolean.value) {
-      filteredAndGroupedConnections.value.forEach(group => {
-        if (expandedGroups.value[group.groupName]) {
-          flatList.push(...group.connections);
-        }
-      });
-  } else {
-      // 如果不显示标签，则包含所有过滤后的连接
-      flatList.push(...flatFilteredConnections.value); // 使用下面定义的 flatFilteredConnections
+// 目录路径与过滤
+const folderMap = computed(() => new Map(folders.value.map(folder => [folder.id, folder])));
+const folderRootLabel = computed(() => t('connections.folders.noFolder', '不归入文件夹'));
+
+const getFolderPath = (folderId?: number | null): string => {
+  if (!folderId) return folderRootLabel.value;
+
+  const names: string[] = [];
+  const visited = new Set<number>();
+  let current: ConnectionFolderInfo | undefined = folderMap.value.get(folderId);
+  while (current && !visited.has(current.id)) {
+    visited.add(current.id);
+    names.unshift(current.name);
+    current = current.parent_id ? folderMap.value.get(current.parent_id) : undefined;
   }
-  return flatList;
+  return names.length > 0 ? names.join(' / ') : folderRootLabel.value;
+};
+
+const getConnectionTagNames = (conn: ConnectionInfo) => {
+  const tagMap = new Map(tags.value.map(tag => [tag.id, tag.name]));
+  return (conn.tag_ids ?? [])
+    .map(tagId => tagMap.get(tagId))
+    .filter((name): name is string => Boolean(name));
+};
+
+const connectionMatchesSearch = (conn: ConnectionInfo, lowerSearchTerm: string) => {
+  if (!lowerSearchTerm) return true;
+  const haystack = [
+    conn.name,
+    conn.host,
+    conn.type,
+    getFolderPath(conn.folder_id),
+    ...getConnectionTagNames(conn),
+  ]
+    .filter((value): value is string => Boolean(value))
+    .join(' ')
+    .toLowerCase();
+  return haystack.includes(lowerSearchTerm);
+};
+
+const folderGroupedConnections = computed(() => {
+  const lowerSearchTerm = searchTerm.value.toLowerCase().trim();
+  const groups = new Map<string, { groupKey: string; groupName: string; depth: number; connections: ConnectionInfo[] }>();
+  const ensureGroup = (folderId?: number | null) => {
+    const groupKey = folderId ? `folder-${folderId}` : 'folder-root';
+    if (!groups.has(groupKey)) {
+      const path = getFolderPath(folderId);
+      groups.set(groupKey, {
+        groupKey,
+        groupName: path,
+        depth: Math.max(0, path.split(' / ').length - 1),
+        connections: [],
+    });
+      if (expandedGroups.value[groupKey] === undefined) {
+        expandedGroups.value[groupKey] = true;
+      }
+    }
+    return groups.get(groupKey)!;
+  };
+
+  connections.value
+    .filter(conn => connectionMatchesSearch(conn, lowerSearchTerm))
+    .forEach(conn => {
+      ensureGroup(conn.folder_id).connections.push(conn);
+  });
+
+  return Array.from(groups.values())
+    .map(group => ({
+      ...group,
+      connections: group.connections.sort((a, b) => (a.name || a.host).localeCompare(b.name || b.host)),
+    }))
+    .sort((a, b) => {
+      if (a.groupKey === 'folder-root') return -1;
+      if (b.groupKey === 'folder-root') return 1;
+      return a.groupName.localeCompare(b.groupName);
+  });
 });
 
-
-// 计算属性：当前高亮连接的 ID
-const highlightedConnectionId = computed(() => {
-  if (highlightedIndex.value >= 0 && highlightedIndex.value < flatVisibleConnections.value.length) {
-    return flatVisibleConnections.value[highlightedIndex.value].id;
-  }
-  return null;
-});
-
+const folderModeHasNoResults = computed(() => shouldUseFolderMode.value && folderGroupedConnections.value.length === 0);
 
 // +++ 编辑标签状态 +++
 // editingTagId: number -> 编辑现有标签, null -> 编辑 "未标记" 分组 (准备创建新标签)
@@ -161,7 +214,7 @@ const filteredAndGroupedConnections = computed(() => {
     }
     // No match found
     return false;
-  });
+});
 
   // 2. 分组过滤后的连接
   filteredConnections.forEach(conn => {
@@ -184,7 +237,7 @@ const filteredAndGroupedConnections = computed(() => {
           }
           tagged = true;
         }
-      });
+    });
       // If none of the tags were found in the tagMap (e.g., stale data), treat as untagged
       if (!tagged && !untagged.some(c => c.id === conn.id)) {
           untagged.push(conn);
@@ -195,7 +248,7 @@ const filteredAndGroupedConnections = computed(() => {
           untagged.push(conn);
       }
     }
-  });
+});
 
   // 3. 排序和格式化输出
   for (const groupName in groups) {
@@ -249,42 +302,74 @@ const flatFilteredConnections = computed(() => {
     }
     // No match found
     return false;
-  });
+});
 
   // Sort the flat list
   return filtered.sort((a, b) => (a.name || a.host).localeCompare(b.name || b.host));
 });
 
+// 计算属性：扁平化的、当前可见的连接列表（用于键盘导航）
+// 注意：这个 flatVisibleConnections 依赖于 filteredAndGroupedConnections 和 expandedGroups
+// 当 showConnectionTagsBoolean 为 false 时，它不会被直接使用，但键盘导航逻辑依赖它
+const flatVisibleConnections = computed(() => {
+  const flatList: ConnectionInfo[] = [];
+  // 如果显示标签，则只包含展开分组的连接
+  if (shouldUseFolderMode.value) {
+      folderGroupedConnections.value.forEach(group => {
+        if (expandedGroups.value[group.groupKey]) {
+          flatList.push(...group.connections);
+        }
+    });
+  } else if (showConnectionTagsBoolean.value) {
+      filteredAndGroupedConnections.value.forEach(group => {
+        if (expandedGroups.value[group.groupName]) {
+          flatList.push(...group.connections);
+        }
+    });
+  } else {
+      // 如果不显示标签，则包含所有过滤后的连接
+      flatList.push(...flatFilteredConnections.value); // 使用下面定义的 flatFilteredConnections
+  }
+  return flatList;
+});
 
-  // +++ 监听分组状态变化并保存到 localStorage +++
-  watch(expandedGroupsSignature, (newState) => {
-    // Only save if tags are shown
-    if (showConnectionTagsBoolean.value) {
+
+// 计算属性：当前高亮连接的 ID
+const highlightedConnectionId = computed(() => {
+  if (highlightedIndex.value >= 0 && highlightedIndex.value < flatVisibleConnections.value.length) {
+    return flatVisibleConnections.value[highlightedIndex.value].id;
+  }
+  return null;
+});
+
+// +++ 监听分组状态变化并保存到 localStorage +++
+watch(expandedGroupsSignature, (newState) => {
+    if (!shouldUseFolderMode.value && showConnectionTagsBoolean.value) {
         try {
           localStorage.setItem(EXPANDED_GROUPS_STORAGE_KEY, newState);
         } catch (e) {
           console.error('Failed to save expanded groups state to localStorage:', e);
         }
     }
-  });
+});
 
-  // 监听搜索词变化，重置高亮索引
-  watch(searchTerm, () => {
+// 监听搜索词变化，重置高亮索引
+watch(searchTerm, () => {
     highlightedIndex.value = -1;
-  });
+});
 
-  // 监听分组展开状态变化，重置高亮索引 (这个 watch 保留，用于重置高亮)
-  watch(expandedGroupsSignature, () => {
+// 监听分组展开状态变化，重置高亮索引 (这个 watch 保留，用于重置高亮)
+watch(expandedGroupsSignature, () => {
       highlightedIndex.value = -1;
-  });
-  // 监听显示模式变化，重置高亮索引
-  watch(showConnectionTagsBoolean, () => {
-      highlightedIndex.value = -1;
-  });
+});
+// 监听显示模式变化，重置高亮索引
+watch([showConnectionTagsBoolean, shouldUseFolderMode], () => {
+  highlightedIndex.value = -1;
+});
 
-  // +++ 监听编辑状态，自动聚焦输入框 +++
-  watch(editingTagId, async (newId) => {
-    if (newId !== null) {
+// +++ 监听编辑状态，自动聚焦输入框 +++
+watch(editingTagId, async (newId) => {
+  if (newId !== null) {
       await nextTick();
       const inputRef = tagInputRefs.value.get(newId); // Get ref from map using the ID
       if (inputRef) {
@@ -294,15 +379,15 @@ const flatFilteredConnections = computed(() => {
         console.error(`[WkspConnList] Watcher: Input ref for ID ${newId} not found in map after nextTick.`);
       }
     }
-  });
+});
 
-  // 切换分组展开/折叠
-  const toggleGroup = (groupName: string) => {
-    // 状态现在总是 boolean，直接切换
-    expandedGroups.value[groupName] = !expandedGroups.value[groupName];
+// 切换分组展开/折叠
+const toggleGroup = (groupName: string) => {
+  // 状态现在总是 boolean，直接切换
+  expandedGroups.value[groupName] = !expandedGroups.value[groupName];
   };
 
-  // 处理单击连接 (左键/Enter) - 使用 session store 处理连接请求
+// 处理单击连接 (左键/Enter) - 使用 session store 处理连接请求
 const handleConnect = (connectionId: number, event?: MouseEvent | KeyboardEvent) => {
   if (event instanceof MouseEvent && event.button !== 0) {
     debugLog(`[WkspConnList] DEBUG: handleConnect called with non-left click (button: ${event.button}). Ignoring.`);
@@ -398,7 +483,7 @@ const handleMenuAction = async (action: 'add' | 'edit' | 'delete' | 'clone') => 
     } else if (action === 'delete') {
       const confirmed = await showConfirmDialog({
         message: t('connections.prompts.confirmDelete', { name: conn.name || conn.host })
-      });
+    });
       if (confirmed) {
         connectionsStore.deleteConnection(conn.id);
         // 注意：删除后列表会自动更新，因为 store 是响应式的
@@ -425,7 +510,7 @@ const handleMenuAction = async (action: 'add' | 'edit' | 'delete' | 'clone') => 
           .catch(error => {
               // 可以在这里处理克隆失败的特定 UI 反馈，如果需要的话
               console.error("Cloning failed in component:", error);
-          });
+        });
     }
   }
 };
@@ -493,16 +578,16 @@ const handleTagMenuAction = async (action: 'connectAll' | 'manageTag' | 'deleteA
     if (sshConnections.length > 0) {
       sshConnections.forEach(conn => {
         emitWorkspaceEvent('connection:connect', { connectionId: conn.id });
-      });
+    });
       uiNotificationsStore.addNotification({
         message: t('workspaceConnectionList.connectingAllSshInGroup', { count: sshConnections.length, groupName: group.groupName }),
         type: 'info',
-      });
+    });
     } else {
       uiNotificationsStore.addNotification({
         message: t('workspaceConnectionList.noSshConnectionsInGroup', { groupName: group.groupName }),
         type: 'info',
-      });
+    });
     }
   } else if (group && action === 'manageTag') {
     if (group.tagId !== null) { // 确保不是 "未标记" 分组
@@ -517,7 +602,7 @@ const handleTagMenuAction = async (action: 'connectAll' | 'manageTag' | 'deleteA
       uiNotificationsStore.addNotification({
         message: t('workspaceConnectionList.manageTags.cannotManageUntagged'), // 需要添加这个翻译
         type: 'warning',
-      });
+    });
     }
   } else if (group && action === 'deleteAllConnections') {
     // 确保是已标记的组
@@ -525,7 +610,7 @@ const handleTagMenuAction = async (action: 'connectAll' | 'manageTag' | 'deleteA
         uiNotificationsStore.addNotification({
             message: t('workspaceConnectionList.cannotDeleteFromUntagged'), 
             type: 'warning',
-        });
+      });
         return;
     }
     // 确保组内有连接
@@ -533,13 +618,13 @@ const handleTagMenuAction = async (action: 'connectAll' | 'manageTag' | 'deleteA
       uiNotificationsStore.addNotification({
         message: t('workspaceConnectionList.noConnectionsToDeleteInGroup', { groupName: group.groupName }), 
         type: 'info',
-      });
+    });
       return;
     }
 
     const confirmed = await showConfirmDialog({
       message: t('workspaceConnectionList.confirmDeleteAllConnectionsInGroup', { count: group.connections.length, groupName: group.groupName })
-    });
+  });
     if (confirmed) {
       const connectionIdsToDelete = group.connections.map(conn => conn.id);
       
@@ -559,15 +644,15 @@ const handleTagMenuAction = async (action: 'connectAll' | 'manageTag' | 'deleteA
             uiNotificationsStore.addNotification({
               message: t('workspaceConnectionList.allConnectionsInGroupDeletedSuccess', { count: successfulDeletes, groupName: group.groupName }),
               type: 'success',
-            });
+          });
           }
           if (failedDeletes > 0) {
              uiNotificationsStore.addNotification({
               message: t('workspaceConnectionList.someConnectionsInGroupDeleteFailed', { count: failedDeletes, groupName: group.groupName }),
               type: 'error',
-            });
+          });
           }
-        });
+      });
     }
   }
 };
@@ -607,6 +692,7 @@ onMounted(() => {
   // focusSearchInput 返回 boolean，符合 () => boolean | Promise<boolean | undefined> 类型
   unregisterFocusAction = focusSwitcherStore.registerFocusAction('connectionListSearch', focusSearchInput);
   connectionsStore.fetchConnections(); // 移到 onMounted
+  connectionsStore.fetchFolders();
   tagsStore.fetchTags(); // 移到 onMounted
   // Load initial expanded state after fetching tags/connections
   expandedGroups.value = loadInitialExpandedGroups();
@@ -786,7 +872,7 @@ const cancelEditingTag = () => {
         <input
           type="text"
           v-model="searchTerm"
-          :placeholder="t('workspaceConnectionList.searchPlaceholder')"
+          :placeholder="shouldUseFolderMode ? t('workspaceConnectionList.searchPlaceholderWithFolder') : t('workspaceConnectionList.searchPlaceholder')"
           ref="searchInputRef"
           class="flex-grow min-w-0 px-4 py-1.5 border border-border/50 rounded-lg bg-input text-foreground text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition duration-150 ease-in-out"
           data-focus-id="connectionListSearch"
@@ -806,7 +892,7 @@ const cancelEditingTag = () => {
       <div class="flex-grow overflow-y-auto p-2" ref="listAreaRef">
         <!-- No Results / No Connections State -->
         <!-- 修改 v-if 条件，考虑两种模式，并且仅在有搜索词时显示 "No Results" -->
-        <div v-if="((showConnectionTagsBoolean && filteredAndGroupedConnections.length === 0) || (!showConnectionTagsBoolean && flatFilteredConnections.length === 0)) && connections.length > 0 && searchTerm" class="p-6 text-center text-text-secondary">
+        <div v-if="((shouldUseFolderMode && folderModeHasNoResults) || (!shouldUseFolderMode && ((showConnectionTagsBoolean && filteredAndGroupedConnections.length === 0) || (!showConnectionTagsBoolean && flatFilteredConnections.length === 0)))) && connections.length > 0 && searchTerm" class="p-6 text-center text-text-secondary">
            <i class="fas fa-search text-xl mb-2"></i>
            <p>{{ t('workspaceConnectionList.noResults') }} "{{ searchTerm }}"</p>
         </div>
@@ -824,7 +910,54 @@ const cancelEditingTag = () => {
         <!-- Groups and Connections (Conditional Rendering) -->
         <div v-else>
           <!-- Grouped View -->
-          <div v-if="showConnectionTagsBoolean">
+          <div v-if="shouldUseFolderMode">
+            <div v-if="isFoldersLoading" class="px-3 py-2 text-xs text-text-secondary">
+              <i class="fas fa-spinner fa-spin mr-2"></i>{{ t('common.loading') }}
+            </div>
+            <div v-for="groupData in folderGroupedConnections" :key="groupData.groupKey" class="mb-1 last:mb-0">
+              <div
+                class="group px-3 py-2 font-semibold flex items-center text-foreground rounded-md hover:bg-header/80 transition-colors duration-150 cursor-pointer"
+                @click="toggleGroup(groupData.groupKey)"
+              >
+                <i
+                  :class="['fas', expandedGroups[groupData.groupKey] ? 'fa-chevron-down' : 'fa-chevron-right', 'mr-2 w-4 text-center text-text-secondary group-hover:text-foreground transition-transform duration-200 ease-in-out']"
+                  @click.stop="toggleGroup(groupData.groupKey)"
+                ></i>
+                <i class="fas fa-folder mr-2 text-text-secondary group-hover:text-primary"></i>
+                <span class="text-sm inline-block overflow-hidden text-ellipsis whitespace-nowrap" :title="groupData.groupName">
+                  {{ groupData.groupName }}
+                </span>
+                <span class="ml-auto text-xs text-text-secondary">{{ groupData.connections.length }}</span>
+              </div>
+              <ul v-show="expandedGroups[groupData.groupKey]" class="list-none p-0 m-0 pl-3">
+                <li
+                  v-for="conn in groupData.connections"
+                  :key="conn.id"
+                  class="group my-0.5 py-2 pr-3 pl-4 cursor-pointer flex items-center gap-2 rounded-md overflow-hidden text-foreground hover:bg-primary/10 transition-colors duration-150"
+                  :class="{ 'bg-primary/20 font-medium': conn.id === highlightedConnectionId }"
+                  :data-conn-id="conn.id"
+                  @click.left="handleConnect(conn.id)"
+                  @click.right.prevent
+                  @contextmenu.prevent="showContextMenu($event, conn)"
+                >
+                  <i :class="['fas', conn.type === 'RDP' ? 'fa-desktop' : (conn.type === 'VNC' ? 'fa-chalkboard' : 'fa-server'), 'w-4 text-center text-text-secondary group-hover:text-primary flex-shrink-0', { 'text-white': conn.id === highlightedConnectionId }]"></i>
+                  <span class="overflow-hidden text-ellipsis whitespace-nowrap flex-grow text-sm" :title="conn.name || conn.host">
+                    {{ conn.name || conn.host }}
+                  </span>
+                  <span v-if="getConnectionTagNames(conn).length > 0" class="hidden sm:inline-flex max-w-[45%] gap-1 overflow-hidden">
+                    <span
+                      v-for="tagName in getConnectionTagNames(conn).slice(0, 2)"
+                      :key="`${conn.id}-${tagName}`"
+                      class="px-1.5 py-0.5 rounded border border-border/60 text-[10px] text-text-secondary truncate"
+                    >
+                      {{ tagName }}
+                    </span>
+                  </span>
+                </li>
+              </ul>
+            </div>
+          </div>
+          <div v-else-if="showConnectionTagsBoolean">
             <div v-for="groupData in filteredAndGroupedConnections" :key="groupData.groupName" class="mb-1 last:mb-0">
               <!-- Group Header -->
               <div

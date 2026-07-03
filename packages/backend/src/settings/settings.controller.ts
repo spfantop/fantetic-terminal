@@ -8,6 +8,7 @@ import { UpdateSidebarConfigDto, UpdateCaptchaSettingsDto, CaptchaSettings } fro
 import { AppearanceSettings, UpdateAppearanceDto } from '../types/appearance.types';
 import { getAppearanceSettings, updateAppearanceSettings as updateAppearanceSettingsInRepo } from '../appearance/appearance.repository';
 import i18next from '../i18n'; 
+import { statusMonitorService } from '../websocket/state';
 
 const auditLogService = new AuditLogService();
 const notificationService = new NotificationService(); 
@@ -77,7 +78,7 @@ export const settingsController = {
           'language', 'ipWhitelist', 'maxLoginAttempts', 'loginBanDuration',
           'showPopupFileEditor', 'shareFileEditorTabs', 'ipWhitelistEnabled',
           'autoCopyOnSelect', 'dockerManagerEnabled', 'dockerStatusIntervalSeconds', 'dockerDefaultExpand',
-          'statusMonitorIntervalSeconds', // +++ 状态监控间隔键 +++
+          'statusMonitorEnabled', 'statusMonitorIntervalSeconds', // +++ 状态监控设置键 +++
           'workspaceSidebarPersistent', // +++ 侧边栏固定键 +++
           'showPopupFileManager', // +++ 弹窗文件管理器设置键 +++
           'sidebarPaneWidths', // +++ 侧边栏宽度对象键 +++
@@ -105,6 +106,9 @@ export const settingsController = {
 
       if (Object.keys(filteredSettings).length > 0) {
           await settingsService.setMultipleSettings(filteredSettings);
+          if (Object.prototype.hasOwnProperty.call(filteredSettings, 'statusMonitorEnabled')) {
+              await statusMonitorService.syncPollingWithEnabledSetting();
+          }
       } 
 
       const updatedKeys = Object.keys(filteredSettings);
