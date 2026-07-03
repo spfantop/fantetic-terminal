@@ -13,11 +13,16 @@ services:
   backend:
     image: spfantop/fantetic-terminal-backend:latest
     container_name: fantetic-terminal-backend
-    env_file:
-      - .env
     environment:
       NODE_ENV: production
       PORT: 3001
+      DEPLOYMENT_MODE: "${DEPLOYMENT_MODE:-docker}"
+      REMOTE_GATEWAY_API_BASE_LOCAL: "${REMOTE_GATEWAY_API_BASE_LOCAL:-http://localhost:9090}"
+      REMOTE_GATEWAY_API_BASE_DOCKER: "${REMOTE_GATEWAY_API_BASE_DOCKER:-http://remote-gateway:9090}"
+      REMOTE_GATEWAY_WS_URL_LOCAL: "${REMOTE_GATEWAY_WS_URL_LOCAL:-ws://localhost:8080}"
+      REMOTE_GATEWAY_WS_URL_DOCKER: "${REMOTE_GATEWAY_WS_URL_DOCKER:-ws://remote-gateway:8080}"
+      RP_ID: "${RP_ID:-localhost}"
+      RP_ORIGIN: "${RP_ORIGIN:-http://localhost:18111}"
     volumes:
       - ./data:/app/data
     networks:

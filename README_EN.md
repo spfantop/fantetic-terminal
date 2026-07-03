@@ -54,8 +54,8 @@ Original project: [Heavrnl/nexus-terminal](https://github.com/Heavrnl/nexus-term
 ---
 
 |                 Split Pane Interface                 |
-| :--------------------------------------------------: |
-| ![setting.png](./doc/imgs/en-US/workspace_split.png) |
+|:----------------------------------------------------:|
+| ![setting.png](./doc/imgs/zh-CN/workspace_split.png) |
 
 ---
 
@@ -81,11 +81,17 @@ mkdir ./fantetic-terminal && cd ./fantetic-terminal
 
 ---
 
-Download the [**docker-compose.yml**](https://raw.githubusercontent.com/spfantop/fantetic-terminal/refs/heads/main/docker-compose.yml) and [**.env**](https://raw.githubusercontent.com/spfantop/fantetic-terminal/refs/heads/main/.env) files from the repository to your current directory.
+Download the [**docker-compose.yml**](https://raw.githubusercontent.com/spfantop/fantetic-terminal/refs/heads/main/docker-compose.yml) file from the repository to your current directory.
 
 
 ```bash
-wget https://raw.githubusercontent.com/spfantop/fantetic-terminal/refs/heads/main/docker-compose.yml -O docker-compose.yml && wget https://raw.githubusercontent.com/spfantop/fantetic-terminal/refs/heads/main/.env -O .env
+wget https://raw.githubusercontent.com/spfantop/fantetic-terminal/refs/heads/main/docker-compose.yml -O docker-compose.yml
+```
+
+If you need to override Passkey domains, RDP/VNC remote-gateway addresses, or other environment settings, optionally download [**.env**](https://raw.githubusercontent.com/spfantop/fantetic-terminal/refs/heads/main/.env) and edit it. Docker Compose prefers values from your current environment or `.env` when the same variable is set.
+
+```bash
+wget https://raw.githubusercontent.com/spfantop/fantetic-terminal/refs/heads/main/.env -O .env
 ```
 
 

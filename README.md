@@ -76,9 +76,14 @@ mkdir ./fantetic-terminal && cd ./fantetic-terminal
 ```
 
 
-下载仓库中的 [**docker-compose.yml**](https://raw.githubusercontent.com/spfantop/fantetic-terminal/refs/heads/main/docker-compose.yml) 和 [**.env**](https://raw.githubusercontent.com/spfantop/fantetic-terminal/refs/heads/main/.env) 文件到当前目录。
+下载仓库中的 [**docker-compose.yml**](https://raw.githubusercontent.com/spfantop/fantetic-terminal/refs/heads/main/docker-compose.yml) 到当前目录。
 ```bash
-wget https://raw.githubusercontent.com/spfantop/fantetic-terminal/refs/heads/main/docker-compose.yml -O docker-compose.yml && wget https://raw.githubusercontent.com/spfantop/fantetic-terminal/refs/heads/main/.env -O .env
+wget https://raw.githubusercontent.com/spfantop/fantetic-terminal/refs/heads/main/docker-compose.yml -O docker-compose.yml
+```
+
+如需覆盖 Passkey 域名、RDP/VNC remote-gateway 地址等配置，可选下载 [**.env**](https://raw.githubusercontent.com/spfantop/fantetic-terminal/refs/heads/main/.env) 并按需修改；Docker Compose 会优先使用当前环境或 `.env` 中的同名变量。
+```bash
+wget https://raw.githubusercontent.com/spfantop/fantetic-terminal/refs/heads/main/.env -O .env
 ```
 > ⚠️ **注意：**
 >
