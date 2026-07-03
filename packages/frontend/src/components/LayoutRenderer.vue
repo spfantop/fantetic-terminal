@@ -84,6 +84,11 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  fullscreenSessionId: {
+    type: String as PropType<string | null>,
+    required: false,
+    default: null,
+  },
 });
 
 
@@ -168,6 +173,8 @@ const terminalPaneSessionId = computed(() => (
     : props.activeSessionId
 ));
 
+const isSessionFullscreenActive = computed(() => props.fullscreenSessionId !== null);
+
 const isTerminalPaneNode = (node: LayoutNode | null | undefined): boolean => (
   Boolean(node && node.type === 'pane' && node.component === 'terminal')
 );
@@ -195,6 +202,9 @@ const getChildPaneSize = (childNode: LayoutNode, siblingCount: number) => {
 };
 
 const shouldRenderSession = (sessionId: string) => {
+  if (props.fullscreenSessionId !== null && sessionId === props.fullscreenSessionId) {
+    return true;
+  }
   if (props.layoutNode.component === 'terminal' && Object.prototype.hasOwnProperty.call(props.layoutNode, 'sessionId')) {
     return props.layoutNode.sessionId === sessionId;
   }
@@ -208,6 +218,9 @@ const shouldRenderSession = (sessionId: string) => {
 };
 
 const isTerminalSessionVisible = (sessionId: string) => {
+  if (props.fullscreenSessionId !== null) {
+    return sessionId === props.fullscreenSessionId;
+  }
   if (props.layoutNode.component === 'terminal' && Object.prototype.hasOwnProperty.call(props.layoutNode, 'sessionId')) {
     return props.layoutNode.sessionId === sessionId;
   }
@@ -342,8 +355,8 @@ const getTerminalRowCellWidths = (rowIndex: number, sessionsInRow: number) => {
   return Array.from({ length: sessionsInRow }, (_, index) => rowCells[index]?.width ?? 1);
 };
 
-watch([() => props.workspaceSplitActive, () => props.workspaceSplitSessionIds.length], () => {
-  if (props.workspaceSplitActive) {
+watch([() => props.workspaceSplitActive, () => props.workspaceSplitSessionIds.length, () => props.fullscreenSessionId], () => {
+  if (props.workspaceSplitActive && !isSessionFullscreenActive.value) {
     initializeTerminalGridSizes();
   } else {
     terminalGridRowSizes.value = [];
@@ -353,7 +366,7 @@ watch([() => props.workspaceSplitActive, () => props.workspaceSplitSessionIds.le
 }, { immediate: true });
 
 const terminalGridResizers = computed(() => {
-  if (!props.workspaceSplitActive || props.workspaceSplitSessionIds.length <= 1) return [];
+  if (isSessionFullscreenActive.value || !props.workspaceSplitActive || props.workspaceSplitSessionIds.length <= 1) return [];
 
   const { rows, cols } = terminalSplitLayout.value;
   const rowSizes = getTerminalRowSizes();
@@ -552,6 +565,16 @@ const getTerminalSessionStyle = (sessionId: string): CSSProperties => {
   };
 
   if (props.poppedOutSessionIds.includes(sessionId)) {
+    if (props.fullscreenSessionId !== null) {
+      const visible = sessionId === props.fullscreenSessionId;
+      return {
+        ...baseHiddenStyle,
+        zIndex: visible ? 3 : -1,
+        opacity: visible ? 1 : 0,
+        pointerEvents: visible ? 'auto' : 'none',
+      };
+    }
+
     return {
       ...baseHiddenStyle,
       zIndex: 3,
@@ -560,7 +583,7 @@ const getTerminalSessionStyle = (sessionId: string): CSSProperties => {
     };
   }
 
-  if (!props.workspaceSplitActive) {
+  if (isSessionFullscreenActive.value || !props.workspaceSplitActive) {
     const visible = isTerminalSessionVisible(sessionId);
     return {
       ...baseHiddenStyle,
@@ -616,15 +639,19 @@ const getTerminalSessionStyle = (sessionId: string): CSSProperties => {
 
 const getTerminalSessionClasses = (sessionId: string) => [
   'terminal-instance-wrapper absolute overflow-hidden',
-  props.workspaceSplitActive ? 'workspace-terminal-grid-cell' : 'inset-0 w-full h-full',
+  props.workspaceSplitActive && !isSessionFullscreenActive.value ? 'workspace-terminal-grid-cell' : 'inset-0 w-full h-full',
   { 'terminal-transparent': shouldUseTerminalBackgroundLayers },
 ];
 
-const isTerminalSessionActiveForLayout = (sessionId: string) => (
-  props.poppedOutSessionIds.includes(sessionId)
+const isTerminalSessionActiveForLayout = (sessionId: string) => {
+  if (props.fullscreenSessionId !== null) {
+    return sessionId === props.fullscreenSessionId;
+  }
+
+  return props.poppedOutSessionIds.includes(sessionId)
     ? true
-    : (props.workspaceSplitActive ? props.workspaceSplitSessionIds.includes(sessionId) : isTerminalSessionVisible(sessionId))
-);
+    : (props.workspaceSplitActive ? props.workspaceSplitSessionIds.includes(sessionId) : isTerminalSessionVisible(sessionId));
+};
 
 const activateTerminalSession = (sessionId: string) => {
   if (sessionId !== props.activeSessionId) {
@@ -1095,6 +1122,7 @@ onBeforeUnmount(() => {
                         :workspace-split-session-ids="workspaceSplitSessionIds"
                         :external-terminal-session-id="externalTerminalSessionId"
                         :terminal-only-mode="terminalOnlyMode"
+                        :fullscreen-session-id="fullscreenSessionId"
                         :editor-tabs="editorTabs"
                         :active-editor-tab-id="activeEditorTabId"
                         :terminal-input-handler="terminalInputHandler"
@@ -1111,10 +1139,10 @@ onBeforeUnmount(() => {
                    <div
                        ref="terminalGridRef"
                        :class="[
-                         'terminal-pane-container relative flex-grow overflow-hidden',
-                         {
-                           'workspace-terminal-grid': workspaceSplitActive,
-                           'resizing': isTerminalGridResizing,
+                          'terminal-pane-container relative flex-grow overflow-hidden',
+                          {
+                            'workspace-terminal-grid': workspaceSplitActive && !isSessionFullscreenActive,
+                            'resizing': isTerminalGridResizing,
                            [`resizing-${terminalGridResizeDirection}`]: isTerminalGridResizing && terminalGridResizeDirection,
                            'has-global-terminal-background': shouldUseTerminalBackgroundLayers,
                            'bg-background': !shouldUseTerminalBackgroundLayers,

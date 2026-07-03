@@ -45,6 +45,7 @@ export type WorkspaceEventPayloads = {
   'session:closeToRight': { targetSessionId: string };
   'session:closeToLeft': { targetSessionId: string };
   'session:popOut': { sessionId: string; windowRef?: Window | null };
+  'session:fullscreen': { sessionId: string };
 
   // UI Interaction Events
   'ui:openLayoutConfigurator': void;

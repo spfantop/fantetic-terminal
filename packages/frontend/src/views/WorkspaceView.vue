@@ -99,6 +99,14 @@ const visibleActiveSession = computed(() => (
   visibleActiveSessionId.value ? sessionStore.sessions.get(visibleActiveSessionId.value) ?? null : null
 ));
 const isVisibleActiveSessionRdp = computed(() => visibleActiveSession.value?.kind === 'rdp');
+const fullscreenSessionId = ref<string | null>(null);
+const isSessionFullscreenActive = computed(() => fullscreenSessionId.value !== null);
+const layoutActiveSessionId = computed(() => fullscreenSessionId.value ?? visibleActiveSessionId.value);
+const isTerminalOnlyMode = computed(() => isVisibleActiveSessionRdp.value || isSessionFullscreenActive.value);
+const FULLSCREEN_ESC_PRESS_THRESHOLD = 3;
+const FULLSCREEN_ESC_SEQUENCE_TIMEOUT_MS = 1200;
+const fullscreenEscPressCount = ref(0);
+let fullscreenEscResetTimer: number | null = null;
 
 let cachedTerminalInputSessionId = '';
 let cachedTerminalInputSession: ReturnType<typeof sessionStore.sessions.get> | null = null;
@@ -253,7 +261,15 @@ type XtermWindowBoundTerminal = XtermTerminal & {
   };
 };
 
+type NavigatorWithKeyboardLock = Navigator & {
+  keyboard?: {
+    lock?: (keyCodes?: string[]) => Promise<void>;
+    unlock?: () => void;
+  };
+};
+
 const poppedOutTerminalMap = shallowRef<Map<string, PoppedOutTerminalState>>(new Map());
+let hasShownFullscreenKeyboardWarning = false;
 
 const cssEscape = (value: string) => (
   window.CSS?.escape ? window.CSS.escape(value) : value.replace(/["\\]/g, '\\$&')
@@ -482,10 +498,197 @@ const focusPoppedOutSession = (sessionId: string, options: { force?: boolean; re
 };
 
 const requestSessionResize = (sessionId: string) => {
-  focusPoppedOutSession(sessionId, { force: true, resize: true });
+  const session = sessionStore.sessions.get(sessionId);
+  if (session?.kind === 'ssh' || poppedOutTerminalMap.value.has(sessionId)) {
+    focusPoppedOutSession(sessionId, { force: true, resize: true });
+    return;
+  }
+
+  window.dispatchEvent(new Event('resize'));
 };
 
+const readKeyboardLockApi = () => (navigator as NavigatorWithKeyboardLock).keyboard;
+
+const showFullscreenKeyboardWarning = () => {
+  if (hasShownFullscreenKeyboardWarning) return;
+  hasShownFullscreenKeyboardWarning = true;
+  uiNotificationsStore.showWarning(t(
+    'workspace.sessionFullscreen.keyboardLockUnavailable',
+    '当前浏览器无法锁定 Esc，可能会单次 Esc 退出全屏。',
+  ));
+};
+
+const lockFullscreenEscapeKey = async () => {
+  const keyboard = readKeyboardLockApi();
+  if (!keyboard?.lock) {
+    showFullscreenKeyboardWarning();
+    return;
+  }
+
+  try {
+    await keyboard.lock(['Escape']);
+  } catch (error) {
+    console.warn('[WorkspaceView] Failed to lock Escape in fullscreen:', error);
+    showFullscreenKeyboardWarning();
+  }
+};
+
+const unlockFullscreenKeyboard = () => {
+  try {
+    readKeyboardLockApi()?.unlock?.();
+  } catch (error) {
+    console.warn('[WorkspaceView] Failed to unlock fullscreen keyboard:', error);
+  }
+};
+
+const resetFullscreenEscPressCount = () => {
+  fullscreenEscPressCount.value = 0;
+  if (fullscreenEscResetTimer !== null) {
+    window.clearTimeout(fullscreenEscResetTimer);
+    fullscreenEscResetTimer = null;
+  }
+};
+
+const isWorkspaceBrowserFullscreen = () => document.fullscreenElement === workspaceRootRef.value;
+
+const exitWorkspaceBrowserFullscreen = async () => {
+  if (!isWorkspaceBrowserFullscreen() || !document.exitFullscreen) {
+    return;
+  }
+
+  try {
+    await document.exitFullscreen();
+  } catch (error) {
+    console.warn('[WorkspaceView] Failed to exit browser fullscreen:', error);
+  }
+};
+
+const clearSessionFullscreenState = () => {
+  const sessionId = fullscreenSessionId.value;
+  if (!sessionId) return;
+
+  fullscreenSessionId.value = null;
+  resetFullscreenEscPressCount();
+  unlockFullscreenKeyboard();
+  nextTick(() => requestSessionResize(sessionId));
+};
+
+const exitSessionFullscreen = () => {
+  clearSessionFullscreenState();
+  void exitWorkspaceBrowserFullscreen();
+};
+
+const applySessionFullscreen = (sessionId: string) => {
+  fullscreenSessionId.value = sessionId;
+  resetFullscreenEscPressCount();
+  if (activeSessionId.value !== sessionId) {
+    sessionStore.activateSession(sessionId);
+  }
+  void lockFullscreenEscapeKey();
+  nextTick(() => requestSessionResize(sessionId));
+};
+
+const requestWorkspaceBrowserFullscreen = async () => {
+  const fullscreenElement = workspaceRootRef.value;
+  if (!fullscreenElement?.requestFullscreen) {
+    uiNotificationsStore.showError(t(
+      'workspace.sessionFullscreen.unsupported',
+      '当前浏览器不支持全屏 API。',
+    ));
+    return false;
+  }
+
+  if (isWorkspaceBrowserFullscreen()) {
+    return true;
+  }
+
+  try {
+    await fullscreenElement.requestFullscreen({ navigationUI: 'hide' });
+    return true;
+  } catch (error) {
+    console.warn('[WorkspaceView] Failed to enter browser fullscreen:', error);
+    uiNotificationsStore.showError(t(
+      'workspace.sessionFullscreen.requestFailed',
+      '进入全屏失败，请检查浏览器权限后重试。',
+    ));
+    return false;
+  }
+};
+
+const enterSessionFullscreen = (sessionId: string) => {
+  if (!sessionStore.sessions.has(sessionId)) {
+    return;
+  }
+
+  void requestWorkspaceBrowserFullscreen().then((enteredFullscreen) => {
+    if (enteredFullscreen) {
+      applySessionFullscreen(sessionId);
+    }
+  });
+};
+
+const handleFullscreenSessionEvent = (payload: WorkspaceEventPayloads['session:fullscreen']) => {
+  enterSessionFullscreen(payload.sessionId);
+};
+
+const handleFullscreenEscapeKey = (event: KeyboardEvent) => {
+  if (!isSessionFullscreenActive.value) {
+    return false;
+  }
+
+  if (event.key !== 'Escape') {
+    resetFullscreenEscPressCount();
+    return false;
+  }
+
+  if (event.repeat) {
+    return false;
+  }
+
+  fullscreenEscPressCount.value += 1;
+  if (fullscreenEscResetTimer !== null) {
+    window.clearTimeout(fullscreenEscResetTimer);
+  }
+
+  if (fullscreenEscPressCount.value >= FULLSCREEN_ESC_PRESS_THRESHOLD) {
+    event.preventDefault();
+    event.stopPropagation();
+    exitSessionFullscreen();
+    return true;
+  }
+
+  fullscreenEscResetTimer = window.setTimeout(resetFullscreenEscPressCount, FULLSCREEN_ESC_SEQUENCE_TIMEOUT_MS);
+  return false;
+};
+
+const handleDocumentFullscreenChange = () => {
+  if (isWorkspaceBrowserFullscreen()) {
+    if (fullscreenSessionId.value) {
+      void lockFullscreenEscapeKey();
+    }
+    return;
+  }
+
+  if (fullscreenSessionId.value) {
+    clearSessionFullscreenState();
+  }
+};
+
+watch(visibleSessionTabsWithStatus, (tabs) => {
+  const currentFullscreenSessionId = fullscreenSessionId.value;
+  if (!currentFullscreenSessionId) return;
+
+  if (!tabs.some(tab => tab.sessionId === currentFullscreenSessionId)) {
+    fullscreenSessionId.value = null;
+    resetFullscreenEscPressCount();
+  }
+});
+
 const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string; windowRef?: Window | null }) => {
+  if (fullscreenSessionId.value === sessionId) {
+    exitSessionFullscreen();
+  }
+
   const workspaceRoot = workspaceRootRef.value;
   if (!workspaceRoot?.isConnected) {
     return;
@@ -727,6 +930,14 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
 
 // --- 处理全局键盘事件 ---
 const handleGlobalKeyDown = (event: KeyboardEvent) => {
+  if (handleFullscreenEscapeKey(event)) {
+    return;
+  }
+
+  if (isSessionFullscreenActive.value) {
+    return;
+  }
+
   if (isSessionPopoutActive.value) {
     return;
   }
@@ -802,7 +1013,8 @@ const handleToggleWorkspaceSplitEvent = (payload?: WorkspaceEventPayloads['ui:to
 onMounted(() => {
   debugLog('[工作区视图] 组件已挂载。');
   // 添加键盘事件监听器
-  window.addEventListener('keydown', handleGlobalKeyDown);
+  window.addEventListener('keydown', handleGlobalKeyDown, true);
+  document.addEventListener('fullscreenchange', handleDocumentFullscreenChange);
   // 确保布局已初始化 (layoutStore 内部会处理)
 
   // +++ 订阅工作区事件 +++
@@ -842,6 +1054,7 @@ onMounted(() => {
   subscribeToWorkspaceEvents('session:closeToRight', (payload) => handleCloseSessionsToRight(payload.targetSessionId));
   subscribeToWorkspaceEvents('session:closeToLeft', (payload) => handleCloseSessionsToLeft(payload.targetSessionId));
   subscribeToWorkspaceEvents('session:popOut', handlePopOutSession);
+  subscribeToWorkspaceEvents('session:fullscreen', handleFullscreenSessionEvent);
   subscribeToWorkspaceEvents('ui:openLayoutConfigurator', handleOpenLayoutConfigurator);
   subscribeToWorkspaceEvents('fileManager:openModalRequest', handleFileManagerOpenRequest); // +++ 订阅文件管理器打开请求 +++
   subscribeToWorkspaceEvents('quickCommand:executeProcessed', handleQuickCommandExecuteProcessed);
@@ -851,7 +1064,10 @@ onBeforeUnmount(() => {
   debugLog('[工作区视图] 组件即将卸载，清理所有会话...');
   restoreAllPoppedOutTerminalElements();
   // 移除键盘事件监听器
-  window.removeEventListener('keydown', handleGlobalKeyDown);
+  window.removeEventListener('keydown', handleGlobalKeyDown, true);
+  document.removeEventListener('fullscreenchange', handleDocumentFullscreenChange);
+  resetFullscreenEscPressCount();
+  unlockFullscreenKeyboard();
   sessionStore.cleanupAllSessions();
 
   // +++ 取消订阅工作区事件 +++
@@ -890,6 +1106,7 @@ onBeforeUnmount(() => {
   unsubscribeFromWorkspaceEvents('session:closeToRight', (payload) => handleCloseSessionsToRight(payload.targetSessionId));
   unsubscribeFromWorkspaceEvents('session:closeToLeft', (payload) => handleCloseSessionsToLeft(payload.targetSessionId));
   unsubscribeFromWorkspaceEvents('session:popOut', handlePopOutSession);
+  unsubscribeFromWorkspaceEvents('session:fullscreen', handleFullscreenSessionEvent);
   unsubscribeFromWorkspaceEvents('ui:openLayoutConfigurator', handleOpenLayoutConfigurator);
   unsubscribeFromWorkspaceEvents('fileManager:openModalRequest', handleFileManagerOpenRequest); // +++ 取消订阅文件管理器打开请求 +++
   unsubscribeFromWorkspaceEvents('quickCommand:executeProcessed', handleQuickCommandExecuteProcessed);
@@ -1390,11 +1607,12 @@ const closeFileManagerModal = () => {
 
 <template>
   <!-- *** 动态 class 绑定，添加 is-mobile 类 *** -->
-  <div ref="workspaceRootRef" :class="['workspace-view', { 'with-header': isHeaderVisible, 'is-mobile': isMobile, 'is-session-popout-active': isSessionPopoutActive }]">
+  <div ref="workspaceRootRef" :class="['workspace-view', { 'with-header': isHeaderVisible, 'is-mobile': isMobile, 'is-session-popout-active': isSessionPopoutActive, 'is-session-fullscreen-active': isSessionFullscreenActive }]">
     <!-- --- 桌面端布局 --- -->
     <template v-if="!isMobile">
       <div class="workspace-panel">
         <TerminalTabBar
+          v-if="!isSessionFullscreenActive"
           :sessions="orderedVisibleSessionTabs"
           :active-session-id="visibleActiveSessionId"
           :is-mobile="isMobile"
@@ -1408,13 +1626,14 @@ const closeFileManagerModal = () => {
         <div class="main-content-area">
           <LayoutRenderer
               v-if="layoutTree"
-              :is-root-renderer="!isVisibleActiveSessionRdp"
+              :is-root-renderer="!isTerminalOnlyMode"
               :layout-node="layoutTree"
-              :active-session-id="visibleActiveSessionId"
+              :active-session-id="layoutActiveSessionId"
               :popped-out-session-ids="poppedOutSessionIds"
               :workspace-split-active="isWorkspaceSplitActive"
               :workspace-split-session-ids="workspaceSplitSessionIds"
-              :terminal-only-mode="isVisibleActiveSessionRdp"
+              :terminal-only-mode="isTerminalOnlyMode"
+              :fullscreen-session-id="fullscreenSessionId"
               :layout-locked="layoutLockedBoolean"
               :terminal-input-handler="handleTerminalInputData"
               class="layout-renderer-wrapper"
@@ -1431,6 +1650,7 @@ const closeFileManagerModal = () => {
     <!-- --- 移动端布局 --- -->
     <template v-else>
       <TerminalTabBar
+        v-if="!isSessionFullscreenActive"
         :sessions="visibleSessionTabsWithStatus"
         :active-session-id="visibleActiveSessionId"
         :is-mobile="isMobile"
@@ -1439,11 +1659,13 @@ const closeFileManagerModal = () => {
       />
       <div class="mobile-content-area">
           <LayoutRenderer
-          v-if="visibleActiveSessionId && mobileLayoutNodeForTerminal"
+          v-if="layoutActiveSessionId && mobileLayoutNodeForTerminal"
           :layout-node="mobileLayoutNodeForTerminal"
-          :active-session-id="visibleActiveSessionId"
+          :active-session-id="layoutActiveSessionId"
           :popped-out-session-ids="poppedOutSessionIds"
           :is-root-renderer="false"
+          :terminal-only-mode="isSessionFullscreenActive"
+          :fullscreen-session-id="fullscreenSessionId"
           :layout-locked="layoutLockedBoolean"
           :terminal-input-handler="handleTerminalInputData"
           class="layout-renderer-wrapper flex-grow overflow-auto"
@@ -1455,7 +1677,7 @@ const closeFileManagerModal = () => {
         </div>
       </div>
       <CommandInputBar
-        v-if="!isVisibleActiveSessionRdp"
+        v-if="!isVisibleActiveSessionRdp && !isSessionFullscreenActive"
         class="mobile-command-bar"
         :is-mobile="isMobile"
         @send-command="handleSendCommand"
@@ -1469,7 +1691,7 @@ const closeFileManagerModal = () => {
       />
       <!-- +++ Use v-show for VirtualKeyboard and bind visibility +++ -->
       <VirtualKeyboard
-        v-if="!isVisibleActiveSessionRdp"
+        v-if="!isVisibleActiveSessionRdp && !isSessionFullscreenActive"
         v-show="isVirtualKeyboardVisible"
         class="mobile-virtual-keyboard"
         @send-key="handleVirtualKeyPress"
@@ -1555,6 +1777,13 @@ const closeFileManagerModal = () => {
     border-radius: 0 0 5px 5px; /* Top-left, Top-right, Bottom-right, Bottom-left */
     margin: var(--base-margin, 0.5rem); /* Add some margin around the content area */
     margin-top: 0; /* Remove top margin if tab bar is directly above */
+}
+
+.workspace-view.is-session-fullscreen-active .main-content-area,
+.workspace-view.is-session-fullscreen-active .mobile-content-area {
+  margin: 0;
+  border: none;
+  border-radius: 0;
 }
 
 .layout-renderer-wrapper {

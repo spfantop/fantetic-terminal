@@ -462,6 +462,11 @@
       "terminalNotFound": "未找到可弹出的终端会话，请稍后重试。",
       "layoutNotReady": "终端布局尚未就绪，请稍后重试。",
       "mountFailed": "弹出终端挂载失败，请稍后重试。"
+    },
+    "sessionFullscreen": {
+      "unsupported": "当前浏览器不支持全屏 API。",
+      "requestFailed": "进入全屏失败，请检查浏览器权限后重试。",
+      "keyboardLockUnavailable": "当前浏览器无法锁定 Esc，可能会单次 Esc 退出全屏。"
     }
   },
 "fileEditor": {
@@ -1627,6 +1632,7 @@
       "closeRight": "关闭右侧标签页",
       "closeLeft": "关闭左侧标签页",
       "popOut": "弹出",
+      "fullscreen": "全屏",
       "suspendSession": "挂起会话",
       "unmarkForSuspend": "取消挂起"
     },

@@ -223,6 +223,9 @@ const handleContextMenuAction = (payload: { action: string; targetId: string | n
         windowRef: window.open('', `fantetic-terminal-${targetId}`, 'popup=yes,width=1200,height=800'),
       });
       break;
+    case 'fullscreen':
+      emitWorkspaceEvent('session:fullscreen', { sessionId: targetId });
+      break;
     case 'close':
       emitWorkspaceEvent('session:close', { sessionId: targetId });
       break;
@@ -274,6 +277,7 @@ const contextMenuItems = computed(() => {
   const totalTabs = props.sessions.length;
 
   items.push({ label: 'tabs.contextMenu.popOut', action: 'pop-out' });
+  items.push({ label: 'tabs.contextMenu.fullscreen', action: 'fullscreen' });
 
   // 添加标记/取消标记挂起会话菜单项（如果适用）
   if (targetSessionState.kind === 'ssh' && connectionInfo && connectionInfo.type === 'SSH') {

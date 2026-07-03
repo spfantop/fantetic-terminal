@@ -1575,6 +1575,7 @@
           "closeRight": "右側のタブを閉じる",
           "closeLeft": "左側のタブを閉じる",
           "popOut": "ポップアウト",
+          "fullscreen": "全画面",
           "suspendSession": "セッションを一時停止",
           "unmarkForSuspend": "一時停止を解除"
         },
@@ -1594,6 +1595,11 @@
             "terminalNotFound": "ポップアウトできるターミナルセッションが見つかりません。しばらくしてから再試行してください。",
             "layoutNotReady": "ターミナルレイアウトの準備ができていません。しばらくしてから再試行してください。",
             "mountFailed": "ポップアウトしたターミナルのマウントに失敗しました。しばらくしてから再試行してください。"
+        },
+        "sessionFullscreen": {
+            "unsupported": "このブラウザーは Fullscreen API に対応していません。",
+            "requestFailed": "全画面表示に入れませんでした。ブラウザーの権限を確認して再試行してください。",
+            "keyboardLockUnavailable": "このブラウザーでは Esc をロックできないため、Esc 1 回で全画面表示が終了する場合があります。"
         }
     },
     "workspaceConnectionList": {

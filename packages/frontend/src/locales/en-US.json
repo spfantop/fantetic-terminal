@@ -462,6 +462,11 @@
       "terminalNotFound": "No terminal session was available to pop out. Please try again shortly.",
       "layoutNotReady": "The terminal layout is not ready yet. Please try again shortly.",
       "mountFailed": "Failed to mount the popped-out terminal. Please try again shortly."
+    },
+    "sessionFullscreen": {
+      "unsupported": "This browser does not support the fullscreen API.",
+      "requestFailed": "Failed to enter fullscreen. Check browser permissions and try again.",
+      "keyboardLockUnavailable": "This browser cannot lock Esc, so one Esc press may exit fullscreen."
     }
   },
 "fileEditor": {
@@ -1623,6 +1628,7 @@
       "closeRight": "Close Tabs to the Right",
       "closeLeft": "Close Tabs to the Left",
       "popOut": "Pop Out",
+      "fullscreen": "Fullscreen",
       "suspendSession": "Suspend Session",
       "unmarkForSuspend": "Unmark Suspend"
     },
