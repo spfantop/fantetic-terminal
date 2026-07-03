@@ -14,9 +14,10 @@ const { activeSession } = storeToRefs(sessionStore); // Get reactive active sess
 const settingsStore = useSettingsStore();
 const { dockerManagerEnabledBoolean } = storeToRefs(settingsStore);
 const emitWorkspaceEvent = useWorkspaceEventEmitter();
+const activeSshSession = computed(() => activeSession.value?.kind === 'ssh' ? activeSession.value : null);
 
 // --- Get Docker Manager Instance from Active Session ---
-const dockerManager = computed(() => activeSession.value?.dockerManager);
+const dockerManager = computed(() => activeSshSession.value?.dockerManager);
 
 // --- Computed properties based on Docker Manager state ---
 const containers = computed(() => dockerManager.value?.containers.value ?? []);
@@ -26,8 +27,8 @@ const isDockerAvailable = computed(() => dockerManager.value?.isDockerAvailable.
 const expandedContainerIds = computed(() => dockerManager.value?.expandedContainerIds.value ?? new Set<string>());
 
 // --- Computed properties for UI state (independent of dockerManager) ---
-const currentSessionId = computed(() => activeSession.value?.sessionId);
-const sshConnectionStatus = computed(() => activeSession.value?.wsManager.connectionStatus.value ?? 'disconnected');
+const currentSessionId = computed(() => activeSshSession.value?.sessionId);
+const sshConnectionStatus = computed(() => activeSshSession.value?.wsManager.connectionStatus.value ?? 'disconnected');
 
 // --- Methods delegated to Docker Manager ---
 const sendDockerCommand = (containerId: string, command: 'start' | 'stop' | 'restart' | 'remove') => {
@@ -39,16 +40,16 @@ const toggleExpand = (containerId: string) => {
 };
 
 const enterContainer = (containerId: string) => {
-  if (activeSession.value?.sessionId) {
+  if (activeSshSession.value?.sessionId) {
     const command = `docker exec -it ${containerId} sh\n`; // \n for auto-execution
-    emitWorkspaceEvent('terminal:sendCommand', { command, sessionId: activeSession.value.sessionId });
+    emitWorkspaceEvent('terminal:sendCommand', { command, sessionId: activeSshSession.value.sessionId });
   }
 };
 
 const viewContainerLogs = (containerId: string) => {
-  if (activeSession.value?.sessionId) {
+  if (activeSshSession.value?.sessionId) {
     const command = `docker logs --tail 1000 -f ${containerId}\n`; // \n for auto-execution
-    emitWorkspaceEvent('terminal:sendCommand', { command, sessionId: activeSession.value.sessionId });
+    emitWorkspaceEvent('terminal:sendCommand', { command, sessionId: activeSshSession.value.sessionId });
   }
 };
 
@@ -74,19 +75,19 @@ const viewContainerLogs = (containerId: string) => {
     <div v-else-if="sshConnectionStatus === 'connecting'" class="flex flex-col justify-center items-center text-center flex-grow text-text-secondary p-4">
         <i class="fas fa-spinner fa-spin text-4xl mb-3"></i>
         <p class="mt-2 mb-1 font-medium">{{ t('dockerManager.waitingForSsh') }}</p>
-        <small class="text-xs max-w-[80%] text-text-disabled">{{ activeSession?.wsManager.statusMessage.value || '...' }}</small>
+        <small class="text-xs max-w-[80%] text-text-disabled">{{ activeSshSession?.wsManager.statusMessage.value || '...' }}</small>
      </div>
      <!-- Case 3: Active session, SSH disconnected -->
       <div v-else-if="sshConnectionStatus === 'disconnected'" class="flex flex-col justify-center items-center text-center flex-grow text-text-secondary p-4">
          <i class="fas fa-unlink text-4xl mb-3"></i>
          <p class="mt-2 mb-1 font-medium">{{ t('dockerManager.error.sshDisconnected') }}</p>
-         <small class="text-xs max-w-[80%] text-text-disabled">{{ activeSession?.wsManager.statusMessage.value || '...' }}</small>
+         <small class="text-xs max-w-[80%] text-text-disabled">{{ activeSshSession?.wsManager.statusMessage.value || '...' }}</small>
       </div>
      <!-- Case 4: Active session, SSH error -->
       <div v-else-if="sshConnectionStatus === 'error'" class="flex flex-col justify-center items-center text-center flex-grow text-text-secondary p-4">
          <i class="fas fa-exclamation-circle text-3xl text-red-500 mb-2"></i>
          <p class="mt-2 mb-1 font-medium">{{ t('dockerManager.error.sshError') }}</p>
-         <small class="text-xs max-w-[80%]">{{ activeSession?.wsManager.statusMessage.value || 'Unknown SSH error' }}</small>
+         <small class="text-xs max-w-[80%]">{{ activeSshSession?.wsManager.statusMessage.value || 'Unknown SSH error' }}</small>
       </div>
      <!-- Case 5: Active session, SSH connected, Docker loading -->
     <div v-else-if="isLoading && containers.length === 0" class="flex flex-col justify-center items-center text-center flex-grow text-text-secondary p-4"> <!-- Use computed isLoading -->

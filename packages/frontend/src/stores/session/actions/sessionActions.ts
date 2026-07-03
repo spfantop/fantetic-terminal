@@ -6,7 +6,7 @@ import { useI18n } from 'vue-i18n';
 import { useConnectionsStore, type ConnectionInfo } from '../../connections.store'; 
 import { sessions, activeSessionId, poppedOutSessionIds } from '../state';
 import { generateSessionId } from '../utils';
-import type { SessionState, SshTerminalInstance, StatusMonitorInstance, DockerManagerInstance, SftpManagerInstance, WsManagerInstance } from '../types';
+import type { SessionState, SshSessionState, SftpManagerInstance, WsManagerInstance } from '../types';
 
 
 import { createWebSocketConnectionManager } from '../../../composables/useWebSocketConnection';
@@ -15,6 +15,7 @@ import { createStatusMonitorManager, type StatusMonitorDependencies } from '../.
 import { createDockerManager, type DockerManagerDependencies } from '../../../composables/useDockerManager';
 import { registerSshSuspendHandlers } from './sshSuspendActions'; 
 import { debugLog } from '../../../composables/useDebugLog';
+import type { WsConnectionStatus } from '../../../composables/useWebSocketConnection';
 // --- 辅助函数 (特定于此模块的 actions) ---
 const findConnectionInfo = (connectionId: number | string, connectionsStore: ReturnType<typeof useConnectionsStore>): ConnectionInfo | undefined => {
   return connectionsStore.connections.find(c => c.id === Number(connectionId));
@@ -47,6 +48,10 @@ export const openNewSession = (
     // TODO: 向用户显示错误
     return;
   }
+  if (connInfo.type !== 'SSH') {
+    console.warn(`[SessionActions] openNewSession 仅用于 SSH，会话类型为 ${connInfo.type}。`);
+    return;
+  }
 
   const newSessionId = existingSessionId || generateSessionId();
   const dbConnId = String(connInfo.id); // connInfo is now guaranteed to be defined here
@@ -55,10 +60,11 @@ export const openNewSession = (
   const isResume = !!existingSessionId; // 如果提供了 existingSessionId，则为恢复流程
 
   // 稍后创建 wsManager，先创建 SessionState 对象的一部分
-  const newSessionPartial: Omit<SessionState, 'wsManager' | 'sftpManagers' | 'terminalManager' | 'statusMonitorManager' | 'dockerManager'> & { wsManager?: WsManagerInstance } = {
+  const newSessionPartial: Omit<SshSessionState, 'wsManager' | 'sftpManagers' | 'terminalManager' | 'statusMonitorManager' | 'dockerManager'> & { wsManager?: WsManagerInstance } = {
       sessionId: newSessionId,
       connectionId: dbConnId,
       connectionName: connInfo.name || connInfo.host,
+      kind: 'ssh',
       editorTabs: ref([]),
       activeEditorTabId: ref(null),
       commandInputContent: ref(''),
@@ -193,6 +199,44 @@ export const openNewSession = (
   }
 };
 
+export const openRdpSession = (connection: ConnectionInfo) => {
+  if (connection.type !== 'RDP') {
+    console.warn(`[SessionActions] openRdpSession 仅用于 RDP，会话类型为 ${connection.type}。`);
+    return;
+  }
+
+  const newSessionId = generateSessionId();
+  const newSession = {
+    sessionId: newSessionId,
+    connectionId: String(connection.id),
+    connectionName: connection.name || connection.host,
+    kind: 'rdp',
+    connection,
+    rdpStatus: 'connecting',
+    rdpStatusMessage: '',
+    createdAt: Date.now(),
+  } as unknown as SessionState;
+
+  const newSessionsMap = new Map(sessions.value);
+  newSessionsMap.set(newSessionId, newSession);
+  sessions.value = newSessionsMap;
+  activeSessionId.value = newSessionId;
+  debugLog(`[SessionActions] 已创建 RDP 会话实例: ${newSessionId} for connection ${connection.id}`);
+};
+
+export const updateRdpSessionStatus = (
+  sessionId: string,
+  status: WsConnectionStatus,
+  message: string,
+) => {
+  const session = sessions.value.get(sessionId);
+  if (!session || session.kind !== 'rdp') return;
+
+  session.rdpStatus = status;
+  session.rdpStatusMessage = message;
+  sessions.value = new Map(sessions.value);
+};
+
 export const activateSession = (sessionId: string) => {
   if (sessions.value.has(sessionId)) {
     if (activeSessionId.value !== sessionId) {
@@ -215,6 +259,22 @@ export const closeSession = (sessionId: string) => {
   }
 
   // 1. 调用实例上的清理和断开方法
+  if (sessionToClose.kind === 'rdp') {
+    const newSessionsMap = new Map(sessions.value);
+    newSessionsMap.delete(sessionId);
+    sessions.value = newSessionsMap;
+
+    if (activeSessionId.value === sessionId) {
+      const remainingSessions = Array.from(sessions.value.keys())
+        .filter(remainingSessionId => !poppedOutSessionIds.value.includes(remainingSessionId));
+      activeSessionId.value = remainingSessions.length > 0 ? remainingSessions[remainingSessions.length - 1] : null;
+    }
+
+    poppedOutSessionIds.value = poppedOutSessionIds.value.filter(poppedOutSessionId => poppedOutSessionId !== sessionId);
+    debugLog(`[SessionActions] 已关闭 RDP 会话: ${sessionId}`);
+    return;
+  }
+
   sessionToClose.wsManager.disconnect();
   debugLog(`[SessionActions] 已为会话 ${sessionId} 调用 wsManager.disconnect()`);
   sessionToClose.sftpManagers.forEach((manager, instanceId) => {
@@ -264,16 +324,19 @@ export const handleConnectRequest = (
     dependencies: {
         connectionsStore: ReturnType<typeof useConnectionsStore>;
         router: ReturnType<typeof useRouter>;
-        openRdpModalAction: (connection: ConnectionInfo) => void; // 来自 modalActions
+        openRdpSessionAction: (connection: ConnectionInfo) => void;
         openVncModalAction: (connection: ConnectionInfo) => void; // 来自 modalActions
         t: ReturnType<typeof useI18n>['t'];
         navigateToWorkspace?: boolean;
     }
 ) => {
-  const { connectionsStore, router, openRdpModalAction, openVncModalAction, t, navigateToWorkspace = true } = dependencies;
+  const { connectionsStore, router, openRdpSessionAction, openVncModalAction, t, navigateToWorkspace = true } = dependencies;
 
   if (connection.type === 'RDP') {
-    openRdpModalAction(connection);
+    openRdpSessionAction(connection);
+    if (navigateToWorkspace) {
+      router.push({ name: 'Connections' });
+    }
   } else if (connection.type === 'VNC') {
     openVncModalAction(connection);
   } else {
@@ -282,7 +345,7 @@ export const handleConnectRequest = (
 
     if (activeSessionId.value) {
       const currentActiveSession = sessions.value.get(activeSessionId.value);
-      if (currentActiveSession && currentActiveSession.connectionId === connIdStr) {
+      if (currentActiveSession?.kind === 'ssh' && currentActiveSession.connectionId === connIdStr) {
         const currentStatus = currentActiveSession.wsManager.connectionStatus.value;
         debugLog(`[SessionActions] 点击的是当前活动会话 ${activeSessionId.value}，状态: ${currentStatus}`);
         if (currentStatus === 'disconnected' || currentStatus === 'error') {

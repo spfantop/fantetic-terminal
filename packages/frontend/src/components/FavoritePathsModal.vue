@@ -98,7 +98,7 @@ const handleDelete = async (pathItem: FavoritePathItem) => {
 
 const handleSendToTerminal = (pathItem: FavoritePathItem) => {
   const activeSession = sessionStore.activeSession;
-  if (activeSession && activeSession.terminalManager) {
+  if (activeSession?.kind === 'ssh' && activeSession.terminalManager) {
     const escapedPath = `"${pathItem.path.replace(/"/g, '\\"')}"`;
     const command = `cd ${escapedPath}\n`;
     try {

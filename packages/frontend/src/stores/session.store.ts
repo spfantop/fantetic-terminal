@@ -53,6 +53,9 @@ export const useSessionStore = defineStore('session', () => {
   const closeRdpModal = () => modalActions.closeRdpModal();
   const openVncModal = (connection: ConnectionInfo) => modalActions.openVncModal(connection);
   const closeVncModal = () => modalActions.closeVncModal();
+  const openRdpSession = (connection: ConnectionInfo) => sessionActions.openRdpSession(connection);
+  const updateRdpSessionStatus = (sessionId: string, status: Parameters<typeof sessionActions.updateRdpSessionStatus>[1], message: string) =>
+    sessionActions.updateRdpSessionStatus(sessionId, status, message);
 
   // Session Actions
   const openNewSession = (connectionId: number | string) =>
@@ -63,7 +66,7 @@ export const useSessionStore = defineStore('session', () => {
     sessionActions.handleConnectRequest(connection, {
       connectionsStore,
       router,
-      openRdpModalAction: openRdpModal, // 传递包装后的 action
+      openRdpSessionAction: openRdpSession,
       openVncModalAction: openVncModal,   // 传递包装后的 action
       t,
       navigateToWorkspace: options?.navigateToWorkspace,
@@ -172,6 +175,8 @@ export const useSessionStore = defineStore('session', () => {
     updateTabScrollPositionInSession,
     openRdpModal,
     closeRdpModal,
+    openRdpSession,
+    updateRdpSessionStatus,
     openVncModal,
     closeVncModal,
     updateSessionCommandInput,

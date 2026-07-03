@@ -7,6 +7,20 @@ import type { FileInfo } from '../../fileEditor.store'; // 路径: packages/fron
 import type { SftpReadFileSuccessPayload } from '../../../types/sftp.types'; // 路径: packages/frontend/src/types/sftp.types.ts
 import type { useI18n } from 'vue-i18n';
 import { debugLog } from '../../../composables/useDebugLog';
+
+const readSshSession = (sessionId: string, actionName: string) => {
+    const session = sessions.value.get(sessionId);
+    if (!session) {
+        console.error(`[EditorActions] ${actionName} 失败：会话 ${sessionId} 不存在`);
+        return null;
+    }
+    if (session.kind !== 'ssh') {
+        console.warn(`[EditorActions] ${actionName} 已跳过：会话 ${sessionId} 不是 SSH`);
+        return null;
+    }
+    return session;
+};
+
 // --- Editor Actions ---
 export const openFileInSession = (
     sessionId: string,
@@ -16,11 +30,8 @@ export const openFileInSession = (
         t: ReturnType<typeof useI18n>['t'];
     }
 ) => {
-    const session = sessions.value.get(sessionId);
-    if (!session) {
-        console.error(`[EditorActions] 尝试在不存在的会话 ${sessionId} 中打开文件`);
-        return;
-    }
+    const session = readSshSession(sessionId, '打开文件');
+    if (!session) return;
     const { getOrCreateSftpManager, t } = dependencies;
 
     const existingTab = session.editorTabs.value.find(tab => tab.filePath === fileInfo.fullPath);
@@ -97,11 +108,8 @@ export const openFileInSession = (
 };
 
 export const closeEditorTabInSession = (sessionId: string, tabId: string) => {
-    const session = sessions.value.get(sessionId);
-    if (!session) {
-        console.error(`[EditorActions] 尝试在不存在的会话 ${sessionId} 中关闭标签页 ${tabId}`);
-        return;
-    }
+    const session = readSshSession(sessionId, `关闭标签页 ${tabId}`);
+    if (!session) return;
 
     const tabIndex = session.editorTabs.value.findIndex(tab => tab.id === tabId);
     if (tabIndex === -1) {
@@ -125,11 +133,8 @@ export const closeEditorTabInSession = (sessionId: string, tabId: string) => {
 };
 
 export const setActiveEditorTabInSession = (sessionId: string, tabId: string) => {
-    const session = sessions.value.get(sessionId);
-    if (!session) {
-        console.error(`[EditorActions] 尝试在不存在的会话 ${sessionId} 中激活标签页 ${tabId}`);
-        return;
-    }
+    const session = readSshSession(sessionId, `激活标签页 ${tabId}`);
+    if (!session) return;
 
     if (session.editorTabs.value.some(tab => tab.id === tabId)) {
         if (session.activeEditorTabId.value !== tabId) {
@@ -142,11 +147,8 @@ export const setActiveEditorTabInSession = (sessionId: string, tabId: string) =>
 };
 
 export const updateFileContentInSession = (sessionId: string, tabId: string, newContent: string) => {
-    const session = sessions.value.get(sessionId);
-    if (!session) {
-        console.error(`[EditorActions] 尝试在不存在的会话 ${sessionId} 中更新标签页 ${tabId} 内容`);
-        return;
-    }
+    const session = readSshSession(sessionId, `更新标签页 ${tabId} 内容`);
+    if (!session) return;
     const tab = session.editorTabs.value.find(t => t.id === tabId);
     if (tab && !tab.isLoading) {
         tab.content = newContent;
@@ -170,11 +172,8 @@ export const saveFileInSession = async (
         t: ReturnType<typeof useI18n>['t'];
     }
 ) => {
-    const session = sessions.value.get(sessionId);
-    if (!session) {
-        console.error(`[EditorActions] 尝试在不存在的会话 ${sessionId} 中保存标签页 ${tabId}`);
-        return;
-    }
+    const session = readSshSession(sessionId, `保存标签页 ${tabId}`);
+    if (!session) return;
     const tab = session.editorTabs.value.find(t => t.id === tabId);
     if (!tab) {
         console.warn(`[EditorActions] 尝试保存在会话 ${sessionId} 中不存在的标签页 ${tabId}`);
@@ -231,11 +230,8 @@ export const saveFileInSession = async (
 };
 
 export const changeEncodingInSession = (sessionId: string, tabId: string, newEncoding: string) => {
-    const session = sessions.value.get(sessionId);
-    if (!session) {
-        console.warn(`[EditorActions] 尝试更改不存在的会话 ${sessionId} 中标签页 ${tabId} 的编码。`);
-        return;
-    }
+    const session = readSshSession(sessionId, `更改标签页 ${tabId} 编码`);
+    if (!session) return;
     const tab = session.editorTabs.value.find(t => t.id === tabId);
     if (!tab) {
         console.warn(`[EditorActions] 尝试更改会话 ${sessionId} 中不存在的标签页 ${tabId} 的编码。`);
@@ -273,7 +269,7 @@ export const changeEncodingInSession = (sessionId: string, tabId: string, newEnc
 };
 
 export const closeOtherTabsInSession = (sessionId: string, targetTabId: string) => {
-    const session = sessions.value.get(sessionId);
+    const session = readSshSession(sessionId, `关闭其他标签页 ${targetTabId}`);
     if (!session) return;
     const targetTab = session.editorTabs.value.find(tab => tab.id === targetTabId);
     if (!targetTab) return;
@@ -286,7 +282,7 @@ export const closeOtherTabsInSession = (sessionId: string, targetTabId: string) 
 };
 
 export const closeTabsToTheRightInSession = (sessionId: string, targetTabId: string) => {
-    const session = sessions.value.get(sessionId);
+    const session = readSshSession(sessionId, `关闭右侧标签页 ${targetTabId}`);
     if (!session) return;
     const targetIndex = session.editorTabs.value.findIndex(tab => tab.id === targetTabId);
     if (targetIndex === -1) return;
@@ -303,11 +299,8 @@ export const updateTabScrollPositionInSession = (
     scrollTop: number,
     scrollLeft: number
 ) => {
-    const session = sessions.value.get(sessionId);
-    if (!session) {
-        console.error(`[EditorActions] 尝试在不存在的会话 ${sessionId} 中更新标签页 ${tabId} 的滚动位置`);
-        return;
-    }
+    const session = readSshSession(sessionId, `更新标签页 ${tabId} 滚动位置`);
+    if (!session) return;
     const tab = session.editorTabs.value.find(t => t.id === tabId);
     if (tab) {
         tab.scrollTop = scrollTop;
@@ -318,7 +311,7 @@ export const updateTabScrollPositionInSession = (
 };
 
 export const closeTabsToTheLeftInSession = (sessionId: string, targetTabId: string) => {
-    const session = sessions.value.get(sessionId);
+    const session = readSshSession(sessionId, `关闭左侧标签页 ${targetTabId}`);
     if (!session) return;
     const targetIndex = session.editorTabs.value.findIndex(tab => tab.id === targetTabId);
     if (targetIndex === -1) return;

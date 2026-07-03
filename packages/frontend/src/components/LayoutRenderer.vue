@@ -80,6 +80,10 @@ const props = defineProps({
     required: false,
     default: null,
   },
+  terminalOnlyMode: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 
@@ -129,6 +133,7 @@ const componentMap: Record<PaneName, Component> = {
   dockerManager: defineAsyncComponent(() => import('./DockerManager.vue')), // <--- 添加 dockerManager 映射
   suspendedSshSessions: defineAsyncComponent(() => import('../views/SuspendedSshSessionsView.vue')),
 };
+const RemoteDesktopSession = defineAsyncComponent(() => import('./RemoteDesktopSession.vue'));
 
 // --- Computed ---
 // 获取当前节点对应的组件实例 (用于主布局)
@@ -153,11 +158,41 @@ const scopedActiveSession = computed(() => (
   props.activeSessionId ? sessionStore.sessions.get(props.activeSessionId) ?? null : null
 ));
 
+const scopedActiveSshSession = computed(() => (
+  scopedActiveSession.value?.kind === 'ssh' ? scopedActiveSession.value : null
+));
+
 const terminalPaneSessionId = computed(() => (
   props.layoutNode.component === 'terminal' && Object.prototype.hasOwnProperty.call(props.layoutNode, 'sessionId')
     ? props.layoutNode.sessionId ?? null
     : props.activeSessionId
 ));
+
+const isTerminalPaneNode = (node: LayoutNode | null | undefined): boolean => (
+  Boolean(node && node.type === 'pane' && node.component === 'terminal')
+);
+
+const nodeHasTerminalPane = (node: LayoutNode | null | undefined): boolean => {
+  if (!node) return false;
+  if (isTerminalPaneNode(node)) return true;
+  return Boolean(node.children?.some(child => nodeHasTerminalPane(child)));
+};
+
+const shouldRenderLayoutNodeInTerminalOnlyMode = (node: LayoutNode) => (
+  !props.terminalOnlyMode || nodeHasTerminalPane(node)
+);
+
+const getChildPaneClasses = (childNode: LayoutNode) => [
+  'flex flex-col h-full min-h-0 min-w-0 overflow-hidden bg-background',
+  { 'terminal-only-hidden-pane': props.terminalOnlyMode && !nodeHasTerminalPane(childNode) },
+];
+
+const getChildPaneSize = (childNode: LayoutNode, siblingCount: number) => {
+  if (props.terminalOnlyMode) {
+    return nodeHasTerminalPane(childNode) ? 100 : 0;
+  }
+  return childNode.size ?? (100 / siblingCount);
+};
 
 const shouldRenderSession = (sessionId: string) => {
   if (props.layoutNode.component === 'terminal' && Object.prototype.hasOwnProperty.call(props.layoutNode, 'sessionId')) {
@@ -618,11 +653,11 @@ const shouldUseTerminalBackgroundLayers = computed(() => (
   && (Boolean(terminalBackgroundImage.value) || Boolean(terminalCustomHTML.value))
 ));
 
-const hasSshSessions = computed(() => {
- // Check if any session has a terminalManager (indicates SSH)
+const hasTerminalSessions = computed(() => {
+ // Check if any terminal-like session can be rendered in this pane.
  for (const [sessionId, sessionState] of sessionStore.sessions) {
    if (!shouldRenderSession(sessionId)) continue;
-   if (sessionState.terminalManager) {
+   if (sessionState.kind === 'ssh' || sessionState.kind === 'rdp') {
      return true;
    }
  }
@@ -657,21 +692,21 @@ const componentProps = computed(() => {
     // 'terminal' case removed as props are now passed directly in the v-for loop
     case 'fileManager':
       // 仅当有活动会话时才返回实际 props，否则返回空对象
-      if (!currentActiveSession) return {};
+      if (!scopedActiveSshSession.value) return {};
       // 传递 instanceId (使用布局节点的 ID), sessionId, dbConnectionId
       // 移除 sftpManager 和 wsDeps
       // +++ 提供 instanceId 的备用值 +++
       const instanceId = props.layoutNode.id || `fm-main-${props.activeSessionId ?? 'unknown'}`;
       return {
-         sessionId: props.activeSessionId ?? '', // 确保 sessionId 不为 null
+         sessionId: scopedActiveSshSession.value.sessionId,
          instanceId: instanceId, // 使用计算出的 instanceId (包含备用值)
-         dbConnectionId: currentActiveSession.connectionId,
+         dbConnectionId: scopedActiveSshSession.value.connectionId,
          // sftpManager: currentActiveSession.sftpManager, // 移除 sftpManager，因为它现在由 FileManager 内部管理
          wsDeps: { // 恢复 wsDeps
-           sendMessage: currentActiveSession.wsManager.sendMessage,
-           onMessage: currentActiveSession.wsManager.onMessage,
-           isConnected: currentActiveSession.wsManager.isConnected, // 恢复 isConnected
-           isSftpReady: currentActiveSession.wsManager.isSftpReady // 恢复 isSftpReady
+           sendMessage: scopedActiveSshSession.value.wsManager.sendMessage,
+           onMessage: scopedActiveSshSession.value.wsManager.onMessage,
+           isConnected: scopedActiveSshSession.value.wsManager.isConnected, // 恢复 isConnected
+           isSftpReady: scopedActiveSshSession.value.wsManager.isSftpReady // 恢复 isSftpReady
          },
          class: 'pane-content', // class 可以保留，或者在模板中处理
          // FileManager 可能也需要转发事件，例如文件操作相关的，暂时省略
@@ -748,21 +783,21 @@ const sidebarProps = computed(() => (paneName: PaneName | null, side: 'left' | '
      };
    case 'fileManager':
      // Only provide props if there's an active session
-     if (scopedActiveSession.value) {
+      if (scopedActiveSshSession.value) {
        // 传递 instanceId (根据 side), sessionId, dbConnectionId
        // 移除 sftpManager 和 wsDeps
        const instanceId = side === 'left' ? 'sidebar-left' : 'sidebar-right';
        return {
          ...baseProps,
-         sessionId: scopedActiveSession.value.sessionId,
+         sessionId: scopedActiveSshSession.value.sessionId,
          instanceId: instanceId, // 使用 'sidebar-left' 或 'sidebar-right'
-         dbConnectionId: scopedActiveSession.value.connectionId,
+         dbConnectionId: scopedActiveSshSession.value.connectionId,
          // sftpManager: activeSession.value.sftpManager, // 移除 sftpManager
          wsDeps: { // 恢复 wsDeps
-           sendMessage: scopedActiveSession.value.wsManager.sendMessage,
-           onMessage: scopedActiveSession.value.wsManager.onMessage,
-           isConnected: scopedActiveSession.value.wsManager.isConnected, // 直接传递 ref
-           isSftpReady: scopedActiveSession.value.wsManager.isSftpReady  // 直接传递 ref
+           sendMessage: scopedActiveSshSession.value.wsManager.sendMessage,
+           onMessage: scopedActiveSshSession.value.wsManager.onMessage,
+           isConnected: scopedActiveSshSession.value.wsManager.isConnected, // 直接传递 ref
+           isSftpReady: scopedActiveSshSession.value.wsManager.isSftpReady  // 直接传递 ref
          },
        };
      } else {
@@ -786,11 +821,12 @@ const sidebarProps = computed(() => (paneName: PaneName | null, side: 'left' | '
 // --- Methods ---
 // 处理 Splitpanes 大小调整事件
 const handlePaneResizing = () => {
-  if (props.layoutLocked) return;
+  if (props.layoutLocked || props.terminalOnlyMode) return;
   emitWorkspaceEvent('ui:resizeTransaction', { phase: 'live', source: 'workspace-layout' });
 };
 
 const handlePaneResize = (eventData: { panes: Array<{ size: number; [key: string]: any }> }) => {
+  if (props.terminalOnlyMode) return;
   // +++ 更详细的日志 +++
   // +++ Log the entire layoutNode object if ID is undefined +++
   if (props.layoutNode && typeof props.layoutNode.id === 'undefined') {
@@ -1025,7 +1061,13 @@ onBeforeUnmount(() => {
             <template v-if="layoutNode.type === 'container' && layoutNode.children && layoutNode.children.length > 0">
               <splitpanes
                   :horizontal="layoutNode.direction === 'vertical'"
-                  :class="['default-theme flex-grow min-h-0 min-w-0', { 'layout-locked': props.layoutLocked }]"
+                  :class="[
+                    'default-theme flex-grow min-h-0 min-w-0',
+                    {
+                      'layout-locked': props.layoutLocked,
+                      'terminal-only-layout': terminalOnlyMode,
+                    },
+                  ]"
                   @resize="handlePaneResizing"
                   @resized="handlePaneResize"
                   @resized.capture="releaseSplitpaneResizeSelectionGuard"
@@ -1037,11 +1079,12 @@ onBeforeUnmount(() => {
                   <pane
                     v-for="childNode in layoutNode.children"
                     :key="childNode.id"
-                    :size="childNode.size ?? (100 / layoutNode.children.length)"
-                    :min-size="5"
-                    class="flex flex-col h-full min-h-0 min-w-0 overflow-hidden bg-background"
+                    :size="getChildPaneSize(childNode, layoutNode.children.length)"
+                    :min-size="terminalOnlyMode ? 0 : 5"
+                    :class="getChildPaneClasses(childNode)"
                   >
                     <LayoutRenderer
+                        v-if="shouldRenderLayoutNodeInTerminalOnlyMode(childNode)"
                         :layout-node="childNode"
                         :is-root-renderer="false"
                         :active-session-id="activeSessionId"
@@ -1051,6 +1094,7 @@ onBeforeUnmount(() => {
                         :workspace-split-active="workspaceSplitActive"
                         :workspace-split-session-ids="workspaceSplitSessionIds"
                         :external-terminal-session-id="externalTerminalSessionId"
+                        :terminal-only-mode="terminalOnlyMode"
                         :editor-tabs="editorTabs"
                         :active-editor-tab-id="activeEditorTabId"
                         :terminal-input-handler="terminalInputHandler"
@@ -1111,9 +1155,10 @@ onBeforeUnmount(() => {
 
                        <!-- Terminal Instances -->
                        <template v-for="[sessionId, sessionState] in sessionStore.sessions" :key="sessionId">
-                           <template v-if="sessionState.terminalManager && shouldRenderSession(sessionId)">
+                           <template v-if="shouldRenderSession(sessionId)">
                                <keep-alive v-if="sessionId !== externalTerminalSessionId">
                                     <component
+                                        v-if="sessionState.kind === 'ssh'"
                                         :is="componentMap.terminal"
                                         :session-id="sessionId"
                                         :is-active="isTerminalSessionActiveForLayout(sessionId)"
@@ -1122,6 +1167,16 @@ onBeforeUnmount(() => {
                                         :options="{}"
                                         :terminal-input-handler="terminalInputHandler"
                                         @click="activateTerminalSession(sessionId)"
+                                    />
+                                    <RemoteDesktopSession
+                                        v-else-if="sessionState.kind === 'rdp'"
+                                        :session-id="sessionId"
+                                        :connection="sessionState.connection ?? null"
+                                        :is-active="isTerminalSessionActiveForLayout(sessionId)"
+                                        :class="getTerminalSessionClasses(sessionId)"
+                                        :style="getTerminalSessionStyle(sessionId)"
+                                        @click="activateTerminalSession(sessionId)"
+                                        @status-change="sessionStore.updateRdpSessionStatus(sessionId, $event.status, $event.message)"
                                     />
                                 </keep-alive>
                                 <div
@@ -1140,7 +1195,7 @@ onBeforeUnmount(() => {
                             @mousedown="handleTerminalGridResizerMouseDown($event, resizer.direction, resizer.index, resizer.rowIndex)"
                         ></div>
                         <!-- Placeholder -->
-                        <div v-if="!terminalPaneSessionId || !hasSshSessions"
+                        <div v-if="!terminalPaneSessionId || !hasTerminalSessions"
                              class="absolute inset-0 flex justify-center items-center text-center text-text-secondary bg-header text-sm p-4"
                              :style="{ zIndex: 4 }">
                             <div class="flex flex-col items-center justify-center p-8 w-full h-full">
@@ -1158,10 +1213,10 @@ onBeforeUnmount(() => {
                           :key="layoutNode.id"
                           v-bind="componentProps"
                           class="flex-grow overflow-auto"
-                          v-if="scopedActiveSession"
+                          v-if="scopedActiveSshSession"
                         >
                         </component>
-                     <div v-if="!scopedActiveSession" class="flex-grow flex justify-center items-center text-center text-text-secondary bg-header text-sm p-4">
+                     <div v-if="!scopedActiveSshSession" class="flex-grow flex justify-center items-center text-center text-text-secondary bg-header text-sm p-4">
                       <div class="flex flex-col items-center justify-center p-8 w-full h-full">
                         <i class="fas fa-plug text-4xl mb-3 text-text-secondary"></i>
                         <span class="text-lg font-medium text-text-secondary mb-2">{{ t('layout.noActiveSession.title') }}</span>
@@ -1226,14 +1281,14 @@ onBeforeUnmount(() => {
             <div :key="`left-sidebar-content-${activeLeftSidebarPane ?? 'none'}`" class="relative flex flex-col flex-grow overflow-hidden pt-10"> <!-- Added pt-10 -->
                 <component
       
-                        v-if="currentLeftSidebarComponent && activeLeftSidebarPane && (activeLeftSidebarPane === 'statusMonitor' || activeLeftSidebarPane !== 'fileManager' || scopedActiveSession)"
+                        v-if="currentLeftSidebarComponent && activeLeftSidebarPane && (activeLeftSidebarPane === 'statusMonitor' || activeLeftSidebarPane !== 'fileManager' || scopedActiveSshSession)"
                         :is="currentLeftSidebarComponent"
                         :key="`left-comp-${activeLeftSidebarPane}`"
                         v-bind="sidebarProps(activeLeftSidebarPane, 'left')"
                         class="flex flex-col flex-grow">
                     </component>
                      <!-- 'fileManager' 且无 activeSession 的提示 -->
-                    <div v-else-if="activeLeftSidebarPane === 'fileManager' && !scopedActiveSession" class="flex flex-col flex-grow justify-center items-center text-center text-text-secondary p-4">
+                    <div v-else-if="activeLeftSidebarPane === 'fileManager' && !scopedActiveSshSession" class="flex flex-col flex-grow justify-center items-center text-center text-text-secondary p-4">
                       <div class="flex flex-col items-center justify-center p-8">
                         <i class="fas fa-plug text-4xl mb-3 text-text-secondary"></i>
                         <span class="text-lg font-medium mb-2">{{ t('layout.noActiveSession.title') }}</span>
@@ -1257,14 +1312,14 @@ onBeforeUnmount(() => {
         <KeepAlive>
             <div :key="`right-sidebar-content-${activeRightSidebarPane ?? 'none'}`" class="relative flex flex-col flex-grow overflow-hidden pt-10"> <!-- Added pt-10 -->
                 <component
-                        v-if="currentRightSidebarComponent && activeRightSidebarPane && (activeRightSidebarPane === 'statusMonitor' || activeRightSidebarPane !== 'fileManager' || scopedActiveSession)"
+                        v-if="currentRightSidebarComponent && activeRightSidebarPane && (activeRightSidebarPane === 'statusMonitor' || activeRightSidebarPane !== 'fileManager' || scopedActiveSshSession)"
                         :is="currentRightSidebarComponent"
                         :key="`right-comp-${activeRightSidebarPane}`"
                         v-bind="sidebarProps(activeRightSidebarPane, 'right')"
                         class="flex flex-col flex-grow">
                     </component>
                      <!-- 'fileManager' 且无 activeSession 的提示 -->
-                    <div v-else-if="activeRightSidebarPane === 'fileManager' && !scopedActiveSession" class="flex flex-col flex-grow justify-center items-center text-center text-text-secondary p-4">
+                    <div v-else-if="activeRightSidebarPane === 'fileManager' && !scopedActiveSshSession" class="flex flex-col flex-grow justify-center items-center text-center text-text-secondary p-4">
                       <div class="flex flex-col items-center justify-center p-8">
                         <i class="fas fa-plug text-4xl mb-3 text-text-secondary"></i>
                         <span class="text-lg font-medium mb-2">{{ t('layout.noActiveSession.title') }}</span>
@@ -1303,6 +1358,15 @@ onBeforeUnmount(() => {
   background-image: none !important; /* Ensure no background image in normal state */
   z-index: 5; /* Ensure splitter is above terminal content and its overlays */
 }
+
+.splitpanes.default-theme .splitpanes__pane.terminal-only-hidden-pane {
+  display: none !important;
+}
+
+.splitpanes.default-theme.terminal-only-layout > .splitpanes__splitter {
+  display: none !important;
+}
+
 .splitpanes.default-theme .splitpanes__splitter:hover { /* Apply hover style to the pseudo-element */
   background-color: transparent !important; /* Make splitter transparent on hover */
   background-image: none !important; /* Ensure no background image on hover */

@@ -62,11 +62,19 @@ const props = defineProps({
     type: String as PropType<string | null>,
     default: null,
   },
+  showSplitAction: {
+    type: Boolean,
+    default: true,
+  },
   disableSessionDrag: {
     type: Boolean,
     default: false,
   },
   listenWorkspaceConnectionEvents: {
+    type: Boolean,
+    default: true,
+  },
+  showLayoutActions: {
     type: Boolean,
     default: true,
   },
@@ -137,14 +145,8 @@ const handlePopupConnect = (connectionId: number) => {
     return;
   }
 
-  // --- 修改：根据类型决定调用哪个 Action ---
-  if (connectionInfo.type === 'RDP') {
-    debugLog(`[TabBar] Popup RDP connect request for ID: ${connectionId}. Calling sessionStore.openRdpModal.`);
-    sessionStore.openRdpModal(connectionInfo);
-  } else {
-    debugLog(`[TabBar] Popup non-RDP connect request for ID: ${connectionId}. Calling sessionStore.handleConnectRequest.`);
-    sessionStore.handleConnectRequest(connectionInfo); // 非 RDP 保持原逻辑
-  }
+  debugLog(`[TabBar] Popup connect request for ID: ${connectionId}. Calling sessionStore.handleConnectRequest.`);
+  sessionStore.handleConnectRequest(connectionInfo);
   showConnectionListPopup.value = false; // 关闭弹出窗口
 };
 
@@ -274,7 +276,7 @@ const contextMenuItems = computed(() => {
   items.push({ label: 'tabs.contextMenu.popOut', action: 'pop-out' });
 
   // 添加标记/取消标记挂起会话菜单项（如果适用）
-  if (connectionInfo && connectionInfo.type === 'SSH') {
+  if (targetSessionState.kind === 'ssh' && connectionInfo && connectionInfo.type === 'SSH') {
     const isActiveSession = targetSessionState.wsManager.isConnected.value;
     if (isActiveSession) { // 只对活动的SSH会话显示相关操作
       if (targetSessionState.isMarkedForSuspend) {
@@ -393,7 +395,7 @@ const toggleConnectionsServerPanel = () => {
 };
 
 const toggleWorkspaceSplit = () => {
-  if (!props.splitWorkspaceAvailable && !props.mergeWorkspaceAvailable) return;
+  if (!props.showSplitAction || (!props.splitWorkspaceAvailable && !props.mergeWorkspaceAvailable)) return;
   emitWorkspaceEvent('ui:toggleWorkspaceSplit', { paneId: props.workspacePaneId });
 };
 
@@ -407,7 +409,9 @@ const workspaceSplitIconClass = computed(() => (
   props.workspaceSplitActive ? 'fas fa-compress-alt' : 'fas fa-columns'
 ));
 
-const isWorkspaceSplitButtonEnabled = computed(() => props.splitWorkspaceAvailable || props.mergeWorkspaceAvailable);
+const isWorkspaceSplitButtonEnabled = computed(() => (
+  props.showSplitAction && (props.splitWorkspaceAvailable || props.mergeWorkspaceAvailable)
+));
 
 const serverPanelToggleIconClass = computed(() => (
   isConnectionsServerPanelCollapsed.value ? 'fas fa-indent' : 'fas fa-outdent'
@@ -456,10 +460,13 @@ const handleTouchStart = (event: TouchEvent, sessionId: string) => {
     touchTimeout = window.setTimeout(() => {
       if (touchedSessionId === sessionId) {
         const sessionState = sessionStore.sessions.get(sessionId);
-        if (sessionState && sessionState.isMarkedForSuspend) {
+        if (sessionState?.kind !== 'ssh') {
+          return;
+        }
+        if (sessionState.isMarkedForSuspend) {
           debugLog(`[TabBar] Long press to unmark suspend for session ID: ${sessionId}`);
           sessionStore.requestUnmarkSshSuspend(sessionId);
-        } else if (sessionState) {
+        } else {
           debugLog(`[TabBar] Long press to mark suspend for session ID: ${sessionId}`);
           sessionStore.requestStartSshSuspend(sessionId);
         }
@@ -521,7 +528,7 @@ onBeforeUnmount(() => {
       <i :class="[serverPanelToggleIconClass, 'text-sm']"></i>
     </button>
     <button
-      v-if="isConnectionsRoute && !props.isMobile"
+      v-if="isConnectionsRoute && !props.isMobile && props.showSplitAction"
       class="flex items-center justify-center px-3 h-full border-r border-border text-text-secondary transition-colors duration-150 flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
       :class="isWorkspaceSplitButtonEnabled ? 'hover:bg-border hover:text-foreground' : ''"
       @click="toggleWorkspaceSplit"
@@ -596,7 +603,7 @@ onBeforeUnmount(() => {
           <i class="fas fa-tasks text-sm"></i>
         </button>
         <!-- +++ 使用 v-if 隐藏移动端的布局按钮 +++ -->
-        <button v-if="!isMobile" class="flex items-center justify-center px-3 h-full border-l border-border text-text-secondary hover:bg-border hover:text-foreground transition-colors duration-150"
+        <button v-if="!isMobile && props.showLayoutActions" class="flex items-center justify-center px-3 h-full border-l border-border text-text-secondary hover:bg-border hover:text-foreground transition-colors duration-150"
                 @click="openLayoutConfigurator" :title="t('layout.configure', '配置布局')">
           <i class="fas fa-th-large text-sm"></i>
         </button>

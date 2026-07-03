@@ -45,17 +45,25 @@ const { isHeaderVisible } = storeToRefs(layoutStore);
 const { isMobile } = useDeviceDetection();
 
 // --- 从 Store 获取响应式状态和 Getters ---
-const { sessionTabsWithStatus, activeSessionId, activeSession, poppedOutSessionIds, isRdpModalOpen, rdpConnectionInfo, isVncModalOpen, vncConnectionInfo } = storeToRefs(sessionStore); // 使用 storeToRefs 获取 RDP 和 VNC 状态
+const { sessionTabsWithStatus, activeSessionId, activeSession, poppedOutSessionIds } = storeToRefs(sessionStore);
 const { shareFileEditorTabsBoolean, layoutLockedBoolean } = storeToRefs(settingsStore); // +++ Add layoutLockedBoolean +++
 const { orderedTabs: globalEditorTabs, activeTabId: globalActiveEditorTabId } = storeToRefs(fileEditorStore);
 const { layoutTree } = storeToRefs(layoutStore); // 只获取布局树
+
+const sessionOnlyLayoutNode = computed((): LayoutNode => ({
+  id: 'rdp-main-terminal-pane',
+  type: 'pane',
+  component: 'terminal',
+  size: 100,
+}));
 
 const getEditorTabsForSession = (sessionId: string | null): FileTab[] => {
   if (shareFileEditorTabsBoolean.value) {
     return globalEditorTabs.value;
   }
   if (!sessionId) return [];
-  return sessionStore.sessions.get(sessionId)?.editorTabs.value ?? [];
+  const session = sessionStore.sessions.get(sessionId);
+  return session?.kind === 'ssh' ? session.editorTabs.value : [];
 };
 
 const getActiveEditorTabIdForSession = (sessionId: string | null) => {
@@ -63,7 +71,8 @@ const getActiveEditorTabIdForSession = (sessionId: string | null) => {
     return globalActiveEditorTabId.value;
   }
   if (!sessionId) return null;
-  return sessionStore.sessions.get(sessionId)?.activeEditorTabId.value ?? null;
+  const session = sessionStore.sessions.get(sessionId);
+  return session?.kind === 'ssh' ? session.activeEditorTabId.value : null;
 };
 
 // --- 计算属性 (用于动态绑定编辑器 Props) ---
@@ -86,6 +95,10 @@ const visibleActiveSessionId = computed(() => (
     ? activeSessionId.value
     : null
 ));
+const visibleActiveSession = computed(() => (
+  visibleActiveSessionId.value ? sessionStore.sessions.get(visibleActiveSessionId.value) ?? null : null
+));
+const isVisibleActiveSessionRdp = computed(() => visibleActiveSession.value?.kind === 'rdp');
 
 let cachedTerminalInputSessionId = '';
 let cachedTerminalInputSession: ReturnType<typeof sessionStore.sessions.get> | null = null;
@@ -93,7 +106,9 @@ let cachedTerminalInputManager: SshTerminalInstance | null = null;
 
 const refreshTerminalInputCache = (sessionId: string) => {
   const session = sessionStore.sessions.get(sessionId) ?? null;
-  const manager = (session?.terminalManager as SshTerminalInstance | undefined) ?? null;
+  const manager = session?.kind === 'ssh'
+    ? (session.terminalManager as SshTerminalInstance | undefined) ?? null
+    : null;
   if (
     sessionId === cachedTerminalInputSessionId &&
     session === cachedTerminalInputSession &&
@@ -113,6 +128,11 @@ const readTerminalInputManager = (sessionId: string) => {
 const readTerminalInputSession = (sessionId: string) => {
   refreshTerminalInputCache(sessionId);
   return cachedTerminalInputSession;
+};
+
+const getSshSessionForAction = (sessionId?: string) => {
+  const session = sessionId ? sessionStore.sessions.get(sessionId) ?? null : activeSession.value ?? null;
+  return session?.kind === 'ssh' ? session : null;
 };
 
 const workspaceSplitAvailable = computed(() => !isMobile.value && visibleSessionTabsWithStatus.value.length > 1);
@@ -208,7 +228,7 @@ type PoppedOutTerminalState = {
   windowRef: Window;
   app: VueApp;
   host: HTMLElement;
-  terminalElement: HTMLElement;
+  sessionElement: HTMLElement;
   placeholder: Comment;
   closeTimer: number;
   closeHandler: () => void;
@@ -286,7 +306,7 @@ const waitForWorkspaceElement = async <T extends Element>(
 };
 
 const getTerminalForSession = (sessionId: string) => (
-  sessionStore.sessions.get(sessionId)?.terminalManager.terminalInstance?.value ?? null
+  getSshSessionForAction(sessionId)?.terminalManager.terminalInstance?.value ?? null
 );
 
 const getTerminalSchedulerWindow = (sessionId: string) => {
@@ -375,14 +395,16 @@ const restorePoppedOutTerminalElement = (sessionId: string) => {
   }
   state.app.unmount();
   if (state.placeholder.parentNode) {
-    state.placeholder.parentNode.replaceChild(state.terminalElement, state.placeholder);
+    state.placeholder.parentNode.replaceChild(state.sessionElement, state.placeholder);
   }
-  rebindXtermRenderWindow(state.sessionId, window);
+  if (sessionStore.sessions.get(state.sessionId)?.kind === 'ssh') {
+    rebindXtermRenderWindow(state.sessionId, window);
+  }
   if (!state.windowRef.closed) {
     state.windowRef.close();
   }
   sessionStore.restorePoppedOutSession(state.sessionId);
-  requestTerminalResize(state.sessionId);
+  requestSessionResize(state.sessionId);
 };
 
 const restoreAllPoppedOutTerminalElements = () => {
@@ -438,8 +460,29 @@ const focusPoppedOutTerminal = (sessionId: string, options: { force?: boolean; r
   });
 };
 
-const requestTerminalResize = (sessionId: string) => {
-  focusPoppedOutTerminal(sessionId, { force: true, resize: true });
+const focusPoppedOutSession = (sessionId: string, options: { force?: boolean; resize?: boolean } = {}) => {
+  if (sessionStore.sessions.get(sessionId)?.kind === 'ssh') {
+    focusPoppedOutTerminal(sessionId, options);
+    return;
+  }
+
+  const state = poppedOutTerminalMap.value.get(sessionId);
+  if (!state || state.windowRef.closed) return;
+
+  try {
+    if (options.force) {
+      state.windowRef.focus();
+    }
+    if (options.resize) {
+      dispatchResizeOnWindow(state.windowRef);
+    }
+  } catch (error) {
+    console.warn(`[WorkspaceView] Failed to focus pop-out session ${sessionId}:`, error);
+  }
+};
+
+const requestSessionResize = (sessionId: string) => {
+  focusPoppedOutSession(sessionId, { force: true, resize: true });
 };
 
 const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string; windowRef?: Window | null }) => {
@@ -451,21 +494,24 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
   const existingPoppedOutTerminal = poppedOutTerminalMap.value.get(sessionId);
   if (existingPoppedOutTerminal) {
     windowRef?.close();
-    rebindXtermRenderWindow(sessionId, existingPoppedOutTerminal.windowRef);
-    focusPoppedOutTerminal(sessionId, { force: true, resize: true });
+    if (sessionStore.sessions.get(sessionId)?.kind === 'ssh') {
+      rebindXtermRenderWindow(sessionId, existingPoppedOutTerminal.windowRef);
+    }
+    focusPoppedOutSession(sessionId, { force: true, resize: true });
     return;
   }
 
   const selector = `[data-terminal-session-id="${cssEscape(sessionId)}"]`;
-  const terminalElement = await waitForWorkspaceElement<HTMLElement>(workspaceRoot, selector);
-  if (!terminalElement?.parentNode) {
+  const sessionElement = await waitForWorkspaceElement<HTMLElement>(workspaceRoot, selector);
+  if (!sessionElement?.parentNode) {
     console.warn(`[WorkspaceView] Cannot pop out session ${sessionId}: terminal element was not found.`);
     windowRef?.close();
     uiNotificationsStore.showError(t('workspace.sessionPopout.terminalNotFound', '未找到可弹出的终端会话，请稍后重试。'));
     return;
   }
 
-  const popoutLayoutTree = layoutTree.value;
+  const sessionForPopout = sessionStore.sessions.get(sessionId);
+  const popoutLayoutTree = sessionForPopout?.kind === 'rdp' ? sessionOnlyLayoutNode.value : layoutTree.value;
   if (!popoutLayoutTree) {
     console.warn(`[WorkspaceView] Cannot pop out session ${sessionId}: layout tree is not ready.`);
     windowRef?.close();
@@ -480,12 +526,12 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
     return;
   }
 
-  if (!terminalElement.parentNode) {
+  if (!sessionElement.parentNode) {
     popup.close();
     uiNotificationsStore.showError(t('workspace.sessionPopout.terminalNotFound', '未找到可弹出的终端会话，请稍后重试。'));
     return;
   }
-  terminalElement.style.removeProperty('display');
+  sessionElement.style.removeProperty('display');
 
   const sessionName = sessionStore.sessions.get(sessionId)?.connectionName || t('workspace.sessionPopout.title', '弹出会话');
   popup.document.open();
@@ -587,7 +633,7 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
         const sessionActiveEditorTabId = computed(() => getActiveEditorTabIdForSession(sessionId));
 
         return () => h(LayoutRenderer, {
-          isRootRenderer: true,
+          isRootRenderer: sessionForPopout?.kind !== 'rdp',
           layoutNode: popoutLayoutTree,
           activeSessionId: sessionId,
           includedSessionId: sessionId,
@@ -628,10 +674,12 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
     return;
   }
   const placeholder = document.createComment(`popped-out-terminal-${sessionId}`);
-  terminalElement.parentNode.replaceChild(placeholder, terminalElement);
-  externalTerminalHost.appendChild(terminalElement);
+  sessionElement.parentNode.replaceChild(placeholder, sessionElement);
+  externalTerminalHost.appendChild(sessionElement);
   sessionStore.popOutSession(sessionId);
-  rebindXtermRenderWindow(sessionId, popup);
+  if (sessionStore.sessions.get(sessionId)?.kind === 'ssh') {
+    rebindXtermRenderWindow(sessionId, popup);
+  }
 
   const closeTimer = window.setInterval(() => {
     if (popup.closed) {
@@ -640,7 +688,7 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
     }
     try {
       if (popup.document.hasFocus()) {
-        focusPoppedOutTerminal(sessionId);
+        focusPoppedOutSession(sessionId);
       }
     } catch (error) {
       console.warn(`[WorkspaceView] Failed to keep pop-out terminal focused for session ${sessionId}:`, error);
@@ -648,10 +696,10 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
   }, 1500);
 
   const closeHandler = () => restorePoppedOutTerminalElement(sessionId);
-  const focusHandler = () => focusPoppedOutTerminal(sessionId, { resize: true });
+  const focusHandler = () => focusPoppedOutSession(sessionId, { resize: true });
   const visibilityHandler = () => {
     if (popup.document.visibilityState === 'visible') {
-      focusPoppedOutTerminal(sessionId, { resize: true });
+      focusPoppedOutSession(sessionId, { resize: true });
     }
   };
   const nextPoppedOutTerminalMap = new Map(poppedOutTerminalMap.value);
@@ -660,7 +708,7 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
     windowRef: popup,
     app: popoutApp,
     host: terminalHost,
-    terminalElement,
+    sessionElement,
     placeholder,
     closeTimer,
     closeHandler,
@@ -674,7 +722,7 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
   popup.addEventListener('pageshow', focusHandler);
   popup.document.addEventListener('visibilitychange', visibilityHandler);
   popup.focus();
-  requestTerminalResize(sessionId);
+  requestSessionResize(sessionId);
 };
 
 // --- 处理全局键盘事件 ---
@@ -889,7 +937,7 @@ const unsubscribeFromWorkspaceEvents = useWorkspaceEventOff();
 
  // 处理命令发送 (用于 CommandBar, CommandHistory, QuickCommands)
  const handleSendCommand = (command: string, targetSessionId?: string) => {
-   const sessionToCommand = targetSessionId ? sessionStore.sessions.get(targetSessionId) : activeSession.value;
+   const sessionToCommand = getSshSessionForAction(targetSessionId);
 
    if (!sessionToCommand) {
      const idForLog = targetSessionId || 'active (none found)';
@@ -970,7 +1018,7 @@ const unsubscribeFromWorkspaceEvents = useWorkspaceEventOff();
  // 处理终端大小调整 (用于 Terminal)
  // 注意：LayoutRenderer 内部的 Terminal 组件需要 emit('terminal-resize', sessionId, dims)
  const handleTerminalResize = (payload: { sessionId: string; dims: { cols: number; rows: number } }) => {
-    sessionStore.sessions.get(payload.sessionId)?.terminalManager.handleTerminalResize(payload.dims);
+    getSshSessionForAction(payload.sessionId)?.terminalManager.handleTerminalResize(payload.dims);
  };
 
  // 处理终端就绪 (用于 Terminal)
@@ -985,14 +1033,10 @@ const unsubscribeFromWorkspaceEvents = useWorkspaceEventOff();
         console.warn(`[工作区视图 ${payload.sessionId}] Payload 未包含 searchAddon 实例！ Payload:`, payload);
     }
     // *** 修正：传递包含 terminal 和 searchAddon 的完整 payload ***
-    sessionStore.sessions.get(payload.sessionId)?.terminalManager.handleTerminalReady(payload);
+    getSshSessionForAction(payload.sessionId)?.terminalManager.handleTerminalReady(payload);
 };
 
 // --- 搜索事件处理 ---
-const getSessionForAction = (sessionId?: string) => (
-  sessionId ? sessionStore.sessions.get(sessionId) ?? null : activeSession.value ?? null
-);
-
 const handleSearch = (term: string, sessionId?: string) => { // +++ 修改 +++
   currentSearchTerm.value = term;
   if (!term) {
@@ -1007,7 +1051,7 @@ const handleSearch = (term: string, sessionId?: string) => { // +++ 修改 +++
 };
 
 const handleFindNext = (sessionId?: string) => {
-  const manager = getSessionForAction(sessionId)?.terminalManager;
+  const manager = getSshSessionForAction(sessionId)?.terminalManager;
   if (manager && currentSearchTerm.value) {
     const mode = isMobile.value ? 'Mobile' : 'Desktop';
    debugLog(`[WorkspaceView ${mode}] Calling findNext for term: "${currentSearchTerm.value}"`);
@@ -1023,7 +1067,7 @@ const handleFindNext = (sessionId?: string) => {
 };
 
 const handleFindPrevious = (sessionId?: string) => {
-  const manager = getSessionForAction(sessionId)?.terminalManager;
+  const manager = getSshSessionForAction(sessionId)?.terminalManager;
   if (manager && currentSearchTerm.value) {
     const mode = isMobile.value ? 'Mobile' : 'Desktop';
    debugLog(`[WorkspaceView ${mode}] Calling findPrevious for term: "${currentSearchTerm.value}"`);
@@ -1041,7 +1085,7 @@ const handleFindPrevious = (sessionId?: string) => {
 const handleCloseSearch = (sessionId?: string) => {
   debugLog(`[WorkspaceView] Received close-search event.`);
   currentSearchTerm.value = ''; // 清空搜索词
-  const manager = getSessionForAction(sessionId)?.terminalManager;
+  const manager = getSshSessionForAction(sessionId)?.terminalManager;
   const mode = isMobile.value ? 'Mobile' : 'Desktop';
   if (manager) {
     manager.clearTerminalSearch();
@@ -1053,7 +1097,7 @@ const handleCloseSearch = (sessionId?: string) => {
 
 // +++ 处理清空终端事件 +++
 const handleClearTerminal = (payload?: WorkspaceEventPayloads['terminal:clear']) => {
-  const currentSession = getSessionForAction(payload?.sessionId);
+  const currentSession = getSshSessionForAction(payload?.sessionId);
   if (!currentSession) {
     console.warn('[WorkspaceView] Cannot clear terminal, no active session.');
     return;
@@ -1071,8 +1115,7 @@ const handleClearTerminal = (payload?: WorkspaceEventPayloads['terminal:clear'])
 
 // +++ 处理滚动到底部请求 +++
 const handleScrollToBottomRequest = (payload: { sessionId: string }) => {
-  const session = sessionStore.sessions.get(payload.sessionId);
-  const terminalManager = session?.terminalManager as (SshTerminalInstance | undefined);
+  const terminalManager = getSshSessionForAction(payload.sessionId)?.terminalManager as (SshTerminalInstance | undefined);
   if (terminalManager?.terminalInstance?.value) {
    debugLog(`[WorkspaceView] Scrolling to bottom for session ${payload.sessionId}`);
     terminalManager.terminalInstance.value.scrollToBottom();
@@ -1090,8 +1133,9 @@ const handleCloseEditorTab = (tabId: string) => {
      fileEditorStore.closeTab(tabId);
    } else {
      const currentActiveSessionId = activeSessionId.value;
-     if (currentActiveSessionId) {
-       sessionStore.closeEditorTabInSession(currentActiveSessionId, tabId);
+     const currentActiveSshSession = getSshSessionForAction(currentActiveSessionId ?? undefined);
+     if (currentActiveSshSession) {
+       sessionStore.closeEditorTabInSession(currentActiveSshSession.sessionId, tabId);
      } else {
         console.warn('[WorkspaceView] Cannot close editor tab: No active session in independent mode.');
      }
@@ -1105,8 +1149,9 @@ const handleCloseEditorTab = (tabId: string) => {
      fileEditorStore.setActiveTab(tabId);
    } else {
      const currentActiveSessionId = activeSessionId.value;
-     if (currentActiveSessionId) {
-       sessionStore.setActiveEditorTabInSession(currentActiveSessionId, tabId);
+     const currentActiveSshSession = getSshSessionForAction(currentActiveSessionId ?? undefined);
+     if (currentActiveSshSession) {
+       sessionStore.setActiveEditorTabInSession(currentActiveSshSession.sessionId, tabId);
      } else {
         console.warn('[WorkspaceView] Cannot activate editor tab: No active session in independent mode.');
      }
@@ -1120,8 +1165,9 @@ const handleCloseEditorTab = (tabId: string) => {
      fileEditorStore.updateFileContent(payload.tabId, payload.content);
    } else {
      const currentActiveSessionId = activeSessionId.value;
-     if (currentActiveSessionId) {
-       sessionStore.updateFileContentInSession(currentActiveSessionId, payload.tabId, payload.content);
+     const currentActiveSshSession = getSshSessionForAction(currentActiveSessionId ?? undefined);
+     if (currentActiveSshSession) {
+       sessionStore.updateFileContentInSession(currentActiveSshSession.sessionId, payload.tabId, payload.content);
      } else {
         console.warn('[WorkspaceView] Cannot update editor content: No active session in independent mode.');
      }
@@ -1135,8 +1181,9 @@ const handleCloseEditorTab = (tabId: string) => {
      fileEditorStore.saveFile(tabId);
    } else {
      const currentActiveSessionId = activeSessionId.value;
-     if (currentActiveSessionId) {
-       sessionStore.saveFileInSession(currentActiveSessionId, tabId);
+     const currentActiveSshSession = getSshSessionForAction(currentActiveSessionId ?? undefined);
+     if (currentActiveSshSession) {
+       sessionStore.saveFileInSession(currentActiveSshSession.sessionId, tabId);
      } else {
         console.warn('[WorkspaceView] Cannot save editor tab: No active session in independent mode.');
      }
@@ -1151,9 +1198,10 @@ const handleCloseEditorTab = (tabId: string) => {
      fileEditorStore.changeEncoding(payload.tabId, payload.encoding);
    } else {
      const currentActiveSessionId = activeSessionId.value;
-     if (currentActiveSessionId) {
+     const currentActiveSshSession = getSshSessionForAction(currentActiveSessionId ?? undefined);
+     if (currentActiveSshSession) {
        // 假设 sessionStore 有一个 changeEncodingInSession 方法
-       sessionStore.changeEncodingInSession(currentActiveSessionId, payload.tabId, payload.encoding);
+       sessionStore.changeEncodingInSession(currentActiveSshSession.sessionId, payload.tabId, payload.encoding);
      } else {
         console.warn('[WorkspaceView] Cannot change editor encoding: No active session in independent mode.');
      }
@@ -1166,7 +1214,7 @@ const handleCloseEditorTab = (tabId: string) => {
    if (shareFileEditorTabsBoolean.value) {
      fileEditorStore.updateTabScrollPosition(tabId, scrollTop, scrollLeft);
    } else {
-     const currentActiveSession = activeSession.value;
+     const currentActiveSession = getSshSessionForAction();
      if (currentActiveSession) {
        // 假设 tabId 在当前活动会话的编辑器标签中是唯一的
        sessionStore.updateTabScrollPositionInSession(currentActiveSession.sessionId, tabId, scrollTop, scrollLeft);
@@ -1193,7 +1241,7 @@ const handleCloseEditorTab = (tabId: string) => {
 
 // +++ 处理虚拟键盘按键事件 +++
 const handleVirtualKeyPress = (keySequence: string) => {
- const currentSession = activeSession.value;
+ const currentSession = getSshSessionForAction();
  if (!currentSession) {
    console.warn('[WorkspaceView] Cannot send virtual key, no active session.');
    return;
@@ -1271,7 +1319,7 @@ const toggleVirtualKeyboard = () => {
 // --- 文件管理器模态框处理 ---
 const handleFileManagerOpenRequest = (payload: { sessionId: string }) => {
   const { sessionId } = payload;
-  const session = sessionStore.sessions.get(sessionId);
+  const session = getSshSessionForAction(sessionId);
   if (!session) {
     console.error(`[WorkspaceView] Cannot open file manager: Session ${sessionId} not found.`);
     // TODO: Show error notification
@@ -1353,17 +1401,20 @@ const closeFileManagerModal = () => {
           :split-workspace-available="workspaceSplitAvailable"
           :merge-workspace-available="isWorkspaceSplitActive"
           :workspace-split-active="isWorkspaceSplitActive"
+          :show-layout-actions="!isVisibleActiveSessionRdp"
+          :show-split-action="true"
           @update:sessions="handleWorkspaceSessionOrderUpdate"
         />
         <div class="main-content-area">
           <LayoutRenderer
               v-if="layoutTree"
-              :is-root-renderer="true"
+              :is-root-renderer="!isVisibleActiveSessionRdp"
               :layout-node="layoutTree"
               :active-session-id="visibleActiveSessionId"
               :popped-out-session-ids="poppedOutSessionIds"
               :workspace-split-active="isWorkspaceSplitActive"
               :workspace-split-session-ids="workspaceSplitSessionIds"
+              :terminal-only-mode="isVisibleActiveSessionRdp"
               :layout-locked="layoutLockedBoolean"
               :terminal-input-handler="handleTerminalInputData"
               class="layout-renderer-wrapper"
@@ -1384,9 +1435,10 @@ const closeFileManagerModal = () => {
         :active-session-id="visibleActiveSessionId"
         :is-mobile="isMobile"
         :split-workspace-available="false"
+        :show-layout-actions="!isVisibleActiveSessionRdp"
       />
       <div class="mobile-content-area">
-        <LayoutRenderer
+          <LayoutRenderer
           v-if="visibleActiveSessionId && mobileLayoutNodeForTerminal"
           :layout-node="mobileLayoutNodeForTerminal"
           :active-session-id="visibleActiveSessionId"
@@ -1403,6 +1455,7 @@ const closeFileManagerModal = () => {
         </div>
       </div>
       <CommandInputBar
+        v-if="!isVisibleActiveSessionRdp"
         class="mobile-command-bar"
         :is-mobile="isMobile"
         @send-command="handleSendCommand"
@@ -1416,6 +1469,7 @@ const closeFileManagerModal = () => {
       />
       <!-- +++ Use v-show for VirtualKeyboard and bind visibility +++ -->
       <VirtualKeyboard
+        v-if="!isVisibleActiveSessionRdp"
         v-show="isVirtualKeyboardVisible"
         class="mobile-virtual-keyboard"
         @send-key="handleVirtualKeyPress"

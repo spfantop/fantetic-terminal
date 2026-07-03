@@ -43,7 +43,7 @@ const getActiveWsManager = (): WsManagerInstance | null => {
   if (firstSessionKey) {
     const session = sessions.value.get(firstSessionKey);
     // debugLog(`[getActiveWsManager]   第一个会话 (ID: ${firstSessionKey}): WS Manager 存在: ${!!session?.wsManager}, WS 已连接: ${session?.wsManager?.isConnected?.value}`);
-    if (session && session.wsManager && session.wsManager.isConnected.value) {
+    if (session?.kind === 'ssh' && session.wsManager && session.wsManager.isConnected.value) {
       // debugLog(`[getActiveWsManager] 使用第一个会话 (ID: ${firstSessionKey}) 的 WebSocket。`);
       return session.wsManager;
     }
@@ -52,7 +52,7 @@ const getActiveWsManager = (): WsManagerInstance | null => {
   // debugLog('[getActiveWsManager] 第一个会话的 WebSocket 不可用或不存在，开始遍历所有会话...');
   for (const [sessionId, session] of sessions.value) {
     // debugLog(`[getActiveWsManager]   遍历中 - 检查会话 ID: ${sessionId}, WS Manager 存在: ${!!session.wsManager}, WS 已连接: ${session.wsManager?.isConnected?.value}`);
-    if (session.wsManager && session.wsManager.isConnected.value) {
+    if (session.kind === 'ssh' && session.wsManager && session.wsManager.isConnected.value) {
       // debugLog(`[getActiveWsManager]   遍历成功，使用会话 (ID: ${sessionId}) 的 WebSocket。`);
       return session.wsManager;
     }
@@ -69,7 +69,7 @@ const getActiveWsManager = (): WsManagerInstance | null => {
  */
 export const requestStartSshSuspend = (sessionId: string): void => {
   const session = sessions.value.get(sessionId);
-  if (session && session.wsManager) {
+  if (session?.kind === 'ssh' && session.wsManager) {
     if (!session.wsManager.isConnected.value) {
       console.warn(`[${t('term.sshSuspend')}] WebSocket 未连接，无法请求标记挂起 (会话 ID: ${sessionId})。`);
       useUiNotificationsStore().addNotification({ type: 'error', message: t('sshSuspend.notifications.wsNotConnectedError') });
@@ -134,7 +134,7 @@ export const requestStartSshSuspend = (sessionId: string): void => {
  */
 export const requestUnmarkSshSuspend = (sessionId: string): void => {
   const session = sessions.value.get(sessionId);
-  if (session && session.wsManager) {
+  if (session?.kind === 'ssh' && session.wsManager) {
     if (!session.wsManager.isConnected.value) {
       console.warn(`[${t('term.sshSuspend')}] WebSocket 未连接，无法请求取消标记挂起 (会话 ID: ${sessionId})。`);
       useUiNotificationsStore().addNotification({ type: 'error', message: t('sshSuspend.notifications.wsNotConnectedError') });

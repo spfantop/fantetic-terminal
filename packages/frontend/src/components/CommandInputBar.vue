@@ -62,11 +62,12 @@ const currentSessionCommandInput = computed({
     const sessionId = props.targetSessionId || activeSessionId.value;
     if (!sessionId) return '';
     const session = sessionStore.sessions.get(sessionId);
-    return session ? session.commandInputContent.value : '';
+    return session?.kind === 'ssh' ? session.commandInputContent.value : '';
   },
   set: (newValue) => {
     const sessionId = props.targetSessionId || activeSessionId.value;
-    if (sessionId) {
+    const session = sessionId ? sessionStore.sessions.get(sessionId) : null;
+    if (sessionId && session?.kind === 'ssh') {
       updateSessionCommandInput(sessionId, newValue);
     }
   }
@@ -86,7 +87,8 @@ const sendCommand = () => {
   }
 
   // 清空 store 中的值
-  if (currentTargetSessionId.value) {
+  const targetSession = currentTargetSessionId.value ? sessionStore.sessions.get(currentTargetSessionId.value) : null;
+  if (currentTargetSessionId.value && targetSession?.kind === 'ssh') {
     updateSessionCommandInput(currentTargetSessionId.value, '');
   }
 };

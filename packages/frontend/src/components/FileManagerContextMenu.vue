@@ -42,7 +42,8 @@ const showSendFilesModal = ref(false);
 // Update the type for itemsToSendData
 const itemsToSendData = ref<{ name: string; path: string; type: 'file' | 'directory' }[]>([]);
 const sourceConnectionId = computed(() => { // +++ 获取并转换源服务器 ID +++
-  const activeConnId = sessionStore.activeSession?.connectionId;
+  const activeSession = sessionStore.activeSession;
+  const activeConnId = activeSession?.kind === 'ssh' ? activeSession.connectionId : null;
   if (activeConnId) {
     const parsedId = parseInt(activeConnId, 10);
     return isNaN(parsedId) ? null : parsedId;

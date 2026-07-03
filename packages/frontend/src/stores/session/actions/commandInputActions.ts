@@ -7,8 +7,10 @@ import { sessions } from '../state';
  */
 export const updateSessionCommandInput = (sessionId: string, content: string) => {
     const session = sessions.value.get(sessionId);
-    if (session) {
+    if (session?.kind === 'ssh') {
         session.commandInputContent.value = content;
+    } else if (session) {
+        console.warn(`[CommandInputActions] 会话 ${sessionId} 不是 SSH，跳过命令输入内容更新`);
     } else {
         console.warn(`[CommandInputActions] 尝试更新不存在的会话 ${sessionId} 的命令输入内容`);
     }

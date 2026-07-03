@@ -15,7 +15,6 @@ import { storeToRefs } from 'pinia';
 import UINotificationDisplay from './components/UINotificationDisplay.vue';
 import FileEditorOverlay from './components/FileEditorOverlay.vue';
 import FocusSwitcherConfigurator from './components/FocusSwitcherConfigurator.vue';
-import RemoteDesktopModal from './components/RemoteDesktopModal.vue';
 import VncModal from './components/VncModal.vue';
 import ConfirmDialog from './components/common/ConfirmDialog.vue';
 import { useDialogStore } from './stores/dialog.store';
@@ -38,7 +37,7 @@ const { isAuthenticated } = storeToRefs(authStore);
 const { showPopupFileEditorBoolean } = storeToRefs(settingsStore);
 const { isLayoutVisible, isHeaderVisible } = storeToRefs(layoutStore); // 添加 isHeaderVisible
 const { isConfiguratorVisible: isFocusSwitcherVisible } = storeToRefs(focusSwitcherStore);
-const { isRdpModalOpen, rdpConnectionInfo, isVncModalOpen, vncConnectionInfo } = storeToRefs(sessionStore); // +++ 获取 RDP 和 VNC 状态 +++
+const { isVncModalOpen, vncConnectionInfo } = storeToRefs(sessionStore); // +++ 获取 VNC 状态 +++
 const { isMobile } = useDeviceDetection();
 
 const route = useRoute();
@@ -746,13 +745,6 @@ const isElementVisibleAndFocusable = (element: HTMLElement): boolean => {
       v-show="isFocusSwitcherVisible"
       :isVisible="isFocusSwitcherVisible"
       @close="focusSwitcherStore.toggleConfigurator(false)"
-    />
-
-    <!-- +++ 条件渲染 RDP 模态框 +++ -->
-    <RemoteDesktopModal
-      v-if="isRdpModalOpen"
-      :connection="rdpConnectionInfo"
-      @close="sessionStore.closeRdpModal()"
     />
 
     <!-- +++ 条件渲染 VNC 模态框 +++ -->

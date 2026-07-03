@@ -4,6 +4,7 @@ import type { Ref } from 'vue';
 import type { FileTab as OriginalFileTab } from '../fileEditor.store'; 
 import type { WsConnectionStatus } from '../../composables/useWebSocketConnection'; 
 import type { DockerManagerInstance as OriginalDockerManagerInstance } from '../../composables/useDockerManager'; 
+import type { ConnectionInfo } from '../connections.store';
 
 // 导入工厂函数仅用于通过 ReturnType 推导实例类型
 // 这些导入仅用于类型推断，不在运行时使用
@@ -25,10 +26,14 @@ export type DockerManagerInstance = OriginalDockerManagerInstance;
 // 重新导出 FileTab 类型，使其可用于其他模块
 export type FileTab = OriginalFileTab;
 
+export type SessionKind = 'ssh' | 'rdp';
+
 export interface SessionState {
   sessionId: string;
   connectionId: string; // 数据库中的连接 ID
   connectionName: string; // 用于显示
+  kind: SessionKind;
+  createdAt: number; // 记录会话创建的时间戳，用于排序
   wsManager: WsManagerInstance;
   sftpManagers: Map<string, SftpManagerInstance>; // 使用 Map 管理多个实例
   terminalManager: SshTerminalInstance;
@@ -41,10 +46,14 @@ export interface SessionState {
   commandInputContent: Ref<string>; // 当前会话的命令输入框内容
   isResuming?: boolean; // 标记会话是否正在从挂起状态恢复
   isMarkedForSuspend?: boolean; // +++ 标记会话是否已被用户请求标记为待挂起 +++
-  createdAt: number; // 记录会话创建的时间戳，用于排序
   disposables?: (() => void)[]; // 用于存储清理函数，例如取消注册消息处理器
   pendingOutput?: string[]; // 用于暂存恢复会话时，在终端实例准备好之前收到的输出
+  connection?: ConnectionInfo; // RDP 会话使用，避免重复查询连接详情。
+  rdpStatus?: WsConnectionStatus;
+  rdpStatusMessage?: string;
 }
+
+export type SshSessionState = SessionState & { kind: 'ssh' };
 
 // 为标签栏定义包含状态的类型
 export interface SessionTabInfoWithStatus {

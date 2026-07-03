@@ -78,8 +78,8 @@ export const sessionTabsWithStatus = computed((): SessionTabInfoWithStatus[] => 
       .map(session => ({
         sessionId: session.sessionId,
         connectionName: session.connectionName,
-        status: session.wsManager.connectionStatus.value, // 从 wsManager 获取状态
-        isMarkedForSuspend: session.isMarkedForSuspend,
+        status: session.kind === 'rdp' ? (session.rdpStatus ?? 'connecting') : session.wsManager.connectionStatus.value,
+        isMarkedForSuspend: session.kind === 'ssh' ? session.isMarkedForSuspend : false,
       }));
   } else {
     // 如果没有自定义顺序，则按照创建时间排序
@@ -88,8 +88,8 @@ export const sessionTabsWithStatus = computed((): SessionTabInfoWithStatus[] => 
       .map(session => ({
         sessionId: session.sessionId,
         connectionName: session.connectionName,
-        status: session.wsManager.connectionStatus.value, // 从 wsManager 获取状态
-        isMarkedForSuspend: session.isMarkedForSuspend,
+        status: session.kind === 'rdp' ? (session.rdpStatus ?? 'connecting') : session.wsManager.connectionStatus.value,
+        isMarkedForSuspend: session.kind === 'ssh' ? session.isMarkedForSuspend : false,
       }));
   }
 });

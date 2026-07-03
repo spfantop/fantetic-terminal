@@ -18,6 +18,10 @@ export const getOrCreateSftpManager = (
         console.error(`[SftpManagerActions] 尝试为不存在的会话 ${sessionId} 获取 SFTP 管理器`);
         return null;
     }
+    if (session.kind !== 'ssh') {
+        console.warn(`[SftpManagerActions] 会话 ${sessionId} 不是 SSH，会跳过 SFTP 管理器创建`);
+        return null;
+    }
     const { t } = dependencies;
 
     let manager = session.sftpManagers.get(instanceId);
@@ -38,7 +42,7 @@ export const getOrCreateSftpManager = (
 
 export const removeSftpManager = (sessionId: string, instanceId: string) => {
     const session = sessions.value.get(sessionId);
-    if (session) {
+    if (session?.kind === 'ssh') {
         const manager = session.sftpManagers.get(instanceId);
         if (manager) {
             manager.cleanup();
