@@ -21,7 +21,7 @@
         </button>
       </div>
       <!-- List Area -->
-      <div class="flex-grow overflow-y-auto p-2">
+      <div v-bind="historyVirtualContainerProps" class="flex-grow overflow-y-auto p-2">
 <!-- Loading State (Only show if loading AND no history is displayed yet) -->
         <div v-if="isLoading && filteredHistory.length === 0" class="p-6 text-center text-text-secondary text-sm flex flex-col items-center justify-center h-full">
           <i class="fas fa-spinner fa-spin text-xl mb-2"></i>
@@ -33,9 +33,9 @@
           <p>{{ $t('commandHistory.empty', '没有历史记录') }}</p>
         </div>
         <!-- History List -->
-        <ul ref="historyListRef" v-else class="list-none p-0 m-0">
+        <ul v-bind="historyVirtualWrapperProps" ref="historyListRef" v-else class="list-none p-0 m-0">
           <li
-            v-for="(entry, index) in filteredHistory"
+            v-for="{ data: entry, index } in virtualHistoryList"
             :key="entry.id"
             class="group flex justify-between items-center px-3 py-2.5 mb-1 cursor-pointer rounded-md hover:bg-primary/10 transition-colors duration-150"
             :class="{ 'bg-primary/20 font-medium': index === storeSelectedIndex }"
@@ -93,6 +93,8 @@ import { useSessionStore } from '../stores/session.store';
 import type { SessionState } from '../stores/session/types'; 
 import { useConnectionsStore } from '../stores/connections.store';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
+import { useVirtualList } from '@vueuse/core';
+import { debugLog } from '../composables/useDebugLog';
 
 const commandHistoryStore = useCommandHistoryStore();
 const { showConfirmDialog } = useConfirmDialog();
@@ -119,6 +121,15 @@ const searchTerm = computed(() => commandHistoryStore.searchTerm);
 const filteredHistory = computed(() => commandHistoryStore.filteredHistory);
 const isLoading = computed(() => commandHistoryStore.isLoading);
 const { selectedIndex: storeSelectedIndex } = storeToRefs(commandHistoryStore); // Get selectedIndex reactively
+const {
+  list: virtualHistoryList,
+  scrollTo: scrollToVirtualHistoryItem,
+  containerProps: historyVirtualContainerProps,
+  wrapperProps: historyVirtualWrapperProps,
+} = useVirtualList(filteredHistory, {
+  itemHeight: 45,
+  overscan: 12,
+});
 
 
 // --- 生命周期钩子 ---
@@ -153,18 +164,9 @@ const updateSearchTerm = (event: Event) => {
 // 滚动到选中的项目
 const scrollToSelected = async (index: number) => { // Accept index as argument
   await nextTick(); // 等待 DOM 更新
-  if (index < 0 || !historyListRef.value) return;
+  if (index < 0 || index >= filteredHistory.value.length) return;
 
-  const listElement = historyListRef.value;
-  const selectedItem = listElement.children[index] as HTMLLIElement;
-
-  if (selectedItem) {
-    // 使用 scrollIntoView 使元素可见，滚动最小距离
-    selectedItem.scrollIntoView({
-      behavior: 'smooth', // 可以使用 'auto' 来实现即时滚动
-      block: 'nearest',
-    });
-  }
+  scrollToVirtualHistoryItem(index);
 };
 
 // Watch for changes in the store's selectedIndex and scroll
@@ -286,7 +288,7 @@ nextTick(() => {
 
     // 更新位置
     if (finalX !== commandHistoryContextMenuPosition.value.x || finalY !== commandHistoryContextMenuPosition.value.y) {
-      console.log(`[CommandHistoryView] Adjusting command history context menu position: (${commandHistoryContextMenuPosition.value.x}, ${commandHistoryContextMenuPosition.value.y}) -> (${finalX}, ${finalY})`);
+      debugLog(`[CommandHistoryView] Adjusting command history context menu position: (${commandHistoryContextMenuPosition.value.x}, ${commandHistoryContextMenuPosition.value.y}) -> (${finalX}, ${finalY})`);
       commandHistoryContextMenuPosition.value = { x: finalX, y: finalY };
     }
   }

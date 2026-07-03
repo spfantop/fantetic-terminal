@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { debugLog } from '../composables/useDebugLog';
 import { ref, watch, nextTick, type PropType, onUnmounted, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import SendFilesModal from './SendFilesModal.vue';
@@ -185,7 +186,7 @@ const handleSendToClick = () => {
 };
 
 const handleFilesSent = (payload: any) => {
-  console.log('Files to send (from FileManagerContextMenu):', payload);
+  debugLog('Files to send (from FileManagerContextMenu):', payload);
   // 实际发送逻辑可以后续添加或委派
 };
 

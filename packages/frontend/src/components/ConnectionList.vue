@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, computed, ref, reactive, watch } from 'vue'; 
+import { onMounted, computed, ref, reactive } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
@@ -37,11 +37,6 @@ onMounted(() => {
   tagsStore.fetchTags(); // 获取标签列表
 });
 
-// Log received props for debugging
-watch(() => props.connections, (newVal: ConnectionInfo[]) => { // Add type annotation for newVal
-  console.log('[ConnectionList] Received connections prop:', JSON.stringify(newVal, null, 2));
-}, { immediate: true, deep: true });
-
 // 创建标签 ID 到名称的映射
 const tagMap = computed(() => {
     const map = new Map<number, string>();
@@ -60,6 +55,14 @@ const getConnectionTagNames = (conn: ConnectionInfo): string[] => {
         .map(tagId => tagMap.value.get(tagId)) // 使用映射获取名称
          .filter((name): name is string => !!name); // 过滤掉未找到的标签并确保类型为 string
  };
+
+ const connectionTagNamesById = computed(() => {
+     const map = new Map<number, string[]>();
+     props.connections.forEach((conn) => {
+         map.set(conn.id, getConnectionTagNames(conn));
+     });
+     return map;
+ });
 
  // 计算按标签分组的连接
  const groupedConnections = computed(() => {
@@ -197,8 +200,8 @@ const handleDelete = async (conn: ConnectionInfo) => {
                         <td class="px-4 py-3 text-sm text-foreground whitespace-nowrap">{{ conn.username }}</td>
                         <td class="px-4 py-3 text-sm text-foreground whitespace-nowrap">{{ conn.auth_method }}</td>
                         <td class="px-4 py-3 text-sm text-foreground">
-                          <div v-if="getConnectionTagNames(conn).length > 0" class="flex flex-wrap gap-1">
-                              <span v-for="tagName in getConnectionTagNames(conn)" :key="tagName" class="px-2 py-0.5 text-xs rounded bg-background-alt border border-border text-text-secondary">
+                          <div v-if="(connectionTagNamesById.get(conn.id) ?? []).length > 0" class="flex flex-wrap gap-1">
+                              <span v-for="tagName in (connectionTagNamesById.get(conn.id) ?? [])" :key="tagName" class="px-2 py-0.5 text-xs rounded bg-background-alt border border-border text-text-secondary">
                                   {{ tagName }}
                               </span>
                           </div>
@@ -227,7 +230,6 @@ const handleDelete = async (conn: ConnectionInfo) => {
 export default {
   methods: {
     connectToServer(connectionId: number) {
-      console.log(`请求连接到服务器 ID: ${connectionId}`);
       // 使用 router 实例进行导航
       this.$router.push({ name: 'Connections' });
     }

@@ -3,6 +3,7 @@
 </template>
 
 <script setup lang="ts">
+import { debugLog } from '../composables/useDebugLog';
 import { ref, onMounted, onBeforeUnmount, watch, shallowRef, computed } from 'vue';
 import { EditorState, Compartment } from '@codemirror/state';
 import { useAppearanceStore } from '../stores/appearance.store';
@@ -221,7 +222,7 @@ onMounted(async () => {
 
   if (editorRef.value) {
     const langExt = await getLanguageExtension(props.language);
-    console.log('[CodeMirrorMobileEditor DEBUG] onMounted - Initial language:', props.language, 'Fetched langExt:', langExt);
+    debugLog('[CodeMirrorMobileEditor DEBUG] onMounted - Initial language:', props.language, 'Fetched langExt:', langExt);
     const startState = createEditorState(props.modelValue, langExt);
     
     view.value = new EditorView({

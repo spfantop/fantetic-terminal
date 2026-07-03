@@ -48,6 +48,8 @@ const chartHostRef = ref<HTMLElement | null>(null);
 const chartKey = ref(0);
 let chartResizeObserver: ResizeObserver | null = null;
 let lastChartHostWidth = 0;
+let chartResizeTimer: number | null = null;
+const CHART_RESIZE_SETTLE_DELAY = 120;
 
 const recentCpuHistory = computed(() => props.cpuHistory.slice(-DISPLAY_POINTS));
 const displayPointCount = computed(() => Math.max(recentCpuHistory.value.length, DISPLAY_POINTS));
@@ -131,11 +133,23 @@ const rerenderChart = () => {
   chartKey.value += 1;
 };
 
+const scheduleChartRerender = () => {
+  if (chartResizeTimer !== null) {
+    window.clearTimeout(chartResizeTimer);
+    chartResizeTimer = null;
+  }
+
+  chartResizeTimer = window.setTimeout(() => {
+    chartResizeTimer = null;
+    nextTick(rerenderChart);
+  }, CHART_RESIZE_SETTLE_DELAY);
+};
+
 onMounted(() => {
   const host = chartHostRef.value;
   if (!host || typeof ResizeObserver === 'undefined') return;
 
-  lastChartHostWidth = Math.round(host.getBoundingClientRect().width);
+  lastChartHostWidth = Math.round(host.clientWidth);
   chartResizeObserver = new ResizeObserver(entries => {
     const entry = entries[0];
     if (!entry) return;
@@ -144,13 +158,17 @@ onMounted(() => {
     if (!nextWidth || Math.abs(nextWidth - lastChartHostWidth) < 2) return;
 
     lastChartHostWidth = nextWidth;
-    nextTick(rerenderChart);
+    scheduleChartRerender();
   });
 
   chartResizeObserver.observe(host);
 });
 
 onBeforeUnmount(() => {
+  if (chartResizeTimer !== null) {
+    window.clearTimeout(chartResizeTimer);
+    chartResizeTimer = null;
+  }
   chartResizeObserver?.disconnect();
   chartResizeObserver = null;
 });

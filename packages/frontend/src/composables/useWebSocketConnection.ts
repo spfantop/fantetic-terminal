@@ -2,9 +2,11 @@ import { ref, shallowRef, computed, readonly } from 'vue';
 import { useI18n } from 'vue-i18n'; // +++ Add import for useI18n +++
 // 从 websocket.types.ts 导入并重新导出 ConnectionStatus
 import type { ConnectionStatus as WsConnectionStatusType, MessagePayload, WebSocketMessage, MessageHandler } from '../types/websocket.types';
+import { debugLog } from './useDebugLog';
 
 // 导出类型别名，以便其他模块可以使用
 export type WsConnectionStatus = WsConnectionStatusType;
+export type SshOutputHandler = (payload: string | Uint8Array, encoding: 'binary' | 'base64' | undefined, message?: WebSocketMessage) => void;
 
 /**
  * 创建并管理单个 WebSocket 连接实例。
@@ -31,6 +33,7 @@ export function createWebSocketConnectionManager(
     const statusMessage = ref<string>(''); // 状态描述文本
     const isSftpReady = ref<boolean>(false); // SFTP 是否就绪
     const messageHandlers = new Map<string, Set<MessageHandler>>(); // 此实例的消息处理器注册表
+    const sshOutputHandlers = new Set<SshOutputHandler>();
     const instanceSessionId = sessionId; // 保存会话 ID 用于日志
     const instanceDbConnectionId = dbConnectionId; // 保存数据库连接 ID
     const getIsMarkedForSuspend = options?.getIsMarkedForSuspend; // +++ 获取回调函数 +++
@@ -39,6 +42,14 @@ export function createWebSocketConnectionManager(
     let reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null; // 重连定时器 ID
     let lastUrl = ''; // 保存上次连接的 URL
     let intentionalDisconnect = false; // 标记是否为用户主动断开
+    const pendingSshInputBuffer: string[] = [];
+    let pendingSshInputSessionId = '';
+    let pendingSshInputCharCount = 0;
+    let sshInputFlushTimer: ReturnType<typeof setTimeout> | null = null;
+    const SSH_INPUT_BUFFERED_AMOUNT_LIMIT = 256 * 1024;
+    const SSH_INPUT_PENDING_CHAR_LIMIT = 256 * 1024;
+    const SSH_INPUT_FLUSH_DELAY = 4;
+    const SSH_INPUT_BACKPRESSURE_FLUSH_DELAY = 16;
 
 
     /**
@@ -63,6 +74,34 @@ export function createWebSocketConnectionManager(
      * @param {MessagePayload} payload - 消息负载
      * @param {WebSocketMessage} fullMessage - 完整的消息对象
      */
+    const dispatchSshOutputMessage = (message: SshOutputFastMessage) => {
+        if (sshOutputHandlers.size > 0) {
+            sshOutputHandlers.forEach(handler => {
+                try {
+                    handler(message.payload, message.encoding);
+                } catch (e) {
+                    console.error(`[WebSocket ${instanceSessionId}] SSH 输出处理器错误:`, e);
+                }
+            });
+        }
+
+        const genericHandlers = messageHandlers.get('ssh:output');
+        if (!genericHandlers?.size) return;
+
+        const fullMessage: WebSocketMessage = {
+            type: 'ssh:output',
+            payload: message.payload,
+            encoding: message.encoding,
+        };
+        genericHandlers.forEach(handler => {
+            try {
+                handler(message.payload, fullMessage);
+            } catch (e) {
+                console.error(`[WebSocket ${instanceSessionId}] 消息处理器错误 (类型: "ssh:output"):`, e);
+            }
+        });
+    };
+
     const dispatchMessage = (type: string, payload: MessagePayload, fullMessage: WebSocketMessage) => {
         if (messageHandlers.has(type)) {
             messageHandlers.get(type)?.forEach(handler => {
@@ -74,6 +113,69 @@ export function createWebSocketConnectionManager(
             });
         }
     };
+
+    const SSH_OUTPUT_MESSAGE_PREFIX = '{"type":"ssh:output","payload":"';
+    const SSH_OUTPUT_MESSAGE_SUFFIX = '","encoding":"base64"}';
+    const BASE64_PAYLOAD_PATTERN = /^[A-Za-z0-9+/=]*$/;
+    const SSH_OUTPUT_BINARY_HEADER = new Uint8Array([0x53, 0x53, 0x48, 0x4f]); // SSHO
+    const SSH_INPUT_BINARY_HEADER = new Uint8Array([0x53, 0x53, 0x48, 0x49]); // SSHI
+    const SSH_INPUT_BINARY_HEADER_LENGTH = SSH_INPUT_BINARY_HEADER.length;
+    const SSH_INPUT_ASCII_FRAME_CACHE: Uint8Array[] = Array.from({ length: 128 }, (_, code) => {
+        const frame = new Uint8Array(SSH_INPUT_BINARY_HEADER_LENGTH + 1);
+        frame.set(SSH_INPUT_BINARY_HEADER, 0);
+        frame[SSH_INPUT_BINARY_HEADER_LENGTH] = code;
+        return frame;
+    });
+    const textEncoder = new TextEncoder();
+    const SSH_OUTPUT_BINARY_HEADER_LENGTH = SSH_OUTPUT_BINARY_HEADER.length;
+
+    const hasSshOutputBinaryHeader = (bytes: Uint8Array) => (
+        bytes.length >= SSH_OUTPUT_BINARY_HEADER_LENGTH
+        && bytes[0] === SSH_OUTPUT_BINARY_HEADER[0]
+        && bytes[1] === SSH_OUTPUT_BINARY_HEADER[1]
+        && bytes[2] === SSH_OUTPUT_BINARY_HEADER[2]
+        && bytes[3] === SSH_OUTPUT_BINARY_HEADER[3]
+    );
+
+    type SshOutputFastMessage = {
+        payload: string | Uint8Array;
+        encoding: 'binary' | 'base64';
+    };
+
+    const parseSshBinaryOutputMessage = (rawData: unknown): SshOutputFastMessage | null => {
+        let bytes: Uint8Array | null = null;
+        if (rawData instanceof ArrayBuffer) {
+            bytes = new Uint8Array(rawData);
+        } else if (ArrayBuffer.isView(rawData)) {
+            bytes = new Uint8Array(rawData.buffer, rawData.byteOffset, rawData.byteLength);
+        }
+
+        if (!bytes || !hasSshOutputBinaryHeader(bytes)) return null;
+
+        return {
+            payload: bytes.subarray(SSH_OUTPUT_BINARY_HEADER_LENGTH),
+            encoding: 'binary',
+        };
+    };
+
+    const parseSshOutputMessageFastPath = (rawData: unknown): SshOutputFastMessage | null => {
+        if (typeof rawData !== 'string') return null;
+        if (!rawData.startsWith(SSH_OUTPUT_MESSAGE_PREFIX) || !rawData.endsWith(SSH_OUTPUT_MESSAGE_SUFFIX)) return null;
+
+        const payload = rawData.slice(SSH_OUTPUT_MESSAGE_PREFIX.length, -SSH_OUTPUT_MESSAGE_SUFFIX.length);
+        if (!BASE64_PAYLOAD_PATTERN.test(payload)) return null;
+
+        return {
+            payload,
+            encoding: 'base64',
+        };
+    };
+
+    const parseSshOutputFastMessage = (rawData: unknown): SshOutputFastMessage | null => (
+        parseSshBinaryOutputMessage(rawData) ?? parseSshOutputMessageFastPath(rawData)
+    );
+
+    const parseIncomingMessage = (rawData: unknown): WebSocketMessage => JSON.parse(rawData?.toString?.() ?? String(rawData));
 
     /**
      * 安排 WebSocket 重连尝试
@@ -144,19 +246,21 @@ export function createWebSocketConnectionManager(
              intentionalDisconnect = true;
              // 在关闭前移除监听器，防止旧的 onclose 干扰
              if (oldWs) {
-                 console.log(`[WebSocket ${instanceSessionId}] 移除旧连接的事件监听器...`);
+                 debugLog(`[WebSocket ${instanceSessionId}] 移除旧连接的事件监听器...`);
                  oldWs.onopen = null;
                  oldWs.onmessage = null;
                  oldWs.onerror = null;
                  oldWs.onclose = null; // 阻止旧的 onclose 干扰
-                 console.log(`[WebSocket ${instanceSessionId}] 关闭旧连接 (强制)...`);
+                 debugLog(`[WebSocket ${instanceSessionId}] 关闭旧连接 (强制)...`);
                  oldWs.close(1000, '状态不一致，强制重连');
              }
+             clearPendingSshInput();
              ws.value = null; // 清理 shallowRef 中的引用
              intentionalDisconnect = previousIntentionalDisconnect; // 恢复标记
-             console.log(`[WebSocket ${instanceSessionId}] 旧连接处理完毕。`);
+             debugLog(`[WebSocket ${instanceSessionId}] 旧连接处理完毕。`);
         } else if (ws.value && ws.value.readyState === WebSocket.CLOSING) {
-             console.log(`[WebSocket ${instanceSessionId}] 检测到旧连接正在关闭 (readyState: ${ws.value.readyState})。清理引用并继续创建新连接...`);
+             debugLog(`[WebSocket ${instanceSessionId}] 检测到旧连接正在关闭 (readyState: ${ws.value.readyState})。清理引用并继续创建新连接...`);
+             clearPendingSshInput();
              ws.value = null; // 清理引用，让后续逻辑创建新的
         }
         // 如果 ws.value 存在且 readyState 是 CLOSED，它应该已经在 onclose 中被设为 null
@@ -170,12 +274,13 @@ export function createWebSocketConnectionManager(
             let secureUrl = url;
             if (window.location.protocol === 'https:') {
                 secureUrl = url.replace(/^ws:/, 'wss:');
-                console.log(`[WebSocket ${instanceSessionId}] HTTPS detected, upgrading WebSocket URL to: ${secureUrl}`);
+                debugLog(`[WebSocket ${instanceSessionId}] HTTPS detected, upgrading WebSocket URL to: ${secureUrl}`);
             } else {
-                 console.log(`[WebSocket ${instanceSessionId}] HTTP detected, using WebSocket URL: ${secureUrl}`);
+                 debugLog(`[WebSocket ${instanceSessionId}] HTTP detected, using WebSocket URL: ${secureUrl}`);
             }
             // --- 使用调整后的 URL ---
             ws.value = new WebSocket(secureUrl);
+            ws.value.binaryType = 'arraybuffer';
 
             ws.value.onopen = () => {
                 reconnectAttempts = 0; // 连接成功，重置尝试次数
@@ -183,7 +288,7 @@ export function createWebSocketConnectionManager(
                 // 状态保持 'connecting' 直到收到 ssh:connected
                 if (!isResumeFlow) {
                     // 对于普通连接，发送 ssh:connect 并等待 ssh:connected 来更新状态
-                    sendMessage({ type: 'ssh:connect', payload: { connectionId: instanceDbConnectionId } });
+                    sendMessage({ type: 'ssh:connect', payload: { connectionId: instanceDbConnectionId, clientCapabilities: { sshBinaryOutput: true, sshBinaryInput: true } } });
                 } else {
                     // 对于恢复流程，WebSocket 打开即表示连接基础已建立
                     // 后续的 SSH_SUSPEND_RESUME_REQUEST 会完成会话的恢复
@@ -195,10 +300,17 @@ export function createWebSocketConnectionManager(
             ws.value.onmessage = (event: MessageEvent) => {
                 try {
                     const rawData = event.data;
-                    const message: WebSocketMessage = JSON.parse(rawData.toString());
+                    const sshOutputMessage = parseSshOutputFastMessage(rawData);
+                    if (sshOutputMessage) {
+                        dispatchSshOutputMessage(sshOutputMessage);
+                        return;
+                    }
+
+                    const message = parseIncomingMessage(rawData);
 
                     // --- 更新此实例的连接状态 ---
                     if (message.type === 'ssh:connected') {
+                        serverSupportsSshBinaryInput = message.payload?.serverCapabilities?.sshBinaryInput === true;
                         if (connectionStatus.value !== 'connected') {
                             connectionStatus.value = 'connected';
                             statusMessage.value = getStatusText('connected');
@@ -218,7 +330,7 @@ export function createWebSocketConnectionManager(
                             isSftpReady.value = false;
                         }
                     } else if (message.type === 'sftp_ready') {
-                        console.log(`[WebSocket ${instanceSessionId}] SFTP 会话已就绪。`);
+                        debugLog(`[WebSocket ${instanceSessionId}] SFTP 会话已就绪。`);
                         isSftpReady.value = true;
                     }
                     // --- 状态更新结束 ---
@@ -240,6 +352,7 @@ export function createWebSocketConnectionManager(
                 }
                 dispatchMessage('internal:error', event, { type: 'internal:error' });
                 isSftpReady.value = false;
+                clearPendingSshInput();
                 ws.value = null; // 清理实例
                 // 如果不是主动断开，尝试重连
                 if (!intentionalDisconnect) {
@@ -260,6 +373,7 @@ export function createWebSocketConnectionManager(
                 }
                 dispatchMessage('internal:closed', { code: event.code, reason: event.reason }, { type: 'internal:closed' });
                 isSftpReady.value = false;
+                clearPendingSshInput();
                 ws.value = null; // 清理实例引用
 
                 // 如果不是主动断开 (code 1000)，尝试重连
@@ -271,6 +385,7 @@ export function createWebSocketConnectionManager(
              connectionStatus.value = 'error';
              statusMessage.value = getStatusText('wsError');
              isSftpReady.value = false;
+             clearPendingSshInput();
              ws.value = null;
         }
     };
@@ -290,10 +405,181 @@ export function createWebSocketConnectionManager(
                  statusMessage.value = getStatusText('disconnected', { reason: '手动断开' });
             }
              ws.value.close(1000, '客户端主动断开'); // 使用标准代码和原因
+             clearPendingSshInput();
              ws.value = null;
              isSftpReady.value = false;
              // 手动断开时可以考虑清除处理器，取决于是否需要重连逻辑
              // messageHandlers.clear();
+        }
+    };
+
+    const JSON_STRING_ESCAPE_PATTERN = /[\\"\u0000-\u001f]/;
+
+    const escapeJsonString = (value: string) => {
+        if (!JSON_STRING_ESCAPE_PATTERN.test(value)) return value;
+
+        return value
+            .replace(/\\/g, '\\\\')
+            .replace(/"/g, '\\"')
+            .replace(/\u0008/g, '\\b')
+            .replace(/\f/g, '\\f')
+            .replace(/\n/g, '\\n')
+            .replace(/\r/g, '\\r')
+            .replace(/\t/g, '\\t')
+            .replace(/[\u0000-\u001f]/g, char => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`);
+    };
+
+    const hasOnlyFields = (target: Record<string, unknown>, allowedFieldSet: Set<string>) => {
+        for (const key in target) {
+            if (!allowedFieldSet.has(key)) return false;
+        }
+        return true;
+    };
+
+    const sshInputMessageFieldSet = new Set(['type', 'sessionId', 'payload']);
+    const sshInputPayloadFieldSet = new Set(['data']);
+
+    let serverSupportsSshBinaryInput = false;
+    let cachedSshInputPrefixSessionId = '';
+    let cachedSshInputPrefix = '';
+    const SSH_INPUT_DATA_SUFFIX = '"}}';
+
+    const getSshInputPrefix = (targetSessionId: string) => {
+        if (targetSessionId !== cachedSshInputPrefixSessionId) {
+            cachedSshInputPrefixSessionId = targetSessionId;
+            cachedSshInputPrefix = `{"type":"ssh:input","sessionId":"${escapeJsonString(targetSessionId)}","payload":{"data":"`;
+        }
+        return cachedSshInputPrefix;
+    };
+
+    const serializeSshInputMessage = (targetSessionId: string, data: string) =>
+        `${getSshInputPrefix(targetSessionId)}${escapeJsonString(data)}${SSH_INPUT_DATA_SUFFIX}`;
+
+    const serializeAsciiSshInputBinaryMessage = (data: string): Uint8Array | null => {
+        for (let i = 0; i < data.length; i += 1) {
+            if (data.charCodeAt(i) > 0x7f) return null;
+        }
+
+        const frame = new Uint8Array(SSH_INPUT_BINARY_HEADER_LENGTH + data.length);
+        frame.set(SSH_INPUT_BINARY_HEADER, 0);
+        for (let i = 0; i < data.length; i += 1) {
+            frame[SSH_INPUT_BINARY_HEADER_LENGTH + i] = data.charCodeAt(i);
+        }
+        return frame;
+    };
+
+    const serializeSshInputBinaryMessage = (data: string): Uint8Array => {
+        if (data.length === 1) {
+            const code = data.charCodeAt(0);
+            if (code < SSH_INPUT_ASCII_FRAME_CACHE.length) return SSH_INPUT_ASCII_FRAME_CACHE[code];
+        }
+
+        const asciiFrame = serializeAsciiSshInputBinaryMessage(data);
+        if (asciiFrame) return asciiFrame;
+
+        const frame = new Uint8Array(SSH_INPUT_BINARY_HEADER_LENGTH + data.length * 3);
+        frame.set(SSH_INPUT_BINARY_HEADER, 0);
+        const { written = 0 } = textEncoder.encodeInto(data, frame.subarray(SSH_INPUT_BINARY_HEADER_LENGTH));
+        return frame.subarray(0, SSH_INPUT_BINARY_HEADER_LENGTH + written);
+    };
+
+    const sendSshInputFrame = (currentWs: WebSocket, targetSessionId: string, data: string) => {
+        if (serverSupportsSshBinaryInput) {
+            currentWs.send(serializeSshInputBinaryMessage(data));
+            return;
+        }
+
+        currentWs.send(serializeSshInputMessage(targetSessionId, data));
+    };
+
+    const clearPendingSshInput = () => {
+        if (sshInputFlushTimer !== null) {
+            clearTimeout(sshInputFlushTimer);
+            sshInputFlushTimer = null;
+        }
+        pendingSshInputBuffer.length = 0;
+        pendingSshInputSessionId = '';
+        pendingSshInputCharCount = 0;
+    };
+
+    const schedulePendingSshInputFlush = (targetSessionId: string, delay = SSH_INPUT_FLUSH_DELAY) => {
+        if (sshInputFlushTimer !== null) return;
+        sshInputFlushTimer = setTimeout(() => {
+            sshInputFlushTimer = null;
+            flushPendingSshInput(targetSessionId);
+        }, delay);
+    };
+
+    function flushPendingSshInput(targetSessionId: string) {
+        const currentWs = ws.value;
+        if (!currentWs || currentWs.readyState !== WebSocket.OPEN) {
+            clearPendingSshInput();
+            return;
+        }
+
+        if (currentWs.bufferedAmount > SSH_INPUT_BUFFERED_AMOUNT_LIMIT) {
+            schedulePendingSshInputFlush(targetSessionId, SSH_INPUT_BACKPRESSURE_FLUSH_DELAY);
+            return;
+        }
+
+        if (pendingSshInputBuffer.length === 0) return;
+        const data = pendingSshInputBuffer.length === 1 ? pendingSshInputBuffer[0] : pendingSshInputBuffer.join('');
+        pendingSshInputBuffer.length = 0;
+        pendingSshInputSessionId = '';
+        pendingSshInputCharCount = 0;
+
+        try {
+            sendSshInputFrame(currentWs, targetSessionId, data);
+        } catch (error) {
+            console.error(`[WebSocket ${instanceSessionId}] 刷新 SSH 输入队列失败:`, error, { sessionId: targetSessionId, length: data.length });
+        }
+    }
+
+    const enqueuePendingSshInput = (targetSessionId: string, data: string) => {
+        if (pendingSshInputSessionId && pendingSshInputSessionId !== targetSessionId) {
+            flushPendingSshInput(pendingSshInputSessionId);
+            if (pendingSshInputBuffer.length > 0) clearPendingSshInput();
+        }
+
+        pendingSshInputSessionId = targetSessionId;
+        pendingSshInputBuffer.push(data);
+        pendingSshInputCharCount += data.length;
+        if (pendingSshInputCharCount > SSH_INPUT_PENDING_CHAR_LIMIT) {
+            const merged = pendingSshInputBuffer.join('');
+            pendingSshInputBuffer.length = 0;
+            pendingSshInputBuffer.push(merged);
+            pendingSshInputCharCount = merged.length;
+        }
+        schedulePendingSshInputFlush(targetSessionId);
+    };
+
+    const serializeMessage = (message: WebSocketMessage) => {
+        const payload = message.payload;
+        if (
+            message.type === 'ssh:input' &&
+            typeof message.sessionId === 'string' &&
+            payload !== null &&
+            typeof payload === 'object' &&
+            !Array.isArray(payload) &&
+            typeof payload.data === 'string' &&
+            hasOnlyFields(message, sshInputMessageFieldSet) &&
+            hasOnlyFields(payload as Record<string, unknown>, sshInputPayloadFieldSet)
+        ) {
+            return serializeSshInputMessage(message.sessionId, payload.data);
+        }
+
+        return JSON.stringify(message);
+    };
+
+    const sendSerializedMessage = (messageString: string, errorContext: unknown) => {
+        if (ws.value && ws.value.readyState === WebSocket.OPEN) {
+            try {
+                ws.value.send(messageString);
+            } catch (e) {
+                console.error(`[WebSocket ${instanceSessionId}] 发送消息失败:`, e, errorContext);
+            }
+        } else {
+            console.warn(`[WebSocket ${instanceSessionId}] 无法发送消息，连接未打开。状态: ${connectionStatus.value}, ReadyState: ${ws.value?.readyState}`);
         }
     };
 
@@ -302,15 +588,33 @@ export function createWebSocketConnectionManager(
      * @param {WebSocketMessage} message - 要发送的消息对象
      */
     const sendMessage = (message: WebSocketMessage) => {
-        if (ws.value && ws.value.readyState === WebSocket.OPEN) {
+        try {
+            sendSerializedMessage(serializeMessage(message), message);
+        } catch (e) {
+            console.error(`[WebSocket ${instanceSessionId}] 序列化消息失败:`, e, message);
+        }
+    };
+
+    const sendSshInput = (targetSessionId: string, data: string) => {
+        const currentWs = ws.value;
+        if (!currentWs || currentWs.readyState !== WebSocket.OPEN) {
+            console.warn(`[WebSocket ${instanceSessionId}] 无法发送 SSH 输入，连接未打开。状态: ${connectionStatus.value}, ReadyState: ${currentWs?.readyState}`);
+            return;
+        }
+
+        if (pendingSshInputBuffer.length > 0 || currentWs.bufferedAmount > SSH_INPUT_BUFFERED_AMOUNT_LIMIT) {
+            enqueuePendingSshInput(targetSessionId, data);
+            return;
+        }
+
+        try {
+            sendSshInputFrame(currentWs, targetSessionId, data);
+        } catch (binaryError) {
             try {
-                const messageString = JSON.stringify(message);
-                ws.value.send(messageString);
-            } catch (e) {
-                console.error(`[WebSocket ${instanceSessionId}] 序列化或发送消息失败:`, e, message);
+                currentWs.send(serializeSshInputMessage(targetSessionId, data));
+            } catch (jsonError) {
+                console.error(`[WebSocket ${instanceSessionId}] 发送 SSH 输入失败:`, jsonError, { binaryError, sessionId: targetSessionId, length: data.length });
             }
-        } else {
-            console.warn(`[WebSocket ${instanceSessionId}] 无法发送消息，连接未打开。状态: ${connectionStatus.value}, ReadyState: ${ws.value?.readyState}`);
         }
     };
 
@@ -343,6 +647,13 @@ export function createWebSocketConnectionManager(
         };
     };
 
+    const onSshOutput = (handler: SshOutputHandler): (() => void) => {
+        sshOutputHandlers.add(handler);
+        return () => {
+            sshOutputHandlers.delete(handler);
+        };
+    };
+
     // 注意：没有在此处使用 onUnmounted。
     // disconnect 方法需要由外部调用者 (例如 WorkspaceView) 在会话关闭时显式调用。
 
@@ -358,6 +669,8 @@ export function createWebSocketConnectionManager(
         connect,
         disconnect,
         sendMessage,
+        sendSshInput,
+        onSshOutput,
         onMessage,
     };
 }

@@ -1,5 +1,5 @@
 <template>
-  <div class="status-monitor" :class="{ 'status-monitor--inactive': !activeSessionId }">
+  <div ref="statusMonitorRootRef" class="status-monitor" :class="{ 'status-monitor--inactive': !activeSessionId }">
     <div v-if="!activeSessionId" class="status-state">
       <i class="fas fa-plug status-state__icon"></i>
       <span class="status-state__title">{{ t('layout.noActiveSession.title') }}</span>
@@ -76,7 +76,7 @@
           </div>
         </div>
 
-        <button type="button" class="sm-link-btn" @click="isCpuCoreModalVisible = true">
+        <button type="button" class="sm-link-btn" @click="showCpuCoreModal">
           {{ t('statusMonitor.cpuViewAllCores') }}
         </button>
       </section>
@@ -152,7 +152,7 @@
           </div>
           <div class="sm-section__actions">
             <span class="sm-badge">{{ t('statusMonitor.processManager.total') }} {{ processTotalDisplay }}</span>
-            <button type="button" class="sm-link-btn sm-link-btn--inline" @click="isProcessModalVisible = true">
+            <button type="button" class="sm-link-btn sm-link-btn--inline" @click="showProcessModal">
               {{ t('statusMonitor.processManager.viewAll') }}
             </button>
           </div>
@@ -258,12 +258,14 @@
 
     <StatusMonitorCpuCoreModal
       :is-visible="isCpuCoreModalVisible"
+      :teleport-target="statusModalTeleportTarget"
       :cpu-core-items="cpuCoreItems"
       :total-cpu-percent="displayCpuPercent"
       @close="isCpuCoreModalVisible = false"
     />
     <StatusMonitorProcessModal
       :is-visible="isProcessModalVisible"
+      :teleport-target="statusModalTeleportTarget"
       :session-id="activeSessionId"
       @close="isProcessModalVisible = false"
     />
@@ -271,7 +273,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, type CSSProperties, type PropType } from 'vue';
+import { computed, nextTick, onMounted, ref, watch, type CSSProperties, type PropType } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
 import StatusMonitorCpuCoreModal from './StatusMonitorCpuCoreModal.vue';
@@ -293,6 +295,8 @@ const { sessions } = storeToRefs(sessionStore);
 const { statusMonitorShowIpBoolean } = storeToRefs(settingsStore);
 const isCpuCoreModalVisible = ref(false);
 const isProcessModalVisible = ref(false);
+const statusMonitorRootRef = ref<HTMLElement | null>(null);
+const statusModalTeleportTarget = ref<string | HTMLElement>('body');
 
 const props = defineProps({
   activeSessionId: {
@@ -300,6 +304,27 @@ const props = defineProps({
     required: false,
     default: null,
   },
+});
+const refreshStatusModalTeleportTarget = (event?: MouseEvent) => {
+  const eventTarget = event?.currentTarget as HTMLElement | null | undefined;
+  const ownerDocument = eventTarget?.ownerDocument ?? statusMonitorRootRef.value?.ownerDocument;
+  statusModalTeleportTarget.value = ownerDocument?.body ?? 'body';
+};
+
+const showCpuCoreModal = (event?: MouseEvent) => {
+  refreshStatusModalTeleportTarget(event);
+  isCpuCoreModalVisible.value = true;
+  nextTick(() => refreshStatusModalTeleportTarget());
+};
+
+const showProcessModal = (event?: MouseEvent) => {
+  refreshStatusModalTeleportTarget(event);
+  isProcessModalVisible.value = true;
+  nextTick(() => refreshStatusModalTeleportTarget());
+};
+
+onMounted(() => {
+  refreshStatusModalTeleportTarget();
 });
 
 const currentSessionState = computed(() =>

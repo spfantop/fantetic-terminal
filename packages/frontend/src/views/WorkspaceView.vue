@@ -29,6 +29,7 @@ import {
 } from '../composables/workspaceEvents';
 import type { WebSocketDependencies } from '../composables/useSftpActions'; 
 import { useDraggableDialog } from '../composables/useDraggableDialog';
+import { debugLog, debugLogLazy } from '../composables/useDebugLog';
 
 // --- Setup ---
 const { t } = useI18n();
@@ -85,6 +86,34 @@ const visibleActiveSessionId = computed(() => (
     ? activeSessionId.value
     : null
 ));
+
+let cachedTerminalInputSessionId = '';
+let cachedTerminalInputSession: ReturnType<typeof sessionStore.sessions.get> | null = null;
+let cachedTerminalInputManager: SshTerminalInstance | null = null;
+
+const refreshTerminalInputCache = (sessionId: string) => {
+  const session = sessionStore.sessions.get(sessionId) ?? null;
+  const manager = (session?.terminalManager as SshTerminalInstance | undefined) ?? null;
+  if (
+    sessionId === cachedTerminalInputSessionId &&
+    session === cachedTerminalInputSession &&
+    manager === cachedTerminalInputManager
+  ) return;
+
+  cachedTerminalInputSessionId = sessionId;
+  cachedTerminalInputSession = session;
+  cachedTerminalInputManager = manager;
+};
+
+const readTerminalInputManager = (sessionId: string) => {
+  refreshTerminalInputCache(sessionId);
+  return cachedTerminalInputManager;
+};
+
+const readTerminalInputSession = (sessionId: string) => {
+  refreshTerminalInputCache(sessionId);
+  return cachedTerminalInputSession;
+};
 
 const workspaceSplitAvailable = computed(() => !isMobile.value && visibleSessionTabsWithStatus.value.length > 1);
 const isWorkspaceSplitActive = ref(false);
@@ -185,7 +214,6 @@ type PoppedOutTerminalState = {
   closeHandler: () => void;
   focusHandler: () => void;
   visibilityHandler: () => void;
-  terminalPointerFocusHandler: () => void;
 };
 
 type XtermWindowBoundTerminal = XtermTerminal & {
@@ -345,8 +373,6 @@ const restorePoppedOutTerminalElement = (sessionId: string) => {
   } catch (error) {
     console.warn(`[WorkspaceView] Failed to remove pop-out window listeners for session ${sessionId}:`, error);
   }
-  state.host.removeEventListener('pointerdown', state.terminalPointerFocusHandler, true);
-  state.host.removeEventListener('mousedown', state.terminalPointerFocusHandler, true);
   state.app.unmount();
   if (state.placeholder.parentNode) {
     state.placeholder.parentNode.replaceChild(state.terminalElement, state.placeholder);
@@ -570,6 +596,7 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
           class: 'layout-renderer-wrapper',
           editorTabs: sessionEditorTabs.value,
           activeEditorTabId: sessionActiveEditorTabId.value,
+          terminalInputHandler: handleTerminalInputData,
         });
       },
     });
@@ -589,22 +616,17 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
     return;
   }
 
-  let externalTerminalHost = await waitForPopupElement<HTMLElement>(
+  const externalTerminalHost = await waitForPopupElement<HTMLElement>(
     popup.document,
-    `[data-external-terminal-session-id="${cssEscape(sessionId)}"]`
+    `[data-external-terminal-session-id="${cssEscape(sessionId)}"]`,
+    30,
   );
   if (!externalTerminalHost) {
-    externalTerminalHost = popup.document.createElement('div');
-    externalTerminalHost.dataset.externalTerminalSessionId = sessionId;
-    externalTerminalHost.className = 'terminal-instance-wrapper absolute inset-0 w-full h-full';
-    externalTerminalHost.style.position = 'absolute';
-    externalTerminalHost.style.inset = '0';
-    externalTerminalHost.style.width = '100%';
-    externalTerminalHost.style.height = '100%';
-    externalTerminalHost.style.zIndex = '3';
-    terminalHost.appendChild(externalTerminalHost);
+    popoutApp.unmount();
+    popup.close();
+    uiNotificationsStore.showError(t('workspace.sessionPopout.mountFailed', '弹出终端挂载失败，请稍后重试。'));
+    return;
   }
-
   const placeholder = document.createComment(`popped-out-terminal-${sessionId}`);
   terminalElement.parentNode.replaceChild(placeholder, terminalElement);
   externalTerminalHost.appendChild(terminalElement);
@@ -632,7 +654,6 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
       focusPoppedOutTerminal(sessionId, { resize: true });
     }
   };
-  const terminalPointerFocusHandler = () => focusPoppedOutTerminal(sessionId, { force: true });
   const nextPoppedOutTerminalMap = new Map(poppedOutTerminalMap.value);
   nextPoppedOutTerminalMap.set(sessionId, {
     sessionId,
@@ -645,7 +666,6 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
     closeHandler,
     focusHandler,
     visibilityHandler,
-    terminalPointerFocusHandler,
   });
   poppedOutTerminalMap.value = nextPoppedOutTerminalMap;
 
@@ -653,8 +673,6 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
   popup.addEventListener('focus', focusHandler);
   popup.addEventListener('pageshow', focusHandler);
   popup.document.addEventListener('visibilitychange', visibilityHandler);
-  terminalHost.addEventListener('pointerdown', terminalPointerFocusHandler, true);
-  terminalHost.addEventListener('mousedown', terminalPointerFocusHandler, true);
   popup.focus();
   requestTerminalResize(sessionId);
 };
@@ -694,7 +712,7 @@ const handleGlobalKeyDown = (event: KeyboardEvent) => {
 
     const nextSessionId = tabs[nextIndex].sessionId;
     if (nextSessionId !== currentId) {
-      console.log(`[WorkspaceView] Alt+${event.key} detected. Switching to session: ${nextSessionId}`);
+      debugLog(`[WorkspaceView] Alt+${event.key} detected. Switching to session: ${nextSessionId}`);
       sessionStore.activateSession(nextSessionId);
     }
   }
@@ -734,7 +752,7 @@ const handleToggleWorkspaceSplitEvent = (payload?: WorkspaceEventPayloads['ui:to
 
 // --- 生命周期钩子 ---
 onMounted(() => {
-  console.log('[工作区视图] 组件已挂载。');
+  debugLog('[工作区视图] 组件已挂载。');
   // 添加键盘事件监听器
   window.addEventListener('keydown', handleGlobalKeyDown);
   // 确保布局已初始化 (layoutStore 内部会处理)
@@ -782,7 +800,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  console.log('[工作区视图] 组件即将卸载，清理所有会话...');
+  debugLog('[工作区视图] 组件即将卸载，清理所有会话...');
   restoreAllPoppedOutTerminalElements();
   // 移除键盘事件监听器
   window.removeEventListener('keydown', handleGlobalKeyDown);
@@ -834,7 +852,7 @@ const unsubscribeFromWorkspaceEvents = useWorkspaceEventOff();
 
  // --- 本地方法 (仅处理 UI 状态) ---
  const handleRequestAddConnection = () => {
-   console.log('[WorkspaceView] handleRequestAddConnection 被调用！');
+   debugLog('[WorkspaceView] handleRequestAddConnection 被调用！');
    connectionToEdit.value = null;
    showAddEditForm.value = true;
  };
@@ -850,12 +868,12 @@ const unsubscribeFromWorkspaceEvents = useWorkspaceEventOff();
  };
 
  const handleConnectionAdded = () => {
-   console.log('[工作区视图] 连接已添加');
+   debugLog('[工作区视图] 连接已添加');
    handleFormClose();
  };
 
  const handleConnectionUpdated = () => {
-   console.log('[工作区视图] 连接已更新');
+   debugLog('[工作区视图] 连接已更新');
    handleFormClose();
  };
 
@@ -881,7 +899,7 @@ const unsubscribeFromWorkspaceEvents = useWorkspaceEventOff();
    const terminalManager = sessionToCommand.terminalManager as (SshTerminalInstance | undefined);
 
    if (terminalManager?.isSshConnected && !terminalManager.isSshConnected.value && command.trim() === '') {
-     console.log(`[WorkspaceView] Command bar Enter detected in disconnected session ${sessionToCommand.sessionId}, attempting reconnect...`);
+     debugLog(`[WorkspaceView] Command bar Enter detected in disconnected session ${sessionToCommand.sessionId}, attempting reconnect...`);
      if (terminalManager.terminalInstance?.value) {
          terminalManager.terminalInstance.value.writeln(`\r\n\x1b[33m${t('workspace.terminal.reconnectingMsg')}\x1b[0m`);
      }
@@ -896,7 +914,7 @@ const unsubscribeFromWorkspaceEvents = useWorkspaceEventOff();
 
    if (terminalManager && typeof terminalManager.sendData === 'function') {
      const commandToSend = command.trim(); // Keep trimmed for history
-     console.log(`[WorkspaceView] Sending command/data to session ${sessionToCommand.sessionId}: ${JSON.stringify(command)}`); // Log raw command
+     debugLogLazy(() => [`[WorkspaceView] Sending command/data to session ${sessionToCommand.sessionId}: ${JSON.stringify(command)}`]);
      // Only append '\r' for regular commands, not for control characters like Ctrl+C (\x03)
      // Send the raw command as received by the function for control characters
      const dataToSend = command === '\x03' ? command : command + '\r';
@@ -914,33 +932,41 @@ const unsubscribeFromWorkspaceEvents = useWorkspaceEventOff();
 
  // 处理终端输入 (用于 Terminal)
  // 注意：LayoutRenderer 内部的 Terminal 组件需要 emit('terminal-input', sessionId, data)
- const handleTerminalInput = (payload: { sessionId: string; data: string }) => {
-   const { sessionId, data } = payload; // 解构 payload
-   const session = sessionStore.sessions.get(sessionId);
-   const manager = session?.terminalManager as (SshTerminalInstance | undefined);
-   if (!session || !manager) {
+ const handleTerminalInputData = (sessionId: string, data: string, batched?: boolean) => {
+   const manager = readTerminalInputManager(sessionId);
+   if (!manager) {
      console.warn(`[WorkspaceView] handleTerminalInput: 未找到会话 ${sessionId} 或其 terminalManager`);
      return;
    }
-   if (data === '\r' && manager.isSshConnected && !manager.isSshConnected.value) {
-     console.log(`[WorkspaceView] 检测到在断开的会话 ${sessionId} 中按下回车，尝试重连...`);
-     if (manager.terminalInstance?.value) {
-         manager.terminalInstance.value.writeln(`\r\n\x1b[33m${t('workspace.terminal.reconnectingMsg')}\x1b[0m`);
-     } else {
-         console.warn(`[WorkspaceView] 无法写入重连提示，terminalInstance 不可用。`);
-     }
-     // +++ 修复：传递 ConnectionInfo 而不是 ID +++
-     const connectionInfo = connectionsStore.connections.find(c => c.id === Number(session.connectionId));
-     if (connectionInfo) {
-       sessionStore.handleConnectRequest(connectionInfo);
-     } else {
-       console.error(`[WorkspaceView] handleTerminalInput: 未找到 ID 为 ${session.connectionId} 的连接信息。`);
-     }
+
+   if (data !== '\r' || !manager.isSshConnected || manager.isSshConnected.value) {
+     manager.handleTerminalData(data, { batched });
+     return;
+   }
+
+   const session = readTerminalInputSession(sessionId);
+   if (!session) {
+     console.warn(`[WorkspaceView] handleTerminalInput: 未找到会话 ${sessionId}`);
+     return;
+   }
+
+   debugLog(`[WorkspaceView] 检测到在断开的会话 ${sessionId} 中按下回车，尝试重连...`);
+   if (manager.terminalInstance?.value) {
+     manager.terminalInstance.value.writeln(`\r\n\x1b[33m${t('workspace.terminal.reconnectingMsg')}\x1b[0m`);
    } else {
-     manager.handleTerminalData(data);
+     console.warn(`[WorkspaceView] 无法写入重连提示，terminalInstance 不可用。`);
+   }
+   const connectionInfo = connectionsStore.connections.find(c => c.id === Number(session.connectionId));
+   if (connectionInfo) {
+     sessionStore.handleConnectRequest(connectionInfo);
+   } else {
+     console.error(`[WorkspaceView] handleTerminalInput: 未找到 ID 为 ${session.connectionId} 的连接信息。`);
    }
  };
 
+ const handleTerminalInput = (payload: WorkspaceEventPayloads['terminal:input']) => {
+   handleTerminalInputData(payload.sessionId, payload.data, payload.batched);
+ };
  // 处理终端大小调整 (用于 Terminal)
  // 注意：LayoutRenderer 内部的 Terminal 组件需要 emit('terminal-resize', sessionId, dims)
  const handleTerminalResize = (payload: { sessionId: string; dims: { cols: number; rows: number } }) => {
@@ -951,11 +977,11 @@ const unsubscribeFromWorkspaceEvents = useWorkspaceEventOff();
  // 注意：LayoutRenderer 内部的 Terminal 组件需要 emit('terminal-ready', payload)
  // *** 修正：更新 payload 类型以包含 searchAddon ***
  const handleTerminalReady = (payload: { sessionId: string; terminal: XtermTerminal; searchAddon: any | null }) => { // --- 使用重命名的 XtermTerminal ---
-    console.log(`[工作区视图 ${payload.sessionId}] 收到 terminal-ready 事件。Payload:`, payload); // *** 添加 Payload 日志 ***
+   debugLog(`[工作区视图 ${payload.sessionId}] 收到 terminal-ready 事件。Payload:`, payload);
     // *** 检查 payload 中 searchAddon 是否存在 ***
     if (payload && payload.searchAddon) {
-        console.log(`[工作区视图 ${payload.sessionId}] Payload 包含 searchAddon 实例。`);
-    } else {
+        debugLog(`[工作区视图 ${payload.sessionId}] Payload 包含 searchAddon 实例。`);
+   } else {
         console.warn(`[工作区视图 ${payload.sessionId}] Payload 未包含 searchAddon 实例！ Payload:`, payload);
     }
     // *** 修正：传递包含 terminal 和 searchAddon 的完整 payload ***
@@ -974,7 +1000,7 @@ const handleSearch = (term: string, sessionId?: string) => { // +++ 修改 +++
     handleCloseSearch(sessionId);
     return;
   }
-  console.log(`[WorkspaceView] Received search event: "${term}"`);
+  debugLog(`[WorkspaceView] Received search event: "${term}"`);
   // 默认向前搜索
   // 触发 findNext
   handleFindNext(sessionId); // 保持调用 findNext，内部会处理 isMobile
@@ -984,11 +1010,11 @@ const handleFindNext = (sessionId?: string) => {
   const manager = getSessionForAction(sessionId)?.terminalManager;
   if (manager && currentSearchTerm.value) {
     const mode = isMobile.value ? 'Mobile' : 'Desktop';
-    console.log(`[WorkspaceView ${mode}] Calling findNext for term: "${currentSearchTerm.value}"`);
+   debugLog(`[WorkspaceView ${mode}] Calling findNext for term: "${currentSearchTerm.value}"`);
     const found = manager.searchNext(currentSearchTerm.value, { incremental: true });
-    console.log(`[WorkspaceView ${mode}] findNext returned: ${found}`);
+   debugLog(`[WorkspaceView ${mode}] findNext returned: ${found}`);
     if (!found) {
-      console.log(`[WorkspaceView ${mode}] findNext: No more results for "${currentSearchTerm.value}"`);
+      debugLog(`[WorkspaceView ${mode}] findNext: No more results for "${currentSearchTerm.value}"`);
     }
   } else {
     const mode = isMobile.value ? 'Mobile' : 'Desktop';
@@ -1000,11 +1026,11 @@ const handleFindPrevious = (sessionId?: string) => {
   const manager = getSessionForAction(sessionId)?.terminalManager;
   if (manager && currentSearchTerm.value) {
     const mode = isMobile.value ? 'Mobile' : 'Desktop';
-    console.log(`[WorkspaceView ${mode}] Calling findPrevious for term: "${currentSearchTerm.value}"`);
+   debugLog(`[WorkspaceView ${mode}] Calling findPrevious for term: "${currentSearchTerm.value}"`);
     const found = manager.searchPrevious(currentSearchTerm.value, { incremental: true });
-    console.log(`[WorkspaceView ${mode}] findPrevious returned: ${found}`);
+   debugLog(`[WorkspaceView ${mode}] findPrevious returned: ${found}`);
     if (!found) {
-      console.log(`[WorkspaceView ${mode}] findPrevious: No previous results for "${currentSearchTerm.value}"`);
+      debugLog(`[WorkspaceView ${mode}] findPrevious: No previous results for "${currentSearchTerm.value}"`);
     }
   } else {
     const mode = isMobile.value ? 'Mobile' : 'Desktop';
@@ -1013,13 +1039,13 @@ const handleFindPrevious = (sessionId?: string) => {
 };
 
 const handleCloseSearch = (sessionId?: string) => {
-  console.log(`[WorkspaceView] Received close-search event.`);
+  debugLog(`[WorkspaceView] Received close-search event.`);
   currentSearchTerm.value = ''; // 清空搜索词
   const manager = getSessionForAction(sessionId)?.terminalManager;
   const mode = isMobile.value ? 'Mobile' : 'Desktop';
   if (manager) {
     manager.clearTerminalSearch();
-    console.log(`[WorkspaceView ${mode}] Search cleared.`);
+   debugLog(`[WorkspaceView ${mode}] Search cleared.`);
   } else {
     console.warn(`[WorkspaceView ${mode}] Cannot clear search, no active session manager.`);
   }
@@ -1036,7 +1062,7 @@ const handleClearTerminal = (payload?: WorkspaceEventPayloads['terminal:clear'])
   const mode = isMobile.value ? 'Mobile' : 'Desktop';
 
   if (terminalManager && terminalManager.terminalInstance?.value && typeof terminalManager.terminalInstance.value.clear === 'function') {
-    console.log(`[WorkspaceView ${mode}] Clearing terminal for active session ${currentSession.sessionId}`);
+   debugLog(`[WorkspaceView ${mode}] Clearing terminal for active session ${currentSession.sessionId}`);
     terminalManager.terminalInstance.value.clear();
   } else {
     console.warn(`[WorkspaceView ${mode}] Cannot clear terminal for session ${currentSession.sessionId}, terminal manager, instance, or clear method not available.`);
@@ -1048,7 +1074,7 @@ const handleScrollToBottomRequest = (payload: { sessionId: string }) => {
   const session = sessionStore.sessions.get(payload.sessionId);
   const terminalManager = session?.terminalManager as (SshTerminalInstance | undefined);
   if (terminalManager?.terminalInstance?.value) {
-    console.log(`[WorkspaceView] Scrolling to bottom for session ${payload.sessionId}`);
+   debugLog(`[WorkspaceView] Scrolling to bottom for session ${payload.sessionId}`);
     terminalManager.terminalInstance.value.scrollToBottom();
   } else {
     console.warn(`[WorkspaceView] Cannot scroll to bottom for session ${payload.sessionId}, terminal instance not found.`);
@@ -1059,7 +1085,7 @@ const handleScrollToBottomRequest = (payload: { sessionId: string }) => {
 // --- 编辑器操作处理 (用于 FileEditorContainer) ---
 const handleCloseEditorTab = (tabId: string) => {
    const isShared = shareFileEditorTabsBoolean.value;
-   console.log(`[WorkspaceView] handleCloseEditorTab: ${tabId}, Shared mode: ${isShared}`);
+   debugLog(`[WorkspaceView] handleCloseEditorTab: ${tabId}, Shared mode: ${isShared}`);
    if (isShared) {
      fileEditorStore.closeTab(tabId);
    } else {
@@ -1067,14 +1093,14 @@ const handleCloseEditorTab = (tabId: string) => {
      if (currentActiveSessionId) {
        sessionStore.closeEditorTabInSession(currentActiveSessionId, tabId);
      } else {
-       console.warn('[WorkspaceView] Cannot close editor tab: No active session in independent mode.');
+        console.warn('[WorkspaceView] Cannot close editor tab: No active session in independent mode.');
      }
    }
  };
 
  const handleActivateEditorTab = (tabId: string) => {
    const isShared = shareFileEditorTabsBoolean.value;
-   console.log(`[WorkspaceView] handleActivateEditorTab: ${tabId}, Shared mode: ${isShared}`);
+   debugLog(`[WorkspaceView] handleActivateEditorTab: ${tabId}, Shared mode: ${isShared}`);
    if (isShared) {
      fileEditorStore.setActiveTab(tabId);
    } else {
@@ -1082,14 +1108,14 @@ const handleCloseEditorTab = (tabId: string) => {
      if (currentActiveSessionId) {
        sessionStore.setActiveEditorTabInSession(currentActiveSessionId, tabId);
      } else {
-       console.warn('[WorkspaceView] Cannot activate editor tab: No active session in independent mode.');
+        console.warn('[WorkspaceView] Cannot activate editor tab: No active session in independent mode.');
      }
    }
  };
 
  const handleUpdateEditorContent = (payload: { tabId: string; content: string }) => {
    const isShared = shareFileEditorTabsBoolean.value;
-   console.log(`[WorkspaceView] handleUpdateEditorContent for tab ${payload.tabId}, Shared mode: ${isShared}`);
+   debugLog(`[WorkspaceView] handleUpdateEditorContent for tab ${payload.tabId}, Shared mode: ${isShared}`);
    if (isShared) {
      fileEditorStore.updateFileContent(payload.tabId, payload.content);
    } else {
@@ -1097,14 +1123,14 @@ const handleCloseEditorTab = (tabId: string) => {
      if (currentActiveSessionId) {
        sessionStore.updateFileContentInSession(currentActiveSessionId, payload.tabId, payload.content);
      } else {
-       console.warn('[WorkspaceView] Cannot update editor content: No active session in independent mode.');
+        console.warn('[WorkspaceView] Cannot update editor content: No active session in independent mode.');
      }
    }
  };
 
  const handleSaveEditorTab = (tabId: string) => {
    const isShared = shareFileEditorTabsBoolean.value;
-   console.log(`[WorkspaceView] handleSaveEditorTab: ${tabId}, Shared mode: ${isShared}`);
+   debugLog(`[WorkspaceView] handleSaveEditorTab: ${tabId}, Shared mode: ${isShared}`);
    if (isShared) {
      fileEditorStore.saveFile(tabId);
    } else {
@@ -1112,7 +1138,7 @@ const handleCloseEditorTab = (tabId: string) => {
      if (currentActiveSessionId) {
        sessionStore.saveFileInSession(currentActiveSessionId, tabId);
      } else {
-       console.warn('[WorkspaceView] Cannot save editor tab: No active session in independent mode.');
+        console.warn('[WorkspaceView] Cannot save editor tab: No active session in independent mode.');
      }
    }
  };
@@ -1120,7 +1146,7 @@ const handleCloseEditorTab = (tabId: string) => {
  // +++ 处理编辑器编码更改事件 +++
  const handleChangeEncoding = (payload: { tabId: string; encoding: string }) => {
    const isShared = shareFileEditorTabsBoolean.value;
-   console.log(`[WorkspaceView] handleChangeEncoding for tab ${payload.tabId} to ${payload.encoding}, Shared mode: ${isShared}`);
+   debugLog(`[WorkspaceView] handleChangeEncoding for tab ${payload.tabId} to ${payload.encoding}, Shared mode: ${isShared}`);
    if (isShared) {
      fileEditorStore.changeEncoding(payload.tabId, payload.encoding);
    } else {
@@ -1129,7 +1155,7 @@ const handleCloseEditorTab = (tabId: string) => {
        // 假设 sessionStore 有一个 changeEncodingInSession 方法
        sessionStore.changeEncodingInSession(currentActiveSessionId, payload.tabId, payload.encoding);
      } else {
-       console.warn('[WorkspaceView] Cannot change editor encoding: No active session in independent mode.');
+        console.warn('[WorkspaceView] Cannot change editor encoding: No active session in independent mode.');
      }
    }
  };
@@ -1145,7 +1171,7 @@ const handleCloseEditorTab = (tabId: string) => {
        // 假设 tabId 在当前活动会话的编辑器标签中是唯一的
        sessionStore.updateTabScrollPositionInSession(currentActiveSession.sessionId, tabId, scrollTop, scrollLeft);
      } else {
-       console.warn('[WorkspaceView] Cannot update editor scroll position: No active session in independent mode for tab:', tabId);
+        console.warn('[WorkspaceView] Cannot update editor scroll position: No active session in independent mode for tab:', tabId);
      }
    }
  };
@@ -1161,7 +1187,7 @@ const handleCloseEditorTab = (tabId: string) => {
    }
  };
  const handleOpenNewSession = (id: number) => {
-    console.log(`[WorkspaceView] Received 'open-new-session' event for ID: ${id}`);
+   debugLog(`[WorkspaceView] Received 'open-new-session' event for ID: ${id}`);
     sessionStore.handleOpenNewSession(id);
   };
 
@@ -1176,7 +1202,7 @@ const handleVirtualKeyPress = (keySequence: string) => {
  // 并且直接发送数据，因为虚拟键盘通常用于发送控制字符或特殊序列
  const terminalManager = currentSession.terminalManager as (SshTerminalInstance | undefined);
  if (terminalManager && typeof terminalManager.sendData === 'function') {
-   console.log(`[WorkspaceView Mobile] Sending virtual key sequence: ${JSON.stringify(keySequence)}`);
+   debugLogLazy(() => [`[WorkspaceView Mobile] Sending virtual key sequence: ${JSON.stringify(keySequence)}`]);
    terminalManager.sendData(keySequence);
  } else {
    console.warn(`[WorkspaceView Mobile] Cannot send virtual key for session ${currentSession.sessionId}, terminal manager or sendData method not available.`);
@@ -1262,7 +1288,7 @@ const handleFileManagerOpenRequest = (payload: { sessionId: string }) => {
 
   // 2. 获取 wsDeps (从 session.wsManager 获取)
   if (!session.wsManager) {
-      console.error(`[WorkspaceView] Cannot open file manager: wsManager not found for session ${sessionId}.`);
+     console.error(`[WorkspaceView] Cannot open file manager: wsManager not found for session ${sessionId}.`);
       // TODO: Show error notification
       return;
   }
@@ -1275,7 +1301,7 @@ const handleFileManagerOpenRequest = (payload: { sessionId: string }) => {
 
   if (!wsDeps) {
       // 如果 wsDeps 仍然为 null，则无法继续
-      console.error(`[WorkspaceView] Cannot open file manager: wsDeps are null after attempting retrieval for session ${sessionId}.`);
+     console.error(`[WorkspaceView] Cannot open file manager: wsDeps are null after attempting retrieval for session ${sessionId}.`);
       return;
   }
 
@@ -1294,13 +1320,13 @@ const handleFileManagerOpenRequest = (payload: { sessionId: string }) => {
   currentFileManagerSessionId.value = sessionId;
   showFileManagerModal.value = true;
   centerFileManagerModal();
-  console.log(`[WorkspaceView] Opening FileManager modal with props for session ${sessionId}:`, newProps);
+  debugLog(`[WorkspaceView] Opening FileManager modal with props for session ${sessionId}:`, newProps);
 };
 
 // --- 处理 quickCommand:executeProcessed 事件 ---
 const handleQuickCommandExecuteProcessed = (payload: WorkspaceEventPayloads['quickCommand:executeProcessed']) => {
   const { command, sessionId: targetSessionId } = payload;
-  console.log(`[WorkspaceView] Received quickCommand:executeProcessed event. Command: "${command}", TargetSessionID: ${targetSessionId}`);
+  debugLog(`[WorkspaceView] Received quickCommand:executeProcessed event. Command: "${command}", TargetSessionID: ${targetSessionId}`);
 
   // 使用现有的 handleSendCommand 逻辑来发送指令
   // handleSendCommand 会处理 sessionId 未定义时使用 activeSessionId 的情况
@@ -1309,7 +1335,7 @@ const handleQuickCommandExecuteProcessed = (payload: WorkspaceEventPayloads['qui
 
 const closeFileManagerModal = () => {
   showFileManagerModal.value = false;
-  console.log('[WorkspaceView] FileManager modal hidden (kept alive).');
+  debugLog('[WorkspaceView] FileManager modal hidden (kept alive).');
 };
 
 </script>
@@ -1339,6 +1365,7 @@ const closeFileManagerModal = () => {
               :workspace-split-active="isWorkspaceSplitActive"
               :workspace-split-session-ids="workspaceSplitSessionIds"
               :layout-locked="layoutLockedBoolean"
+              :terminal-input-handler="handleTerminalInputData"
               class="layout-renderer-wrapper"
               :editor-tabs="editorTabs"
               :active-editor-tab-id="activeEditorTabId"
@@ -1366,6 +1393,7 @@ const closeFileManagerModal = () => {
           :popped-out-session-ids="poppedOutSessionIds"
           :is-root-renderer="false"
           :layout-locked="layoutLockedBoolean"
+          :terminal-input-handler="handleTerminalInputData"
           class="layout-renderer-wrapper flex-grow overflow-auto"
           :editor-tabs="editorTabs"
           :active-editor-tab-id="activeEditorTabId"

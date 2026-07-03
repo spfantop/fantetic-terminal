@@ -18,6 +18,14 @@ import type { AuditLogEntry } from '../types/server.types';
 
 type DashboardTone = 'neutral' | 'success' | 'warning' | 'danger';
 
+type DashboardConnectionRow = {
+  connection: ConnectionInfo;
+  displayName: string;
+  folderName: string;
+  visibleTags: TagInfo[];
+  hiddenTagCount: number;
+};
+
 const { t, locale } = useI18n();
 const router = useRouter();
 const connectionsStore = useConnectionsStore();
@@ -143,6 +151,31 @@ const dashboardConnections = computed(() =>
   filteredAndSortedConnections.value.slice(0, maxDashboardConnections)
 );
 
+const tagById = computed(() => new Map(tags.value.map(tag => [tag.id, tag])));
+const folderNameById = computed(() => new Map(folders.value.map(folder => [folder.id, folder.name])));
+const tagCountById = computed(() => {
+  const countMap = new Map<number, number>();
+  connections.value.forEach((connection) => {
+    connection.tag_ids?.forEach((tagId) => {
+      countMap.set(tagId, (countMap.get(tagId) ?? 0) + 1);
+    });
+  });
+  return countMap;
+});
+
+const dashboardConnectionRows = computed<DashboardConnectionRow[]>(() => (
+  dashboardConnections.value.map((connection) => {
+    const allTags = getConnectionTags(connection);
+    return {
+      connection,
+      displayName: getConnectionDisplayName(connection),
+      folderName: getFolderName(connection.folder_id),
+      visibleTags: allTags.slice(0, 3),
+      hiddenTagCount: Math.max(0, allTags.length - 3),
+    };
+  })
+));
+
 const recentAuditLogs = computed(() => auditLogs.value.slice(0, maxRecentLogs));
 const totalConnections = computed(() => connections.value.length);
 const folderCount = computed(() => folders.value.length);
@@ -247,7 +280,7 @@ const organizationItems = computed(() => [
 
 const topTags = computed(() => {
   const tagRows = tags.value.map(tag => {
-    const count = connections.value.filter(conn => conn.tag_ids?.includes(tag.id)).length;
+    const count = tagCountById.value.get(tag.id) ?? 0;
     return { ...tag, count, percent: percentOf(count, totalConnections.value) };
   });
   return tagRows.filter(tag => tag.count > 0).sort((a, b) => b.count - a.count).slice(0, 5);
@@ -344,13 +377,13 @@ const getConnectionDisplayName = (conn: ConnectionInfo) =>
 const getConnectionTags = (conn: ConnectionInfo): TagInfo[] => {
   if (!conn.tag_ids?.length) return [];
   return conn.tag_ids
-    .map(id => tags.value.find(tag => tag.id === id))
+    .map(id => tagById.value.get(id))
     .filter((tag): tag is TagInfo => Boolean(tag));
 };
 
 const getFolderName = (folderId: number | null | undefined) => {
   if (folderId === null || folderId === undefined) return t('dashboard.noFolder');
-  return folders.value.find(folder => folder.id === folderId)?.name || t('dashboard.unknownFolder');
+  return folderNameById.value.get(folderId) || t('dashboard.unknownFolder');
 };
 
 const isFailedAction = (actionType: string): boolean => {
@@ -502,15 +535,15 @@ const formatAuditDetails = (details: AuditLogEntry['details']) => {
             {{ t('common.loading') }}
           </div>
 
-          <div v-else-if="dashboardConnections.length > 0" class="connection-stack">
-            <div v-for="conn in dashboardConnections" :key="conn.id" class="connection-row">
-              <div class="connection-row__icon" :class="`connection-row__icon--${conn.type.toLowerCase()}`">
+          <div v-else-if="dashboardConnectionRows.length > 0" class="connection-stack">
+            <div v-for="row in dashboardConnectionRows" :key="row.connection.id" class="connection-row">
+              <div class="connection-row__icon" :class="`connection-row__icon--${row.connection.type.toLowerCase()}`">
                 <i
                   class="fas"
                   :class="
-                    conn.type === 'SSH'
+                    row.connection.type === 'SSH'
                       ? 'fa-terminal'
-                      : conn.type === 'RDP'
+                      : row.connection.type === 'RDP'
                         ? 'fa-desktop'
                         : 'fa-eye'
                   "
@@ -518,19 +551,19 @@ const formatAuditDetails = (details: AuditLogEntry['details']) => {
               </div>
               <div class="connection-row__body">
                 <div class="connection-row__title">
-                  <span :title="getConnectionDisplayName(conn)">{{ getConnectionDisplayName(conn) }}</span>
-                  <em>{{ conn.type }}</em>
+                  <span :title="row.displayName">{{ row.displayName }}</span>
+                  <em>{{ row.connection.type }}</em>
                 </div>
                 <div class="connection-row__meta">
-                  <span>{{ t('dashboard.lastConnected') }} {{ formatRelativeTime(conn.last_connected_at) }}</span>
-                  <span>{{ getFolderName(conn.folder_id) }}</span>
+                  <span>{{ t('dashboard.lastConnected') }} {{ formatRelativeTime(row.connection.last_connected_at) }}</span>
+                  <span>{{ row.folderName }}</span>
                 </div>
-                <div v-if="getConnectionTags(conn).length > 0" class="connection-row__tags">
-                  <span v-for="tag in getConnectionTags(conn).slice(0, 3)" :key="tag.id">
+                <div v-if="row.visibleTags.length > 0" class="connection-row__tags">
+                  <span v-for="tag in row.visibleTags" :key="tag.id">
                     {{ tag.name }}
                   </span>
-                  <span v-if="getConnectionTags(conn).length > 3">
-                    +{{ getConnectionTags(conn).length - 3 }}
+                  <span v-if="row.hiddenTagCount > 0">
+                    +{{ row.hiddenTagCount }}
                   </span>
                 </div>
               </div>
@@ -538,7 +571,7 @@ const formatAuditDetails = (details: AuditLogEntry['details']) => {
                 class="connection-row__action"
                 :title="t('connections.actions.connect')"
                 :aria-label="t('connections.actions.connect')"
-                @click="connectTo(conn)"
+                @click="connectTo(row.connection)"
               >
                 <i class="fas fa-arrow-right"></i>
               </button>

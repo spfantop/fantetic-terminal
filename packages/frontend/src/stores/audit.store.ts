@@ -1,3 +1,4 @@
+import { debugLog } from '../composables/useDebugLog';
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import apiClient from '../utils/apiClient'; // 使用统一的 apiClient
@@ -38,7 +39,7 @@ export const useAuditLogStore = defineStore('auditLog', () => {
             try {
                 const cachedData = localStorage.getItem(cacheKey);
                 if (cachedData) {
-                    console.log('[AuditLogStore] Loading dashboard logs from cache.');
+                    debugLog('[AuditLogStore] Loading dashboard logs from cache.');
                     // 仪表盘只关心日志列表，不关心 totalLogs 或 currentPage
                     logs.value = JSON.parse(cachedData);
                     isLoading.value = false; // 先显示缓存
@@ -68,7 +69,7 @@ export const useAuditLogStore = defineStore('auditLog', () => {
                 ...(sortOrder && { sort_order: sortOrder }),
             };
 
-            console.log(`[AuditLogStore] Fetching logs from server (isDashboard: ${isDashboardRequest}). Params:`, params);
+            debugLog(`[AuditLogStore] Fetching logs from server (isDashboard: ${isDashboardRequest}). Params:`, params);
             const response = await apiClient.get<AuditLogApiResponse>('/audit-logs', { params });
             const freshLogs = response.data.logs;
             const freshTotal = response.data.total;
@@ -79,16 +80,16 @@ export const useAuditLogStore = defineStore('auditLog', () => {
                 const currentLogsString = JSON.stringify(logs.value);
 
                 if (currentLogsString !== freshLogsString) {
-                    console.log('[AuditLogStore] Dashboard logs data changed, updating state and cache.');
+                    debugLog('[AuditLogStore] Dashboard logs data changed, updating state and cache.');
                     logs.value = freshLogs;
                     localStorage.setItem(cacheKey, freshLogsString); // 更新缓存
                 } else {
-                    console.log('[AuditLogStore] Dashboard logs data is up-to-date.');
+                    debugLog('[AuditLogStore] Dashboard logs data is up-to-date.');
                 }
                 // 仪表盘请求不更新 totalLogs 或 currentPage
             } else {
                 // 非仪表盘请求，直接更新日志和总数
-                console.log('[AuditLogStore] Updating logs for full view.');
+                debugLog('[AuditLogStore] Updating logs for full view.');
                 logs.value = freshLogs;
                 totalLogs.value = freshTotal;
             }

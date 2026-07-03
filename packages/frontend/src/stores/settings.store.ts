@@ -1,3 +1,4 @@
+import { debugLog, debugLogLazy } from '../composables/useDebugLog';
 import { defineStore } from 'pinia';
 import apiClient from '../utils/apiClient'; 
 import { ref, computed } from 'vue'; 
@@ -117,7 +118,7 @@ export const useSettingsStore = defineStore('settings', () => {
     let determinedLang: string | undefined; // 使用 string 类型
 
     try {
-      console.log('[SettingsStore] 加载通用设置...');
+      debugLog('[SettingsStore] 加载通用设置...');
       // Fetch all settings, including the new ones
       const [
         generalSettingsResponse,
@@ -136,7 +137,7 @@ export const useSettingsStore = defineStore('settings', () => {
       settings.value.showQuickCommandTags = String(showQuickCommandTagsResponse.data.enabled);
 
       // --- 更详细的日志 ---
-      console.log('[SettingsStore] Fetched settings from backend:', JSON.stringify(settings.value));
+      debugLogLazy(() => ['[SettingsStore] Fetched settings from backend:', JSON.stringify(settings.value)]);
 
       // --- 设置默认值 (如果后端未返回) ---
       if (settings.value.showPopupFileEditor === undefined) {
@@ -219,10 +220,10 @@ export const useSettingsStore = defineStore('settings', () => {
       const defaultFileManagerColWidths = { type: 50, name: 300, size: 100, permissions: 120, modified: 180 };
 
       // Row Size Multiplier
-      console.log(`[SettingsStore] Raw fileManagerRowSizeMultiplier from backend: '${settings.value.fileManagerRowSizeMultiplier}'`);
+      debugLog(`[SettingsStore] Raw fileManagerRowSizeMultiplier from backend: '${settings.value.fileManagerRowSizeMultiplier}'`);
       if (settings.value.fileManagerRowSizeMultiplier === undefined) {
           settings.value.fileManagerRowSizeMultiplier = defaultFileManagerRowMultiplier; // Assign first
-          console.log(`[SettingsStore] fileManagerRowSizeMultiplier not found, set to default: ${settings.value.fileManagerRowSizeMultiplier}`); // Log the assigned value
+          debugLog(`[SettingsStore] fileManagerRowSizeMultiplier not found, set to default: ${settings.value.fileManagerRowSizeMultiplier}`); // Log the assigned value
       }
       // Ensure it's a valid number string before parsing later
       const parsedMultiplier = parseFloat(settings.value.fileManagerRowSizeMultiplier);
@@ -230,11 +231,11 @@ export const useSettingsStore = defineStore('settings', () => {
           console.warn(`[SettingsStore] Invalid fileManagerRowSizeMultiplier loaded ('${settings.value.fileManagerRowSizeMultiplier}'), resetting to default.`);
           settings.value.fileManagerRowSizeMultiplier = defaultFileManagerRowMultiplier;
       }
-      console.log(`[SettingsStore] Final fileManagerRowSizeMultiplier value in store: '${settings.value.fileManagerRowSizeMultiplier}'`);
+      debugLog(`[SettingsStore] Final fileManagerRowSizeMultiplier value in store: '${settings.value.fileManagerRowSizeMultiplier}'`);
 
       // Column Widths
       let loadedFmWidths: Record<string, number> = {};
-      console.log(`[SettingsStore] Raw fileManagerColWidths from backend: '${settings.value.fileManagerColWidths}'`);
+      debugLog(`[SettingsStore] Raw fileManagerColWidths from backend: '${settings.value.fileManagerColWidths}'`);
       try {
           if (settings.value.fileManagerColWidths) {
               loadedFmWidths = JSON.parse(settings.value.fileManagerColWidths);
@@ -257,14 +258,14 @@ export const useSettingsStore = defineStore('settings', () => {
       }
       // Ensure defaults for all known columns, merging with loaded valid ones
       const finalFmWidths: Record<string, number> = { ...defaultFileManagerColWidths };
-      console.log(`[SettingsStore] Default FM Col Widths: ${JSON.stringify(defaultFileManagerColWidths)}`);
+      debugLogLazy(() => [`[SettingsStore] Default FM Col Widths: ${JSON.stringify(defaultFileManagerColWidths)}`]);
       Object.keys(defaultFileManagerColWidths).forEach(key => {
           if (loadedFmWidths[key] !== undefined && loadedFmWidths[key] > 0) { // Use loaded if valid
               finalFmWidths[key] = loadedFmWidths[key];
           }
       });
       parsedFileManagerColWidths.value = finalFmWidths;
-      console.log(`[SettingsStore] Final parsedFileManagerColWidths value in store: ${JSON.stringify(parsedFileManagerColWidths.value)}`);
+      debugLogLazy(() => [`[SettingsStore] Final parsedFileManagerColWidths value in store: ${JSON.stringify(parsedFileManagerColWidths.value)}`]);
       // Save back if defaults were added or structure changed (optional, might cause extra write)
       // const currentSavedFmWidthsString = settings.value.fileManagerColWidths;
       // const finalFmWidthsString = JSON.stringify(finalFmWidths);
@@ -310,41 +311,41 @@ export const useSettingsStore = defineStore('settings', () => {
       //  Layout locked default - Only set if not provided by backend
       if (settings.value.layoutLocked === undefined) {
           settings.value.layoutLocked = 'false';
-          console.log('[SettingsStore] layoutLocked not found in fetched settings, set to default: false');
+          debugLog('[SettingsStore] layoutLocked not found in fetched settings, set to default: false');
       } else {
-          console.log(`[SettingsStore] layoutLocked found in fetched settings: ${settings.value.layoutLocked}`);
+          debugLog(`[SettingsStore] layoutLocked found in fetched settings: ${settings.value.layoutLocked}`);
       }
       //  Terminal scrollback limit default
       if (settings.value.terminalScrollbackLimit === undefined) {
           settings.value.terminalScrollbackLimit = '5000'; // 默认 5000 行
-          console.log(`[SettingsStore] terminalScrollbackLimit not found, set to default: ${settings.value.terminalScrollbackLimit}`);
+          debugLog(`[SettingsStore] terminalScrollbackLimit not found, set to default: ${settings.value.terminalScrollbackLimit}`);
       }
       //  File Manager Delete Confirmation default
       if (settings.value.fileManagerShowDeleteConfirmation === undefined) {
         settings.value.fileManagerShowDeleteConfirmation = 'true'; // 默认显示删除确认
-        console.log(`[SettingsStore] fileManagerShowDeleteConfirmation not found, set to default: ${settings.value.fileManagerShowDeleteConfirmation}`);
+        debugLog(`[SettingsStore] fileManagerShowDeleteConfirmation not found, set to default: ${settings.value.fileManagerShowDeleteConfirmation}`);
       }
       //  Terminal Right Click Paste default
       // --- 添加日志：打印从后端获取的原始值 ---
-      console.log(`[SettingsStore DEBUG] Raw terminalEnableRightClickPaste from backend: '${settings.value.terminalEnableRightClickPaste}' (type: ${typeof settings.value.terminalEnableRightClickPaste})`);
+      debugLog(`[SettingsStore DEBUG] Raw terminalEnableRightClickPaste from backend: '${settings.value.terminalEnableRightClickPaste}' (type: ${typeof settings.value.terminalEnableRightClickPaste})`);
       // --- 日志结束 ---
       if (settings.value.terminalEnableRightClickPaste === undefined) {
         settings.value.terminalEnableRightClickPaste = 'true'; // 默认启用右键粘贴
-        console.log(`[SettingsStore] terminalEnableRightClickPaste not found, set to default: ${settings.value.terminalEnableRightClickPaste}`);
+        debugLog(`[SettingsStore] terminalEnableRightClickPaste not found, set to default: ${settings.value.terminalEnableRightClickPaste}`);
       }
       if (settings.value.showStatusMonitorIpAddress === undefined) {
         settings.value.showStatusMonitorIpAddress = 'false'; // 默认禁用状态监视器显示IP
-        console.log(`[SettingsStore] showStatusMonitorIpAddress not found, set to default: ${settings.value.showStatusMonitorIpAddress}`);
+        debugLog(`[SettingsStore] showStatusMonitorIpAddress not found, set to default: ${settings.value.showStatusMonitorIpAddress}`);
       }
       // +++ 快捷命令列表行大小乘数默认值 +++
       if (settings.value.quickCommandRowSizeMultiplier === undefined) {
         settings.value.quickCommandRowSizeMultiplier = '1.0';
-        console.log(`[SettingsStore] quickCommandRowSizeMultiplier not found, set to default: ${settings.value.quickCommandRowSizeMultiplier}`);
+        debugLog(`[SettingsStore] quickCommandRowSizeMultiplier not found, set to default: ${settings.value.quickCommandRowSizeMultiplier}`);
       }
       // +++ 快捷指令视图紧凑模式默认值 +++
       if (settings.value.quickCommandsCompactMode === undefined) {
         settings.value.quickCommandsCompactMode = 'false';
-        console.log(`[SettingsStore] quickCommandsCompactMode not found, set to default: ${settings.value.quickCommandsCompactMode}`);
+        debugLog(`[SettingsStore] quickCommandsCompactMode not found, set to default: ${settings.value.quickCommandsCompactMode}`);
       }
         
       // --- 从 localStorage 加载 QuickCommands 特有设置 ---
@@ -353,7 +354,7 @@ export const useSettingsStore = defineStore('settings', () => {
         const parsedLocalMultiplier = parseFloat(localQcRowSizeMultiplier);
         if (!isNaN(parsedLocalMultiplier) && parsedLocalMultiplier > 0) {
           settings.value.quickCommandRowSizeMultiplier = localQcRowSizeMultiplier;
-          console.log(`[SettingsStore] Loaded quickCommandRowSizeMultiplier from localStorage: ${localQcRowSizeMultiplier}`);
+          debugLog(`[SettingsStore] Loaded quickCommandRowSizeMultiplier from localStorage: ${localQcRowSizeMultiplier}`);
         } else {
           console.warn(`[SettingsStore] Invalid quickCommandRowSizeMultiplier in localStorage: ${localQcRowSizeMultiplier}. Using server/default.`);
         }
@@ -362,14 +363,14 @@ export const useSettingsStore = defineStore('settings', () => {
       const localQcCompactMode = localStorage.getItem('fantetic_quickCommandsCompactMode');
       if (localQcCompactMode === 'true' || localQcCompactMode === 'false') {
         settings.value.quickCommandsCompactMode = localQcCompactMode;
-        console.log(`[SettingsStore] Loaded quickCommandsCompactMode from localStorage: ${localQcCompactMode}`);
+        debugLog(`[SettingsStore] Loaded quickCommandsCompactMode from localStorage: ${localQcCompactMode}`);
       } else if (localQcCompactMode !== null) {
         console.warn(`[SettingsStore] Invalid quickCommandsCompactMode in localStorage: ${localQcCompactMode}. Using server/default.`);
       }
         
       // --- 语言设置 ---
       const langFromSettings = settings.value.language;
-      console.log(`[SettingsStore] Language from fetched settings: ${langFromSettings}`); // <-- 添加日志
+      debugLog(`[SettingsStore] Language from fetched settings: ${langFromSettings}`); // <-- 添加日志
       determinedLang = resolveEffectiveSettingsLocale(langFromSettings);
       settings.value.language = determinedLang;
       if (langFromSettings !== determinedLang) {
@@ -377,12 +378,12 @@ export const useSettingsStore = defineStore('settings', () => {
       }
 
       if (determinedLang) {
-        console.log(`[SettingsStore] Determined language: ${determinedLang}. Calling setLocale...`); // <-- 添加日志
+        debugLog(`[SettingsStore] Determined language: ${determinedLang}. Calling setLocale...`); // <-- 添加日志
         setLocale(determinedLang);
       } else {
         // This case should theoretically not happen with the fallback logic above
         console.error('[SettingsStore] Could not determine a valid language. This should not happen.');
-        console.log(`[SettingsStore] Falling back to default: ${defaultLng}. Calling setLocale...`); // <-- 添加日志
+        debugLog(`[SettingsStore] Falling back to default: ${defaultLng}. Calling setLocale...`); // <-- 添加日志
         setLocale(defaultLng);
       }
 
@@ -390,7 +391,7 @@ export const useSettingsStore = defineStore('settings', () => {
       console.error('Error loading general settings:', err); // <-- 修改日志
       error.value = err.response?.data?.message || err.message || 'Failed to load settings';
       const fallbackLang = resolveEffectiveSettingsLocale();
-      console.log(`[SettingsStore] Error loading settings. Falling back to language: ${fallbackLang}. Calling setLocale...`); // <-- 添加日志
+      debugLog(`[SettingsStore] Error loading settings. Falling back to language: ${fallbackLang}. Calling setLocale...`); // <-- 添加日志
       setLocale(fallbackLang);
     } finally {
       isLoading.value = false;
@@ -453,24 +454,24 @@ export const useSettingsStore = defineStore('settings', () => {
         const endpoint = booleanEndpoints[key];
 
         if (endpoint && typeof value === 'boolean') {
-            console.log(`[SettingsStore] Attempting to update boolean setting via specific endpoint - Key: ${key}, Value: ${value}, Endpoint: ${endpoint}`);
+            debugLog(`[SettingsStore] Attempting to update boolean setting via specific endpoint - Key: ${key}, Value: ${value}, Endpoint: ${endpoint}`);
             apiPromise = apiClient.put(endpoint, { enabled: value });
         } else if (typeof value === 'string') {
             // --- 添加针对 terminalEnableRightClickPaste 的特定日志 ---
             if (key === 'terminalEnableRightClickPaste') {
-                console.log(`[SettingsStore DEBUG] Updating terminalEnableRightClickPaste. Value type: ${typeof value}, Value: '${value}'`);
+                debugLog(`[SettingsStore DEBUG] Updating terminalEnableRightClickPaste. Value type: ${typeof value}, Value: '${value}'`);
             }
             // --- 日志结束 ---
-            console.log(`[SettingsStore] Attempting to update general setting - Key: ${key}, Value: ${value}`);
+            debugLog(`[SettingsStore] Attempting to update general setting - Key: ${key}, Value: ${value}`);
             const payload = { [key]: value };
-            console.log('[SettingsStore] Sending PUT request to /settings with payload:', payload);
+            debugLog('[SettingsStore] Sending PUT request to /settings with payload:', payload);
             apiPromise = apiClient.put('/settings', payload);
         } else {
             throw new Error(`Invalid value type for setting '${key}': expected boolean for specific endpoint or string for general.`);
         }
 
         await apiPromise;
-        console.log(`[SettingsStore] Successfully updated setting via API - Key: ${key}`);
+        debugLog(`[SettingsStore] Successfully updated setting via API - Key: ${key}`);
 
         // Update store state *after* successful API call
         settings.value = { ...settings.value, [key]: String(value) }; // Store as string internally
@@ -479,7 +480,7 @@ export const useSettingsStore = defineStore('settings', () => {
         if (key === 'quickCommandsCompactMode' && (String(value) === 'true' || String(value) === 'false')) {
           try {
             localStorage.setItem('fantetic_quickCommandsCompactMode', String(value));
-            console.log(`[SettingsStore] Saved quickCommandsCompactMode to localStorage: ${String(value)}`);
+            debugLog(`[SettingsStore] Saved quickCommandsCompactMode to localStorage: ${String(value)}`);
           } catch (e) {
             console.error('[SettingsStore] Failed to save quickCommandsCompactMode to localStorage:', e);
           }
@@ -491,7 +492,7 @@ export const useSettingsStore = defineStore('settings', () => {
         const nextLocale = normalizeSettingsLocale(value);
         settings.value.language = nextLocale;
         if (nextLocale === value) {
-          console.log(`[SettingsStore] updateSetting: Language updated to ${nextLocale}. Calling setLocale...`);
+          debugLog(`[SettingsStore] updateSetting: Language updated to ${nextLocale}. Calling setLocale...`);
           setLocale(nextLocale);
         } else {
           console.warn(`[SettingsStore] updateSetting: Attempted to set invalid language '${value}'. Falling back to '${nextLocale}'.`);
@@ -576,7 +577,7 @@ export const useSettingsStore = defineStore('settings', () => {
       }
 
     if (Object.keys(filteredUpdates).length === 0) {
-        console.log('[SettingsStore] 没有有效的通用设置需要更新。');
+        debugLog('[SettingsStore] 没有有效的通用设置需要更新。');
         return; // 没有有效设置需要更新
     }
 
@@ -588,7 +589,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
       // If language is updated, apply it
       if (languageUpdate) {
-        console.log(`[SettingsStore] updateMultipleSettings: Language updated to ${languageUpdate}. Calling setLocale...`); // <-- 添加日志
+        debugLog(`[SettingsStore] updateMultipleSettings: Language updated to ${languageUpdate}. Calling setLocale...`); // <-- 添加日志
         setLocale(languageUpdate);
       }
     } catch (err: any) {
@@ -631,7 +632,7 @@ export const useSettingsStore = defineStore('settings', () => {
     settings.value.fileManagerColWidths = widthsString;
 
     try {
-      console.log(`[SettingsStore] Saving FM layout: multiplier=${multiplierString}, widths=${widthsString}`);
+      debugLog(`[SettingsStore] Saving FM layout: multiplier=${multiplierString}, widths=${widthsString}`);
       await updateMultipleSettings({
         fileManagerRowSizeMultiplier: multiplierString,
         fileManagerColWidths: widthsString,
@@ -654,11 +655,11 @@ export const useSettingsStore = defineStore('settings', () => {
       // --- 保存到 localStorage ---
       try {
         localStorage.setItem('fantetic_quickCommandRowSizeMultiplier', multiplierString);
-        console.log(`[SettingsStore] Saved quickCommandRowSizeMultiplier to localStorage: ${multiplierString}`);
+        debugLog(`[SettingsStore] Saved quickCommandRowSizeMultiplier to localStorage: ${multiplierString}`);
       } catch (e) {
         console.error('[SettingsStore] Failed to save quickCommandRowSizeMultiplier to localStorage:', e);
       }
-      console.log(`[SettingsStore] Quick Command row size multiplier updated to: ${multiplierString}`);
+      debugLog(`[SettingsStore] Quick Command row size multiplier updated to: ${multiplierString}`);
     } catch (error) {
       console.error('[SettingsStore] Failed to save Quick Command row size multiplier:', error);
       // Optionally revert local state or show error to user
@@ -678,11 +679,11 @@ export const useSettingsStore = defineStore('settings', () => {
     isLoading.value = true;
     error.value = null;
     try {
-      console.log('[SettingsStore] 加载 CAPTCHA 设置...');
+      debugLog('[SettingsStore] 加载 CAPTCHA 设置...');
       // Use the correct endpoint defined in the backend routes
       const response = await apiClient.get<CaptchaSettings>('/settings/captcha');
       captchaSettings.value = response.data;
-      console.log('[SettingsStore] CAPTCHA 设置加载完成:', { ...response.data, hcaptchaSecretKey: '***', recaptchaSecretKey: '***' }); // Mask secrets
+      debugLog('[SettingsStore] CAPTCHA 设置加载完成:', { ...response.data, hcaptchaSecretKey: '***', recaptchaSecretKey: '***' }); // Mask secrets
     } catch (err: any) {
       console.error('加载 CAPTCHA 设置失败:', err);
       error.value = err.response?.data?.message || err.message || '加载 CAPTCHA 设置失败';
@@ -700,7 +701,7 @@ export const useSettingsStore = defineStore('settings', () => {
     isLoading.value = true;
     error.value = null;
     try {
-      console.log('[SettingsStore] 更新 CAPTCHA 设置:', { ...updates, hcaptchaSecretKey: '***', recaptchaSecretKey: '***' }); // Mask secrets
+      debugLog('[SettingsStore] 更新 CAPTCHA 设置:', { ...updates, hcaptchaSecretKey: '***', recaptchaSecretKey: '***' }); // Mask secrets
       // Use the correct endpoint defined in the backend routes
       await apiClient.put('/settings/captcha', updates);
 
@@ -712,10 +713,10 @@ export const useSettingsStore = defineStore('settings', () => {
         // If settings were null, reload them after update
         await loadCaptchaSettings();
       }
-      console.log('[SettingsStore] CAPTCHA 设置更新成功。');
+      debugLog('[SettingsStore] CAPTCHA 设置更新成功。');
 
       // --- 强制 authStore 重新获取配置 ---
-      console.log('[SettingsStore] Triggering authStore to refetch CAPTCHA config...');
+      debugLog('[SettingsStore] Triggering authStore to refetch CAPTCHA config...');
       authStore.publicCaptchaConfig = null; // 重置 authStore 的状态以允许重新获取
       await authStore.fetchCaptchaConfig(); // 让 authStore 立即获取最新的配置
       // -----------------------------------------

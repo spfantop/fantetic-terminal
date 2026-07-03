@@ -1,5 +1,5 @@
 <template>
-  <teleport to="body">
+  <teleport :to="resolvedTeleportTarget">
     <div
       v-if="isVisible"
       class="cpu-core-modal__overlay"
@@ -67,6 +67,7 @@ const props = defineProps<{
   isVisible: boolean;
   cpuCoreItems: CpuCoreDisplayItem[];
   totalCpuPercent: number;
+  teleportTarget?: string | HTMLElement;
 }>();
 
 const emit = defineEmits<{
@@ -74,6 +75,7 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+const resolvedTeleportTarget = computed(() => props.teleportTarget ?? 'body');
 
 const sortedItems = computed(() => [...props.cpuCoreItems].sort((left, right) => right.percent - left.percent));
 

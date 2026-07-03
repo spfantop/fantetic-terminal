@@ -7,6 +7,7 @@ import type { WebSocketMessage, MessagePayload } from '../types/websocket.types'
 
 
 import type { WebSocketDependencies } from './useSftpActions'; 
+import { debugLog } from './useDebugLog';
 
 
 const generateUploadId = (): string => {
@@ -74,7 +75,7 @@ wsDeps;
                 if (!isLast) {                                     
                     nextTick(readNextChunk);
                 } else {
-                    console.log(`[FileUploader ${sessionIdForLog.value}] Sent last chunk for ${uploadId}`);
+                    debugLog(`[FileUploader ${sessionIdForLog.value}] Sent last chunk for ${uploadId}`);
                     
                 }
             } else {
@@ -107,7 +108,7 @@ wsDeps;
              readNextChunk();
         } else {
              // 立即处理零字节文件
-             console.log(`[FileUploader ${sessionIdForLog.value}] Processing zero-byte file ${uploadId}`);
+             debugLog(`[FileUploader ${sessionIdForLog.value}] Processing zero-byte file ${uploadId}`);
              // Send chunkIndex 0 for zero-byte file
              wsDeps.value.sendMessage({ type: 'sftp:upload:chunk', payload: { uploadId, chunkIndex: 0, data: '', isLast: true } });
              upload.progress = 100;
@@ -141,7 +142,7 @@ wsDeps;
         }
         // 规范化路径，移除多余的斜杠 e.g. /root//dir -> /root/dir
         finalRemotePath = finalRemotePath.replace(/\/+/g, '/');
-        console.log(`[FileUploader ${sessionIdForLog.value}] Calculated finalRemotePath: ${finalRemotePath} (current: ${currentPathRef.value}, relative: ${relativePath}, filename: ${file.name}) // wsDeps.isSftpReady: ${wsDeps.value.isSftpReady.value}`); 
+        debugLog(`[FileUploader ${sessionIdForLog.value}] Calculated finalRemotePath: ${finalRemotePath} (current: ${currentPathRef.value}, relative: ${relativePath}, filename: ${file.name}) // wsDeps.isSftpReady: ${wsDeps.value.isSftpReady.value}`);
         // --- 结束修正 ---
 
 
@@ -154,7 +155,7 @@ wsDeps;
             status: 'pending' // 初始状态
         };
 
-        console.log(`[FileUploader ${sessionIdForLog.value}] Starting upload ${uploadId} to ${finalRemotePath}`);
+        debugLog(`[FileUploader ${sessionIdForLog.value}] Starting upload ${uploadId} to ${finalRemotePath}`);
         wsDeps.value.sendMessage({ 
             type: 'sftp:upload:start',
             payload: { uploadId, remotePath: finalRemotePath, size: file.size, relativePath: relativePath || undefined }
@@ -165,7 +166,7 @@ wsDeps;
     const cancelUpload = (uploadId: string, notifyBackend = true) => {
         const upload = uploads[uploadId];
         if (upload && ['pending', 'uploading', 'paused'].includes(upload.status)) {
-            console.log(`[FileUploader ${sessionIdForLog.value}] Cancelling upload ${uploadId}`);
+            debugLog(`[FileUploader ${sessionIdForLog.value}] Cancelling upload ${uploadId}`);
             upload.status = 'cancelled'; // 立即更新状态
 
             if (notifyBackend && wsDeps.value.isConnected.value) { 
@@ -189,7 +190,7 @@ wsDeps;
 
         const upload = uploads[uploadId];
         if (upload && upload.status === 'pending') {
-            console.log(`[FileUploader ${sessionIdForLog.value}] Upload ${uploadId} ready, starting chunk sending.`);
+            debugLog(`[FileUploader ${sessionIdForLog.value}] Upload ${uploadId} ready, starting chunk sending.`);
             upload.status = 'uploading';
             sendFileChunks(uploadId, upload.file); // 开始发送块
         } else {
@@ -203,7 +204,7 @@ wsDeps;
 
         const upload = uploads[uploadId];
         if (upload) {
-            console.log(`[FileUploader ${sessionIdForLog.value}] Upload ${uploadId} successful.`);
+            debugLog(`[FileUploader ${sessionIdForLog.value}] Upload ${uploadId} successful.`);
             upload.status = 'success';
             upload.progress = 100;
 
@@ -249,7 +250,7 @@ wsDeps;
         if (!uploadId) return;
         const upload = uploads[uploadId];
         if (upload && upload.status === 'uploading') {
-            console.log(`[FileUploader ${sessionIdForLog.value}] Upload ${uploadId} paused.`);
+            debugLog(`[FileUploader ${sessionIdForLog.value}] Upload ${uploadId} paused.`);
             upload.status = 'paused';
         }
     };
@@ -259,7 +260,7 @@ wsDeps;
         if (!uploadId) return;
         const upload = uploads[uploadId];
         if (upload && upload.status === 'paused') {
-            console.log(`[FileUploader ${sessionIdForLog.value}] Resuming upload ${uploadId}`);
+            debugLog(`[FileUploader ${sessionIdForLog.value}] Resuming upload ${uploadId}`);
             upload.status = 'uploading';
             sendFileChunks(uploadId, upload.file);
         }

@@ -1,3 +1,4 @@
+import { debugLog } from '../composables/useDebugLog';
 import axios from 'axios';
 import router from '../router'; 
 import { useAuthStore } from '../stores/auth.store'; 
@@ -52,7 +53,7 @@ apiClient.interceptors.response.use(
              return Promise.reject(new Error('Unauthorized, logging out.'));
           } else {
              // 如果用户本来就未认证，可能只是访问了需要登录的接口，暂时不强制跳转
-             console.log('Unauthorized access to protected route.');
+             debugLog('Unauthorized access to protected route.');
           }
           break;
         case 403: // 禁止访问

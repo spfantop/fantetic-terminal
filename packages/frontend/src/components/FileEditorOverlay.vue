@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { debugLog } from '../composables/useDebugLog';
 import { computed, ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'; // + nextTick
 import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
@@ -9,6 +10,7 @@ import { useFileEditorStore, type FileTab } from '../stores/fileEditor.store';
 import { useSettingsStore } from '../stores/settings.store';
 import { useSessionStore } from '../stores/session.store';
 import { useAppearanceStore } from '../stores/appearance.store';
+import { measureCachedTextWidth } from '../composables/useCachedTextMeasurement';
 
 
 const { t } = useI18n();
@@ -126,31 +128,18 @@ const updateSelectWidth = () => {
 
     if (!selectedOption) return;
 
-    // Create a temporary span to measure text width
-    const tempSpan = document.createElement('span');
-    // Copy relevant styles (adjust as needed for accurate measurement)
     const styles = window.getComputedStyle(selectElement);
-    tempSpan.style.fontSize = styles.fontSize;
-    tempSpan.style.fontFamily = styles.fontFamily;
-    tempSpan.style.fontWeight = styles.fontWeight;
-    tempSpan.style.letterSpacing = styles.letterSpacing;
-    tempSpan.style.paddingLeft = styles.paddingLeft; // Include padding for accuracy
-    tempSpan.style.paddingRight = styles.paddingRight;
-    tempSpan.style.visibility = 'hidden'; // Make it invisible
-    tempSpan.style.position = 'absolute'; // Prevent layout shift
-    tempSpan.style.whiteSpace = 'nowrap'; // Prevent wrapping
-    tempSpan.style.left = '-9999px'; // Move off-screen
-
-    tempSpan.textContent = selectedOption.text;
-    document.body.appendChild(tempSpan);
-
-    const textWidth = tempSpan.offsetWidth;
-    document.body.removeChild(tempSpan);
-
-    // Set the select width (add extra space for dropdown arrow, adjust as needed)
+    const font = `${styles.fontStyle} ${styles.fontVariant} ${styles.fontWeight} ${styles.fontSize} ${styles.fontFamily}`;
+    const letterSpacing = Number.parseFloat(styles.letterSpacing);
+    const textWidth = measureCachedTextWidth(
+      selectedOption.text,
+      font,
+      Number.isFinite(letterSpacing) ? letterSpacing : 0,
+    );
+    const horizontalPadding = Number.parseFloat(styles.paddingLeft) + Number.parseFloat(styles.paddingRight);
     const arrowPadding = 25; // Increased padding for arrow and visual spacing
-    selectElement.style.width = `${textWidth + arrowPadding}px`;
-    // console.log(`[EditorOverlay] Setting select width for "${selectedOption.text}" to ${textWidth + arrowPadding}px`);
+    selectElement.style.width = `${Math.ceil(textWidth + horizontalPadding + arrowPadding)}px`;
+    // debugLog(`[EditorOverlay] Setting select width for "${selectedOption.text}" to ${textWidth + arrowPadding}px`);
   });
 };
 
@@ -337,7 +326,7 @@ const handleCloseTab = (tabId: string) => {
 
 // +++ 处理右键菜单事件 +++
 const handleCloseOtherTabs = (targetTabId: string) => {
-    console.log(`[FileEditorOverlay] handleCloseOtherTabs called for target: ${targetTabId}`); // Add log
+    debugLog(`[FileEditorOverlay] handleCloseOtherTabs called for target: ${targetTabId}`); // Add log
     if (shareFileEditorTabsBoolean.value) {
         closeOtherTabs(targetTabId); 
     } else {
@@ -351,7 +340,7 @@ const handleCloseOtherTabs = (targetTabId: string) => {
 };
 
 const handleCloseRightTabs = (targetTabId: string) => {
-    console.log(`[FileEditorOverlay] handleCloseRightTabs called for target: ${targetTabId}`); // Add log
+    debugLog(`[FileEditorOverlay] handleCloseRightTabs called for target: ${targetTabId}`); // Add log
     if (shareFileEditorTabsBoolean.value) {
         closeTabsToTheRight(targetTabId); 
     } else {
@@ -365,7 +354,7 @@ const handleCloseRightTabs = (targetTabId: string) => {
 };
 
 const handleCloseLeftTabs = (targetTabId: string) => {
-    console.log(`[FileEditorOverlay] handleCloseLeftTabs called for target: ${targetTabId}`); // Add log
+    debugLog(`[FileEditorOverlay] handleCloseLeftTabs called for target: ${targetTabId}`); // Add log
     if (shareFileEditorTabsBoolean.value) {
         closeTabsToTheLeft(targetTabId); // 修正：调用正确的 action 名称
     } else {
@@ -385,7 +374,7 @@ const handleEncodingChange = (event: Event) => {
   const currentActiveTab = activeTab.value;
 
   if (currentActiveTab && newEncoding && newEncoding !== currentSelectedEncoding.value) {
-    console.log(`[EditorOverlay] Encoding changed to ${newEncoding} for tab ${currentActiveTab.id}`);
+    debugLog(`[EditorOverlay] Encoding changed to ${newEncoding} for tab ${currentActiveTab.id}`);
     if (shareFileEditorTabsBoolean.value) {
         changeGlobalEncoding(currentActiveTab.id, newEncoding); // 全局 Store
     } else {
@@ -471,13 +460,13 @@ const stopResize = () => {
 // 监听 popupTrigger 的变化来显示弹窗
 watch(popupTrigger, () => {
     if (!showPopupFileEditorBoolean.value || !popupFileInfo.value) {
-        console.log('[FileEditorOverlay] Popup trigger changed, but overlay is disabled or file info is missing.');
+        debugLog('[FileEditorOverlay] Popup trigger changed, but overlay is disabled or file info is missing.');
         isVisible.value = false;
         return;
     }
 
     const { filePath, sessionId } = popupFileInfo.value;
-    console.log(`[FileEditorOverlay] Triggered for file: ${filePath} in session: ${sessionId}`);
+    debugLog(`[FileEditorOverlay] Triggered for file: ${filePath} in session: ${sessionId}`);
 
     isVisible.value = true;
 

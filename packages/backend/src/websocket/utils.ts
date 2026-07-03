@@ -3,6 +3,8 @@ import { SftpService } from '../sftp/sftp.service';
 import { StatusMonitorService } from '../services/status-monitor.service';
 import { clientStates, sftpService, statusMonitorService } from './state';
 import { sshSuspendService } from '../ssh-suspend/ssh-suspend.service';
+import { clearSshOutputQueue } from './ssh-output-buffer';
+import { clearSshInputQueue } from './ssh-input-writer';
 
 // --- 解析 Ports 字符串的辅助函数 ---
 export function parsePortsString(portsString: string | undefined | null): PortInfo[] {
@@ -73,6 +75,10 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
     const state = clientStates.get(sessionId);
     if (state) {
         console.log(`WebSocket: 清理会话 ${sessionId} (用户: ${state.ws.username}, DB 连接 ID: ${state.dbConnectionId})...`);
+
+        // 清理会话时取消延迟输出任务，避免关闭后继续向旧 WebSocket 写入。
+        clearSshOutputQueue(state);
+        clearSshInputQueue(state);
 
         // 1. 停止状态轮询 (如果存在)
         if (statusMonitorService) statusMonitorService.stopStatusPolling(sessionId);

@@ -24,6 +24,18 @@ export interface ClientState { // 导出以便 Service 可以导入
     isSuspendedByService?: boolean; // 标记此会话是否已被 SshSuspendService 接管
     isMarkedForSuspend?: boolean; // 标记此会话是否已被用户请求挂起（等待断开连接）
     suspendLogPath?: string;      // 如果标记挂起，则存储日志路径 (基于原始 sessionId)
+    pendingSshOutputBuffer?: Buffer[]; // SSH 输出短窗口聚合缓冲
+    pendingSshOutputBytes?: number; // SSH 输出聚合缓冲字节数
+    sshOutputFlushImmediate?: NodeJS.Immediate; // SSH 输出同 tick 聚合任务
+    sshOutputFlushTimer?: NodeJS.Timeout; // WebSocket 背压下的延迟输出任务
+    isSshOutputPaused?: boolean; // WebSocket 输出背压时暂停 SSH 读取
+    pendingSshInputBuffer?: (string | Buffer)[]; // SSH 输入背压缓冲
+    pendingSshInputByteCount?: number; // SSH 输入背压缓冲字节数
+    isSshInputBackpressured?: boolean; // 标记 SSH 输入流是否处于背压状态
+    sshInputDrainHandler?: () => void; // SSH 输入流 drain 监听器
+    supportsSshBinaryOutput?: boolean; // 前端支持 SSH 输出二进制帧，避免 base64/JSON 热路径开销
+    supportsSshBinaryInput?: boolean; // 前端支持 SSH 输入二进制帧，避免 JSON 字符串热路径开销
+    lastSshInputOverflowWarnAt?: number; // 输入缓冲溢出日志节流时间
     // suspendLogWritableStream?: NodeJS.WritableStream; // 移除，将直接使用 temporaryLogStorageService.writeToLog
 }
 
@@ -96,6 +108,10 @@ export interface SshSuspendResumeRequest {
   payload: {
     suspendSessionId: string; // The ID of the suspended session to resume
     newFrontendSessionId: string; // The new frontend session ID for the resumed connection
+    clientCapabilities?: {
+      sshBinaryOutput?: boolean;
+      sshBinaryInput?: boolean;
+    };
   };
 }
 

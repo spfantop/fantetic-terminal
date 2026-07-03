@@ -1,3 +1,4 @@
+import { debugLog } from '../composables/useDebugLog';
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import apiClient from '../utils/apiClient'; // 使用统一的 apiClient
@@ -48,7 +49,7 @@ export const useTagsStore = defineStore('tags', () => {
                 tags.value = freshData;
                 localStorage.setItem(cacheKey, freshDataString); // 更新缓存
             } else {
-                console.log('[TagsStore] Tags data is up-to-date.');
+                debugLog('[TagsStore] Tags data is up-to-date.');
             }
             error.value = null; // 清除错误
             return true; // 表示获取成功（即使数据未变）

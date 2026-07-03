@@ -17,6 +17,7 @@ import { useAlertDialog } from '../composables/useAlertDialog';
 import { storeToRefs } from 'pinia';
 import type { ConnectionFolderInfo } from '../stores/connections.store';
 import { beginGlobalDragSelectionGuard } from '../composables/useGlobalDragSelectionGuard';
+import { useWorkspaceEventEmitter } from '../composables/workspaceEvents';
 
 const { t } = useI18n();
 const { showConfirmDialog } = useConfirmDialog();
@@ -24,6 +25,7 @@ const { showAlertDialog } = useAlertDialog();
 const connectionsStore = useConnectionsStore();
 const sessionStore = useSessionStore();
 const tagsStore = useTagsStore();
+const emitWorkspaceEvent = useWorkspaceEventEmitter();
 
 const { connections, folders, isLoading: isLoadingConnections, isFoldersLoading } = storeToRefs(connectionsStore);
 const { tags } = storeToRefs(tagsStore);
@@ -49,6 +51,13 @@ interface ServerFolderGroup {
   name: string;
   connections: ConnectionInfo[];
   totalConnectionCount: number;
+}
+
+interface ServerEntryMeta {
+  tagNames: string[];
+  detailRows: Array<{ key: string; label: string; value: string }>;
+  detailTitle: string;
+  truncatedNotes: string;
 }
 
 type ConnectionDragEndEvent = {
@@ -106,6 +115,8 @@ const isServerPanelCollapsed = ref(getInitialServerPanelCollapsed());
 const isServerPanelResizing = ref(false);
 const serverPanelResizeOriginLeft = ref(0);
 let releaseServerPanelResizeGuard: (() => void) | null = null;
+let serverPanelResizeFrameId: number | null = null;
+let pendingServerPanelWidth: number | null = null;
 const isTagFilterOpen = ref(false);
 const isDraggingConnection = ref(false);
 const expandedServerFolders = ref<Record<string, boolean>>({});
@@ -723,6 +734,7 @@ onUnmounted(() => {
   window.removeEventListener('resize', handleServerPanelViewportResize);
   window.removeEventListener(SERVER_PANEL_TOGGLE_EVENT, handleServerPanelToggleRequest);
   stopServerPanelResize();
+  cancelPendingServerPanelWidth();
 });
 
 const connectTo = (connection: ConnectionInfo) => {
@@ -735,11 +747,13 @@ watch(selectedFolderId, (newValue) => {
 
 watch(selectedTagIds, (newValue) => {
   localStorage.setItem(LS_FILTER_TAGS_KEY, JSON.stringify(newValue));
-}, { deep: true });
+});
 
 const selectedTagCount = computed(() => selectedTagIds.value.length);
 
 const isTagSelected = (tagId: number) => selectedTagIds.value.includes(tagId);
+
+const tagNameById = computed(() => new Map((tags.value as TagInfo[]).map(tag => [tag.id, tag.name])));
 
 const toggleTagFilterMenu = () => {
   isTagFilterOpen.value = !isTagFilterOpen.value;
@@ -763,9 +777,8 @@ const getTagNames = (tagIds: number[] | undefined): string[] => {
   if (!tagIds || tagIds.length === 0) {
     return [];
   }
-  const allTags = tags.value as TagInfo[];
   return tagIds
-    .map(id => allTags.find(tag => tag.id === id)?.name)
+    .map(id => tagNameById.value.get(id))
     .filter((name): name is string => !!name);
 };
 
@@ -849,12 +862,43 @@ const handleServerPanelViewportResize = () => {
   }
 };
 
+const applyPendingServerPanelWidth = () => {
+  serverPanelResizeFrameId = null;
+  if (pendingServerPanelWidth === null) return;
+
+  serverPanelWidth.value = pendingServerPanelWidth;
+  pendingServerPanelWidth = null;
+};
+
+const scheduleServerPanelWidth = (width: number) => {
+  pendingServerPanelWidth = clampServerPanelWidth(width);
+  if (serverPanelResizeFrameId !== null) return;
+
+  serverPanelResizeFrameId = window.requestAnimationFrame(applyPendingServerPanelWidth);
+};
+
+const flushPendingServerPanelWidth = () => {
+  if (serverPanelResizeFrameId !== null) {
+    window.cancelAnimationFrame(serverPanelResizeFrameId);
+    serverPanelResizeFrameId = null;
+  }
+  applyPendingServerPanelWidth();
+};
+
+const cancelPendingServerPanelWidth = () => {
+  if (serverPanelResizeFrameId !== null) {
+    window.cancelAnimationFrame(serverPanelResizeFrameId);
+    serverPanelResizeFrameId = null;
+  }
+  pendingServerPanelWidth = null;
+};
+
 const handleServerPanelResize = (event: PointerEvent) => {
   event.preventDefault();
-  const panelLeft = serverPanelResizeOriginLeft.value || serverListPanelRef.value?.getBoundingClientRect().left || 0;
-  const nextWidth = event.clientX - panelLeft;
+  const nextWidth = event.clientX - serverPanelResizeOriginLeft.value;
 
   if (nextWidth <= SERVER_PANEL_COLLAPSE_THRESHOLD) {
+    pendingServerPanelWidth = null;
     collapseServerPanel();
     stopServerPanelResize();
     return;
@@ -863,17 +907,19 @@ const handleServerPanelResize = (event: PointerEvent) => {
   if (isServerPanelCollapsed.value) {
     expandServerPanel();
   }
-  serverPanelWidth.value = clampServerPanelWidth(nextWidth);
+  scheduleServerPanelWidth(nextWidth);
 };
 
 const stopServerPanelResize = () => {
   if (!isServerPanelResizing.value) return;
 
   isServerPanelResizing.value = false;
+  flushPendingServerPanelWidth();
   window.removeEventListener('pointermove', handleServerPanelResize);
   window.removeEventListener('pointerup', stopServerPanelResize);
   releaseServerPanelResizeGuard?.();
   releaseServerPanelResizeGuard = null;
+  emitWorkspaceEvent('ui:resizeTransaction', { phase: 'end', source: 'server-panel' });
   serverPanelResizeOriginLeft.value = 0;
   if (!isServerPanelCollapsed.value) {
     saveServerPanelWidth();
@@ -896,6 +942,7 @@ const startServerPanelResize = (event: PointerEvent) => {
   isServerPanelResizing.value = true;
   serverPanelResizeOriginLeft.value = serverListPanelRef.value?.getBoundingClientRect().left ?? 0;
   releaseServerPanelResizeGuard = beginGlobalDragSelectionGuard('col-resize');
+  emitWorkspaceEvent('ui:resizeTransaction', { phase: 'start', source: 'server-panel' });
   window.addEventListener('pointermove', handleServerPanelResize);
   window.addEventListener('pointerup', stopServerPanelResize);
 };
@@ -1410,6 +1457,28 @@ const getServerDetailTitle = (connection: ConnectionInfo): string => {
   return `${username}@${host}:${port}`;
 };
 
+const serverEntryMetaById = computed(() => {
+  const metaMap = new Map<number, ServerEntryMeta>();
+  manualOrderedFilteredConnections.value.forEach((connection) => {
+    metaMap.set(connection.id, {
+      tagNames: getTagNames(connection.tag_ids),
+      detailRows: getServerDetailRows(connection),
+      detailTitle: getServerDetailTitle(connection),
+      truncatedNotes: getTruncatedNotes(connection.notes),
+    });
+  });
+  return metaMap;
+});
+
+const getServerEntryMeta = (connection: ConnectionInfo): ServerEntryMeta => (
+  serverEntryMetaById.value.get(connection.id) ?? {
+    tagNames: [],
+    detailRows: getServerDetailRows(connection),
+    detailTitle: getServerDetailTitle(connection),
+    truncatedNotes: getTruncatedNotes(connection.notes),
+  }
+);
+
 
 
 // --- Connect All Filtered Connections ---
@@ -1641,25 +1710,25 @@ const handleConnectAllFilteredConnections = async () => {
 
                     <div class="server-entry-content">
                       <div class="server-entry-mainline">
-                        <span class="server-entry-name" :title="getServerDetailTitle(conn)">
+                        <span class="server-entry-name" :title="getServerEntryMeta(conn).detailTitle">
                           {{ conn.name || t('connections.unnamedFallback', '未命名连接') }}
                         </span>
                         <span class="server-entry-type">{{ conn.type }}</span>
-                        <div v-if="getTagNames(conn.tag_ids).length > 0" class="server-entry-tags">
-                          <span v-for="tagName in getTagNames(conn.tag_ids)" :key="tagName">
+                        <div v-if="getServerEntryMeta(conn).tagNames.length > 0" class="server-entry-tags">
+                          <span v-for="tagName in getServerEntryMeta(conn).tagNames" :key="tagName">
                             {{ tagName }}
                           </span>
                         </div>
                       </div>
                       <div class="server-entry-detail-popover" role="tooltip">
-                        <div v-for="row in getServerDetailRows(conn)" :key="row.key" class="server-entry-detail-row">
+                        <div v-for="row in getServerEntryMeta(conn).detailRows" :key="row.key" class="server-entry-detail-row">
                           <span class="server-entry-detail-label">{{ row.label }}</span>
                           <span class="server-entry-detail-value">{{ row.value }}</span>
                         </div>
                       </div>
                       <div v-if="conn.notes && conn.notes.trim() !== ''" class="server-entry-meta">
                         <span :title="conn.notes">
-                          {{ getTruncatedNotes(conn.notes) }}
+                          {{ getServerEntryMeta(conn).truncatedNotes }}
                         </span>
                       </div>
                       <div
@@ -1774,25 +1843,25 @@ const handleConnectAllFilteredConnections = async () => {
 
                     <div class="server-entry-content">
                       <div class="server-entry-mainline">
-                        <span class="server-entry-name" :title="getServerDetailTitle(conn)">
+                        <span class="server-entry-name" :title="getServerEntryMeta(conn).detailTitle">
                           {{ conn.name || t('connections.unnamedFallback', '未命名连接') }}
                         </span>
                         <span class="server-entry-type">{{ conn.type }}</span>
-                        <div v-if="getTagNames(conn.tag_ids).length > 0" class="server-entry-tags">
-                          <span v-for="tagName in getTagNames(conn.tag_ids)" :key="tagName">
+                        <div v-if="getServerEntryMeta(conn).tagNames.length > 0" class="server-entry-tags">
+                          <span v-for="tagName in getServerEntryMeta(conn).tagNames" :key="tagName">
                             {{ tagName }}
                           </span>
                         </div>
                       </div>
                       <div class="server-entry-detail-popover" role="tooltip">
-                        <div v-for="row in getServerDetailRows(conn)" :key="row.key" class="server-entry-detail-row">
+                        <div v-for="row in getServerEntryMeta(conn).detailRows" :key="row.key" class="server-entry-detail-row">
                           <span class="server-entry-detail-label">{{ row.label }}</span>
                           <span class="server-entry-detail-value">{{ row.value }}</span>
                         </div>
                       </div>
                       <div v-if="conn.notes && conn.notes.trim() !== ''" class="server-entry-meta">
                         <span :title="conn.notes">
-                          {{ getTruncatedNotes(conn.notes) }}
+                          {{ getServerEntryMeta(conn).truncatedNotes }}
                         </span>
                       </div>
                       <div

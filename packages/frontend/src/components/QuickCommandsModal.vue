@@ -3,6 +3,7 @@ import { defineProps, defineEmits, watch, onMounted, ref } from 'vue';
 import QuickCommandsView from '../views/QuickCommandsView.vue'; // 导入视图
 import { useWorkspaceEventSubscriber } from '../composables/workspaceEvents'; // 导入事件订阅器
 import { useDraggableDialog } from '../composables/useDraggableDialog';
+import { debugLog } from '../composables/useDebugLog';
 
 const props = defineProps<{
   isVisible: boolean;
@@ -56,7 +57,7 @@ onUnmounted(() => {
 onMounted(() => {
   // 监听 terminal:sendCommand 事件以关闭模态框
   onWorkspaceEvent('terminal:sendCommand', () => {
-    console.log('[QuickCommandsModal] Received terminal:sendCommand event, closing modal.');
+    debugLog('[QuickCommandsModal] Received terminal:sendCommand event, closing modal.');
     closeModal();
   });
 });

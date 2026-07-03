@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useI18n } from 'vue-i18n';
 import { useSessionStore } from '../stores/session.store';
@@ -13,6 +13,7 @@ type ProcessSortDirection = 'asc' | 'desc';
 const props = defineProps<{
   isVisible: boolean;
   sessionId: string | null;
+  teleportTarget?: string | HTMLElement;
 }>();
 
 const emit = defineEmits<{
@@ -28,6 +29,9 @@ const searchQuery = ref('');
 const autoRefresh = ref(true);
 const isLoading = ref(false);
 const processItems = ref<ProcessListItem[]>([]);
+const processTableWrapRef = ref<HTMLElement | null>(null);
+const processScrollTop = ref(0);
+const processViewportHeight = ref(0);
 const totalProcesses = ref(0);
 const runningProcesses = ref(0);
 const sleepingProcesses = ref(0);
@@ -40,9 +44,16 @@ let unregisterListResponse: (() => void) | null = null;
 let unregisterListError: (() => void) | null = null;
 let unregisterSignalResponse: (() => void) | null = null;
 let autoRefreshTimer: ReturnType<typeof setInterval> | null = null;
+let processScrollFrameId: number | null = null;
+let processResizeObserver: ResizeObserver | null = null;
+let keydownDocument: Document | null = null;
+const PROCESS_ROW_HEIGHT = 45;
+const PROCESS_OVERSCAN = 8;
+const PROCESS_COLUMN_COUNT = 8;
 
 const currentSession = computed(() => (props.sessionId ? sessions.value.get(props.sessionId) ?? null : null));
 const currentWsManager = computed(() => currentSession.value?.wsManager ?? null);
+const resolvedTeleportTarget = computed(() => props.teleportTarget ?? 'body');
 
 const filteredProcesses = computed(() => {
   const keyword = searchQuery.value.trim().toLowerCase();
@@ -117,6 +128,66 @@ const sortedProcesses = computed(() => {
     })
     .map(({ item }) => item);
 });
+
+const processVirtualStartIndex = computed(() => (
+  Math.max(0, Math.floor(processScrollTop.value / PROCESS_ROW_HEIGHT) - PROCESS_OVERSCAN)
+));
+
+const processVirtualVisibleCount = computed(() => (
+  Math.ceil((processViewportHeight.value || 360) / PROCESS_ROW_HEIGHT) + PROCESS_OVERSCAN * 2
+));
+
+const virtualProcesses = computed(() => {
+  const startIndex = processVirtualStartIndex.value;
+  return sortedProcesses.value
+    .slice(startIndex, startIndex + processVirtualVisibleCount.value)
+    .map((item, offset) => ({ item, index: startIndex + offset }));
+});
+
+const processVirtualTopSpacerHeight = computed(() => processVirtualStartIndex.value * PROCESS_ROW_HEIGHT);
+
+const processVirtualBottomSpacerHeight = computed(() => {
+  const hiddenRows = sortedProcesses.value.length - processVirtualStartIndex.value - virtualProcesses.value.length;
+  return Math.max(0, hiddenRows * PROCESS_ROW_HEIGHT);
+});
+
+const updateProcessViewportMetrics = () => {
+  const container = processTableWrapRef.value;
+  if (!container) return;
+
+  const viewportHeight = container.clientHeight;
+  const maxScrollTop = Math.max(0, sortedProcesses.value.length * PROCESS_ROW_HEIGHT - viewportHeight);
+  const nextScrollTop = Math.min(container.scrollTop, maxScrollTop);
+  if (container.scrollTop !== nextScrollTop) {
+    container.scrollTop = nextScrollTop;
+  }
+
+  processViewportHeight.value = viewportHeight;
+  processScrollTop.value = nextScrollTop;
+};
+
+const scheduleProcessViewportMetrics = () => {
+  if (processScrollFrameId !== null) return;
+
+  processScrollFrameId = window.requestAnimationFrame(() => {
+    processScrollFrameId = null;
+    updateProcessViewportMetrics();
+  });
+};
+
+const observeProcessTableWrap = () => {
+  processResizeObserver?.disconnect();
+  processResizeObserver = null;
+
+  const container = processTableWrapRef.value;
+  if (!container) return;
+
+  updateProcessViewportMetrics();
+  if (typeof ResizeObserver === 'undefined') return;
+
+  processResizeObserver = new ResizeObserver(scheduleProcessViewportMetrics);
+  processResizeObserver.observe(container);
+};
 
 const formatMemoryMb = (value: number): string => {
   if (!Number.isFinite(value)) {
@@ -198,6 +269,14 @@ const stopAutoRefresh = () => {
 
 const closeModal = () => {
   emit('close');
+};
+
+const resolveModalDocument = (): Document => {
+  if (props.teleportTarget && typeof props.teleportTarget !== 'string') {
+    return props.teleportTarget.ownerDocument;
+  }
+
+  return processTableWrapRef.value?.ownerDocument ?? document;
 };
 
 const requestProcessList = () => {
@@ -306,13 +385,23 @@ watch(autoRefresh, () => {
   syncAutoRefresh();
 });
 
+watch(sortedProcesses, () => {
+  nextTick(updateProcessViewportMetrics);
+});
+
 watch(
   () => props.isVisible,
   visible => {
     if (!visible) {
       stopAutoRefresh();
+      processResizeObserver?.disconnect();
+      processResizeObserver = null;
+      return;
     }
+
+    nextTick(observeProcessTableWrap);
   },
+  { immediate: true },
 );
 
 const handleKeydown = (event: KeyboardEvent) => {
@@ -321,27 +410,46 @@ const handleKeydown = (event: KeyboardEvent) => {
   }
 };
 
+const removeKeydownListener = () => {
+  keydownDocument?.removeEventListener('keydown', handleKeydown);
+  keydownDocument = null;
+};
+
+const addKeydownListener = () => {
+  const targetDocument = resolveModalDocument();
+  if (keydownDocument === targetDocument) return;
+
+  removeKeydownListener();
+  targetDocument.addEventListener('keydown', handleKeydown);
+  keydownDocument = targetDocument;
+};
+
 watch(
-  () => props.isVisible,
-  visible => {
+  () => [props.isVisible, props.teleportTarget] as const,
+  ([visible]) => {
     if (visible) {
-      document.addEventListener('keydown', handleKeydown);
+      addKeydownListener();
     } else {
-      document.removeEventListener('keydown', handleKeydown);
+      removeKeydownListener();
     }
   },
   { immediate: true },
 );
-
 onUnmounted(() => {
   stopAutoRefresh();
   cleanupHandlers();
-  document.removeEventListener('keydown', handleKeydown);
+  removeKeydownListener();
+  if (processScrollFrameId !== null) {
+    window.cancelAnimationFrame(processScrollFrameId);
+    processScrollFrameId = null;
+  }
+  processResizeObserver?.disconnect();
+  processResizeObserver = null;
 });
 </script>
 
 <template>
-  <teleport to="body">
+  <teleport :to="resolvedTeleportTarget">
     <div v-if="isVisible" class="process-modal-overlay" @click.self="closeModal">
       <div class="process-modal-shell">
         <button class="process-modal-close" type="button" @click="closeModal" :title="t('common.close', '关闭')">
@@ -382,7 +490,7 @@ onUnmounted(() => {
           {{ processError }}
         </div>
 
-        <div v-else class="process-table-wrap">
+        <div ref="processTableWrapRef" v-else class="process-table-wrap" @scroll="scheduleProcessViewportMetrics">
           <div v-if="isLoading && sortedProcesses.length === 0" class="process-state">
             <i class="fas fa-spinner fa-spin"></i>
             <span>{{ t('common.loading', '加载中...') }}</span>
@@ -483,7 +591,10 @@ onUnmounted(() => {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="item in sortedProcesses" :key="item.pid">
+              <tr v-if="processVirtualTopSpacerHeight > 0" class="process-virtual-spacer" aria-hidden="true">
+                <td :colspan="PROCESS_COLUMN_COUNT" :style="{ height: `${processVirtualTopSpacerHeight}px` }"></td>
+              </tr>
+              <tr v-for="{ item, index } in virtualProcesses" :key="`${item.pid}-${index}`">
                 <td class="process-table__mono">{{ item.pid }}</td>
                 <td>{{ item.user }}</td>
                 <td>
@@ -503,6 +614,9 @@ onUnmounted(() => {
                     </button>
                   </div>
                 </td>
+              </tr>
+              <tr v-if="processVirtualBottomSpacerHeight > 0" class="process-virtual-spacer" aria-hidden="true">
+                <td :colspan="PROCESS_COLUMN_COUNT" :style="{ height: `${processVirtualBottomSpacerHeight}px` }"></td>
               </tr>
             </tbody>
           </table>
@@ -686,6 +800,11 @@ onUnmounted(() => {
   padding: 12px 10px;
   text-align: left;
   font-size: 13px;
+}
+
+.process-virtual-spacer td {
+  border-bottom: 0;
+  padding: 0;
 }
 
 .process-table th {

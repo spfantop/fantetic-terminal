@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { debugLog } from '../../composables/useDebugLog';
 import { ref, watch, computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useAppearanceStore } from '../../stores/appearance.store';
@@ -39,7 +40,7 @@ const initializeEditableState = () => {
 onMounted(initializeEditableState);
 
 watch(() => appearanceSettings.value.customUiTheme, () => {
-    console.log('[StyleCustomizerUiTab Watch] customUiTheme changed, re-initializing.');
+    debugLog('[StyleCustomizerUiTab Watch] customUiTheme changed, re-initializing.');
     initializeEditableState();
 }, { deep: true });
 

@@ -11,6 +11,8 @@ import { useFocusSwitcherStore } from '../stores/focusSwitcher.store';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store'; // +++ 修正导入大小写 +++
 import { useSettingsStore } from '../stores/settings.store'; 
 import { useWorkspaceEventEmitter } from '../composables/workspaceEvents';
+import { scheduleScrollIntoView } from '../composables/useRafScrollIntoView';
+import { debugLog } from '../composables/useDebugLog';
 import ManageTagConnectionsModal from './ManageTagConnectionsModal.vue'; 
 import { useConfirmDialog } from '../composables/useConfirmDialog';
 
@@ -75,6 +77,7 @@ const loadInitialExpandedGroups = (): Record<string, boolean> => {
 
 // 分组展开状态 - 从 localStorage 初始化
 const expandedGroups = ref<Record<string, boolean>>(loadInitialExpandedGroups());
+const expandedGroupsSignature = computed(() => JSON.stringify(expandedGroups.value));
 
 // --- 移除 RDP 模态框状态 ---
 // const showRdpModal = ref(false);
@@ -254,16 +257,16 @@ const flatFilteredConnections = computed(() => {
 
 
   // +++ 监听分组状态变化并保存到 localStorage +++
-  watch(expandedGroups, (newState) => {
+  watch(expandedGroupsSignature, (newState) => {
     // Only save if tags are shown
     if (showConnectionTagsBoolean.value) {
         try {
-          localStorage.setItem(EXPANDED_GROUPS_STORAGE_KEY, JSON.stringify(newState));
+          localStorage.setItem(EXPANDED_GROUPS_STORAGE_KEY, newState);
         } catch (e) {
           console.error('Failed to save expanded groups state to localStorage:', e);
         }
     }
-  }, { deep: true });
+  });
 
   // 监听搜索词变化，重置高亮索引
   watch(searchTerm, () => {
@@ -271,10 +274,9 @@ const flatFilteredConnections = computed(() => {
   });
 
   // 监听分组展开状态变化，重置高亮索引 (这个 watch 保留，用于重置高亮)
-  watch(expandedGroups, () => {
+  watch(expandedGroupsSignature, () => {
       highlightedIndex.value = -1;
-  }, { deep: true });
-
+  });
   // 监听显示模式变化，重置高亮索引
   watch(showConnectionTagsBoolean, () => {
       highlightedIndex.value = -1;
@@ -303,7 +305,7 @@ const flatFilteredConnections = computed(() => {
   // 处理单击连接 (左键/Enter) - 使用 session store 处理连接请求
 const handleConnect = (connectionId: number, event?: MouseEvent | KeyboardEvent) => {
   if (event instanceof MouseEvent && event.button !== 0) {
-    console.log(`[WkspConnList] DEBUG: handleConnect called with non-left click (button: ${event.button}). Ignoring.`);
+    debugLog(`[WkspConnList] DEBUG: handleConnect called with non-left click (button: ${event.button}). Ignoring.`);
     return;
   }
 
@@ -327,11 +329,11 @@ const handleConnect = (connectionId: number, event?: MouseEvent | KeyboardEvent)
 
 // 显示右键菜单
 const showContextMenu = (event: MouseEvent, connection: ConnectionInfo) => {
-console.log(`[WkspConnList] showContextMenu (右键) called for ID: ${connection.id}. Event:`, event);
+debugLog(`[WkspConnList] showContextMenu (右键) called for ID: ${connection.id}. Event:`, event);
 event.preventDefault(); // 再次确保阻止默认行为
 event.stopPropagation(); // 阻止事件冒泡
 event.stopImmediatePropagation(); // 尝试更强力地阻止事件链
-console.log('[WkspConnList] Right-click default prevented and propagation stopped.');
+debugLog('[WkspConnList] Right-click default prevented and propagation stopped.');
 contextTargetConnection.value = connection;
 contextMenuPosition.value = { x: event.clientX, y: event.clientY };
 contextMenuVisible.value = true;
@@ -364,7 +366,7 @@ nextTick(() => {
 
     // 更新位置
     if (finalX !== contextMenuPosition.value.x || finalY !== contextMenuPosition.value.y) {
-      console.log(`[WkspConnList] Adjusting context menu position: (${contextMenuPosition.value.x}, ${contextMenuPosition.value.y}) -> (${finalX}, ${finalY})`);
+      debugLog(`[WkspConnList] Adjusting context menu position: (${contextMenuPosition.value.x}, ${contextMenuPosition.value.y}) -> (${finalX}, ${finalY})`);
       contextMenuPosition.value = { x: finalX, y: finalY };
     }
   }
@@ -386,7 +388,7 @@ const handleMenuAction = async (action: 'add' | 'edit' | 'delete' | 'clone') => 
   closeContextMenu(); // 先关闭菜单
 
   if (action === 'add') {
-    console.log('[WorkspaceConnectionList] handleMenuAction called with action: add. Emitting request-add-connection...'); 
+    debugLog('[WorkspaceConnectionList] handleMenuAction called with action: add. Emitting request-add-connection...');
     // router.push('/connections/add'); // 改为触发事件
     emitWorkspaceEvent('connection:requestAdd');
   }else if (conn) {
@@ -465,7 +467,7 @@ nextTick(() => {
 
     // 更新位置
     if (finalX !== tagContextMenuPosition.value.x || finalY !== tagContextMenuPosition.value.y) {
-      console.log(`[WkspConnList] Adjusting tag context menu position: (${tagContextMenuPosition.value.x}, ${tagContextMenuPosition.value.y}) -> (${finalX}, ${finalY})`);
+      debugLog(`[WkspConnList] Adjusting tag context menu position: (${tagContextMenuPosition.value.x}, ${tagContextMenuPosition.value.y}) -> (${finalX}, ${finalY})`);
       tagContextMenuPosition.value = { x: finalX, y: finalY };
     }
   }
@@ -614,7 +616,7 @@ onBeforeUnmount(() => {
   // 调用存储的注销函数
   if (unregisterFocusAction) {
     unregisterFocusAction();
-    console.log(`[WkspConnList] Unregistered focus action on unmount.`);
+    debugLog(`[WkspConnList] Unregistered focus action on unmount.`);
   }
   unregisterFocusAction = null;
 });
@@ -665,7 +667,7 @@ const scrollToHighlighted = async () => {
   // Query selector needs to work for both grouped and flat lists
   const highlightedElement = listAreaRef.value.querySelector(`li[data-conn-id="${highlightedConnectionId.value}"]`);
   if (highlightedElement) {
-    highlightedElement.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    scheduleScrollIntoView(highlightedElement, { block: 'nearest', inline: 'nearest' });
   }
 };
 

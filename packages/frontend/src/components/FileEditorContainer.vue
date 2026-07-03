@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { debugLog } from '../composables/useDebugLog';
 import { computed, type PropType, ref, watch, defineExpose, onMounted, onBeforeUnmount, nextTick } from 'vue'; // 添加 nextTick
 import { useI18n } from 'vue-i18n';
 import MonacoEditor from './MonacoEditor.vue'; 
@@ -10,6 +11,7 @@ import { useSettingsStore } from '../stores/settings.store';
 import { useAppearanceStore } from '../stores/appearance.store'; // +++ 导入外观 Store +++
 import { storeToRefs } from 'pinia';
 import { useWorkspaceEventEmitter } from '../composables/workspaceEvents';
+import { measureCachedTextWidth } from '../composables/useCachedTextMeasurement';
 
 const { t } = useI18n();
 const emitWorkspaceEvent = useWorkspaceEventEmitter(); // +++ 获取事件发射器 +++
@@ -59,40 +61,25 @@ const updateSelectWidth = () => {
 
     if (!selectedOption) return;
 
-    // Create a temporary span to measure text width
-    const tempSpan = document.createElement('span');
-    // Copy relevant styles (adjust as needed for accurate measurement)
     const styles = window.getComputedStyle(selectElement);
-    tempSpan.style.fontSize = styles.fontSize;
-    tempSpan.style.fontFamily = styles.fontFamily;
-    tempSpan.style.fontWeight = styles.fontWeight;
-    tempSpan.style.letterSpacing = styles.letterSpacing;
-    tempSpan.style.paddingLeft = styles.paddingLeft; // Include padding for accuracy
-    tempSpan.style.paddingRight = styles.paddingRight;
-    // tempSpan.style.borderLeftWidth = styles.borderLeftWidth; // Border might not be needed for width calc
-    // tempSpan.style.borderRightWidth = styles.borderRightWidth;
-    tempSpan.style.visibility = 'hidden'; // Make it invisible
-    tempSpan.style.position = 'absolute'; // Prevent layout shift
-    tempSpan.style.whiteSpace = 'nowrap'; // Prevent wrapping
-    tempSpan.style.left = '-9999px'; // Move off-screen
-
-    tempSpan.textContent = selectedOption.text;
-    document.body.appendChild(tempSpan);
-
-    const textWidth = tempSpan.offsetWidth;
-    document.body.removeChild(tempSpan);
-
-    // Set the select width (add extra space for dropdown arrow, adjust as needed)
+    const font = `${styles.fontStyle} ${styles.fontVariant} ${styles.fontWeight} ${styles.fontSize} ${styles.fontFamily}`;
+    const letterSpacing = Number.parseFloat(styles.letterSpacing);
+    const textWidth = measureCachedTextWidth(
+      selectedOption.text,
+      font,
+      Number.isFinite(letterSpacing) ? letterSpacing : 0,
+    );
+    const horizontalPadding = Number.parseFloat(styles.paddingLeft) + Number.parseFloat(styles.paddingRight);
     const arrowPadding = 25; // Increased padding for arrow and visual spacing
-    selectElement.style.width = `${textWidth + arrowPadding}px`;
-    // console.log(`[EditorContainer] Setting select width for "${selectedOption.text}" to ${textWidth + arrowPadding}px`);
+    selectElement.style.width = `${Math.ceil(textWidth + horizontalPadding + arrowPadding)}px`;
+    // debugLog(`[EditorContainer] Setting select width for "${selectedOption.text}" to ${textWidth + arrowPadding}px`);
   });
 };
 
 
 // 监听 activeTab 的变化，重置 localEditorContent 并更新 select 宽度
 watch(activeTab, (newTab) => {
-    // console.log('[EditorContainer] Active tab changed, updating local content.');
+    // debugLog('[EditorContainer] Active tab changed, updating local content.');
     localEditorContent.value = newTab?.content ?? '';
     updateSelectWidth(); // Update select width when tab changes
 }, { immediate: true }); // immediate: true ensures it runs on initial load too
@@ -100,9 +87,9 @@ watch(activeTab, (newTab) => {
 // 移除用于调试的 watch 函数
 // 当本地编辑器内容变化时，通知父组件 (WorkspaceView)
 watch(localEditorContent, (newContent) => {
-    // console.log('[EditorContainer] Local content changed, checking if emit needed.');
+    // debugLog('[EditorContainer] Local content changed, checking if emit needed.');
     if (activeTab.value && newContent !== activeTab.value.content) {
-        // console.log(`[EditorContainer] Emitting update:content for tab ${activeTab.value.id}`);
+        // debugLog(`[EditorContainer] Emitting update:content for tab ${activeTab.value.id}`);
         // 只有当内容实际改变时才发出事件
         emitWorkspaceEvent('editor:updateContent', { tabId: activeTab.value.id, content: newContent });
         // 注意：isModified 状态应该由 Store 根据 content 和 originalContent 计算
@@ -198,7 +185,7 @@ const handleEncodingChange = (event: Event) => {
   const target = event.target as HTMLSelectElement;
   const newEncoding = target.value;
   if (activeTab.value && newEncoding && newEncoding !== currentSelectedEncoding.value) {
-    console.log(`[EditorContainer] Encoding changed to ${newEncoding} for tab ${activeTab.value.id}`);
+    debugLog(`[EditorContainer] Encoding changed to ${newEncoding} for tab ${activeTab.value.id}`);
     emitWorkspaceEvent('editor:changeEncoding', { tabId: activeTab.value.id, encoding: newEncoding });
   }
 };

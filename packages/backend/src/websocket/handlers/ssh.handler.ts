@@ -7,6 +7,8 @@ import { cleanupClientConnection } from '../utils';
 import { temporaryLogStorageService } from '../../ssh-suspend/temporary-log-storage.service';
 import { startDockerStatusPolling } from './docker.handler';
 import WebSocket from 'ws';
+import { flushSshOutput, scheduleSshOutput } from '../ssh-output-buffer';
+import { writeSshInput } from '../ssh-input-writer';
 
 export async function handleSshConnect(
     ws: AuthenticatedWebSocket,
@@ -60,6 +62,8 @@ export async function handleSshConnect(
             connectionName: connInfo!.name,
             ipAddress: clientIp,
             isShellReady: false,
+            supportsSshBinaryOutput: payload?.clientCapabilities?.sshBinaryOutput === true,
+            supportsSshBinaryInput: payload?.clientCapabilities?.sshBinaryInput === true,
         };
         clientStates.set(newSessionId, newState);
         console.log(`WebSocket: 为用户 ${ws.username} (IP: ${clientIp}) 创建新会话 ${newSessionId} (DB ID: ${dbConnectionIdAsNumber}, 连接名称: ${newState.connectionName})`);
@@ -100,11 +104,7 @@ export async function handleSshConnect(
                 newState.isShellReady = true;
 
                 stream.on('data', (data: Buffer) => {
-                    if (ws.readyState === WebSocket.OPEN) {
-                        // 确保数据以 UTF-8 编码转换为 Base64
-                        const utf8Data = data.toString('utf8');
-                        ws.send(JSON.stringify({ type: 'ssh:output', payload: Buffer.from(utf8Data, 'utf8').toString('base64'), encoding: 'base64' }));
-                    }
+                    scheduleSshOutput(newState, data);
                     // 如果会话被标记为待挂起，则将输出写入日志
                     const currentState = clientStates.get(newSessionId); // 获取最新的状态
                     if (currentState?.isMarkedForSuspend && currentState.suspendLogPath) {
@@ -114,12 +114,10 @@ export async function handleSshConnect(
                     }
                 });
                 stream.stderr.on('data', (data: Buffer) => {
-                    console.error(`SSH Stderr (会话: ${newSessionId}): ${data.toString('utf8').substring(0, 100)}...`);
-                    if (ws.readyState === WebSocket.OPEN) {
-                        // 确保数据以 UTF-8 编码转换为 Base64
-                        const utf8ErrData = data.toString('utf8');
-                        ws.send(JSON.stringify({ type: 'ssh:output', payload: Buffer.from(utf8ErrData, 'utf8').toString('base64'), encoding: 'base64' }));
+                    if (process.env.DEBUG_SSH_STDERR === 'true') {
+                        console.error(`SSH Stderr (会话: ${newSessionId}): ${data.toString('utf8').substring(0, 100)}...`);
                     }
+                    scheduleSshOutput(newState, data);
                     // 同样，如果会话被标记为待挂起，则将 stderr 输出写入日志
                     const currentState = clientStates.get(newSessionId);
                     if (currentState?.isMarkedForSuspend && currentState.suspendLogPath) {
@@ -129,6 +127,7 @@ export async function handleSshConnect(
                     }
                 });
                 stream.on('close', () => {
+                    flushSshOutput(newState, { force: true });
                     console.log(`SSH: 会话 ${newSessionId} 的 Shell 通道已关闭。`);
                     if (ws.readyState === WebSocket.OPEN) {
                         ws.send(JSON.stringify({ type: 'ssh:disconnected', payload: 'Shell 通道已关闭。' }));
@@ -140,7 +139,8 @@ export async function handleSshConnect(
                     type: 'ssh:connected',
                     payload: {
                         connectionId: dbConnectionIdAsNumber,
-                        sessionId: newSessionId
+                        sessionId: newSessionId,
+                        serverCapabilities: { sshBinaryInput: true, sshBinaryOutput: newState.supportsSshBinaryOutput === true }
                     }
                 }));
                 console.log(`WebSocket: 会话 ${newSessionId} SSH 连接和 Shell 建立成功。`);
@@ -177,10 +177,12 @@ export async function handleSshConnect(
         }
 
         sshClient.on('close', () => {
+            flushSshOutput(newState, { force: true });
             console.log(`SSH: 会话 ${newSessionId} 的客户端连接已关闭。`);
             cleanupClientConnection(newSessionId);
         });
         sshClient.on('error', (err: Error) => {
+            flushSshOutput(newState, { force: true });
             console.error(`SSH: 会话 ${newSessionId} 的客户端连接错误:`, err);
             if (ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'ssh:error', payload: `SSH 连接错误: ${err.message}` }));
@@ -219,8 +221,8 @@ export function handleSshInput(ws: AuthenticatedWebSocket, payload: any): void {
         return;
     }
     const data = payload?.data;
-    if (typeof data === 'string' && state.isShellReady) { // Check isShellReady
-        state.sshShellStream.write(data);
+    if (typeof data === 'string' && state.isShellReady) {
+        writeSshInput(state, data);
     } else if (!state.isShellReady) {
         console.warn(`WebSocket: 会话 ${sessionId} 收到 SSH 输入，但 Shell 尚未就绪。`);
     }
@@ -242,7 +244,9 @@ export function handleSshResize(ws: AuthenticatedWebSocket, payload: any): void 
     }
 
     if (state.isShellReady && state.sshShellStream) {
-        console.log(`SSH: 会话 ${sessionId} 调整终端大小: ${cols}x${rows}`);
+        if (process.env.DEBUG_TERMINAL_RESIZE === 'true') {
+            console.log(`SSH: 会话 ${sessionId} 调整终端大小: ${cols}x${rows}`);
+        }
         state.sshShellStream.setWindow(rows, cols, 0, 0);
     } else {
         // Store intended size if shell not ready, apply when shell is ready.

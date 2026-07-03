@@ -227,31 +227,33 @@
 </template>
 
 <script setup lang="ts">
+import { debugLog, debugLogLazy } from '../composables/useDebugLog';
 import { ref, onMounted, onBeforeUnmount, computed, nextTick, defineExpose, watch, watchEffect } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useQuickCommandsStore, type QuickCommandFE, type QuickCommandSortByType, type GroupedQuickCommands } from '../stores/quickCommands.store';
-import { useQuickCommandTagsStore } from '../stores/quickCommandTags.store'; 
+import { useQuickCommandTagsStore } from '../stores/quickCommandTags.store';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
 import { useI18n } from 'vue-i18n';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
 import AddEditQuickCommandForm from '../components/AddEditQuickCommandForm.vue';
-import { useFocusSwitcherStore } from '../stores/focusSwitcher.store'; 
+import { useFocusSwitcherStore } from '../stores/focusSwitcher.store';
 import { useSettingsStore } from '../stores/settings.store';
 import { useWorkspaceEventEmitter } from '../composables/workspaceEvents';
 import { useSessionStore } from '../stores/session.store';
-import type { SessionState } from '../stores/session/types'; 
+import type { SessionState } from '../stores/session/types';
 import { useConnectionsStore } from '../stores/connections.store';
+import { scheduleScrollIntoView } from '../composables/useRafScrollIntoView';
 
 const quickCommandsStore = useQuickCommandsStore();
-const quickCommandTagsStore = useQuickCommandTagsStore(); 
+const quickCommandTagsStore = useQuickCommandTagsStore();
 const uiNotificationsStore = useUiNotificationsStore();
 const { t } = useI18n();
 const { showConfirmDialog } = useConfirmDialog();
 const focusSwitcherStore = useFocusSwitcherStore();
 const settingsStore = useSettingsStore();
 const emitWorkspaceEvent = useWorkspaceEventEmitter();
-const sessionStore = useSessionStore(); 
-const connectionsStore = useConnectionsStore(); 
+const sessionStore = useSessionStore();
+const connectionsStore = useConnectionsStore();
 
 const hoveredItemId = ref<number | null>(null);
 const isFormVisible = ref(false);
@@ -292,10 +294,10 @@ watchEffect(() => {
   if (storeVal && typeof storeVal === 'number' && storeVal > 0) {
     if (quickCommandRowSizeMultiplier.value !== storeVal) {
       quickCommandRowSizeMultiplier.value = storeVal;
-      // console.log(`[QuickCmdView] Row size multiplier loaded from store: ${storeVal}`);
+      // debugLog(`[QuickCmdView] Row size multiplier loaded from store: ${storeVal}`);
     }
   } else {
-    // console.log(`[QuickCmdView] No valid row size multiplier in store for QuickCommands, using default: ${quickCommandRowSizeMultiplier.value}`);
+    // debugLog(`[QuickCmdView] No valid row size multiplier in store for QuickCommands, using default: ${quickCommandRowSizeMultiplier.value}`);
   }
 });
 
@@ -307,7 +309,7 @@ const handleWheel = (event: WheelEvent) => {
     quickCommandRowSizeMultiplier.value = parseFloat(newMultiplier.toFixed(2));
 
     if (quickCommandRowSizeMultiplier.value !== oldMultiplier) {
-      // console.log(`[QuickCmdView] Row size multiplier changed: ${quickCommandRowSizeMultiplier.value}. Saving to store...`);
+      // debugLog(`[QuickCmdView] Row size multiplier changed: ${quickCommandRowSizeMultiplier.value}. Saving to store...`);
       // 假设 settingsStore 有一个名为 updateQuickCommandRowSizeMultiplier 的 action
       if (settingsStore.updateQuickCommandRowSizeMultiplier) {
         settingsStore.updateQuickCommandRowSizeMultiplier(quickCommandRowSizeMultiplier.value);
@@ -403,8 +405,8 @@ const scrollToSelected = async (index: number) => {
     const selectedElement = listContainer.querySelector(`li[data-command-id="${selectedCommandId}"]`) as HTMLLIElement;
 
     if (selectedElement) {
-        selectedElement.scrollIntoView({
-            behavior: 'smooth',
+        scheduleScrollIntoView(selectedElement, {
+            behavior: 'auto',
             block: 'nearest',
         });
     } else {
@@ -636,7 +638,7 @@ const finishEditingTag = async () => {
   try {
     if (currentEditingId === 'untagged') {
       // --- Create new tag and assign commands ---
-      console.log(`[QuickCmdView] Creating new tag: ${newName}`);
+      debugLog(`[QuickCmdView] Creating new tag: ${newName}`);
       const newTag = await quickCommandTagsStore.addTag(newName);
       if (newTag) {
         operationSuccess = true;
@@ -645,13 +647,13 @@ const finishEditingTag = async () => {
         const commandIdsToAssign = untaggedGroup ? untaggedGroup.commands.map(c => c.id) : [];
 
         if (commandIdsToAssign.length > 0) {
-          console.log(`[QuickCmdView] Assigning ${commandIdsToAssign.length} commands to new tag ID: ${newTag.id}`);
-          console.log(`[QuickCmdView] Command IDs to assign: ${JSON.stringify(commandIdsToAssign)}`); 
+          debugLog(`[QuickCmdView] Assigning ${commandIdsToAssign.length} commands to new tag ID: ${newTag.id}`);
+          debugLogLazy(() => [`[QuickCmdView] Command IDs to assign: ${JSON.stringify(commandIdsToAssign)}`]);
           // Call the store action to assign commands to the new tag
           const assignSuccess = await quickCommandsStore.assignCommandsToTagAction(commandIdsToAssign, newTag.id);
           if (assignSuccess) {
             // Success/Error Notifications and list refresh are handled within the store action
-            console.log(`[QuickCmdView] assignCommandsToTagAction reported success.`);
+            debugLog(`[QuickCmdView] assignCommandsToTagAction reported success.`);
           } else {
              console.error(`[QuickCmdView] assignCommandsToTagAction reported failure.`);
              // Optionally show a specific error here if the store action doesn't cover all cases
@@ -684,7 +686,7 @@ const finishEditingTag = async () => {
       if (originalTagName === newName) {
         operationSuccess = true; // No change needed
       } else {
-        console.log(`[QuickCmdView] Updating tag ID ${currentEditingId} from "${originalTagName}" to "${newName}"`);
+        debugLog(`[QuickCmdView] Updating tag ID ${currentEditingId} from "${originalTagName}" to "${newName}"`);
         const updateResult = await quickCommandTagsStore.updateTag(currentEditingId, newName);
         if (updateResult) {
           operationSuccess = true;
@@ -747,7 +749,7 @@ nextTick(() => {
 
     // 更新位置
     if (finalX !== quickCommandContextMenuPosition.value.x || finalY !== quickCommandContextMenuPosition.value.y) {
-      console.log(`[QuickCmdView] Adjusting quick command context menu position: (${quickCommandContextMenuPosition.value.x}, ${quickCommandContextMenuPosition.value.y}) -> (${finalX}, ${finalY})`);
+      debugLog(`[QuickCmdView] Adjusting quick command context menu position: (${quickCommandContextMenuPosition.value.x}, ${quickCommandContextMenuPosition.value.y}) -> (${finalX}, ${finalY})`);
       quickCommandContextMenuPosition.value = { x: finalX, y: finalY };
     }
   }

@@ -1,3 +1,4 @@
+import { debugLog } from './useDebugLog';
 import { ref, reactive, watch, computed, onMounted, toRefs } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useI18n } from 'vue-i18n';
@@ -124,8 +125,8 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
           formData.folder_id = newVal.folder_id ?? null;
           formData.icon = normalizeServerIconKey(newVal.icon, newVal.type);
           formData.jump_chain = newVal.jump_chain ? JSON.parse(JSON.stringify(newVal.jump_chain)) : null; 
-          console.log('[Debug] watch connectionToEdit - newVal.jump_chain:', newVal.jump_chain);
-          console.log('[Debug] watch connectionToEdit - formData.jump_chain initialized:', formData.jump_chain);
+          debugLog('[Debug] watch connectionToEdit - newVal.jump_chain:', newVal.jump_chain);
+          debugLog('[Debug] watch connectionToEdit - formData.jump_chain initialized:', formData.jump_chain);
           formData.notes = newVal.notes ?? '';
           formData.tag_ids = newVal.tag_ids ? [...newVal.tag_ids] : [];
 
@@ -164,7 +165,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
          formData.vncPassword = '';
          formData.jump_chain = null; 
          formData.proxy_type = null;
-         console.log('[Debug] watch connectionToEdit - formData.jump_chain reset');
+         debugLog('[Debug] watch connectionToEdit - formData.jump_chain reset');
          advancedConnectionMode.value = 'proxy'; 
     }
   }, { immediate: true });
@@ -216,7 +217,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
     } else {
       formData.proxy_type = null;
     }
-    console.log(`[Debug] useAddConnectionForm: proxy_type set to ${formData.proxy_type} (type: ${newType}, mode: ${newAdvMode})`);
+    debugLog(`[Debug] useAddConnectionForm: proxy_type set to ${formData.proxy_type} (type: ${newType}, mode: ${newAdvMode})`);
   }, { immediate: true });
 
   // Helper function to parse IP range

@@ -1,5 +1,6 @@
 import { ref, computed, nextTick, type Ref, type ComputedRef } from 'vue';
 import type { FileListItem } from '../../types/sftp.types';
+import { scheduleScrollIntoView } from '../useRafScrollIntoView';
 
 // 定义 Composable 的输入参数类型
 export interface UseFileManagerKeyboardNavigationOptions {
@@ -42,9 +43,8 @@ export function useFileManagerKeyboardNavigation(options: UseFileManagerKeyboard
     const selectedRow = rows[selectedIndex.value] as HTMLElement;
 
     if (selectedRow) {
-        // 使用 scrollIntoView 使元素可见，滚动最小距离
-        selectedRow.scrollIntoView({
-            behavior: 'smooth', // 可以使用 'auto' 来实现即时滚动
+        scheduleScrollIntoView(selectedRow, {
+            behavior: 'auto',
             block: 'nearest',
         });
     }

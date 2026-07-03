@@ -1,16 +1,17 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watch, nextTick, watchEffect } from 'vue';
-import { Terminal, ITerminalAddon, IDisposable } from 'xterm';
+import { computed, ref, onMounted, onBeforeUnmount, watch, nextTick, watchEffect } from 'vue';
+import { Terminal, IDisposable } from 'xterm';
 import { useDeviceDetection } from '../composables/useDeviceDetection';
 import { useAppearanceStore } from '../stores/appearance.store';
 import { useSettingsStore } from '../stores/settings.store';
-import { useSessionStore } from '../stores/session.store'; 
 import { storeToRefs } from 'pinia';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from 'xterm-addon-web-links';
 import { SearchAddon, type ISearchOptions } from '@xterm/addon-search';
 import 'xterm/css/xterm.css';
-import { useWorkspaceEventEmitter, useWorkspaceEventSubscriber, useWorkspaceEventOff } from '../composables/workspaceEvents'; // +++ Import subscriber and off
+import { useWorkspaceEventEmitter, useWorkspaceEventOff, useWorkspaceEventSubscriber } from '../composables/workspaceEvents';
+import type { WorkspaceEventPayloads } from '../composables/workspaceEvents';
+import { debugLog } from '../composables/useDebugLog';
 
 
 // 定义 props 和 emits
@@ -19,13 +20,14 @@ const props = defineProps<{
   isActive: boolean; // 标记此终端是否为活动标签页
   stream?: ReadableStream<string>; // 用于接收来自 WebSocket 的数据流 (可选)
   options?: object; // xterm 的配置选项
+  terminalInputHandler?: (sessionId: string, data: string, batched?: boolean) => void;
 }>();
 
 
 
 const emitWorkspaceEvent = useWorkspaceEventEmitter(); // +++ 获取事件发射器 +++
-const subscribeToWorkspaceEvent = useWorkspaceEventSubscriber(); // +++ 获取事件订阅器 +++
-const unsubscribeFromWorkspaceEvent = useWorkspaceEventOff(); // +++ 获取事件取消订阅器 +++
+const subscribeToWorkspaceEvent = useWorkspaceEventSubscriber();
+const unsubscribeFromWorkspaceEvent = useWorkspaceEventOff();
 
 const terminalRef = ref<HTMLElement | null>(null); // xterm 挂载点的引用 (内部容器)
 const terminalOuterWrapperRef = ref<HTMLElement | null>(null); // 最外层容器的引用，用于背景图
@@ -34,11 +36,58 @@ let fitAddon: FitAddon | null = null;
 let searchAddon: SearchAddon | null = null; // *** 添加 searchAddon 变量 ***
 let resizeObserver: ResizeObserver | null = null;
 let observedElement: HTMLElement | null = null; // +++ Store the observed element +++
-let debounceTimer: number | null = null; // 用于防抖的计时器 ID
 let selectionListenerDisposable: IDisposable | null = null; // +++ 提升声明并添加类型 +++
-let lastResizeObserverWidth = 0;
-let lastResizeObserverHeight = 0;
+let resizeAnimationFrameId: number | null = null;
+let pendingFitOptions: { forceFit: boolean; forceResizeEmit: boolean; pixelSize?: TerminalPixelSize } = { forceFit: false, forceResizeEmit: false };
+let resizeEmitTimer: number | null = null;
+let pendingResizeDimensions: TerminalDimensions | null = null;
+let stabilizedResizeTimer: number | null = null;
+let lastObservedSize: TerminalPixelSize | null = null;
+let lastAppliedDimensions: TerminalDimensions | null = null;
+let lastEmittedDimensions: TerminalDimensions | null = null;
+let lastStableSize: TerminalPixelSize | null = null;
+let cachedFitMetrics: TerminalFitMetrics | null = null;
+let resizeTransactionDepth = 0;
+let hasDeferredFitDuringResize = false;
+let resizeTransactionSettleTimer: number | null = null;
 const RESIZE_THRESHOLD = 0.5; // px
+const RESIZE_EMIT_DELAY = 150;
+const STABILIZED_RESIZE_DELAY = 150;
+const RESIZE_TRANSACTION_SETTLE_DELAY = 80;
+
+type TerminalDimensions = {
+  cols: number;
+  rows: number;
+};
+
+type TerminalPixelSize = {
+  width: number;
+  height: number;
+};
+
+type TerminalFitMetrics = {
+  cellWidth: number;
+  cellHeight: number;
+  paddingHorizontal: number;
+  paddingVertical: number;
+  scrollbarWidth: number;
+};
+
+type XtermInternalCore = {
+  _renderService?: {
+    dimensions?: {
+      css?: {
+        cell?: {
+          width?: number;
+          height?: number;
+        };
+      };
+    };
+  };
+  viewport?: {
+    scrollBarWidth?: number;
+  };
+};
 
 
 const { isMobile } = useDeviceDetection(); // 设备检测
@@ -63,12 +112,22 @@ const {
   terminalTextShadowColor,
   initialAppearanceDataLoaded, 
 } = storeToRefs(appearanceStore);
+const terminalThemeSignature = computed(() => JSON.stringify(effectiveTerminalTheme.value));
+const terminalTextStyleSignature = computed(() => [
+  terminalTextStrokeEnabled.value,
+  terminalTextStrokeWidth.value,
+  terminalTextStrokeColor.value,
+  terminalTextShadowEnabled.value,
+  terminalTextShadowOffsetX.value,
+  terminalTextShadowOffsetY.value,
+  terminalTextShadowBlur.value,
+  terminalTextShadowColor.value,
+].join('|'));
  
 const isTerminalDomReady = ref(false); 
  
 // --- Settings Store ---
 const settingsStore = useSettingsStore(); // +++ 实例化设置 store +++
-const sessionStore = useSessionStore(); // +++ 实例化会话 store +++
 const {
   autoCopyOnSelectBoolean,
   terminalScrollbackLimitNumber, 
@@ -89,65 +148,254 @@ const debounce = (func: Function, delay: number) => {
   };
 };
 
-// 防抖处理由 ResizeObserver 触发的 resize 事件
-const debouncedEmitResize = debounce((term: Terminal) => {
-    if (term && props.isActive) { // 仅当标签仍处于活动状态时才发送防抖后的 resize
-        const dimensions = { cols: term.cols, rows: term.rows };
-        console.log(`[Terminal ${props.sessionId}] Debounced resize emit (from ResizeObserver):`, dimensions);
-        emitWorkspaceEvent('terminal:resize', { sessionId: props.sessionId, dims: dimensions });
-        // *** 尝试在发送 resize 后强制刷新终端显示 ***
-        try {
-            term.refresh(0, term.rows - 1); // Refresh entire viewport
-        } catch (e) {
-            console.warn(`[Terminal ${props.sessionId}] Terminal refresh failed:`, e);
-        }
+const isSameDimensions = (a: TerminalDimensions | null, b: TerminalDimensions | null) => (
+  !!a && !!b && a.cols === b.cols && a.rows === b.rows
+);
+
+const isSamePixelSize = (a: TerminalPixelSize | null, b: TerminalPixelSize | null) => (
+  !!a && !!b && Math.abs(a.width - b.width) < RESIZE_THRESHOLD && Math.abs(a.height - b.height) < RESIZE_THRESHOLD
+);
+
+const readTerminalPixelSize = (): TerminalPixelSize | null => {
+  const element = terminalRef.value;
+  if (!element) return null;
+
+  const width = element.clientWidth;
+  const height = element.clientHeight;
+  if (width <= 0 || height <= 0) return null;
+
+  return { width, height };
+};
+
+const readCssPixelValue = (style: CSSStyleDeclaration, propertyName: string) => {
+  const value = Number.parseFloat(style.getPropertyValue(propertyName));
+  return Number.isFinite(value) ? value : 0;
+};
+
+const readTerminalCore = (): XtermInternalCore | null => {
+  if (!terminal) return null;
+  return (terminal as unknown as { _core?: XtermInternalCore })._core ?? null;
+};
+
+const invalidateTerminalFitMetrics = () => {
+  cachedFitMetrics = null;
+};
+
+const refreshTerminalFitMetrics = (): TerminalFitMetrics | null => {
+  if (!terminal?.element) return null;
+
+  const core = readTerminalCore();
+  const cell = core?._renderService?.dimensions?.css?.cell;
+  const cellWidth = Number(cell?.width ?? 0);
+  const cellHeight = Number(cell?.height ?? 0);
+  if (cellWidth <= 0 || cellHeight <= 0) return null;
+
+  const elementStyle = window.getComputedStyle(terminal.element);
+  const paddingHorizontal = readCssPixelValue(elementStyle, 'padding-left') + readCssPixelValue(elementStyle, 'padding-right');
+  const paddingVertical = readCssPixelValue(elementStyle, 'padding-top') + readCssPixelValue(elementStyle, 'padding-bottom');
+  const scrollbarWidth = terminal.options.scrollback === 0 ? 0 : Math.max(0, core?.viewport?.scrollBarWidth ?? 0);
+
+  cachedFitMetrics = {
+    cellWidth,
+    cellHeight,
+    paddingHorizontal,
+    paddingVertical,
+    scrollbarWidth,
+  };
+  return cachedFitMetrics;
+};
+
+const proposeDimensionsFromCachedMetrics = (pixelSize: TerminalPixelSize, forceRefreshMetrics = false): TerminalDimensions | null => {
+  const metrics = forceRefreshMetrics || !cachedFitMetrics ? refreshTerminalFitMetrics() : cachedFitMetrics;
+  if (!metrics) return fitAddon?.proposeDimensions() ?? null;
+
+  const availableWidth = Math.max(0, pixelSize.width - metrics.paddingHorizontal - metrics.scrollbarWidth);
+  const availableHeight = Math.max(0, pixelSize.height - metrics.paddingVertical);
+
+  return {
+    cols: Math.max(2, Math.floor(availableWidth / metrics.cellWidth)),
+    rows: Math.max(1, Math.floor(availableHeight / metrics.cellHeight)),
+  };
+};
+
+const resizeTerminalToDimensions = (dimensions: TerminalDimensions) => {
+  if (!terminal || isNaN(dimensions.cols) || isNaN(dimensions.rows)) return;
+
+  terminal.resize(dimensions.cols, dimensions.rows);
+};
+
+const clearPendingResizeEmit = () => {
+  if (resizeEmitTimer !== null) {
+    window.clearTimeout(resizeEmitTimer);
+    resizeEmitTimer = null;
+  }
+  pendingResizeDimensions = null;
+};
+
+const emitResizeDimensions = (dimensions: TerminalDimensions, force = false) => {
+  if (force) {
+    clearPendingResizeEmit();
+  }
+  if (!props.isActive || (!force && isSameDimensions(lastEmittedDimensions, dimensions))) return;
+
+  lastEmittedDimensions = { ...dimensions };
+  emitWorkspaceEvent('terminal:resize', { sessionId: props.sessionId, dims: dimensions });
+};
+
+const scheduleResizeEmit = (dimensions: TerminalDimensions, force = false) => {
+  clearPendingResizeEmit();
+  pendingResizeDimensions = { ...dimensions };
+  resizeEmitTimer = window.setTimeout(() => {
+    if (pendingResizeDimensions) {
+      emitResizeDimensions(pendingResizeDimensions, force);
     }
-}, 150); // 150ms 防抖延迟
+    pendingResizeDimensions = null;
+    resizeEmitTimer = null;
+  }, RESIZE_EMIT_DELAY);
+};
+
+const emitStabilizedResize = (size: TerminalPixelSize, force = false) => {
+  if (!props.isActive || (!force && isSamePixelSize(lastStableSize, size))) return;
+
+  lastStableSize = { ...size };
+  emitWorkspaceEvent('terminal:stabilizedResize', {
+    sessionId: props.sessionId,
+    width: Math.round(size.width),
+    height: Math.round(size.height),
+  });
+};
+
+const scheduleStabilizedResize = (size: TerminalPixelSize) => {
+  if (stabilizedResizeTimer !== null) {
+    window.clearTimeout(stabilizedResizeTimer);
+    stabilizedResizeTimer = null;
+  }
+
+  const nextSize = { ...size };
+  stabilizedResizeTimer = window.setTimeout(() => {
+    emitStabilizedResize(nextSize);
+    stabilizedResizeTimer = null;
+  }, STABILIZED_RESIZE_DELAY);
+};
+
+const fitTerminalToContainer = (options: { forceFit?: boolean; forceResizeEmit?: boolean; emitStabilizedNow?: boolean; pixelSize?: TerminalPixelSize } = {}) => {
+  if (!terminal || !fitAddon || !terminalRef.value) return;
+
+  const pixelSize = options.pixelSize ?? readTerminalPixelSize();
+  if (!pixelSize) return;
+
+  try {
+    const proposedDimensions = proposeDimensionsFromCachedMetrics(pixelSize, !!options.forceFit);
+    if (!proposedDimensions || proposedDimensions.cols <= 0 || proposedDimensions.rows <= 0) return;
+
+    const nextDimensions = { cols: proposedDimensions.cols, rows: proposedDimensions.rows };
+    const dimensionsChanged = !isSameDimensions(lastAppliedDimensions, nextDimensions)
+      || terminal.cols !== nextDimensions.cols
+      || terminal.rows !== nextDimensions.rows;
+
+    // 借鉴 pretext 的热路径思路：resize 中先做纯尺寸计算，只有网格尺寸变化时才触发 xterm 重排。
+    if (dimensionsChanged) {
+      resizeTerminalToDimensions(nextDimensions);
+    }
+
+    const currentDimensions = { cols: terminal.cols, rows: terminal.rows };
+    lastAppliedDimensions = { ...currentDimensions };
+
+    if (dimensionsChanged || options.forceResizeEmit) {
+      if (options.forceResizeEmit) {
+        emitResizeDimensions(currentDimensions, true);
+      } else {
+        scheduleResizeEmit(currentDimensions);
+      }
+    }
+
+    if (options.emitStabilizedNow) {
+      emitStabilizedResize(pixelSize, true);
+    } else {
+      scheduleStabilizedResize(pixelSize);
+    }
+  } catch (error) {
+    console.warn(`[Terminal ${props.sessionId}] fit failed:`, error);
+  }
+};
+
+const scheduleTerminalFit = (options: { forceFit?: boolean; forceResizeEmit?: boolean; pixelSize?: TerminalPixelSize } = {}) => {
+  if (resizeTransactionDepth > 0 && !options.forceFit && !options.forceResizeEmit) {
+    hasDeferredFitDuringResize = true;
+  }
+
+  pendingFitOptions.forceFit = pendingFitOptions.forceFit || !!options.forceFit;
+  pendingFitOptions.forceResizeEmit = pendingFitOptions.forceResizeEmit || !!options.forceResizeEmit;
+  if (options.pixelSize) {
+    pendingFitOptions.pixelSize = { ...options.pixelSize };
+  }
+
+  if (resizeAnimationFrameId !== null) return;
+
+  resizeAnimationFrameId = window.requestAnimationFrame(() => {
+    resizeAnimationFrameId = null;
+    const nextOptions = { ...pendingFitOptions };
+    pendingFitOptions = { forceFit: false, forceResizeEmit: false };
+    fitTerminalToContainer(nextOptions);
+  });
+};
 
 // 立即执行 Fit 并发送 Resize 的函数
 const fitAndEmitResizeNow = (term: Terminal) => {
-    // terminalRef 现在指向内部容器，检查它即可
-    if (!term || !terminalRef.value) return;
-    try {
-        // 确保容器可见且有尺寸
-        if (terminalRef.value.offsetHeight > 0 && terminalRef.value.offsetWidth > 0) {
-            fitAddon?.fit();
-            const dimensions = { cols: term.cols, rows: term.rows };
-            emitWorkspaceEvent('terminal:resize', { sessionId: props.sessionId, dims: dimensions });
-            // 发出稳定尺寸事件
-            if (terminalRef.value) {
-              const stableWidth = terminalRef.value.offsetWidth;
-              const stableHeight = terminalRef.value.offsetHeight;
-              emitWorkspaceEvent('terminal:stabilizedResize', { sessionId: props.sessionId, width: stableWidth, height: stableHeight });
-            }
-
-            
-            // 使用 nextTick 确保 fit() 的效果已反映，再触发 resize
-            nextTick(() => {
-                // 再次检查终端实例是否仍然存在
-                // terminalRef 现在指向内部容器
-                if (terminal && terminalRef.value) {
-                    console.log(`[Terminal ${props.sessionId}] Triggering window resize event after immediate fit.`);
-                    window.dispatchEvent(new Event('resize'));
-                }
-            });
-        } else {
-             console.log(`[Terminal ${props.sessionId}] Immediate fit skipped (container not visible or has no dimensions).`);
-        }
-    } catch (e) {
-        console.warn("Immediate fit/resize failed:", e);
-    }
+  if (!term || term !== terminal) return;
+  fitTerminalToContainer({ forceFit: true, forceResizeEmit: true, emitStabilizedNow: true });
 };
 
+const handleResizeTransaction = (payload: WorkspaceEventPayloads['ui:resizeTransaction']) => {
+  if (payload.phase === 'start') {
+    if (resizeTransactionSettleTimer !== null) {
+      window.clearTimeout(resizeTransactionSettleTimer);
+      resizeTransactionSettleTimer = null;
+    }
+    resizeTransactionDepth += 1;
+    hasDeferredFitDuringResize = true;
+    return;
+  }
+
+  if (payload.phase === 'live') {
+    if (resizeTransactionDepth > 0 && props.isActive) {
+      scheduleTerminalFit();
+    }
+    return;
+  }
+
+  resizeTransactionDepth = Math.max(0, resizeTransactionDepth - 1);
+  if (resizeTransactionDepth > 0 || !hasDeferredFitDuringResize) return;
+
+  hasDeferredFitDuringResize = false;
+  resizeTransactionSettleTimer = window.setTimeout(() => {
+    resizeTransactionSettleTimer = null;
+    if (resizeTransactionDepth === 0 && props.isActive) {
+      const deferredPixelSize = pendingFitOptions.pixelSize;
+      pendingFitOptions = { forceFit: false, forceResizeEmit: false };
+      fitTerminalToContainer({ forceFit: true, forceResizeEmit: true, emitStabilizedNow: true, pixelSize: deferredPixelSize });
+    }
+  }, RESIZE_TRANSACTION_SETTLE_DELAY);
+};
+
+const emitTerminalInput = (data: string) => {
+  if (!data) return;
+
+  if (props.terminalInputHandler) {
+    props.terminalInputHandler(props.sessionId, data, true);
+    return;
+  }
+  emitWorkspaceEvent('terminal:input', { sessionId: props.sessionId, data, batched: true });
+};
 // 创建防抖版的字体大小保存函数 (区分设备)
 const debouncedSaveFontSize = debounce(async (size: number) => {
     try {
         if (isMobile.value) {
             await appearanceStore.setTerminalFontSizeMobile(size);
-            console.log(`[Terminal ${props.sessionId}] Debounced MOBILE font size saved: ${size}`);
+            debugLog(`[Terminal ${props.sessionId}] Debounced MOBILE font size saved: ${size}`);
         } else {
             await appearanceStore.setTerminalFontSize(size);
-            console.log(`[Terminal ${props.sessionId}] Debounced DESKTOP font size saved: ${size}`);
+            debugLog(`[Terminal ${props.sessionId}] Debounced DESKTOP font size saved: ${size}`);
         }
     } catch (error) {
         console.error(`[Terminal ${props.sessionId}] Debounced font size save failed:`, error);
@@ -170,7 +418,7 @@ const handleContextMenuPaste = async (event: MouseEvent) => {
     const text = await navigator.clipboard.readText();
     if (text && terminal) {
       const processedText = text.replace(/\r\n?/g, '\n');
-      emitWorkspaceEvent('terminal:input', { sessionId: props.sessionId, data: processedText });
+      emitTerminalInput(processedText);
     }
   } catch (err) {
     console.error('[Terminal] Failed to paste via Right Click:', err);
@@ -220,6 +468,7 @@ const handleTouchMove = (event: TouchEvent) => {
       const currentTerminalOptFontSize = terminal.options.fontSize ?? currentTerminalFontSize.value;
       if (newSize !== currentTerminalOptFontSize) {
         terminal.options.fontSize = newSize;
+        invalidateTerminalFitMetrics();
         fitAndEmitResizeNow(terminal);
         debouncedSaveFontSize(newSize); // 使用新的区分设备的保存函数
       }
@@ -235,6 +484,8 @@ const handleTouchEnd = (event: TouchEvent) => {
 
 // 初始化终端
 onMounted(() => {
+  subscribeToWorkspaceEvent('ui:resizeTransaction', handleResizeTransaction);
+
   // xterm 挂载到 terminalRef (内部容器)
   if (terminalRef.value) {
     terminal = new Terminal({
@@ -265,15 +516,13 @@ onMounted(() => {
     terminal.open(terminalRef.value);
     // terminal.open() 同步执行完毕后，可以认为 Xterm 已尝试附加到 DOM
     isTerminalDomReady.value = true; // +++ 直接在此处设置 DOM 准备就绪状态 +++
-    console.log(`[Terminal ${props.sessionId}] Xterm open() called, considering DOM ready for initial style checks.`);
+    debugLog(`[Terminal ${props.sessionId}] Xterm open() called, considering DOM ready for initial style checks.`);
  
-    // 适应容器大小
-    fitAddon.fit();
-    emitWorkspaceEvent('terminal:resize', { sessionId: props.sessionId, dims: { cols: terminal.cols, rows: terminal.rows } }); // 触发初始 resize 事件
+    fitTerminalToContainer({ forceFit: true, forceResizeEmit: true, emitStabilizedNow: true }); // 触发初始 resize 事件
 
     // 监听用户输入
     terminal.onData((data) => {
-      emitWorkspaceEvent('terminal:input', { sessionId: props.sessionId, data });
+      emitTerminalInput(data);
     });
 
     // 监听终端大小变化 (通过 ResizeObserver) - 主要处理浏览器窗口大小变化等
@@ -284,62 +533,27 @@ onMounted(() => {
             if (!props.isActive || !terminal || !terminalRef.value) return;
 
             const entry = entries[0];
-            const { height: rectHeight, width: rectWidth } = entry.contentRect;
-            const offsetW = terminalRef.value.offsetWidth;
-            const offsetH = terminalRef.value.offsetHeight;
+            const size = { width: entry.contentRect.width, height: entry.contentRect.height };
+            if (size.width <= 0 || size.height <= 0 || isSamePixelSize(lastObservedSize, size)) return;
 
-            // --- 阈值判断逻辑 ---
-            const widthChangedSignificantly = Math.abs(rectWidth - lastResizeObserverWidth) >= RESIZE_THRESHOLD;
-            const heightChangedSignificantly = Math.abs(rectHeight - lastResizeObserverHeight) >= RESIZE_THRESHOLD;
-
-            if (!widthChangedSignificantly && !heightChangedSignificantly) {
-              console.log(`[TerminalResizeObserver sessionId=${props.sessionId}] Size change below threshold (${RESIZE_THRESHOLD}px). rectWidth: ${rectWidth.toFixed(2)}, rectHeight: ${rectHeight.toFixed(2)}, lastWidth: ${lastResizeObserverWidth.toFixed(2)}, lastHeight: ${lastResizeObserverHeight.toFixed(2)}. Skipping fit.`);
-              return;
-            }
-            
-            console.log(`[TerminalResizeObserver sessionId=${props.sessionId}] Size change AT or ABOVE threshold (${RESIZE_THRESHOLD}px). rectWidth: ${rectWidth.toFixed(2)}, rectHeight: ${rectHeight.toFixed(2)}, lastWidth: ${lastResizeObserverWidth.toFixed(2)}, lastHeight: ${lastResizeObserverHeight.toFixed(2)}. Proceeding with fit.`);
-            
-            const roundedWidth = Math.round(rectWidth);
-            const roundedHeight = Math.round(rectHeight);
-
-            // 更新 lastResizeObserverWidth/Height 为取整后的值
-            lastResizeObserverWidth = roundedWidth;
-            lastResizeObserverHeight = roundedHeight;
-            // --- 阈值判断逻辑结束 ---
-
-            console.log(`[TerminalResizeObserver sessionId=${props.sessionId}] Triggered. Observed contentRect: ${rectWidth.toFixed(2)}w x ${rectHeight.toFixed(2)}h (rounded to ${roundedWidth}x${roundedHeight}). terminalRef offset: ${offsetW}w x ${offsetH}h.`);
-            if (entry.target && terminalRef.value) {
-              const targetBoundingClientRect = entry.target.getBoundingClientRect();
-              const terminalRefBoundingClientRect = terminalRef.value.getBoundingClientRect();
-              console.log(`[TerminalResizeObserver sessionId=${props.sessionId}] target.getBoundingClientRect(): ${targetBoundingClientRect.width.toFixed(2)}w x ${targetBoundingClientRect.height.toFixed(2)}h, top: ${targetBoundingClientRect.top.toFixed(2)}, left: ${targetBoundingClientRect.left.toFixed(2)}`);
-              console.log(`[TerminalResizeObserver sessionId=${props.sessionId}] terminalRef.getBoundingClientRect(): ${terminalRefBoundingClientRect.width.toFixed(2)}w x ${terminalRefBoundingClientRect.height.toFixed(2)}h, top: ${terminalRefBoundingClientRect.top.toFixed(2)}, left: ${terminalRefBoundingClientRect.left.toFixed(2)}`);
-            }
-
-            if (rectHeight > 0 && rectWidth > 0) {
-                try {
-                  fitAddon?.fit();
-                  debouncedEmitResize(terminal); // This will log the cols/rows after debouncing
-                  emitWorkspaceEvent('terminal:stabilizedResize', { sessionId: props.sessionId, width: roundedWidth, height: roundedHeight });
-                 } catch (e) {
-                    console.warn(`[TerminalResizeObserver sessionId=${props.sessionId}] Fit addon or debouncedEmitResize failed:`, e);
-                 }
-            }
+            lastObservedSize = { ...size };
+            scheduleTerminalFit({ pixelSize: size });
         });
         // Observe only if initially active (or becomes active later)
         if (props.isActive) {
             resizeObserver.observe(observedElement);
-            console.log(`[Terminal ${props.sessionId}] Initial observe.`);
+            debugLog(`[Terminal ${props.sessionId}] Initial observe.`);
         }
     }
 
 
     // 监听 isActive prop 的变化
     watch(() => props.isActive, (newValue, oldValue) => {
-        console.log(`[Terminal ${props.sessionId}] isActive changed from ${oldValue} to ${newValue}`);
+        debugLog(`[Terminal ${props.sessionId}] isActive changed from ${oldValue} to ${newValue}`);
         if (resizeObserver && observedElement) {
             if (newValue) {
                 // --- Become Active ---
-                console.log(`[Terminal ${props.sessionId}] Becoming active. Observing element and fitting.`);
+                debugLog(`[Terminal ${props.sessionId}] Becoming active. Observing element and fitting.`);
                 // Start observing
                 try {
                     resizeObserver.observe(observedElement);
@@ -351,17 +565,17 @@ onMounted(() => {
                     setTimeout(() => {
                         // 检查内部容器 terminalRef
                         if (props.isActive && terminal && terminalRef.value && terminalRef.value.offsetHeight > 0) {
-                            fitAndEmitResizeNow(terminal);
+                            scheduleTerminalFit({ forceFit: true, forceResizeEmit: true });
                             // Also ensure focus when becoming active
                             terminal.focus();
                         } else {
-                            console.log(`[Terminal ${props.sessionId}] Skipped delayed fit (inactive, destroyed, or not visible).`);
+                            debugLog(`[Terminal ${props.sessionId}] Skipped delayed fit (inactive, destroyed, or not visible).`);
                         }
                     }, 50); // 50ms delay
                 });
             } else {
                 // --- Become Inactive ---
-                console.log(`[Terminal ${props.sessionId}] Becoming inactive. Unobserving element.`);
+                debugLog(`[Terminal ${props.sessionId}] Becoming inactive. Unobserving element.`);
                 // Stop observing
                 try {
                     resizeObserver.unobserve(observedElement);
@@ -440,26 +654,26 @@ onMounted(() => {
     });
 
     // --- 监听外观变化 ---
-    watch(effectiveTerminalTheme, (newTheme) => { // Changed from currentTerminalTheme
+    watch(terminalThemeSignature, () => { // Changed from currentTerminalTheme
       if (terminal) {
-        console.log(`[Terminal ${props.sessionId}] 应用新终端主题 (effective)。`);
+        debugLog(`[Terminal ${props.sessionId}] 应用新终端主题 (effective)。`);
         // 直接修改 options 对象
-        terminal.options.theme = newTheme;
+        terminal.options.theme = effectiveTerminalTheme.value;
         // 修改选项后需要刷新终端才能生效
         try {
             // 刷新整个视口
             terminal.refresh(0, terminal.rows - 1);
-            console.log(`[Terminal ${props.sessionId}] 终端已刷新以应用新主题。`);
+            debugLog(`[Terminal ${props.sessionId}] 终端已刷新以应用新主题。`);
         } catch (e) {
             console.warn(`[Terminal ${props.sessionId}] 刷新终端以应用主题时出错:`, e);
         }
       }
-    }, { deep: true });
-
+    });
     watch(currentTerminalFontFamily, (newFontFamily) => {
         if (terminal) {
-            console.log(`[Terminal ${props.sessionId}] 应用新终端字体: ${newFontFamily}`);
+            debugLog(`[Terminal ${props.sessionId}] 应用新终端字体: ${newFontFamily}`);
             terminal.options.fontFamily = newFontFamily;
+            invalidateTerminalFitMetrics();
             // 字体变化可能影响尺寸，重新 fit
             fitAndEmitResizeNow(terminal);
         }
@@ -468,10 +682,20 @@ onMounted(() => {
     // 监听字体大小变化
     watch(currentTerminalFontSize, (newSize) => {
         if (terminal) {
-            console.log(`[Terminal ${props.sessionId}] 应用新终端字体大小: ${newSize}`);
+            debugLog(`[Terminal ${props.sessionId}] 应用新终端字体大小: ${newSize}`);
             terminal.options.fontSize = newSize;
+            invalidateTerminalFitMetrics();
             // 字体大小变化需要重新 fit
             fitAndEmitResizeNow(terminal);
+        }
+    });
+
+    watch(terminalScrollbackLimitNumber, (newLimit) => {
+        if (terminal) {
+            debugLog(`[Terminal ${props.sessionId}] 应用新终端滚动缓冲行数: ${newLimit}`);
+            terminal.options.scrollback = getScrollbackValue(newLimit);
+            invalidateTerminalFitMetrics();
+            scheduleTerminalFit({ forceFit: true, forceResizeEmit: true });
         }
     });
 
@@ -491,7 +715,7 @@ onMounted(() => {
                 if (selection) {
                     try {
                         await navigator.clipboard.writeText(selection);
-                        console.log('[Terminal] Copied via Ctrl+Shift+C:', selection);
+                        debugLog('[Terminal] Copied via Ctrl+Shift+C:', selection);
                     } catch (err) {
                         console.error('[Terminal] Failed to copy via Ctrl+Shift+C:', err);
                         // 可以考虑添加 UI 提示
@@ -506,7 +730,7 @@ onMounted(() => {
                     const text = await navigator.clipboard.readText();
                     if (text) {
                         const processedText = text.replace(/\r\n?/g, '\n');
-                        emitWorkspaceEvent('terminal:input', { sessionId: props.sessionId, data: processedText });
+                        emitTerminalInput(processedText);
                     }
                 } catch (err) {
                     console.error('[Terminal] Failed to paste via Ctrl+Shift+V:', err);
@@ -550,8 +774,9 @@ onMounted(() => {
             }
 
             if (newSize !== currentSize) { // 仅在字体大小实际改变时执行
-                console.log(`[Terminal ${props.sessionId}] Font size changed via wheel: ${newSize}`);
+                debugLog(`[Terminal ${props.sessionId}] Font size changed via wheel: ${newSize}`);
                 terminal.options.fontSize = newSize; // 先更新选项
+                invalidateTerminalFitMetrics();
                 fitAndEmitResizeNow(terminal); // 调用统一函数
 
                 // 调用防抖函数来保存设置
@@ -564,7 +789,7 @@ onMounted(() => {
 
     // Add touch listeners for pinch zoom on mobile
     if (isMobile.value && terminalRef.value && terminal) {
-      console.log(`[Terminal ${props.sessionId}] Adding touch listeners for mobile pinch zoom.`);
+      debugLog(`[Terminal ${props.sessionId}] Adding touch listeners for mobile pinch zoom.`);
       terminalRef.value.addEventListener('touchstart', handleTouchStart, { passive: false });
       terminalRef.value.addEventListener('touchmove', handleTouchMove, { passive: false });
       terminalRef.value.addEventListener('touchend', handleTouchEnd, { passive: false });
@@ -577,22 +802,39 @@ onMounted(() => {
 
 // 组件卸载前清理资源
 onBeforeUnmount(() => {
+  unsubscribeFromWorkspaceEvent('ui:resizeTransaction', handleResizeTransaction);
+
+  if (resizeAnimationFrameId !== null) {
+    window.cancelAnimationFrame(resizeAnimationFrameId);
+    resizeAnimationFrameId = null;
+  }
+  clearPendingResizeEmit();
+  if (stabilizedResizeTimer !== null) {
+    window.clearTimeout(stabilizedResizeTimer);
+    stabilizedResizeTimer = null;
+  }
+  if (resizeTransactionSettleTimer !== null) {
+    window.clearTimeout(resizeTransactionSettleTimer);
+    resizeTransactionSettleTimer = null;
+  }
+  pendingResizeDimensions = null;
+
   // Ensure observer is cleaned up
   if (resizeObserver && observedElement) {
       try {
           resizeObserver.unobserve(observedElement);
-          console.log(`[Terminal ${props.sessionId}] Unobserved on unmount.`);
+          debugLog(`[Terminal ${props.sessionId}] Unobserved on unmount.`);
       } catch (e) {
           console.warn(`[Terminal ${props.sessionId}] Error unobserving on unmount:`, e);
       }
       resizeObserver.disconnect(); // Fully disconnect observer
-      console.log(`[Terminal ${props.sessionId}] ResizeObserver disconnected.`);
+      debugLog(`[Terminal ${props.sessionId}] ResizeObserver disconnected.`);
   }
   resizeObserver = null;
   observedElement = null;
 
   if (terminal) {
-    console.log(`[Terminal ${props.sessionId}] Disposing terminal instance.`);
+    debugLog(`[Terminal ${props.sessionId}] Disposing terminal instance.`);
     terminal.dispose();
     terminal = null;
   }
@@ -608,7 +850,7 @@ onBeforeUnmount(() => {
 
     // Remove touch listeners on unmount
     if (isMobile.value && terminalRef.value) {
-        console.log(`[Terminal ${props.sessionId}] Removing touch listeners.`);
+        debugLog(`[Terminal ${props.sessionId}] Removing touch listeners.`);
         terminalRef.value.removeEventListener('touchstart', handleTouchStart);
         terminalRef.value.removeEventListener('touchmove', handleTouchMove);
         terminalRef.value.removeEventListener('touchend', handleTouchEnd);
@@ -681,34 +923,20 @@ const applyTerminalTextStyles = () => {
 };
 
 // 监听文字描边和阴影设置的变化
-watch(
-  [
-    terminalTextStrokeEnabled,
-    terminalTextStrokeWidth,
-    terminalTextStrokeColor,
-    terminalTextShadowEnabled,
-    terminalTextShadowOffsetX,
-    terminalTextShadowOffsetY,
-    terminalTextShadowBlur,
-    terminalTextShadowColor,
-  ],
-  () => {
-    // console.log('[Terminal] Text style settings changed, applying new styles.');
-    // 这个 watch 现在主要负责响应运行时的更改
-    // 初始加载由下面的 watchEffect 处理
-    if (isTerminalDomReady.value && initialAppearanceDataLoaded.value) {
-      nextTick(() => {
-        applyTerminalTextStyles();
-      });
-    }
-  },
-  { deep: true }
-);
- 
-// watchEffect 用于处理初始样式应用 +++
+watch(terminalTextStyleSignature, () => {
+  // console.log('[Terminal] Text style settings changed, applying new styles.');
+  // 这个 watch 现在主要负责响应运行时的更改
+  // 初始加载由下面的 watchEffect 处理
+  if (isTerminalDomReady.value && initialAppearanceDataLoaded.value) {
+    nextTick(() => {
+      applyTerminalTextStyles();
+    });
+  }
+});
+ // watchEffect 用于处理初始样式应用 +++
 watchEffect(() => {
   if (isTerminalDomReady.value && initialAppearanceDataLoaded.value && terminalRef.value && terminal?.element) {
-    console.log(`[Terminal ${props.sessionId}] Initial style application: DOM ready and appearance data loaded. Applying text styles.`);
+    debugLog(`[Terminal ${props.sessionId}] Initial style application: DOM ready and appearance data loaded. Applying text styles.`);
     nextTick(() => {
       applyTerminalTextStyles();
     });
@@ -730,13 +958,21 @@ watchEffect(() => {
   height: 100%;
   overflow: hidden;
   position: relative;
+  contain: layout paint size;
 }
 
 .terminal-inner-container {
   width: 100%;
   height: 100%;
+  overflow: hidden;
+  contain: layout paint size;
   /* position: relative;  移除了 position relative */
   /* z-index 调整或移除，因为背景层不再在此组件内 */
+}
+
+.terminal-inner-container :deep(.xterm) {
+  width: 100%;
+  height: 100%;
 }
 
 /* 文字描边和阴影样式 */

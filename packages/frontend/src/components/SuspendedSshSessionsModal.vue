@@ -4,6 +4,7 @@ import SuspendedSshSessionsView from '../views/SuspendedSshSessionsView.vue'; //
 import { useWorkspaceEventSubscriber, useWorkspaceEventOff } from '../composables/workspaceEvents'; // 导入事件订阅器和取消订阅器
 import { useI18n } from 'vue-i18n';
 import { useDraggableDialog } from '../composables/useDraggableDialog';
+import { debugLog } from '../composables/useDebugLog';
 
 const props = defineProps<{
   isVisible: boolean;
@@ -46,7 +47,7 @@ const offWorkspaceEvent = useWorkspaceEventOff(); // 获取取消订阅函数
 
 // 定义事件处理函数
 const handleSuspendedSessionActionCompleted = () => {
-  console.log('[SuspendedSshSessionsModal] Received suspendedSession:actionCompleted event, closing modal.');
+  debugLog('[SuspendedSshSessionsModal] Received suspendedSession:actionCompleted event, closing modal.');
   closeModal();
 };
 

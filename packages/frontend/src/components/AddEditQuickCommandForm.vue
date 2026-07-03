@@ -105,17 +105,18 @@
 </template>
 
 <script setup lang="ts">
+import { debugLog } from '../composables/useDebugLog';
 import { ref, reactive, computed, watch, onMounted } from 'vue';
 import { useResizable } from '../composables/useResizable';
 import { useI18n } from 'vue-i18n';
 import { useQuickCommandsStore, type QuickCommandFE } from '../stores/quickCommands.store';
 import { useQuickCommandTagsStore } from '../stores/quickCommandTags.store';
 import { useSessionStore } from '../stores/session.store';
-import { useUiNotificationsStore } from '../stores/uiNotifications.store'; 
-import { useWorkspaceEventEmitter } from '../composables/workspaceEvents'; 
+import { useUiNotificationsStore } from '../stores/uiNotifications.store';
+import { useWorkspaceEventEmitter } from '../composables/workspaceEvents';
 import TagInput from './TagInput.vue';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
-import { useAlertDialog } from '../composables/useAlertDialog'; 
+import { useAlertDialog } from '../composables/useAlertDialog';
 import { useDraggableDialog } from '../composables/useDraggableDialog';
 
 const props = defineProps<{
@@ -126,12 +127,12 @@ const emit = defineEmits(['close']);
 
 const { t } = useI18n();
 const { showConfirmDialog } = useConfirmDialog();
-const { showAlertDialog } = useAlertDialog(); 
+const { showAlertDialog } = useAlertDialog();
 const quickCommandsStore = useQuickCommandsStore();
-const quickCommandTagsStore = useQuickCommandTagsStore(); 
-const sessionStore = useSessionStore(); 
-const uiNotificationsStore = useUiNotificationsStore(); 
-const emitWorkspaceEvent = useWorkspaceEventEmitter(); 
+const quickCommandTagsStore = useQuickCommandTagsStore();
+const sessionStore = useSessionStore();
+const uiNotificationsStore = useUiNotificationsStore();
+const emitWorkspaceEvent = useWorkspaceEventEmitter();
 const isSubmitting = ref(false);
 
 const modalRootRef = ref<HTMLElement | null>(null);
@@ -204,18 +205,18 @@ onMounted(() => {
 });
 
 const handleCreateTag = async (tagName: string) => {
-    console.log(`[QuickCmdForm] Received create-tag event for: ${tagName}`); 
+    debugLog(`[QuickCmdForm] Received create-tag event for: ${tagName}`);
     if (!tagName || tagName.trim().length === 0) return;
-    console.log(`[QuickCmdForm] Calling quickCommandTagsStore.addTag...`); 
+    debugLog(`[QuickCmdForm] Calling quickCommandTagsStore.addTag...`);
     const newTag = await quickCommandTagsStore.addTag(tagName.trim());
     if (newTag && !formData.tagIds.includes(newTag.id)) {
-        console.log(`[QuickCmdForm] New tag created (ID: ${newTag.id}), adding to selection.`); 
+        debugLog(`[QuickCmdForm] New tag created (ID: ${newTag.id}), adding to selection.`);
         formData.tagIds.push(newTag.id);
     }
 };
 
 const handleDeleteTag = async (tagId: number) => {
-    console.log(`[QuickCmdForm] Received delete-tag event for ID: ${tagId}`); 
+    debugLog(`[QuickCmdForm] Received delete-tag event for ID: ${tagId}`);
     const tagToDelete = quickCommandTagsStore.tags.find(t => t.id === tagId);
     if (!tagToDelete) return;
 
@@ -223,7 +224,7 @@ const handleDeleteTag = async (tagId: number) => {
         message: t('tags.prompts.confirmDelete', { name: tagToDelete.name })
     });
     if (confirmed) {
-        console.log(`[QuickCmdForm] Calling quickCommandTagsStore.deleteTag...`);
+        debugLog(`[QuickCmdForm] Calling quickCommandTagsStore.deleteTag...`);
         const success = await quickCommandTagsStore.deleteTag(tagId);
         if (success) {
             // 如果删除成功，TagInput的availableTags将会更新，
@@ -231,7 +232,7 @@ const handleDeleteTag = async (tagId: number) => {
             // 如果该标签已被选中，我们还需要从本地的formData.tagIds中移除它。
             const index = formData.tagIds.indexOf(tagId);
             if (index > -1) {
-                 console.log(`[QuickCmdForm] Removing deleted tag ID ${tagId} from selection.`);
+                 debugLog(`[QuickCmdForm] Removing deleted tag ID ${tagId} from selection.`);
                  formData.tagIds.splice(index, 1);
             }
         } else {
@@ -324,13 +325,13 @@ const handleExecute = () => {
     return;
   }
 
-  console.log(`[QuickCmdForm] Executing processed command: "${processedCommand}" on session ${activeSessionId}`);
+  debugLog(`[QuickCmdForm] Executing processed command: "${processedCommand}" on session ${activeSessionId}`);
   emitWorkspaceEvent('quickCommand:executeProcessed', {
     command: processedCommand,
     sessionId: activeSessionId
   });
 
-  closeForm(); 
+  closeForm();
 };
 </script>
 

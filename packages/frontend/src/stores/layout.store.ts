@@ -1,3 +1,4 @@
+import { debugLog, debugLogLazy } from '../composables/useDebugLog';
 import { defineStore } from 'pinia';
 import { ref, computed, watch, type Ref, type ComputedRef } from 'vue';
 import apiClient from '../utils/apiClient';
@@ -107,6 +108,25 @@ function cloneLayoutNode(node: LayoutNode): LayoutNode {
   };
 }
 
+export function areLayoutNodesEqual(left: LayoutNode | null, right: LayoutNode | null): boolean {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  if (left.id !== right.id || left.type !== right.type) return false;
+  if (left.component !== right.component || left.direction !== right.direction) return false;
+  if (left.sessionId !== right.sessionId) return false;
+  if ((left.size ?? null) !== (right.size ?? null)) return false;
+
+  const leftChildren = left.children ?? [];
+  const rightChildren = right.children ?? [];
+  if (leftChildren.length !== rightChildren.length) return false;
+
+  return leftChildren.every((child, index) => areLayoutNodesEqual(child, rightChildren[index]));
+}
+
+export function areSidebarPanesEqual(left: { left: PaneName[], right: PaneName[] }, right: { left: PaneName[], right: PaneName[] }) {
+  const isSamePaneList = (a: PaneName[], b: PaneName[]) => a.length === b.length && a.every((pane, index) => pane === b[index]);
+  return isSamePaneList(left.left, right.left) && isSamePaneList(left.right, right.right);
+}
 function stripSessionScopedTerminalPanes(node: LayoutNode | null): LayoutNode | null {
   if (!node) return null;
 
@@ -192,7 +212,7 @@ function ensureNodeIds(node: LayoutNode | null): LayoutNode | null {
   // 初始化布局和侧栏配置
   async function initializeLayout() {
     // --- 移除之前的 DEBUG 日志 ---
-    console.log('[Layout Store] Starting initializeLayout...'); // 保留起始日志
+    debugLog('[Layout Store] Starting initializeLayout...'); // 保留起始日志
     layoutTree.value = null;
     sidebarPanes.value = getDefaultSidebarPanes();
 
@@ -202,23 +222,23 @@ function ensureNodeIds(node: LayoutNode | null): LayoutNode | null {
 
     // 1. 尝试从后端加载主布局
     try {
-      console.log('[Layout Store] Step 1: Attempting to load layout from backend...');
+      debugLog('[Layout Store] Step 1: Attempting to load layout from backend...');
       const response = await apiClient.get<LayoutNode | null>('/settings/layout');
       if (response.data) {
-        console.log('[Layout Store] Step 1: Backend returned data.');
+        debugLog('[Layout Store] Step 1: Backend returned data.');
         // +++ 在赋值前确保 ID 存在 +++
         loadedLayout = ensureNodeIds(stripSessionScopedTerminalPanes(response.data));
         layoutLoadedFromBackend = true;
-        console.log('[Layout Store] Step 1: Layout processed with ensureNodeIds.');
+        debugLog('[Layout Store] Step 1: Layout processed with ensureNodeIds.');
         // 更新 localStorage (使用处理过的布局)
         try {
           localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(loadedLayout));
-          console.log('[Layout Store] Step 1: Saved processed layout to localStorage.');
+          debugLog('[Layout Store] Step 1: Saved processed layout to localStorage.');
         } catch (lsError) {
           console.error('[Layout Store] Step 1: Failed to save processed layout to localStorage:', lsError);
         }
       } else {
-        console.log('[Layout Store] Step 1: Backend did not return layout data.');
+        debugLog('[Layout Store] Step 1: Backend did not return layout data.');
       }
     } catch (error) {
       console.error('[Layout Store] Step 1: Error loading layout from backend:', error);
@@ -226,7 +246,7 @@ function ensureNodeIds(node: LayoutNode | null): LayoutNode | null {
 
     // 2. 尝试从后端加载侧栏配置 (侧栏逻辑不变)
     try {
-        console.log('[Layout Store] Step 2: Attempting to load sidebar config from backend...');
+        debugLog('[Layout Store] Step 2: Attempting to load sidebar config from backend...');
         const response = await apiClient.get<{ left: any[], right: any[] } | null>('/settings/sidebar');
         if (response.data &&
             isValidPaneNameArray(response.data.left, allPossiblePanes.value) &&
@@ -234,14 +254,14 @@ function ensureNodeIds(node: LayoutNode | null): LayoutNode | null {
         {
             sidebarPanes.value = response.data as { left: PaneName[], right: PaneName[] };
             sidebarLoadedFromBackend = true;
-            console.log('[Layout Store] Step 2: Sidebar config loaded from backend.');
+            debugLog('[Layout Store] Step 2: Sidebar config loaded from backend.');
             try {
                 localStorage.setItem(SIDEBAR_STORAGE_KEY, JSON.stringify(response.data));
             } catch (lsError) {
                 console.error('[Layout Store] Step 2: Failed to save backend sidebar config to localStorage:', lsError);
             }
         } else {
-             console.log('[Layout Store] Step 2: Backend did not return valid sidebar data.');
+             debugLog('[Layout Store] Step 2: Backend did not return valid sidebar data.');
         }
     } catch (error) {
         console.error('[Layout Store] Step 2: Error loading sidebar config from backend:', error);
@@ -250,27 +270,27 @@ function ensureNodeIds(node: LayoutNode | null): LayoutNode | null {
 
     // 3. 如果主布局后端未加载成功，尝试从 localStorage 加载
     if (!layoutLoadedFromBackend) {
-      console.log('[Layout Store] Step 3: Attempting localStorage for layout...');
+      debugLog('[Layout Store] Step 3: Attempting localStorage for layout...');
       try {
         const savedLayout = localStorage.getItem(LAYOUT_STORAGE_KEY);
         if (savedLayout) {
           const parsedLayout = JSON.parse(savedLayout) as LayoutNode;
-          console.log('[Layout Store] Step 3: Parsed layout from localStorage.');
+          debugLog('[Layout Store] Step 3: Parsed layout from localStorage.');
           // +++ 在赋值前确保 ID 存在 +++
           loadedLayout = ensureNodeIds(stripSessionScopedTerminalPanes(parsedLayout));
-          console.log('[Layout Store] Step 3: Layout processed with ensureNodeIds.');
+          debugLog('[Layout Store] Step 3: Layout processed with ensureNodeIds.');
         } else {
           // 4. 如果 localStorage 也没有，使用默认主布局
-          console.log('[Layout Store] Step 4: No layout in localStorage. Applying default.');
+          debugLog('[Layout Store] Step 4: No layout in localStorage. Applying default.');
           // +++ 确保默认布局也有 ID (虽然 getDefaultLayout 内部会生成) +++
           loadedLayout = ensureNodeIds(getDefaultLayout());
-          console.log('[Layout Store] Step 4: Default layout processed with ensureNodeIds.');
+          debugLog('[Layout Store] Step 4: Default layout processed with ensureNodeIds.');
         }
       } catch (error) {
         console.error('[Layout Store] Step 3/4: Error loading/parsing layout from localStorage or applying default:', error);
         // Fallback to default if error and loadedLayout is still null
         if (!loadedLayout) {
-             console.log('[Layout Store] Step 3/4: Applying default layout due to error.');
+             debugLog('[Layout Store] Step 3/4: Applying default layout due to error.');
              loadedLayout = ensureNodeIds(getDefaultLayout());
         }
       }
@@ -278,7 +298,7 @@ function ensureNodeIds(node: LayoutNode | null): LayoutNode | null {
 
     // 5. 如果侧栏配置后端未加载成功，尝试从 localStorage 加载 (侧栏逻辑不变)
     if (!sidebarLoadedFromBackend) {
-        console.log('[Layout Store] Step 5: Attempting localStorage for sidebars...');
+        debugLog('[Layout Store] Step 5: Attempting localStorage for sidebars...');
         try {
             const savedSidebars = localStorage.getItem(SIDEBAR_STORAGE_KEY);
             if (savedSidebars) {
@@ -288,14 +308,14 @@ function ensureNodeIds(node: LayoutNode | null): LayoutNode | null {
                     isValidPaneNameArray(parsedSidebars.right, allPossiblePanes.value))
                 {
                     sidebarPanes.value = parsedSidebars as { left: PaneName[], right: PaneName[] };
-                    console.log('[Layout Store] Step 5: Sidebar config loaded from localStorage.');
+                    debugLog('[Layout Store] Step 5: Sidebar config loaded from localStorage.');
                 } else {
                      console.warn('[Layout Store] Step 5: Invalid sidebar config in localStorage. Applying default.');
                      sidebarPanes.value = getDefaultSidebarPanes();
                 }
             } else {
                 // 6. 如果 localStorage 也没有，使用默认侧栏配置
-                console.log('[Layout Store] Step 6: No sidebar config in localStorage. Applying default.');
+                debugLog('[Layout Store] Step 6: No sidebar config in localStorage. Applying default.');
                 sidebarPanes.value = getDefaultSidebarPanes();
             }
         } catch (error) {
@@ -307,7 +327,7 @@ function ensureNodeIds(node: LayoutNode | null): LayoutNode | null {
     }
 
     // --- Final Assignment and Check ---
-    console.log('[Layout Store] Final Assignment: Assigning processed layout to layoutTree.value.');
+    debugLog('[Layout Store] Final Assignment: Assigning processed layout to layoutTree.value.');
     layoutTree.value = loadedLayout; // 将处理过的布局赋值给状态
 
     // Final check (主要是为了调试，可以简化或移除)
@@ -320,10 +340,10 @@ function ensureNodeIds(node: LayoutNode | null): LayoutNode | null {
          sidebarPanes.value = getDefaultSidebarPanes();
      }
 
-    console.log('[Layout Store] initializeLayout finished.');
+    debugLog('[Layout Store] initializeLayout finished.');
     // --- 移除最终状态的详细日志，避免冗余 ---
-    // console.log('[Layout Store] Final layoutTree.value:', JSON.stringify(layoutTree.value, null, 2));
-    // console.log('[Layout Store] Final sidebarPanes.value:', JSON.stringify(sidebarPanes.value, null, 2));
+    // debugLog('[Layout Store] Final layoutTree.value:', JSON.stringify(layoutTree.value, null, 2));
+    // debugLog('[Layout Store] Final sidebarPanes.value:', JSON.stringify(sidebarPanes.value, null, 2));
   }
 
   // --- Helper for debounced persistence ---
@@ -343,13 +363,13 @@ function ensureNodeIds(node: LayoutNode | null): LayoutNode | null {
         newTree = stripSessionScopedTerminalPanes(newTree);
     }
     // Check if the tree actually changed before updating and persisting
-    if (JSON.stringify(newTree) !== JSON.stringify(layoutTree.value)) {
+    if (!areLayoutNodesEqual(newTree, layoutTree.value)) {
         layoutTree.value = newTree;
-        console.log('[Layout Store] 布局树已更新。 New tree:', newTree);
+        debugLog('[Layout Store] 布局树已更新。 New tree:', newTree);
         // --- Directly call persist ---
         await persistLayoutTree(); // Await persistence directly
     } else {
-        console.log('[Layout Store] updateLayoutTree called but tree is unchanged.');
+        debugLog('[Layout Store] updateLayoutTree called but tree is unchanged.');
     }
   }
 
@@ -361,13 +381,13 @@ function ensureNodeIds(node: LayoutNode | null): LayoutNode | null {
         isValidPaneNameArray(newPanes.right, allPossiblePanes.value))
     {
         // Check if panes actually changed
-        if (JSON.stringify(newPanes) !== JSON.stringify(sidebarPanes.value)) {
+        if (!areSidebarPanesEqual(newPanes, sidebarPanes.value)) {
             sidebarPanes.value = newPanes as { left: PaneName[], right: PaneName[] }; // Assign validated data
-            console.log('[Layout Store] 侧栏配置已通过验证并更新。 New sidebarPanes value:', JSON.parse(JSON.stringify(sidebarPanes.value)));
+            debugLogLazy(() => ['[Layout Store] 侧栏配置已通过验证并更新。 New sidebarPanes value:', JSON.parse(JSON.stringify(sidebarPanes.value))]);
             // --- Directly call persist ---
             await persistSidebarPanes(); // Await persistence directly
         } else {
-             console.log('[Layout Store] updateSidebarPanes called but panes are unchanged.');
+             debugLog('[Layout Store] updateSidebarPanes called but panes are unchanged.');
         }
     } else {
         console.error('[Layout Store] updateSidebarPanes 接收到无效的侧栏配置数据，未更新状态:', newPanes);
@@ -377,59 +397,71 @@ function ensureNodeIds(node: LayoutNode | null): LayoutNode | null {
   // 递归查找并更新节点大小
   function findAndUpdateNodeSize(node: LayoutNode | null, nodeId: string, childrenSizes: { index: number; size: number }[]): LayoutNode | null {
     if (!node) return null;
+
     if (node.id === nodeId && node.type === 'container' && node.children) {
-      const updatedChildren = [...node.children];
-      childrenSizes.forEach(({ index, size }) => {
-        if (updatedChildren[index]) {
-          updatedChildren[index] = { ...updatedChildren[index], size: size };
-        }
+      const sizeByIndex = new Map(childrenSizes.map(({ index, size }) => [index, size]));
+      let changed = false;
+      const updatedChildren = node.children.map((child, index) => {
+        const nextSize = sizeByIndex.get(index);
+        if (nextSize === undefined) return child;
+        const currentSize = child.size ?? 0;
+        if (Math.abs(currentSize - nextSize) < 0.0001) return child;
+
+        changed = true;
+        return { ...child, size: nextSize };
       });
-      return { ...node, children: updatedChildren };
+
+      return changed ? { ...node, children: updatedChildren } : node;
     }
 
     if (node.type === 'container' && node.children) {
-      const updatedChildren = node.children.map(child => findAndUpdateNodeSize(child, nodeId, childrenSizes));
-      // 检查是否有子节点被更新
-      if (updatedChildren.some((child, index) => child !== node.children![index])) {
-        return { ...node, children: updatedChildren.filter(Boolean) as LayoutNode[] };
-      }
+      let changed = false;
+      const updatedChildren = node.children.map((child) => {
+        const updatedChild = findAndUpdateNodeSize(child, nodeId, childrenSizes);
+        if (updatedChild !== child) {
+          changed = true;
+        }
+        return updatedChild ?? child;
+      });
+
+      return changed ? { ...node, children: updatedChildren } : node;
     }
-    return node; // 未找到或未更新，返回原节点
+
+    return node;
   }
 
 
   // 更新特定容器节点的子节点大小
   function updateNodeSizes(nodeId: string, childrenSizes: { index: number; size: number }[]) {
-    console.log(`[Layout Store] 请求更新节点 ${nodeId} 的子节点大小:`, childrenSizes);
-    const originalJson = JSON.stringify(layoutTree.value); // Store original state
-    const updatedTree = findAndUpdateNodeSize(layoutTree.value, nodeId, childrenSizes);
+    debugLog(`[Layout Store] 请求更新节点 ${nodeId} 的子节点大小:`, childrenSizes);
+    const previousTree = layoutTree.value;
+    const updatedTree = findAndUpdateNodeSize(previousTree, nodeId, childrenSizes);
 
-    if (updatedTree && JSON.stringify(updatedTree) !== originalJson) { // Compare with original JSON
+    if (updatedTree && updatedTree !== previousTree) {
        layoutTree.value = updatedTree;
-       console.log(`[Layout Store] 节点 ${nodeId} 的子节点大小已更新，触发防抖保存。`);
+       debugLog(`[Layout Store] 节点 ${nodeId} 的子节点大小已更新，触发防抖保存。`);
        // --- Use debounced persist for resize ---
        debouncedPersistLayout();
     } else {
-       console.log(`[Layout Store] 未找到节点 ${nodeId} 或大小未改变。`);
+       debugLog(`[Layout Store] 未找到节点 ${nodeId} 或大小未改变。`);
     }
   }
-
   // 切换布局（Header/Footer）的可见性
   function toggleLayoutVisibility() {
     isLayoutVisible.value = !isLayoutVisible.value;
-    console.log(`[Layout Store] 布局可见性切换为: ${isLayoutVisible.value}`);
+    debugLog(`[Layout Store] 布局可见性切换为: ${isLayoutVisible.value}`);
     // 注意：这个状态目前不与后端同步
   }
 
   // 从后端加载主导航栏可见性设置
   async function loadHeaderVisibility() {
-    console.log('[Layout Store] Attempting to load header visibility from backend...');
+    debugLog('[Layout Store] Attempting to load header visibility from backend...');
     try {
       // --- 调用后端 API (复用 nav-bar-visibility 接口) ---
       const response = await apiClient.get<{ visible: boolean }>('/settings/nav-bar-visibility'); // 使用 apiClient
       if (response && typeof response.data.visible === 'boolean') {
         isHeaderVisible.value = response.data.visible;
-        console.log(`[Layout Store] Header visibility loaded from backend: ${isHeaderVisible.value}`);
+        debugLog(`[Layout Store] Header visibility loaded from backend: ${isHeaderVisible.value}`);
       } else {
         console.warn('[Layout Store] Invalid response from backend for header visibility, using default.');
         isHeaderVisible.value = true; // 默认值
@@ -444,13 +476,13 @@ function ensureNodeIds(node: LayoutNode | null): LayoutNode | null {
   // 切换主导航栏可见性并同步到后端
   async function toggleHeaderVisibility() {
     const newValue = !isHeaderVisible.value;
-    console.log(`[Layout Store] Toggling header visibility to: ${newValue}`);
+    debugLog(`[Layout Store] Toggling header visibility to: ${newValue}`);
     isHeaderVisible.value = newValue; // 立即更新 UI
 
     try {
       // --- 调用后端 API (复用 nav-bar-visibility 接口) ---
       await apiClient.put('/settings/nav-bar-visibility', { visible: newValue }); // 使用 apiClient
-      console.log('[Layout Store] Header visibility saved to backend.');
+      debugLog('[Layout Store] Header visibility saved to backend.');
     } catch (error) {
       console.error('[Layout Store] Failed to save header visibility to backend:', error);
     }
@@ -458,13 +490,13 @@ function ensureNodeIds(node: LayoutNode | null): LayoutNode | null {
 
  // 获取系统内置的默认布局
  function getSystemDefaultLayout(): LayoutNode {
-   console.log('[Layout Store] Getting system default layout.');
+   debugLog('[Layout Store] Getting system default layout.');
    return getDefaultLayout(); // 直接调用内部函数
  }
 
  // 获取系统内置的默认侧栏配置
  function getSystemDefaultSidebarPanes(): { left: PaneName[], right: PaneName[] } {
-     console.log('[Layout Store] Getting system default sidebar panes.');
+     debugLog('[Layout Store] Getting system default sidebar panes.');
      return getDefaultSidebarPanes();
  }
 
@@ -473,9 +505,9 @@ function ensureNodeIds(node: LayoutNode | null): LayoutNode | null {
    // ... (existing try/catch logic for backend and localStorage) ...
    // Ensure apiClient calls are awaited if they return promises
    try {
-     console.log('[Layout Store] Attempting to save main layout to backend...');
+     debugLog('[Layout Store] Attempting to save main layout to backend...');
      await apiClient.put('/settings/layout', layoutTree.value); // await
-     console.log('[Layout Store] 主布局已成功保存到后端 (sent value):', layoutTree.value);
+     debugLog('[Layout Store] 主布局已成功保存到后端 (sent value):', layoutTree.value);
    } catch (error) {
      console.error('[Layout Store] 保存主布局到后端失败:', error);
    }
@@ -483,7 +515,7 @@ function ensureNodeIds(node: LayoutNode | null): LayoutNode | null {
    try {
      const layoutToSave = JSON.stringify(layoutTree.value);
      localStorage.setItem(LAYOUT_STORAGE_KEY, layoutToSave);
-     console.log('[Layout Store] 主布局已自动保存到 localStorage (saved value):', layoutToSave);
+     debugLog('[Layout Store] 主布局已自动保存到 localStorage (saved value):', layoutToSave);
    } catch (error) {
      console.error('[Layout Store] 保存主布局到 localStorage 失败:', error);
    }
@@ -493,9 +525,9 @@ function ensureNodeIds(node: LayoutNode | null): LayoutNode | null {
  async function persistSidebarPanes() { // Make async
     // ... (existing try/catch logic for backend and localStorage) ...
     try {
-         console.log('[Layout Store] Attempting to save sidebar config to backend...');
+         debugLog('[Layout Store] Attempting to save sidebar config to backend...');
          await apiClient.put('/settings/sidebar', sidebarPanes.value); // await
-         console.log('[Layout Store] 侧栏配置已成功保存到后端。');
+         debugLog('[Layout Store] 侧栏配置已成功保存到后端。');
      } catch (error) {
          console.error('[Layout Store] 保存侧栏配置到后端失败:', error);
      }
@@ -503,7 +535,7 @@ function ensureNodeIds(node: LayoutNode | null): LayoutNode | null {
      try {
          const sidebarsToSave = JSON.stringify(sidebarPanes.value);
          localStorage.setItem(SIDEBAR_STORAGE_KEY, sidebarsToSave);
-         console.log('[Layout Store] 侧栏配置已自动保存到 localStorage。');
+         debugLog('[Layout Store] 侧栏配置已自动保存到 localStorage。');
      } catch (error) {
          console.error('[Layout Store] 保存侧栏配置到 localStorage 失败:', error);
      }

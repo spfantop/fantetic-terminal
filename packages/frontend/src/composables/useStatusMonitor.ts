@@ -2,6 +2,7 @@ import { ref, readonly, watch, type Ref, type ComputedRef } from 'vue';
 import type { ServerStatus } from '../types/server.types';
 import type { ConnectionRoutePlan, MessagePayload, WebSocketMessage } from '../types/websocket.types';
 import { useLayoutStore } from '../stores/layout.store';
+import { debugLog } from './useDebugLog';
 
 export interface StatusMonitorDependencies {
   onMessage: (type: string, handler: (payload: any, fullMessage?: WebSocketMessage) => void) => () => void;
@@ -110,11 +111,11 @@ export function createStatusMonitorManager(sessionId: string, wsDeps: StatusMoni
 
   const registerStatusHandlers = () => {
     if (unregisterUpdate || unregisterError || unregisterLegacyError || unregisterRoutePlan) {
-      console.log(`[会话 ${sessionId}][状态监控模块] 处理器已注册，跳过。`);
+      debugLog(`[会话 ${sessionId}][状态监控模块] 处理器已注册，跳过。`);
       return;
     }
     if (isConnected.value) {
-      console.log(`[会话 ${sessionId}][状态监控模块] 注册状态消息处理器。`);
+      debugLog(`[会话 ${sessionId}][状态监控模块] 注册状态消息处理器。`);
       unregisterUpdate = onMessage('status_update', handleStatusUpdate);
       unregisterError = onMessage('status:error', handleStatusError);
       unregisterLegacyError = onMessage('status_error', handleStatusError);
@@ -126,7 +127,7 @@ export function createStatusMonitorManager(sessionId: string, wsDeps: StatusMoni
 
   const unregisterAllStatusHandlers = () => {
     if (unregisterUpdate || unregisterError || unregisterLegacyError || unregisterRoutePlan) {
-      console.log(`[会话 ${sessionId}][状态监控模块] 注销状态消息处理器。`);
+      debugLog(`[会话 ${sessionId}][状态监控模块] 注销状态消息处理器。`);
       unregisterUpdate?.();
       unregisterError?.();
       unregisterLegacyError?.();
@@ -139,13 +140,13 @@ export function createStatusMonitorManager(sessionId: string, wsDeps: StatusMoni
   };
 
   watch(isConnected, (newValue, oldValue) => {
-    console.log(`[会话 ${sessionId}][状态监控模块] 连接状态变化: ${oldValue} -> ${newValue}`);
+    debugLog(`[会话 ${sessionId}][状态监控模块] 连接状态变化: ${oldValue} -> ${newValue}`);
     if (newValue) {
       const layoutStore = useLayoutStore();
       if (layoutStore.usedPanes.has('statusMonitor')) {
         registerStatusHandlers();
       } else {
-        console.log(`[会话 ${sessionId}][状态监控模块] 状态监视器不在布局中，跳过注册处理器。`);
+        debugLog(`[会话 ${sessionId}][状态监控模块] 状态监视器不在布局中，跳过注册处理器。`);
       }
     } else {
       unregisterAllStatusHandlers();
@@ -163,7 +164,7 @@ export function createStatusMonitorManager(sessionId: string, wsDeps: StatusMoni
     }
     pendingFrameId = null;
     pendingStatus = null;
-    console.log(`[会话 ${sessionId}][状态监控模块] 已清理。`);
+    debugLog(`[会话 ${sessionId}][状态监控模块] 已清理。`);
   };
 
   return {

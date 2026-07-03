@@ -117,6 +117,7 @@
 </template>
 
 <script setup lang="ts">
+import { debugLog, debugLogLazy } from '../composables/useDebugLog';
 import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue'; // +++ 导入 nextTick, watch 和 onUnmounted +++
 import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
@@ -213,9 +214,9 @@ const cancelEditingName = () => {
 };
 
 const resumeSession = async (session: SuspendedSshSession) => { // 参数类型改为 SuspendedSshSession
-  console.log(`[SuspendedSshSessionsView] Attempting to resume session ID: ${session.suspendSessionId}, Name: ${session.customSuspendName || session.connectionName}`);
+  debugLog(`[SuspendedSshSessionsView] Attempting to resume session ID: ${session.suspendSessionId}, Name: ${session.customSuspendName || session.connectionName}`);
   // 使用 JSON.parse(JSON.stringify()) 来记录会话对象的一个快照，避免在异步操作后因对象被修改而导致日志不准确
-  console.log('[SuspendedSshSessionsView] Session details snapshot:', JSON.parse(JSON.stringify(session)));
+  debugLogLazy(() => ['[SuspendedSshSessionsView] Session details snapshot:', JSON.parse(JSON.stringify(session))]);
 
   try {
     // 假设 sessionStore.resumeSshSession 返回一个 Promise。
@@ -223,27 +224,27 @@ const resumeSession = async (session: SuspendedSshSession) => { // 参数类型�
     // 为了获取详细信息（如是否真正恢复、历史日志），sessionStore.resumeSshSession 可能需要被修改以返回一个包含这些信息的对象。
     const result = await sessionStore.resumeSshSession(session.suspendSessionId);
 
-    console.log('[SuspendedSshSessionsView] Call to sessionStore.resumeSshSession completed.');
+    debugLog('[SuspendedSshSessionsView] Call to sessionStore.resumeSshSession completed.');
 
     // 检查 result 是否是包含期望信息的对象结构
     // @ts-ignore (因为我们不确定 result 的确切类型，并且这是在 Vue 文件中)
     if (result && typeof result === 'object' && ('isResumed' in result || 'historicalOutput' in result || 'message' in result)) {
-      console.log('[SuspendedSshSessionsView] Result from resumeSshSession:', result);
+      debugLog('[SuspendedSshSessionsView] Result from resumeSshSession:', result);
       // @ts-ignore
-      console.log(`[SuspendedSshSessionsView] Is session truly resumed (based on backend response)? : ${result.isResumed ? 'Yes, existing session resumed.' : 'No, a new session was likely opened (or status unknown from response).'}`);
+      debugLog(`[SuspendedSshSessionsView] Is session truly resumed (based on backend response)? : ${result.isResumed ? 'Yes, existing session resumed.' : 'No, a new session was likely opened (or status unknown from response).'}`);
       // @ts-ignore
-      console.log('[SuspendedSshSessionsView] Historical terminal log from backend:', result.historicalOutput || 'Not provided or empty.');
+      debugLog('[SuspendedSshSessionsView] Historical terminal log from backend:', result.historicalOutput || 'Not provided or empty.');
       // @ts-ignore
       if (result.message) {
         // @ts-ignore
-        console.log('[SuspendedSshSessionsView] Backend message:', result.message);
+        debugLog('[SuspendedSshSessionsView] Backend message:', result.message);
       }
     } else {
-      console.log('[SuspendedSshSessionsView] sessionStore.resumeSshSession did not return the expected detailed information object (e.g., { isResumed: boolean, historicalOutput?: string, message?: string }). The action was dispatched.');
-      console.log('[SuspendedSshSessionsView] To get client-side confirmation of session state and historical logs, the sessionStore.resumeSshSession action might need to be updated to return this data.');
-      console.log('[SuspendedSshSessionsView] For now, please check browser developer console (network tab for backend responses) or backend logs for details on session restoration and historical log loading.');
+      debugLog('[SuspendedSshSessionsView] sessionStore.resumeSshSession did not return the expected detailed information object (e.g., { isResumed: boolean, historicalOutput?: string, message?: string }). The action was dispatched.');
+      debugLog('[SuspendedSshSessionsView] To get client-side confirmation of session state and historical logs, the sessionStore.resumeSshSession action might need to be updated to return this data.');
+      debugLog('[SuspendedSshSessionsView] For now, please check browser developer console (network tab for backend responses) or backend logs for details on session restoration and historical log loading.');
       if (result !== undefined) {
-          console.log('[SuspendedSshSessionsView] Actual value returned by resumeSshSession (if any):', result);
+          debugLog('[SuspendedSshSessionsView] Actual value returned by resumeSshSession (if any):', result);
       }
     }
   } catch (error) {
@@ -264,7 +265,7 @@ const removeSession = (session: SuspendedSshSession) => { // 参数类型改为 
 };
 
 const exportLog = async (session: SuspendedSshSession) => {
- console.log(`[SuspendedSshSessionsView] Attempting to export log for session ID: ${session.suspendSessionId}`);
+ debugLog(`[SuspendedSshSessionsView] Attempting to export log for session ID: ${session.suspendSessionId}`);
  await sessionStore.exportSshSessionLog(session.suspendSessionId);
  // 不需要 emitWorkspaceEvent，因为导出日志通常不关闭模态框
 };
@@ -276,7 +277,7 @@ onMounted(async () => {
   // 确保连接列表已加载或正在加载
   // 通常 store 的 fetch 方法会处理重复调用或自行管理加载状态
   try {
-    console.log('[SuspendedSshSessionsView] Ensuring connections are fetched.');
+    debugLog('[SuspendedSshSessionsView] Ensuring connections are fetched.');
     await connectionsStore.fetchConnections(); // +++ 获取连接列表 +++
   } catch (error) {
     console.error('[SuspendedSshSessionsView] Error fetching connections:', error);

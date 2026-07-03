@@ -6,7 +6,7 @@ import type { FileTab, SftpManagerInstance } from '../types';
 import type { FileInfo } from '../../fileEditor.store'; // 路径: packages/frontend/src/stores/fileEditor.store.ts
 import type { SftpReadFileSuccessPayload } from '../../../types/sftp.types'; // 路径: packages/frontend/src/types/sftp.types.ts
 import type { useI18n } from 'vue-i18n';
-
+import { debugLog } from '../../../composables/useDebugLog';
 // --- Editor Actions ---
 export const openFileInSession = (
     sessionId: string,
@@ -26,7 +26,7 @@ export const openFileInSession = (
     const existingTab = session.editorTabs.value.find(tab => tab.filePath === fileInfo.fullPath);
     if (existingTab) {
         session.activeEditorTabId.value = existingTab.id;
-        console.log(`[EditorActions] 会话 ${sessionId} 中已存在文件 ${fileInfo.fullPath} 的标签页，已激活: ${existingTab.id}`);
+        debugLog(`[EditorActions] 会话 ${sessionId} 中已存在文件 ${fileInfo.fullPath} 的标签页，已激活: ${existingTab.id}`);
     } else {
         const newTabId = `${sessionId}:${fileInfo.fullPath}`; // 保证唯一性
         const newTab: FileTab = {
@@ -48,7 +48,7 @@ export const openFileInSession = (
         };
         session.editorTabs.value.push(newTab);
         session.activeEditorTabId.value = newTab.id;
-        console.log(`[EditorActions] 已在会话 ${sessionId} 中为文件 ${fileInfo.fullPath} 创建新标签页: ${newTab.id}`);
+        debugLog(`[EditorActions] 已在会话 ${sessionId} 中为文件 ${fileInfo.fullPath} 创建新标签页: ${newTab.id}`);
 
         const loadContent = async () => {
             const tabRef = session.editorTabs.value.find(t => t.id === newTab.id);
@@ -63,10 +63,10 @@ export const openFileInSession = (
                 if (!sftpManager) {
                     throw new Error(t('fileManager.errors.sftpManagerNotFound'));
                 }
-                console.log(`[EditorActions ${sessionId}] 使用 primary-editor sftpManager 读取文件 ${fileInfo.fullPath}`);
+                debugLog(`[EditorActions ${sessionId}] 使用 primary-editor sftpManager 读取文件 ${fileInfo.fullPath}`);
 
                 const fileData: SftpReadFileSuccessPayload = await sftpManager.readFile(fileInfo.fullPath);
-                console.log(`[EditorActions ${sessionId}] 文件 ${fileInfo.fullPath} 读取成功。后端使用编码: ${fileData.encodingUsed}`);
+                debugLog(`[EditorActions ${sessionId}] 文件 ${fileInfo.fullPath} 读取成功。后端使用编码: ${fileData.encodingUsed}`);
 
                 // 再次查找 tab，因为它可能在异步操作期间被关闭
                 const currentTabState = session.editorTabs.value.find(t => t.id === newTab.id);
@@ -80,7 +80,7 @@ export const openFileInSession = (
                 currentTabState.isLoading = false;
                 currentTabState.isModified = false;
                 currentTabState.loadingError = null;
-                console.log(`[EditorActions ${sessionId}] 文件 ${fileInfo.fullPath} 内容已加载并设置到标签页 ${newTab.id}。`);
+                debugLog(`[EditorActions ${sessionId}] 文件 ${fileInfo.fullPath} 内容已加载并设置到标签页 ${newTab.id}。`);
 
             } catch (err: any) {
                 console.error(`[EditorActions ${sessionId}] 读取文件 ${fileInfo.fullPath} 失败:`, err);
@@ -112,7 +112,7 @@ export const closeEditorTabInSession = (sessionId: string, tabId: string) => {
     // TODO: 检查 isDirty 状态，提示保存？
 
     session.editorTabs.value.splice(tabIndex, 1);
-    console.log(`[EditorActions] 已从会话 ${sessionId} 中移除标签页: ${tabId}`);
+    debugLog(`[EditorActions] 已从会话 ${sessionId} 中移除标签页: ${tabId}`);
 
     if (session.activeEditorTabId.value === tabId) {
         const remainingTabs = session.editorTabs.value;
@@ -120,7 +120,7 @@ export const closeEditorTabInSession = (sessionId: string, tabId: string) => {
             ? remainingTabs[Math.max(0, tabIndex > 0 ? tabIndex -1 : 0 )].id // 激活前一个或第一个
             : null;
         session.activeEditorTabId.value = nextActiveTabId;
-        console.log(`[EditorActions] 会话 ${sessionId} 关闭活动标签页后，切换到: ${nextActiveTabId}`);
+        debugLog(`[EditorActions] 会话 ${sessionId} 关闭活动标签页后，切换到: ${nextActiveTabId}`);
     }
 };
 
@@ -134,7 +134,7 @@ export const setActiveEditorTabInSession = (sessionId: string, tabId: string) =>
     if (session.editorTabs.value.some(tab => tab.id === tabId)) {
         if (session.activeEditorTabId.value !== tabId) {
             session.activeEditorTabId.value = tabId;
-            console.log(`[EditorActions] 已在会话 ${sessionId} 中激活标签页: ${tabId}`);
+            debugLog(`[EditorActions] 已在会话 ${sessionId} 中激活标签页: ${tabId}`);
         }
     } else {
         console.warn(`[EditorActions] 尝试激活会话 ${sessionId} 中不存在的标签页 ID: ${tabId}`);
@@ -204,7 +204,7 @@ export const saveFileInSession = async (
         return;
     }
 
-    console.log(`[EditorActions] 开始保存文件: ${tab.filePath} (会话 ${sessionId}, Tab ID: ${tab.id}) using primary-editor sftpManager`);
+    debugLog(`[EditorActions] 开始保存文件: ${tab.filePath} (会话 ${sessionId}, Tab ID: ${tab.id}) using primary-editor sftpManager`);
     tab.isSaving = true;
     tab.saveStatus = 'saving';
     tab.saveError = null;
@@ -214,7 +214,7 @@ export const saveFileInSession = async (
 
     try {
         await sftpManager.writeFile(tab.filePath, contentToSave, encodingToUse);
-        console.log(`[EditorActions] 文件 ${tab.filePath} (会话 ${sessionId}) 使用编码 ${encodingToUse} 保存成功。`);
+        debugLog(`[EditorActions] 文件 ${tab.filePath} (会话 ${sessionId}) 使用编码 ${encodingToUse} 保存成功。`);
         tab.isSaving = false;
         tab.saveStatus = 'success';
         tab.saveError = null;
@@ -249,11 +249,11 @@ export const changeEncodingInSession = (sessionId: string, tabId: string, newEnc
         return;
     }
     if (tab.selectedEncoding === newEncoding) {
-        console.log(`[EditorActions] 会话 ${sessionId} 标签页 ${tabId} 编码已经是 ${newEncoding}，无需更改。`);
+        debugLog(`[EditorActions] 会话 ${sessionId} 标签页 ${tabId} 编码已经是 ${newEncoding}，无需更改。`);
         return;
     }
 
-    console.log(`[EditorActions] 使用新编码 "${newEncoding}" 在前端重新解码文件: ${tab.filePath} (会话 ${sessionId}, Tab ID: ${tabId})`);
+    debugLog(`[EditorActions] 使用新编码 "${newEncoding}" 在前端重新解码文件: ${tab.filePath} (会话 ${sessionId}, Tab ID: ${tabId})`);
 
     try {
         const newContent = decodeRawContent(tab.rawContentBase64, newEncoding);
@@ -265,7 +265,7 @@ export const changeEncodingInSession = (sessionId: string, tabId: string, newEnc
         // 如果 newContent !== tab.originalContent，isModified 应该为 true
         // 为了简单起见，这里不改变 isModified，由后续的 content 比较来决定
         tab.loadingError = null; // 清除可能存在的旧错误
-        console.log(`[EditorActions] 文件 ${tab.filePath} (会话 ${sessionId}) 使用新编码 "${newEncoding}" 解码完成。`);
+        debugLog(`[EditorActions] 文件 ${tab.filePath} (会话 ${sessionId}) 使用新编码 "${newEncoding}" 解码完成。`);
     } catch (err: any) {
         console.error(`[EditorActions] 使用编码 "${newEncoding}" 在前端解码文件 ${tab.filePath} (会话 ${sessionId}) 失败:`, err);
         tab.loadingError = `前端解码失败 (编码: ${newEncoding}): ${err.message || err}`;
@@ -278,7 +278,7 @@ export const closeOtherTabsInSession = (sessionId: string, targetTabId: string) 
     const targetTab = session.editorTabs.value.find(tab => tab.id === targetTabId);
     if (!targetTab) return;
 
-    console.log(`[EditorActions ${sessionId}] 关闭除 ${targetTabId} 之外的所有标签页...`);
+    debugLog(`[EditorActions ${sessionId}] 关闭除 ${targetTabId} 之外的所有标签页...`);
     const tabsToClose = session.editorTabs.value.filter(tab => tab.id !== targetTabId);
     // 为了避免在迭代中修改数组导致的问题，先收集 ID
     const idsToClose = tabsToClose.map(t => t.id);
@@ -291,7 +291,7 @@ export const closeTabsToTheRightInSession = (sessionId: string, targetTabId: str
     const targetIndex = session.editorTabs.value.findIndex(tab => tab.id === targetTabId);
     if (targetIndex === -1) return;
 
-    console.log(`[EditorActions ${sessionId}] 关闭 ${targetTabId} 右侧的所有标签页...`);
+    debugLog(`[EditorActions ${sessionId}] 关闭 ${targetTabId} 右侧的所有标签页...`);
     const tabsToClose = session.editorTabs.value.slice(targetIndex + 1);
     const idsToClose = tabsToClose.map(t => t.id);
     idsToClose.forEach(id => closeEditorTabInSession(sessionId, id));
@@ -323,7 +323,7 @@ export const closeTabsToTheLeftInSession = (sessionId: string, targetTabId: stri
     const targetIndex = session.editorTabs.value.findIndex(tab => tab.id === targetTabId);
     if (targetIndex === -1) return;
 
-    console.log(`[EditorActions ${sessionId}] 关闭 ${targetTabId} 左侧的所有标签页...`);
+    debugLog(`[EditorActions ${sessionId}] 关闭 ${targetTabId} 左侧的所有标签页...`);
     const tabsToClose = session.editorTabs.value.slice(0, targetIndex);
     const idsToClose = tabsToClose.map(t => t.id);
     idsToClose.forEach(id => closeEditorTabInSession(sessionId, id));

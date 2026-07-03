@@ -2,7 +2,7 @@
 import type { ConnectionInfo } from '../stores/connections.store';
 import { computed, defineAsyncComponent, type PropType, type Component, ref, watch, onMounted, onBeforeUnmount, nextTick, type CSSProperties } from 'vue'; // Added onBeforeUnmount, nextTick and CSSProperties
 import { useI18n } from 'vue-i18n';
-import { useWorkspaceEventSubscriber, useWorkspaceEventOff } from '../composables/workspaceEvents';
+import { useWorkspaceEventEmitter, useWorkspaceEventSubscriber, useWorkspaceEventOff, type WorkspaceEventPayloads } from '../composables/workspaceEvents';
 import '@fortawesome/fontawesome-free/css/all.min.css';
 import { Splitpanes, Pane } from 'splitpanes';
 import { useLayoutStore, type LayoutNode, type PaneName } from '../stores/layout.store';
@@ -12,6 +12,7 @@ import { useSettingsStore } from '../stores/settings.store';
 import { useAppearanceStore } from '../stores/appearance.store'; // +++ Import appearance store +++
 import { useSidebarResize } from '../composables/useSidebarResize';
 import { beginGlobalDragSelectionGuard } from '../composables/useGlobalDragSelectionGuard';
+import { debugLog } from '../composables/useDebugLog';
 import { storeToRefs } from 'pinia';
 
 
@@ -74,6 +75,11 @@ const props = defineProps({
     required: false,
     default: null,
   },
+  terminalInputHandler: {
+    type: Function as PropType<(sessionId: string, data: string, batched?: boolean) => void>,
+    required: false,
+    default: null,
+  },
 });
 
 
@@ -85,6 +91,7 @@ const settingsStore = useSettingsStore();
 const { t } = useI18n();
 const subscribeToWorkspaceEvent = useWorkspaceEventSubscriber();
 const unsubscribeFromWorkspaceEvent = useWorkspaceEventOff();
+const emitWorkspaceEvent = useWorkspaceEventEmitter();
 
 // +++ Appearance Store Refs +++
 const appearanceStore = useAppearanceStore();
@@ -205,6 +212,81 @@ const isTerminalGridResizing = ref(false);
 const terminalGridResizeDirection = ref<'vertical' | 'horizontal' | null>(null);
 let cleanupTerminalGridResizeListeners: (() => void) | null = null;
 let releaseSplitpaneResizeGuard: (() => void) | null = null;
+let splitpaneResizeDocument: Document | null = null;
+let splitpaneResizeBridgeCleanup: (() => void) | null = null;
+let terminalGridResizeDocument: Document | null = null;
+let terminalGridResizeFrameId: number | null = null;
+let pendingTerminalGridResizeUpdate: (() => void) | null = null;
+
+const readEventDocument = (event: Event) => {
+  const target = event.target as (EventTarget & { ownerDocument?: Document }) | null;
+  return target?.ownerDocument ?? document;
+};
+
+const bridgePopupPointerEventsToMainDocument = (sourceDocument: Document) => {
+  if (sourceDocument === document) return () => {};
+  const sourceWindow = sourceDocument.defaultView;
+  if (!sourceWindow) return () => {};
+
+  const forwardMouseEvent = (event: MouseEvent) => {
+    document.dispatchEvent(new MouseEvent(event.type, {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      screenX: event.screenX,
+      screenY: event.screenY,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      ctrlKey: event.ctrlKey,
+      altKey: event.altKey,
+      shiftKey: event.shiftKey,
+      metaKey: event.metaKey,
+      button: event.button,
+      buttons: event.buttons,
+      relatedTarget: null,
+    }));
+  };
+
+  const forwardTouchEvent = (event: TouchEvent) => {
+    document.dispatchEvent(new TouchEvent(event.type, {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      touches: Array.from(event.touches),
+      targetTouches: Array.from(event.targetTouches),
+      changedTouches: Array.from(event.changedTouches),
+      ctrlKey: event.ctrlKey,
+      altKey: event.altKey,
+      shiftKey: event.shiftKey,
+      metaKey: event.metaKey,
+    }));
+  };
+
+  sourceDocument.addEventListener('mousemove', forwardMouseEvent, true);
+  sourceDocument.addEventListener('mouseup', forwardMouseEvent, true);
+  sourceDocument.addEventListener('touchmove', forwardTouchEvent, { capture: true, passive: false });
+  sourceDocument.addEventListener('touchend', forwardTouchEvent, true);
+  sourceDocument.addEventListener('touchcancel', forwardTouchEvent, true);
+
+  return () => {
+    sourceDocument.removeEventListener('mousemove', forwardMouseEvent, true);
+    sourceDocument.removeEventListener('mouseup', forwardMouseEvent, true);
+    sourceDocument.removeEventListener('touchmove', forwardTouchEvent, true);
+    sourceDocument.removeEventListener('touchend', forwardTouchEvent, true);
+    sourceDocument.removeEventListener('touchcancel', forwardTouchEvent, true);
+  };
+};
+const scheduleTerminalGridResizeUpdate = (update: () => void) => {
+  pendingTerminalGridResizeUpdate = update;
+  if (terminalGridResizeFrameId !== null) return;
+
+  terminalGridResizeFrameId = window.requestAnimationFrame(() => {
+    terminalGridResizeFrameId = null;
+    pendingTerminalGridResizeUpdate?.();
+    pendingTerminalGridResizeUpdate = null;
+    emitWorkspaceEvent('ui:resizeTransaction', { phase: 'live', source: 'terminal-grid' });
+  });
+};
 
 const initializeTerminalGridSizes = () => {
   const { rows, cols } = terminalSplitLayout.value;
@@ -319,7 +401,9 @@ const handleTerminalGridResizerMouseDown = (
   cleanupTerminalGridResizeListeners?.();
   isTerminalGridResizing.value = true;
   terminalGridResizeDirection.value = type;
-  const releaseTerminalGridSelectionGuard = beginGlobalDragSelectionGuard(type === 'vertical' ? 'col-resize' : 'row-resize');
+  emitWorkspaceEvent('ui:resizeTransaction', { phase: 'start', source: 'terminal-grid' });
+  terminalGridResizeDocument = readEventDocument(event);
+  const releaseTerminalGridSelectionGuard = beginGlobalDragSelectionGuard(type === 'vertical' ? 'col-resize' : 'row-resize', terminalGridResizeDocument);
 
   const layoutRect = layoutElement.getBoundingClientRect();
   const totalSize = type === 'vertical' ? layoutRect.width : layoutRect.height;
@@ -345,9 +429,11 @@ const handleTerminalGridResizerMouseDown = (
       const targetWidth = (mouseRatio * totalRowWidth) - widthsBefore;
       const clampedWidth = Math.max(0.15, Math.min(twoCellWidth - 0.15, targetWidth));
 
-      rowCells[index].width = clampedWidth;
-      rowCells[index + 1].width = twoCellWidth - clampedWidth;
-      terminalGridCellSizes.value = newSizes;
+      scheduleTerminalGridResizeUpdate(() => {
+        rowCells[index].width = clampedWidth;
+        rowCells[index + 1].width = twoCellWidth - clampedWidth;
+        terminalGridCellSizes.value = newSizes;
+      });
       return;
     }
 
@@ -360,46 +446,62 @@ const handleTerminalGridResizerMouseDown = (
       const targetFirstRow = (mouseRatio * totalRowSize) - heightsBefore;
       const clampedFirstRow = Math.max(0.15, Math.min(twoRowTotal - 0.15, targetFirstRow));
 
-      newSizes[index] = clampedFirstRow;
-      newSizes[index + 1] = twoRowTotal - clampedFirstRow;
-      terminalGridRowSizes.value = newSizes;
+      scheduleTerminalGridResizeUpdate(() => {
+        newSizes[index] = clampedFirstRow;
+        newSizes[index + 1] = twoRowTotal - clampedFirstRow;
+        terminalGridRowSizes.value = newSizes;
+      });
     }
   };
 
   const handleMouseUp = () => {
     isTerminalGridResizing.value = false;
     terminalGridResizeDirection.value = null;
-    document.removeEventListener('mousemove', handleMouseMove);
-    document.removeEventListener('mouseup', handleMouseUp);
+    const dragDocument = terminalGridResizeDocument ?? document;
+    dragDocument.removeEventListener('mousemove', handleMouseMove);
+    dragDocument.removeEventListener('mouseup', handleMouseUp);
+    terminalGridResizeDocument = null;
     releaseTerminalGridSelectionGuard();
+    emitWorkspaceEvent('ui:resizeTransaction', { phase: 'end', source: 'terminal-grid' });
     cleanupTerminalGridResizeListeners = null;
   };
 
-  document.addEventListener('mousemove', handleMouseMove);
-  document.addEventListener('mouseup', handleMouseUp);
+  terminalGridResizeDocument.addEventListener('mousemove', handleMouseMove);
+  terminalGridResizeDocument.addEventListener('mouseup', handleMouseUp);
   cleanupTerminalGridResizeListeners = handleMouseUp;
 };
 
 const releaseSplitpaneResizeSelectionGuard = () => {
+  const hadActiveGuard = !!releaseSplitpaneResizeGuard;
+  const dragDocument = splitpaneResizeDocument ?? document;
+  splitpaneResizeBridgeCleanup?.();
+  splitpaneResizeBridgeCleanup = null;
   releaseSplitpaneResizeGuard?.();
   releaseSplitpaneResizeGuard = null;
-  document.removeEventListener('mouseup', releaseSplitpaneResizeSelectionGuard, true);
-  document.removeEventListener('touchend', releaseSplitpaneResizeSelectionGuard, true);
-  document.removeEventListener('touchcancel', releaseSplitpaneResizeSelectionGuard, true);
+  splitpaneResizeDocument = null;
+  if (hadActiveGuard) {
+    emitWorkspaceEvent('ui:resizeTransaction', { phase: 'end', source: 'workspace-layout' });
+  }
+  dragDocument.removeEventListener('mouseup', releaseSplitpaneResizeSelectionGuard, true);
+  dragDocument.removeEventListener('touchend', releaseSplitpaneResizeSelectionGuard, true);
+  dragDocument.removeEventListener('touchcancel', releaseSplitpaneResizeSelectionGuard, true);
 };
 
 const handleSplitpaneResizePointerDown = (event: MouseEvent | TouchEvent) => {
   if (props.layoutLocked) return;
 
-  const target = event.target;
-  if (!(target instanceof HTMLElement) || !target.closest('.splitpanes__splitter')) return;
+  const target = event.target as HTMLElement | null;
+  if (!target?.closest?.('.splitpanes__splitter')) return;
 
   releaseSplitpaneResizeSelectionGuard();
   const isHorizontal = props.layoutNode.direction === 'vertical';
-  releaseSplitpaneResizeGuard = beginGlobalDragSelectionGuard(isHorizontal ? 'row-resize' : 'col-resize');
-  document.addEventListener('mouseup', releaseSplitpaneResizeSelectionGuard, true);
-  document.addEventListener('touchend', releaseSplitpaneResizeSelectionGuard, true);
-  document.addEventListener('touchcancel', releaseSplitpaneResizeSelectionGuard, true);
+  splitpaneResizeDocument = readEventDocument(event);
+  splitpaneResizeBridgeCleanup = bridgePopupPointerEventsToMainDocument(splitpaneResizeDocument);
+  releaseSplitpaneResizeGuard = beginGlobalDragSelectionGuard(isHorizontal ? 'row-resize' : 'col-resize', splitpaneResizeDocument);
+  emitWorkspaceEvent('ui:resizeTransaction', { phase: 'start', source: 'workspace-layout' });
+  splitpaneResizeDocument.addEventListener('mouseup', releaseSplitpaneResizeSelectionGuard, true);
+  splitpaneResizeDocument.addEventListener('touchend', releaseSplitpaneResizeSelectionGuard, true);
+  splitpaneResizeDocument.addEventListener('touchcancel', releaseSplitpaneResizeSelectionGuard, true);
 };
 
 const getTerminalSessionStyle = (sessionId: string): CSSProperties => {
@@ -683,6 +785,11 @@ const sidebarProps = computed(() => (paneName: PaneName | null, side: 'left' | '
 
 // --- Methods ---
 // 处理 Splitpanes 大小调整事件
+const handlePaneResizing = () => {
+  if (props.layoutLocked) return;
+  emitWorkspaceEvent('ui:resizeTransaction', { phase: 'live', source: 'workspace-layout' });
+};
+
 const handlePaneResize = (eventData: { panes: Array<{ size: number; [key: string]: any }> }) => {
   // +++ 更详细的日志 +++
   // +++ Log the entire layoutNode object if ID is undefined +++
@@ -747,10 +854,6 @@ const handleMainAreaClick = () => {
   }
 };
 
-// --- Debug Watcher for sidebarPanes from store ---
-watch(sidebarPanes, (newVal) => {
-  // console.log('[LayoutRenderer] Received updated sidebarPanes from store:', JSON.parse(JSON.stringify(newVal)));
-}, { deep: true, immediate: true }); // Immediate to log initial value
 
 // --- Icon Helper ---
 const getIconClasses = (paneName: PaneName): string[] => {
@@ -787,7 +890,7 @@ onMounted(() => {
     handleRef: leftResizeHandleRef,
     side: 'left',
     onResizeEnd: (newWidth) => {
-      console.log(`Left sidebar resize ended. New width: ${newWidth}px`);
+      debugLog(`Left sidebar resize ended. New width: ${newWidth}px`);
       // +++ Update specific pane width +++
       if (activeLeftSidebarPane.value) {
         settingsStore.updateSidebarPaneWidth(activeLeftSidebarPane.value, `${newWidth}px`);
@@ -801,7 +904,7 @@ onMounted(() => {
     handleRef: rightResizeHandleRef,
     side: 'right',
     onResizeEnd: (newWidth) => {
-      console.log(`Right sidebar resize ended. New width: ${newWidth}px`);
+      debugLog(`Right sidebar resize ended. New width: ${newWidth}px`);
       // +++ Update specific pane width +++
       if (activeRightSidebarPane.value) {
         settingsStore.updateSidebarPaneWidth(activeRightSidebarPane.value, `${newWidth}px`);
@@ -879,6 +982,11 @@ watch(terminalCustomHTML, (newHtmlContent, oldHtmlContent) => {
 
 
 onBeforeUnmount(() => {
+  if (terminalGridResizeFrameId !== null) {
+    window.cancelAnimationFrame(terminalGridResizeFrameId);
+    terminalGridResizeFrameId = null;
+  }
+  pendingTerminalGridResizeUpdate = null;
   cleanupTerminalGridResizeListeners?.();
   releaseSplitpaneResizeSelectionGuard();
   const handleStabilizedTerminalResizeHandler = ({ sessionId, width, height }: { sessionId: string; width: number; height: number }) => {
@@ -918,6 +1026,7 @@ onBeforeUnmount(() => {
               <splitpanes
                   :horizontal="layoutNode.direction === 'vertical'"
                   :class="['default-theme flex-grow min-h-0 min-w-0', { 'layout-locked': props.layoutLocked }]"
+                  @resize="handlePaneResizing"
                   @resized="handlePaneResize"
                   @resized.capture="releaseSplitpaneResizeSelectionGuard"
                   @mousedown.capture="handleSplitpaneResizePointerDown"
@@ -944,6 +1053,7 @@ onBeforeUnmount(() => {
                         :external-terminal-session-id="externalTerminalSessionId"
                         :editor-tabs="editorTabs"
                         :active-editor-tab-id="activeEditorTabId"
+                        :terminal-input-handler="terminalInputHandler"
                         class="flex-grow min-h-0 min-w-0 overflow-hidden"
                     />
                   </pane>
@@ -1010,6 +1120,7 @@ onBeforeUnmount(() => {
                                         :class="getTerminalSessionClasses(sessionId)"
                                         :style="getTerminalSessionStyle(sessionId)"
                                         :options="{}"
+                                        :terminal-input-handler="terminalInputHandler"
                                         @click="activateTerminalSession(sessionId)"
                                     />
                                 </keep-alive>

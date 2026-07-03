@@ -33,6 +33,8 @@ export function useResizable(
   let startY = 0;
   let startWidth = 0;
   let startHeight = 0;
+  let resizeFrameId: number | null = null;
+  let pendingSize: { width: number; height: number } | null = null;
 
   const getEdge = (event: MouseEvent, el: HTMLElement): Edge => {
     const rect = el.getBoundingClientRect();
@@ -62,6 +64,30 @@ export function useResizable(
     else if (edge === 'top-left' || edge === 'bottom-right') el.style.cursor = 'nwse-resize';
     else if (edge === 'top-right' || edge === 'bottom-left') el.style.cursor = 'nesw-resize';
     else el.style.cursor = 'default';
+  };
+
+  const applyPendingSize = () => {
+    resizeFrameId = null;
+    if (!pendingSize) return;
+
+    width.value = pendingSize.width;
+    height.value = pendingSize.height;
+    pendingSize = null;
+  };
+
+  const scheduleSizeUpdate = (nextWidth: number, nextHeight: number) => {
+    pendingSize = { width: nextWidth, height: nextHeight };
+    if (resizeFrameId !== null) return;
+
+    resizeFrameId = window.requestAnimationFrame(applyPendingSize);
+  };
+
+  const flushPendingSize = () => {
+    if (resizeFrameId !== null) {
+      window.cancelAnimationFrame(resizeFrameId);
+      resizeFrameId = null;
+    }
+    applyPendingSize();
   };
 
   const handleMouseDown = (event: MouseEvent) => {
@@ -113,12 +139,15 @@ export function useResizable(
     }
 
     // Apply constraints
-    width.value = Math.max(minWidth, Math.min(maxWidth, newWidth));
-    height.value = Math.max(minHeight, Math.min(maxHeight, newHeight));
+    scheduleSizeUpdate(
+      Math.max(minWidth, Math.min(maxWidth, newWidth)),
+      Math.max(minHeight, Math.min(maxHeight, newHeight)),
+    );
   };
 
   const handleMouseUp = () => {
     if (!isResizing.value) return;
+    flushPendingSize();
     isResizing.value = false;
     if (elementRef.value) {
         elementRef.value.style.userSelect = '';
@@ -132,6 +161,12 @@ export function useResizable(
     if (!elementRef.value || isResizing.value) return;
     const edge = getEdge(event, elementRef.value);
     updateCursorStyle(elementRef.value, edge);
+  };
+
+  const handleMouseLeave = () => {
+    if (!isResizing.value && elementRef.value) {
+      elementRef.value.style.cursor = 'default';
+    }
   };
 
   onMounted(() => {
@@ -150,21 +185,20 @@ export function useResizable(
       el.addEventListener('mousedown', handleMouseDown);
       el.addEventListener('mousemove', handleElementHover); // For cursor changes
       // Reset cursor when mouse leaves the element
-      el.addEventListener('mouseleave', () => {
-        if (!isResizing.value && el) {
-          el.style.cursor = 'default';
-        }
-      });
+      el.addEventListener('mouseleave', handleMouseLeave);
     }
   });
 
   onBeforeUnmount(() => {
+    if (resizeFrameId !== null) {
+      window.cancelAnimationFrame(resizeFrameId);
+      resizeFrameId = null;
+    }
+    pendingSize = null;
     if (elementRef.value) {
       elementRef.value.removeEventListener('mousedown', handleMouseDown);
       elementRef.value.removeEventListener('mousemove', handleElementHover);
-      elementRef.value.removeEventListener('mouseleave', () => {
-        if (elementRef.value) elementRef.value.style.cursor = 'default';
-      });
+      elementRef.value.removeEventListener('mouseleave', handleMouseLeave);
     }
     window.removeEventListener('mousemove', handleMouseMove); // Cleanup just in case
     window.removeEventListener('mouseup', handleMouseUp);     // Cleanup just in case
@@ -175,9 +209,7 @@ export function useResizable(
     if (oldEl) {
       oldEl.removeEventListener('mousedown', handleMouseDown);
       oldEl.removeEventListener('mousemove', handleElementHover);
-      oldEl.removeEventListener('mouseleave', () => {
-        if (oldEl) oldEl.style.cursor = 'default';
-      });
+      oldEl.removeEventListener('mouseleave', handleMouseLeave);
     }
     if (newEl) {
       const computedStyle = window.getComputedStyle(newEl);
@@ -190,9 +222,7 @@ export function useResizable(
 
       newEl.addEventListener('mousedown', handleMouseDown);
       newEl.addEventListener('mousemove', handleElementHover);
-      newEl.addEventListener('mouseleave', () => {
-        if (newEl && !isResizing.value) newEl.style.cursor = 'default';
-      });
+      newEl.addEventListener('mouseleave', handleMouseLeave);
     }
   });
 

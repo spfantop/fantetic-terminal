@@ -1,3 +1,4 @@
+import { debugLog } from '../composables/useDebugLog';
 import { defineStore } from 'pinia';
 import apiClient from '../utils/apiClient'; 
 import { ref, computed, watch } from 'vue'; 
@@ -45,6 +46,7 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
 
     // +++ State for expanded groups +++
     const expandedGroups = ref<Record<string, boolean>>({});
+    const expandedGroupsSignature = computed(() => JSON.stringify(expandedGroups.value));
 
     // --- Getters ---
 
@@ -183,7 +185,7 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
                 const parsedState = JSON.parse(storedState);
                 if (typeof parsedState === 'object' && parsedState !== null) {
                     expandedGroups.value = parsedState;
-                    console.log('[QuickCmdStore] Loaded expanded groups state from localStorage.');
+                    debugLog('[QuickCmdStore] Loaded expanded groups state from localStorage.');
                     return;
                 }
             }
@@ -196,16 +198,16 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
     };
 
     // +++ Save expanded groups state to localStorage +++
-    const saveExpandedGroups = () => {
+    const saveExpandedGroups = (expandedGroupsJson: string) => {
         try {
-            localStorage.setItem(EXPANDED_GROUPS_STORAGE_KEY, JSON.stringify(expandedGroups.value));
+            localStorage.setItem(EXPANDED_GROUPS_STORAGE_KEY, expandedGroupsJson);
         } catch (e) {
             console.error('[QuickCmdStore] Failed to save expanded groups state:', e);
         }
     };
 
     // +++ Watch for changes and save +++
-    watch(expandedGroups, saveExpandedGroups, { deep: true });
+    watch(expandedGroupsSignature, saveExpandedGroups);
 
     // +++ Action to toggle group expansion +++
     const toggleGroup = (groupName: string) => {
@@ -274,7 +276,7 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
         // 2. 后台获取最新数据
         isLoading.value = true;
         try {
-            console.log(`[QuickCmdStore] Fetching latest commands from server...`);
+            debugLog(`[QuickCmdStore] Fetching latest commands from server...`);
             // 不再发送 sortBy 参数
             const response = await apiClient.get<QuickCommandFE[]>('/quick-commands');
             // 确保返回的数据包含 tagIds 数组和 variables 对象
@@ -288,7 +290,7 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
             // 3. 对比并更新
             const currentDataString = JSON.stringify(quickCommandsList.value);
             if (currentDataString !== freshDataString) {
-                console.log('[QuickCmdStore] Commands data changed, updating state and cache.');
+                debugLog('[QuickCmdStore] Commands data changed, updating state and cache.');
                 quickCommandsList.value = freshData;
                 localStorage.setItem(cacheKey, freshDataString); // 更新缓存
             } else {
@@ -308,7 +310,7 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
     // 清除快捷指令列表缓存
     const clearQuickCommandsCache = () => {
         localStorage.removeItem('quickCommandsListCache');
-        console.log('[QuickCmdStore] Cleared quick commands list cache.');
+        debugLog('[QuickCmdStore] Cleared quick commands list cache.');
     };
 
 
@@ -443,7 +445,7 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
             try {
                 const response = await apiClient.post('/quick-commands/bulk-assign-tag', { commandIds, tagId });
                 if (response.data.success) {
-                    console.log(`[Store] Successfully assigned tag ${tagId} to ${commandIds.length} commands via API.`);
+                    debugLog(`[Store] Successfully assigned tag ${tagId} to ${commandIds.length} commands via API.`);
 
                     // --- Manual state update for immediate UI feedback ---
                     let updatedCount = 0;
@@ -463,7 +465,7 @@ export const useQuickCommandsStore = defineStore('quickCommands', () => {
                              console.warn(`[Store] assignCommandsToTagAction: Command ID ${cmdId} not found in local list for manual update.`);
                         }
                     });
-                    console.log(`[Store] Manually updated tagIds for ${updatedCount} commands in local state.`);
+                    debugLog(`[Store] Manually updated tagIds for ${updatedCount} commands in local state.`);
 
                     // Optionally, still fetch for full consistency, but UI should update based on manual change first.
                     // clearQuickCommandsCache();

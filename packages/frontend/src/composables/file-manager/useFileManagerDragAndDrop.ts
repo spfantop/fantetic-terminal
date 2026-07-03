@@ -1,5 +1,6 @@
 import { ref, type Ref } from 'vue';
 import type { FileListItem } from '../../types/sftp.types'; // 确保路径正确
+import { debugLog } from '../useDebugLog';
 
 // 定义 Composable 的输入参数类型
 export interface UseFileManagerDragAndDropOptions {
@@ -52,10 +53,10 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
      // 检查是否是外部文件拖拽
      const isExternalFileDrag = event.dataTransfer?.types.includes('Files') ?? false;
      if (isConnected.value && isExternalFileDrag && !draggedItem.value) { // 确保不是内部拖拽触发
-        // console.log("[DragDrop] External file drag entered container.");
+        // debugLog("[DragDrop] External file drag entered container.");
         showExternalDropOverlay.value = true; // 显示蒙版
      } else if (draggedItem.value) {
-        // console.log("[DragDrop] Internal item drag entered container area.");
+        // debugLog("[DragDrop] Internal item drag entered container area.");
         // 内部拖拽进入容器但不在行上，可能需要处理效果，但不显示蒙版
         if (event.dataTransfer) event.dataTransfer.dropEffect = 'none'; // 默认在容器空白处无效
      }
@@ -142,16 +143,16 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
      const container = (event.currentTarget as HTMLElement);
      // 检查是否真的离开了容器边界
      if (!target || !container.contains(target)) {
-        // console.log("[DragDrop] Drag left container boundary.");
+        // debugLog("[DragDrop] Drag left container boundary.");
         if (showExternalDropOverlay.value) {
-            // console.log("[DragDrop] Hiding external drop overlay due to leaving container.");
+            // debugLog("[DragDrop] Hiding external drop overlay due to leaving container.");
             showExternalDropOverlay.value = false; // 隐藏蒙版
         }
         // isDraggingOver.value = false; // 不再使用
         dragOverTarget.value = null; // 清除行高亮
         stopAutoScroll(); // 停止滚动
      } else {
-        // console.log("[DragDrop] Drag left fired but still inside container.");
+        // debugLog("[DragDrop] Drag left fired but still inside container.");
         // 鼠标仍在容器内（可能移到了子元素上），不隐藏蒙版或清除状态
         // 但如果是内部拖拽移到了非行区域，需要清除行高亮
         if (draggedItem.value) {
@@ -170,7 +171,7 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
       // 文件处理
       (item as FileSystemFileEntry).file((file) => {
         // 调用上传函数，传递文件和相对路径
-        console.log(`[DragDrop] Uploading file: ${path}${file.name}`);
+        debugLog(`[DragDrop] Uploading file: ${path}${file.name}`);
         onFileUpload(file, path); // 传递相对路径
       }, (err) => {
         console.error(`[DragDrop] Error getting file from entry: ${path}${item.name}`, err);
@@ -179,7 +180,7 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
       // 目录处理
       const dirReader = (item as FileSystemDirectoryEntry).createReader();
       dirReader.readEntries((entries) => {
-        console.log(`[DragDrop] Traversing directory: ${path}${item.name}, found ${entries.length} entries.`);
+        debugLog(`[DragDrop] Traversing directory: ${path}${item.name}, found ${entries.length} entries.`);
         // 递归遍历目录中的每个条目
         entries.forEach((entry) => {
           traverseFileTree(entry, path + item.name + '/'); // 更新相对路径
@@ -199,11 +200,11 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
 
     const items = event.dataTransfer?.items;
     if (!items || items.length === 0 || !isConnected.value) {
-        console.log("[DragDrop] Overlay drop ignored: No items or not connected.");
+        debugLog("[DragDrop] Overlay drop ignored: No items or not connected.");
         return;
     }
 
-    console.log(`[DragDrop] Processing ${items.length} items from overlay drop.`);
+    debugLog(`[DragDrop] Processing ${items.length} items from overlay drop.`);
     for (let i = 0; i < items.length; i++) {
         const item = items[i];
         if (item.kind === 'file') {
@@ -221,7 +222,7 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
   // 因为外部 drop 由蒙版处理，内部 drop 由行处理并阻止冒泡。
   // 保留一个空的或只做清理的函数以防万一。
   const handleDrop = (event: DragEvent) => {
-    // console.log("[DragDrop] Container drop event triggered (should be rare).");
+    // debugLog("[DragDrop] Container drop event triggered (should be rare).");
     // 清理所有状态以防异常情况
     showExternalDropOverlay.value = false;
     draggedItem.value = null; // 清理内部拖拽状态
@@ -233,12 +234,12 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
 
   const handleDragStart = (item: FileListItem) => {
     if (item.filename === '..') return;
-    // console.log(`[DragDrop] Drag Start: ${item.filename}`);
+    // debugLog(`[DragDrop] Drag Start: ${item.filename}`);
     draggedItem.value = item;
   };
 
   const handleDragEnd = () => {
-    // console.log(`[DragDrop] Drag End`);
+    // debugLog(`[DragDrop] Drag End`);
     draggedItem.value = null;
     dragOverTarget.value = null;
     stopAutoScroll();
@@ -280,7 +281,7 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
     // 验证内部拖放操作的有效性
     // 检查: 是否有拖拽项? 拖拽项不是 '..'? 目标项是文件夹或 '..'? 拖拽项不是目标项自身? 放置的目标确实是悬停的目标?
     if (!sourceItem || sourceItem.filename === '..' || (targetItem.filename !== '..' && !targetItem.attrs.isDirectory) || sourceItem.filename === targetItem.filename || targetItem.filename !== currentDragOverTarget) {
-        console.log(`[DragDrop] Internal drop on row ignored: Invalid conditions. Source: ${sourceItem?.filename}, Target: ${targetItem.filename}, Drop Target: ${currentDragOverTarget}`);
+        debugLog(`[DragDrop] Internal drop on row ignored: Invalid conditions. Source: ${sourceItem?.filename}, Target: ${targetItem.filename}, Drop Target: ${currentDragOverTarget}`);
         if (sourceItem) draggedItem.value = null; // 清理拖拽状态
         return;
     }
@@ -318,7 +319,7 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
     // 检查被拖拽的项是否在选区内
     if (selectedItems.value.has(sourceItem.filename)) {
         // 多选拖拽：移动所有选中的项
-        console.log(`[DragDrop] Multi-item drop detected. Moving ${selectedItems.value.size} selected items.`);
+        debugLog(`[DragDrop] Multi-item drop detected. Moving ${selectedItems.value.size} selected items.`);
         selectedItems.value.forEach(filename => {
             // 从完整文件列表中查找对应的 FileListItem 对象
             const itemToMove = fileList.value.find(f => f.filename === filename);
@@ -337,7 +338,7 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
         // clearSelection(); // 需要从 useFileManagerSelection 引入或作为参数传入
     } else {
         // 单选拖拽 (拖拽了一个未选中的项)
-        console.log(`[DragDrop] Single unselected item drop detected. Moving ${sourceItem.filename}.`);
+        debugLog(`[DragDrop] Single unselected item drop detected. Moving ${sourceItem.filename}.`);
         // 检查目标路径是否与源路径相同
         if (sourceFullPath !== newFullPath) {
             itemsToMove.push(sourceItem);
@@ -348,14 +349,14 @@ export function useFileManagerDragAndDrop(options: UseFileManagerDragAndDropOpti
 
     // 统一执行移动操作
     if (itemsToMove.length > 0) {
-        console.log(`[DragDrop] Executing move for ${itemsToMove.length} items to target directory: ${targetDirectoryFullPath}`);
+        debugLog(`[DragDrop] Executing move for ${itemsToMove.length} items to target directory: ${targetDirectoryFullPath}`);
         itemsToMove.forEach(item => {
             const itemNewFullPath = joinPath(targetDirectoryFullPath, item.filename);
-            console.log(`[DragDrop]   - Moving '${item.filename}' to '${itemNewFullPath}'`);
+            debugLog(`[DragDrop]   - Moving '${item.filename}' to '${itemNewFullPath}'`);
             onItemMove(item, itemNewFullPath); // 调用移动回调
         });
     } else {
-        console.log("[DragDrop] No valid items to move.");
+        debugLog("[DragDrop] No valid items to move.");
     }
 
     // 清理拖拽状态

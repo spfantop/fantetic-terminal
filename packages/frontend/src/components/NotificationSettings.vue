@@ -70,6 +70,7 @@
 </template>
 
 <script setup lang="ts">
+import { debugLog } from '../composables/useDebugLog';
 import { ref, onMounted, computed } from 'vue';
 import { useNotificationsStore } from '../stores/notifications.store';
 import { NotificationSetting, NotificationChannelType, NotificationEvent } from '../types/server.types';
@@ -141,7 +142,7 @@ const closeForm = () => {
 
 // TODO: Implement save logic when form component is ready
 const handleSave = (savedSetting: NotificationSetting) => {
-  console.log('Setting saved:', savedSetting);
+  debugLog('Setting saved:', savedSetting);
   closeForm();
   // The store should have updated the list automatically after add/update
   // Optionally, you could force a refresh if needed: store.fetchSettings();

@@ -21,6 +21,7 @@ import ConfirmDialog from './components/common/ConfirmDialog.vue';
 import { useDialogStore } from './stores/dialog.store';
 import SettingsView from './views/SettingsView.vue';
 import { darkUiTheme, defaultUiTheme } from './features/appearance/config/default-themes';
+import { debugLog } from './composables/useDebugLog';
 
 const { t } = useI18n();
 const authStore = useAuthStore();
@@ -84,6 +85,10 @@ const isDockActionMenuHovering = ref(false);
 const isSettingsDialogVisible = ref(false);
 const isSwitchingDockTheme = ref(false);
 const isConnectionsServerPanelCollapsed = ref(localStorage.getItem(CONNECTIONS_SERVER_PANEL_COLLAPSED_KEY) === 'true');
+let dockHoverFrameId: number | null = null;
+let pendingDockHoverPoint: { x: number; y: number } | null = null;
+let dockHoverRectCache: { dock?: DOMRect; hoverBar?: DOMRect; actionMenu?: DOMRect; stamp: number } | null = null;
+const DOCK_HOVER_RECT_CACHE_MS = 120;
 // --- 移除 shortcutTriggeredInKeyDown 标志 ---
 
 onMounted(() => {
@@ -96,11 +101,11 @@ onMounted(() => {
   
   // PWA Install Prompt
   window.addEventListener('beforeinstallprompt', (e) => {
-    console.log('[App.vue] beforeinstallprompt event fired. Browser will handle install prompt.');
+    debugLog('[App.vue] beforeinstallprompt event fired. Browser will handle install prompt.');
   });
 
   window.addEventListener('appinstalled', () => {
-    console.log('[App.vue] PWA was installed');
+    debugLog('[App.vue] PWA was installed');
   });
   
   // +++ 加载 Header 可见性状态 +++
@@ -116,6 +121,10 @@ watch(isAuthenticated, (loggedIn) => {
   }
 }, { immediate: true });
 
+watch([dockWidth, isDockCollapsed, isDockActionMenuHovering], () => {
+  invalidateDockHoverRectCache();
+});
+
 // +++ 卸载钩子以移除监听器 +++
 onUnmounted(() => {
   window.removeEventListener('keydown', handleAltKeyDown); // +++ 移除 keydown 监听 +++
@@ -123,6 +132,10 @@ onUnmounted(() => {
   document.removeEventListener('mousemove', handleDockHoverTracking);
   window.removeEventListener('mouseout', handleDockMouseOut);
   window.removeEventListener(CONNECTIONS_SERVER_PANEL_COLLAPSED_EVENT, handleConnectionsServerPanelCollapsedChange);
+  if (dockHoverFrameId !== null) {
+    window.cancelAnimationFrame(dockHoverFrameId);
+    dockHoverFrameId = null;
+  }
   stopDockResize();
 });
 
@@ -371,22 +384,60 @@ const isPointInRect = (rect: DOMRect | undefined, x: number, y: number) => {
   return Boolean(rect && x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom);
 };
 
-const handleDockHoverTracking = (event: MouseEvent) => {
+const invalidateDockHoverRectCache = () => {
+  dockHoverRectCache = null;
+};
+
+const readDockHoverRects = () => {
+  const now = performance.now();
+  if (dockHoverRectCache && now - dockHoverRectCache.stamp < DOCK_HOVER_RECT_CACHE_MS) {
+    return dockHoverRectCache;
+  }
+
+  dockHoverRectCache = {
+    dock: dockRef.value?.getBoundingClientRect(),
+    hoverBar: dockHoverBarRef.value?.getBoundingClientRect(),
+    actionMenu: isDockActionMenuHovering.value ? dockActionMenuRef.value?.getBoundingClientRect() : undefined,
+    stamp: now,
+  };
+
+  return dockHoverRectCache;
+};
+
+const updateDockHoverFromPoint = (x: number, y: number) => {
   if (!isDockCollapsed.value || !shouldAllowDock.value || isMobile.value) {
     if (isDockHovering.value) isDockHovering.value = false;
     return;
   }
 
-  const dockRect = dockRef.value?.getBoundingClientRect();
-  const hoverBarRect = dockHoverBarRef.value?.getBoundingClientRect();
-  const actionMenuRect = isDockActionMenuHovering.value ? dockActionMenuRef.value?.getBoundingClientRect() : undefined;
-  const nextHovering = isPointInRect(dockRect, event.clientX, event.clientY)
-    || isPointInRect(hoverBarRect, event.clientX, event.clientY)
-    || isPointInRect(actionMenuRect, event.clientX, event.clientY);
+  const rects = readDockHoverRects();
+  const nextHovering = isPointInRect(rects.dock, x, y)
+    || isPointInRect(rects.hoverBar, x, y)
+    || isPointInRect(rects.actionMenu, x, y);
 
   if (isDockHovering.value !== nextHovering) {
     isDockHovering.value = nextHovering;
   }
+};
+
+const setDockActionMenuHovering = (value: boolean) => {
+  if (isDockActionMenuHovering.value === value) return;
+  isDockActionMenuHovering.value = value;
+  invalidateDockHoverRectCache();
+};
+
+const handleDockHoverTracking = (event: MouseEvent) => {
+  pendingDockHoverPoint = { x: event.clientX, y: event.clientY };
+  if (dockHoverFrameId !== null) return;
+
+  dockHoverFrameId = window.requestAnimationFrame(() => {
+    dockHoverFrameId = null;
+    if (!pendingDockHoverPoint) return;
+
+    const { x, y } = pendingDockHoverPoint;
+    pendingDockHoverPoint = null;
+    updateDockHoverFromPoint(x, y);
+  });
 };
 
 const handleDockMouseOut = (event: MouseEvent) => {
@@ -419,23 +470,23 @@ const handleAltKeyDown = async (event: KeyboardEvent) => { // +++ 改为 async +
     if (/^[a-zA-Z0-9]$/.test(key)) {
         altShortcutKey.value = key; // 记录按键
         const shortcutString = `Alt+${key}`;
-        console.log(`[App] KeyDown: Alt+${key} detected. Checking shortcut: ${shortcutString}`);
+        debugLog(`[App] KeyDown: Alt+${key} detected. Checking shortcut: ${shortcutString}`);
         const targetId = focusSwitcherStore.getFocusTargetIdByShortcut(shortcutString);
 
         if (targetId) {
-            console.log(`[App] KeyDown: Shortcut match found. Targeting ID: ${targetId}`);
+            debugLog(`[App] KeyDown: Shortcut match found. Targeting ID: ${targetId}`);
             event.preventDefault(); // 阻止默认行为 (如菜单)
             const success = await focusSwitcherStore.focusTarget(targetId); // +++ 立即尝试聚焦 +++
             if (success) {
-                console.log(`[App] KeyDown: Successfully focused ${targetId} via shortcut.`);
+                debugLog(`[App] KeyDown: Successfully focused ${targetId} via shortcut.`);
                 lastFocusedIdBySwitcher.value = targetId;
                 // --- 移除设置标志位 ---
             } else {
-                console.log(`[App] KeyDown: Failed to focus ${targetId} via shortcut action.`);
+                debugLog(`[App] KeyDown: Failed to focus ${targetId} via shortcut action.`);
                 // 聚焦失败，可以选择是否取消 Alt 状态，暂时不处理，让 keyup 重置
             }
         } else {
-            console.log(`[App] KeyDown: No configured shortcut found for ${shortcutString}.`);
+            debugLog(`[App] KeyDown: No configured shortcut found for ${shortcutString}.`);
             // 没有匹配的快捷键，可以选择取消 Alt 状态以允许默认行为，或保持状态等待 keyup
             // isAltPressed.value = false;
             // altShortcutKey.value = null;
@@ -445,14 +496,14 @@ const handleAltKeyDown = async (event: KeyboardEvent) => { // +++ 改为 async +
         isAltPressed.value = false;
         altShortcutKey.value = null;
         // --- 移除重置标志位 ---
-        console.log('[App] KeyDown: Alt sequence cancelled by non-alphanumeric key press.');
+        debugLog('[App] KeyDown: Alt sequence cancelled by non-alphanumeric key press.');
     }
   } else if (isAltPressed.value && ['Control', 'Shift', 'Meta'].includes(event.key)) {
       // 按下其他修饰键，取消 Alt 状态
       isAltPressed.value = false;
       altShortcutKey.value = null;
       // --- 移除重置标志位 ---
-      console.log('[App] KeyDown: Alt sequence cancelled by other modifier key press.');
+      debugLog('[App] KeyDown: Alt sequence cancelled by other modifier key press.');
   }
 };
 
@@ -470,26 +521,26 @@ const handleGlobalKeyUp = async (event: KeyboardEvent) => {
 
     if (altWasPressed && triggeredShortcutKey === null) {
       // 如果 Alt 之前是按下的，并且没有记录到有效的快捷键，则执行顺序切换
-      console.log('[App] KeyUp: Alt released without a valid shortcut key captured. Attempting sequential focus switch.');
+      debugLog('[App] KeyUp: Alt released without a valid shortcut key captured. Attempting sequential focus switch.');
       event.preventDefault(); // 仅在执行顺序切换时阻止默认行为
 
       // --- 顺序切换逻辑 (保持不变) ---
       let currentFocusId: string | null = lastFocusedIdBySwitcher.value;
-      console.log(`[App] Sequential switch. Last focused by switcher: ${currentFocusId}`);
+      debugLog(`[App] Sequential switch. Last focused by switcher: ${currentFocusId}`);
 
       if (!currentFocusId) {
           const activeElement = document.activeElement as HTMLElement;
           if (activeElement && activeElement.hasAttribute('data-focus-id')) {
               currentFocusId = activeElement.getAttribute('data-focus-id');
-              console.log(`[App] Sequential switch. Found focus ID from activeElement: ${currentFocusId}`);
+              debugLog(`[App] Sequential switch. Found focus ID from activeElement: ${currentFocusId}`);
           } else {
-              console.log(`[App] Sequential switch. Could not determine current focus ID.`);
+              debugLog(`[App] Sequential switch. Could not determine current focus ID.`);
           }
       }
 
       const order = focusSwitcherStore.sequenceOrder; // ++ 使用新的 sequenceOrder state ++
       if (order.length === 0) { // ++ 检查新的 state ++
-        console.log('[App] No focus sequence configured.');
+        debugLog('[App] No focus sequence configured.');
         return;
       }
 
@@ -501,32 +552,32 @@ const handleGlobalKeyUp = async (event: KeyboardEvent) => {
           break;
         }
 
-        console.log(`[App] Sequential switch. Trying to focus target ID: ${nextFocusId}`);
+        debugLog(`[App] Sequential switch. Trying to focus target ID: ${nextFocusId}`);
         const success = await focusSwitcherStore.focusTarget(nextFocusId);
 
         if (success) {
-          console.log(`[App] Successfully focused ${nextFocusId} sequentially.`);
+          debugLog(`[App] Successfully focused ${nextFocusId} sequentially.`);
           lastFocusedIdBySwitcher.value = nextFocusId;
           focused = true;
           break;
         } else {
-          console.log(`[App] Failed to focus ${nextFocusId} sequentially. Trying next...`);
+          debugLog(`[App] Failed to focus ${nextFocusId} sequentially. Trying next...`);
           currentFocusId = nextFocusId;
         }
       }
 
       if (!focused) {
-        console.log('[App] Cycled through sequence, no target could be focused.');
+        debugLog('[App] Cycled through sequence, no target could be focused.');
         lastFocusedIdBySwitcher.value = null;
       }
       // --- 顺序切换逻辑结束 ---
 
     } else if (altWasPressed && triggeredShortcutKey !== null) {
-      console.log(`[App] KeyUp: Alt released after capturing key '${triggeredShortcutKey}'. Shortcut logic handled in keydown. No sequential switch.`);
+      debugLog(`[App] KeyUp: Alt released after capturing key '${triggeredShortcutKey}'. Shortcut logic handled in keydown. No sequential switch.`);
       // 快捷键逻辑已在 keydown 处理，keyup 时无需操作，也不阻止默认行为（除非特定需要）
     } else {
       // Alt 松开，但 isAltPressed 已经是 false (例如被其他键取消了)
-      console.log('[App] KeyUp: Alt released, but sequence was already cancelled or not active.');
+      debugLog('[App] KeyUp: Alt released, but sequence was already cancelled or not active.');
     }
   }
 };
@@ -616,7 +667,7 @@ const isElementVisibleAndFocusable = (element: HTMLElement): boolean => {
       </div>
 
       <div class="dock-bottom">
-        <div class="dock-actions" @mouseenter="isDockActionMenuHovering = true" @mouseleave="isDockActionMenuHovering = false">
+        <div class="dock-actions" @mouseenter="setDockActionMenuHovering(true)" @mouseleave="setDockActionMenuHovering(false)">
           <button type="button" class="dock-link dock-menu-trigger" :aria-label="t('dock.actions', '操作菜单')">
             <i class="fas fa-user-gear"></i>
             <span class="dock-link-label">{{ t('dock.actions', '操作菜单') }}</span>

@@ -1,5 +1,6 @@
 import { ref, onMounted, onUnmounted, type Ref, watch } from 'vue'; // +++ Import watch +++
 import { beginGlobalDragSelectionGuard } from './useGlobalDragSelectionGuard';
+import { debugLog } from './useDebugLog';
 
 interface UseSidebarResizeOptions {
   sidebarRef: Ref<HTMLElement | null>;
@@ -22,13 +23,38 @@ export function useSidebarResize({
   const startX = ref(0);
   const startWidth = ref(0);
   let releaseDragSelectionGuard: (() => void) | null = null;
+  let resizeFrameId: number | null = null;
+  let pendingWidth: number | null = null;
+
+  const applyPendingWidth = () => {
+    resizeFrameId = null;
+    if (!sidebarRef.value || pendingWidth === null) return;
+
+    sidebarRef.value.style.width = `${pendingWidth}px`;
+    pendingWidth = null;
+  };
+
+  const scheduleWidthUpdate = (width: number) => {
+    pendingWidth = width;
+    if (resizeFrameId !== null) return;
+
+    resizeFrameId = window.requestAnimationFrame(applyPendingWidth);
+  };
+
+  const flushPendingWidth = () => {
+    if (resizeFrameId !== null) {
+      window.cancelAnimationFrame(resizeFrameId);
+      resizeFrameId = null;
+    }
+    applyPendingWidth();
+  };
 
   const handleMouseDown = (event: MouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
-    console.log(`[useSidebarResize] handleMouseDown triggered for side: ${side}`, { sidebar: sidebarRef.value, handle: handleRef.value }); // +++ Add Log +++
+    debugLog(`[useSidebarResize] handleMouseDown triggered for side: ${side}`, { sidebar: sidebarRef.value, handle: handleRef.value }); // +++ Add Log +++
     if (!sidebarRef.value || !handleRef.value) {
-       console.log('[useSidebarResize] MouseDown ignored: sidebarRef or handleRef is null.'); 
+       debugLog('[useSidebarResize] MouseDown ignored: sidebarRef or handleRef is null.');
        return;
     }
 
@@ -58,12 +84,13 @@ export function useSidebarResize({
     // 应用宽度限制
     newWidth = Math.max(minWidth, Math.min(newWidth, maxWidth));
 
-    sidebarRef.value.style.width = `${newWidth}px`;
+    scheduleWidthUpdate(newWidth);
   };
 
   const handleMouseUp = () => {
     if (!isDragging.value) return;
 
+    flushPendingWidth();
     isDragging.value = false;
     releaseDragSelectionGuard?.();
     releaseDragSelectionGuard = null;
@@ -96,6 +123,11 @@ export function useSidebarResize({
     // 清理可能残留的全局监听器
     document.removeEventListener('mousemove', handleMouseMove);
     document.removeEventListener('mouseup', handleMouseUp);
+    if (resizeFrameId !== null) {
+      window.cancelAnimationFrame(resizeFrameId);
+      resizeFrameId = null;
+    }
+    pendingWidth = null;
     releaseDragSelectionGuard?.();
     releaseDragSelectionGuard = null;
   });

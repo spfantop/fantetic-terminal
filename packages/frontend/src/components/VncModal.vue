@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { debugLog } from '../composables/useDebugLog';
 import { ref, onMounted, onUnmounted, watch, nextTick, computed, watchEffect } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useSettingsStore } from '../stores/settings.store';
@@ -44,11 +45,11 @@ const sendInputTextToVnc = async () => {
   }
   const textToSend = vncPasteInputText.value;
   if (!textToSend) {
-    console.log('[VncModal] Paste input is empty, nothing to send.');
+    debugLog('[VncModal] Paste input is empty, nothing to send.');
     return;
   }
 
-  console.log(`[VncModal] Simulating keyboard input for: ${textToSend.substring(0,50)}...`);
+  debugLog(`[VncModal] Simulating keyboard input for: ${textToSend.substring(0,50)}...`);
   try {
     for (const char of textToSend) {
       const keysym = char.charCodeAt(0); //直接使用字符的 Unicode 码点作为 keysym
@@ -63,7 +64,7 @@ const sendInputTextToVnc = async () => {
         console.warn(`[VncModal] Invalid keysym for character "${char}". Skipping.`);
       }
     }
-    console.log('[VncModal] Finished simulating keyboard input.');
+    debugLog('[VncModal] Finished simulating keyboard input.');
     // vncPasteInputText.value = ''; // 如果希望发送后清空输入框，取消此行注释
   } catch (err: any) {
     console.error('[VncModal] Error simulating keyboard input:', err);
@@ -180,7 +181,7 @@ const handleConnection = async () => {
               const displayWidth = vncDisplayRef.value.offsetWidth;
               const displayHeight = vncDisplayRef.value.offsetHeight;
               if (displayWidth > 0 && displayHeight > 0) {
-                console.log(`[VncModal] Initial resize on connect: ${displayWidth}x${displayHeight}`);
+                debugLog(`[VncModal] Initial resize on connect: ${displayWidth}x${displayHeight}`);
                 guacClient.value.sendSize(displayWidth, displayHeight);
               }
             }
@@ -230,13 +231,13 @@ const trySyncClipboardOnDisplayFocus = async () => {
       const writer = new Guacamole.StringWriter(stream);
       writer.sendText(currentClipboardText);
       writer.sendEnd();
-      console.log('[VncModal] Sent clipboard to VNC on display focus:', currentClipboardText.substring(0, 50) + (currentClipboardText.length > 50 ? '...' : ''));
+      debugLog('[VncModal] Sent clipboard to VNC on display focus:', currentClipboardText.substring(0, 50) + (currentClipboardText.length > 50 ? '...' : ''));
     }
   } catch (err) {
     // This error is expected if the document/tab is not focused when the VNC display element gets focus.
     // Or if clipboard permissions are not granted.
     if (err instanceof DOMException && err.name === 'NotAllowedError') {
-      // console.log('[VncModal] Clipboard read on display focus skipped: Document not focused or permission denied.');
+      // debugLog('[VncModal] Clipboard read on display focus skipped: Document not focused or permission denied.');
     } else {
       console.warn('[VncModal] Could not read clipboard on display focus, or other error:', err);
     }
@@ -535,7 +536,7 @@ watchEffect(() => {
         const displayHeight = vncDisplayRef.value.offsetHeight;
 
         if (displayWidth > 0 && displayHeight > 0) {
-          console.log(`[VncModal] Resizing VNC display to: ${displayWidth}x${displayHeight} due to style change.`);
+          debugLog(`[VncModal] Resizing VNC display to: ${displayWidth}x${displayHeight} due to style change.`);
           guacClient.value.sendSize(displayWidth, displayHeight);
         }
       }

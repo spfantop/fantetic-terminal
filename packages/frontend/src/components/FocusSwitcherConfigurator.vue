@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { debugLog, debugLogLazy } from '../composables/useDebugLog';
 import { ref, computed, watch, reactive, type Ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import draggable from 'vuedraggable';
@@ -49,6 +50,29 @@ const localSequence = ref<SequenceDisplayItem[]>([]); // 右侧列表，只关�
 const localItemConfigs = ref<Record<string, FocusItemConfig>>({}); // 所有项目的配置 (快捷键)
 const originalConfig = ref<FocusSwitcherFullConfig | null>(null); // 存储原始完整配置用于比较
 
+const normalizeFocusConfig = (sequence: string[], itemConfigs: Record<string, FocusItemConfig>): FocusSwitcherFullConfig => {
+  const shortcuts: Record<string, FocusItemConfig> = {};
+
+  for (const input of focusSwitcherStore.availableInputs) {
+    const shortcut = itemConfigs[input.id]?.shortcut;
+    if (shortcut && typeof shortcut === 'string' && shortcut.trim() !== '') {
+      shortcuts[input.id] = { shortcut };
+    }
+  }
+
+  return { sequence, shortcuts };
+};
+
+const isSameFocusConfig = (left: FocusSwitcherFullConfig, right: FocusSwitcherFullConfig) => {
+  if (left.sequence.length !== right.sequence.length) return false;
+  if (left.sequence.some((id, index) => id !== right.sequence[index])) return false;
+
+  const leftShortcutKeys = Object.keys(left.shortcuts);
+  const rightShortcutKeys = Object.keys(right.shortcuts);
+  if (leftShortcutKeys.length !== rightShortcutKeys.length) return false;
+
+  return leftShortcutKeys.every((key) => left.shortcuts[key]?.shortcut === right.shortcuts[key]?.shortcut);
+};
 // --- Watchers ---
 watch(() => props.isVisible, async (newValue) => { // ++ Make async for potential backend load ++
   if (newValue) {
@@ -61,9 +85,9 @@ watch(() => props.isVisible, async (newValue) => { // ++ Make async for potentia
     const allAvailableInputs = focusSwitcherStore.availableInputs; // 获取所有可用输入的基础信息
     const inputsMap = new Map(allAvailableInputs.map(input => [input.id, input]));
 
-    console.log('[FocusSwitcherConfigurator] Loading full config from store...');
-    console.log('[FocusSwitcherConfigurator] Store sequenceOrder:', JSON.stringify(currentSequenceOrder));
-    console.log('[FocusSwitcherConfigurator] Store itemConfigs:', JSON.stringify(currentItemConfigs));
+    debugLog('[FocusSwitcherConfigurator] Loading full config from store...');
+    debugLogLazy(() => ['[FocusSwitcherConfigurator] Store sequenceOrder:', JSON.stringify(currentSequenceOrder)]);
+    debugLogLazy(() => ['[FocusSwitcherConfigurator] Store itemConfigs:', JSON.stringify(currentItemConfigs)]);
 
     // 构建本地右侧列表 (localSequence)
     localSequence.value = currentSequenceOrder
@@ -79,15 +103,12 @@ watch(() => props.isVisible, async (newValue) => { // ++ Make async for potentia
     localItemConfigs.value = JSON.parse(JSON.stringify(initialConfigs));
 
     // 存储原始完整配置用于比较
-    originalConfig.value = JSON.parse(JSON.stringify({
-        sequence: currentSequenceOrder,
-        shortcuts: currentItemConfigs
-    }));
+    originalConfig.value = normalizeFocusConfig([...currentSequenceOrder], currentItemConfigs);
 
     hasChanges.value = false;
-    console.log('[FocusSwitcherConfigurator] Dialog opened. Loaded localSequence:', JSON.stringify(localSequence.value));
-    console.log('[FocusSwitcherConfigurator] Loaded localItemConfigs:', JSON.stringify(localItemConfigs.value));
-    console.log('[FocusSwitcherConfigurator] Original full config stored:', JSON.stringify(originalConfig.value));
+    debugLogLazy(() => ['[FocusSwitcherConfigurator] Dialog opened. Loaded localSequence:', JSON.stringify(localSequence.value)]);
+    debugLogLazy(() => ['[FocusSwitcherConfigurator] Loaded localItemConfigs:', JSON.stringify(localItemConfigs.value)]);
+    debugLogLazy(() => ['[FocusSwitcherConfigurator] Original full config stored:', JSON.stringify(originalConfig.value)]);
     // 重置/计算初始位置和大小
     requestAnimationFrame(() => {
       if (dialogRef.value) {
@@ -111,45 +132,15 @@ watch(() => props.isVisible, async (newValue) => { // ++ Make async for potentia
 watch([localSequence, localItemConfigs], () => {
   if (!originalConfig.value) return; // Not initialized yet
 
-  // 1. Construct the current configuration based on local state
-  const currentFullConfig: FocusSwitcherFullConfig = {
-    sequence: localSequence.value.map(item => item.id),
-    shortcuts: {},
-  };
-  // Populate shortcuts, only including those with a defined and non-empty string value
-  focusSwitcherStore.availableInputs.forEach(input => {
-      const localConfig = localItemConfigs.value[input.id];
-      // Only include if shortcut is defined, is a string, and is not empty
-      if (localConfig?.shortcut && typeof localConfig.shortcut === 'string' && localConfig.shortcut.trim() !== '') {
-          currentFullConfig.shortcuts[input.id] = { shortcut: localConfig.shortcut };
-      }
-  });
+  const currentFullConfig = normalizeFocusConfig(
+    localSequence.value.map(item => item.id),
+    localItemConfigs.value
+  );
 
-  // 2. Construct a comparable version of the original config
-  // Ensure original shortcuts only contain defined and non-empty string values for fair comparison
-  const comparableOriginalConfig: FocusSwitcherFullConfig = {
-      sequence: originalConfig.value.sequence,
-      shortcuts: {},
-  };
-  for (const id in originalConfig.value.shortcuts) {
-      const originalShortcut = originalConfig.value.shortcuts[id]?.shortcut;
-      // Only include if shortcut was defined, is a string, and is not empty
-      if (originalShortcut && typeof originalShortcut === 'string' && originalShortcut.trim() !== '') {
-          comparableOriginalConfig.shortcuts[id] = { shortcut: originalShortcut };
-      }
-  }
-
-  // 3. Compare the stringified versions
-  const changed = JSON.stringify(currentFullConfig) !== JSON.stringify(comparableOriginalConfig);
-
-  hasChanges.value = changed;
-  // console.log(`[FocusSwitcherConfigurator] Comparing:`);
-  // console.log("Current:", JSON.stringify(currentFullConfig));
-  // console.log("Original:", JSON.stringify(comparableOriginalConfig));
-  // console.log(`[FocusSwitcherConfigurator] Changes detected: ${changed}`);
+  hasChanges.value = !isSameFocusConfig(currentFullConfig, originalConfig.value);
+  // debugLog(`[FocusSwitcherConfigurator] Changes detected: ${hasChanges.value}`);
 
 }, { deep: true });
-
 
 // --- Methods ---
 const closeDialog = async () => {
@@ -183,9 +174,9 @@ const saveConfiguration = () => {
     shortcuts: newShortcuts,
   };
 
-  console.log('[FocusSwitcherConfigurator] Saving full configuration:', JSON.stringify(fullConfigToSave));
+  debugLogLazy(() => ['[FocusSwitcherConfigurator] Saving full configuration:', JSON.stringify(fullConfigToSave)]);
   focusSwitcherStore.updateConfiguration(fullConfigToSave); // 调用 Store 更新函数
-  console.log('[FocusSwitcherConfigurator] Configuration save process triggered.');
+  debugLog('[FocusSwitcherConfigurator] Configuration save process triggered.');
   hasChanges.value = false;
   emit('close'); // 保存后关闭
 };
@@ -352,7 +343,7 @@ const captureShortcut = (event: KeyboardEvent, itemConfig: FocusItemConfig) => {
       itemConfig.shortcut = undefined; // 使用 undefined 清空
   } else {
     // 可选：如果按下非 Alt 组合键，可以清空或提示
-    // console.log('[FocusSwitcherConfigurator] Invalid shortcut combination.');
+    // debugLog('[FocusSwitcherConfigurator] Invalid shortcut combination.');
   }
 };
 </script>

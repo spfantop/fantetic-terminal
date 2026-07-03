@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, PropType } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { debugLog, debugLogLazy } from '../composables/useDebugLog';
 
 interface MenuItem {
   label: string;
@@ -44,11 +45,11 @@ const menuStyle = computed(() => ({
 }));
 
 const handleAction = (item: MenuItem) => {
-  console.log(`[ContextMenu] handleAction called for item:`, JSON.stringify(item)); // + Log item
+  debugLogLazy(() => [`[ContextMenu] handleAction called for item:`, JSON.stringify(item)]); // + Log item
   if (!item.disabled && !item.isSeparator) {
-    console.log(`[ContextMenu] Inside handleAction, props.targetId is:`, props.targetId); // ++ Log prop value before emit
+    debugLog(`[ContextMenu] Inside handleAction, props.targetId is:`, props.targetId); // ++ Log prop value before emit
     const payload = { action: item.action, targetId: props.targetId };
-    console.log(`[ContextMenu] Emitting menu-action with payload:`, JSON.stringify(payload)); // + Log emit payload
+    debugLogLazy(() => [`[ContextMenu] Emitting menu-action with payload:`, JSON.stringify(payload)]); // + Log emit payload
     emit('menu-action', payload);
     emit('close'); // 点击后自动关闭
   }

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, defineEmits } from 'vue'; 
+import { ref, defineEmits } from 'vue';
+import { debugLogLazy } from '../composables/useDebugLog';
 
 const emit = defineEmits<{
   (e: 'send-key', keySequence: string): void;
@@ -39,14 +40,14 @@ const sendKey = (keyDef: KeyDefinition) => {
        sequence = '\x03';
     }
     // Add more Ctrl combinations here if needed
-    console.log(`[VirtualKeyboard] Sending Ctrl + ${keyDef.label} as ${JSON.stringify(sequence)}`);
+    debugLogLazy(() => [`[VirtualKeyboard] Sending Ctrl + ${keyDef.label} as ${JSON.stringify(sequence)}`]);
   } else if (isAltActive.value) {
     // Handle Alt combinations (typically prefix with ESC)
     sequence = '\x1b' + sequence;
-    console.log(`[VirtualKeyboard] Sending Alt + ${keyDef.label} as ${JSON.stringify(sequence)}`);
+    debugLogLazy(() => [`[VirtualKeyboard] Sending Alt + ${keyDef.label} as ${JSON.stringify(sequence)}`]);
   } else {
      // Send the standard sequence
-     console.log(`[VirtualKeyboard] Sending key: ${JSON.stringify(sequence)}`);
+     debugLogLazy(() => [`[VirtualKeyboard] Sending key: ${JSON.stringify(sequence)}`]);
   }
 
   // Emit the final sequence

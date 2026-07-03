@@ -6,7 +6,7 @@ import type { Terminal as XtermTerminal } from 'xterm';
 // 定义事件载荷类型
 export type WorkspaceEventPayloads = {
   // Terminal Events
-  'terminal:input': { sessionId: string; data: string };
+  'terminal:input': { sessionId: string; data: string; batched?: boolean };
   'terminal:resize': { sessionId: string; dims: { cols: number; rows: number } };
   'terminal:ready': { sessionId: string; terminal: XtermTerminal; searchAddon: any };
   'terminal:sendCommand': { command: string; sessionId?: string }; // sessionId 可选，用于指定目标，默认为 active
@@ -49,6 +49,7 @@ export type WorkspaceEventPayloads = {
   // UI Interaction Events
   'ui:openLayoutConfigurator': void;
   'ui:toggleWorkspaceSplit': { paneId?: string | null } | void;
+  'ui:resizeTransaction': { phase: 'start' | 'live' | 'end'; source: 'server-panel' | 'terminal-grid' | 'workspace-layout' };
   'ui:openTransferProgressModal': void; // 请求打开文件传输进度模态框
   // 'ui:toggleVirtualKeyboard': void; // 如果决定迁移 CommandInputBar 的这个事件
   'fileManager:openModalRequest': { sessionId: string }; // 请求打开文件管理器模态框

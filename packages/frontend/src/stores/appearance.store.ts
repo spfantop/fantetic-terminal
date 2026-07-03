@@ -1,14 +1,15 @@
+import { debugLog } from '../composables/useDebugLog';
 import { defineStore } from 'pinia';
 import apiClient from '../utils/apiClient';
-import { ref, computed, watch, nextTick } from 'vue'; 
+import { ref, computed, watch, nextTick } from 'vue';
 import { useDeviceDetection } from '../composables/useDeviceDetection';
 import type { ITheme } from 'xterm';
-import type { TerminalTheme } from '../types/terminal-theme.types'; 
+import type { TerminalTheme } from '../types/terminal-theme.types';
 import type { AppearanceSettings, UpdateAppearanceDto } from '../types/appearance.types';
 import { defaultXtermTheme, defaultUiTheme } from '../features/appearance/config/default-themes';
 
 // Helper function to safely parse JSON
-export const safeJsonParse = <T>(jsonString: string | undefined | null, defaultValue: T): T => { 
+export const safeJsonParse = <T>(jsonString: string | undefined | null, defaultValue: T): T => {
     if (!jsonString) return defaultValue;
     try {
         return JSON.parse(jsonString);
@@ -30,7 +31,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
     const appearanceSettings = ref<Partial<AppearanceSettings>>({}); // 从 API 获取的原始设置
     const initialAppearanceDataLoaded = ref(false); // 跟踪初始数据是否加载完成
     const allTerminalThemes = ref<TerminalTheme[]>([]); // 重命名: 存储从后端获取的所有主题
-  
+
     // HTML Presets State
     const localHtmlPresets = ref<Array<{ name: string, type: 'preset' | 'custom' }>>([]); // Updated type
     const remoteHtmlPresets = ref<Array<{ name: string, downloadUrl?: string }>>([]);
@@ -38,7 +39,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
     const activeHtmlPresetTab = ref<'local' | 'remote'>('local');
     const isLoadingHtmlPresets = ref(false);
     const htmlPresetError = ref<string | null>(null);
- 
+
     // State for theme preview
     const isPreviewingTerminalTheme = ref(false);
     const previewTerminalThemeData = ref<ITheme | null>(null);
@@ -135,14 +136,14 @@ export const useAppearanceStore = defineStore('appearance', () => {
         const size = appearanceSettings.value.mobileEditorFontSize;
         return typeof size === 'number' && size > 0 ? size : 16; // 默认 16
     });
- 
+
     // 终端背景是否启用
     const isTerminalBackgroundEnabled = computed<boolean>(() => {
         // 默认关闭背景层，避免明亮模式下无背景图时出现灰色蒙层。
         const enabled = appearanceSettings.value.terminalBackgroundEnabled;
         return typeof enabled === 'boolean' ? enabled : false;
     });
- 
+
     // 终端背景蒙版透明度
     const currentTerminalBackgroundOverlayOpacity = computed<number>(() => {
         const opacity = appearanceSettings.value.terminalBackgroundOverlayOpacity;
@@ -197,11 +198,11 @@ export const useAppearanceStore = defineStore('appearance', () => {
             appearanceSettings.value = settingsResponse.data;
             allTerminalThemes.value = themesResponse.data; // 更新 allTerminalThemes
             initialAppearanceDataLoaded.value = true; // +++ 设置为 true 表示数据加载成功
- 
+
             // Initialize remoteHtmlPresetsRepositoryUrl from loaded settings
             // Assuming backend returns it as part of AppearanceSettings
             remoteHtmlPresetsRepositoryUrl.value = appearanceSettings.value.remoteHtmlPresetsUrl || null;
- 
+
             // 应用加载的 UI 主题
             applyUiTheme(currentUiTheme.value);
             // 应用背景
@@ -228,7 +229,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
      */
     function toggleStyleCustomizer(visible?: boolean) {
         isStyleCustomizerVisible.value = visible === undefined ? !isStyleCustomizerVisible.value : visible;
-        console.log('[AppearanceStore] Style Customizer visibility toggled:', isStyleCustomizerVisible.value);
+        debugLog('[AppearanceStore] Style Customizer visibility toggled:', isStyleCustomizerVisible.value);
     }
 
 
@@ -250,14 +251,14 @@ export const useAppearanceStore = defineStore('appearance', () => {
             const response = await apiClient.put<AppearanceSettings>('/appearance', payloadToSend); // 使用 apiClient, 发送合并后的 payload
             // 使用后端返回的最新设置更新本地状态
             appearanceSettings.value = response.data;
-            console.log('[AppearanceStore] 外观设置已更新:', appearanceSettings.value);
+            debugLog('[AppearanceStore] 外观设置已更新:', appearanceSettings.value);
 
             // 如果 UI 主题或背景更新，重新应用
             if (updates.customUiTheme !== undefined) applyUiTheme(currentUiTheme.value);
             if (updates.pageBackgroundImage !== undefined) applyPageBackground(); // 移除 pageBackgroundOpacity 检查
             // 终端相关设置由 Terminal 组件监听应用
             // 注意：terminalBackgroundEnabled 的应用逻辑在 Terminal 组件中处理
- 
+
         } catch (err: any) {
             console.error('更新外观设置失败:', err);
             throw new Error(err.response?.data?.message || err.message || '更新外观设置失败');
@@ -295,12 +296,12 @@ export const useAppearanceStore = defineStore('appearance', () => {
 
         // 2. 立即更新前端本地状态 (使用数字 ID)
         appearanceSettings.value.activeTerminalThemeId = idNum;
-        console.log(`[AppearanceStore] Applied theme locally (ID): ${idNum}`);
+        debugLog(`[AppearanceStore] Applied theme locally (ID): ${idNum}`);
 
         // 3. 更新后端 (发送数字 ID)
         try {
             await updateAppearanceSettings({ activeTerminalThemeId: idNum });
-            console.log(`[AppearanceStore] Notified backend. Sent activeTerminalThemeId: ${idNum}`);
+            debugLog(`[AppearanceStore] Notified backend. Sent activeTerminalThemeId: ${idNum}`);
         } catch (error) {
             // 如果更新后端失败，回滚前端状态
             console.error('[AppearanceStore] Failed to update backend activeTerminalThemeId:', error);
@@ -356,17 +357,17 @@ export const useAppearanceStore = defineStore('appearance', () => {
     async function setMobileEditorFontSize(size: number) {
         await updateAppearanceSettings({ mobileEditorFontSize: size });
     }
- 
+
     /**
      * 设置终端背景是否启用
      * @param enabled 是否启用
      */
     async function setTerminalBackgroundEnabled(enabled: boolean) {
-        console.log(`[AppearanceStore LOG] setTerminalBackgroundEnabled 调用，准备发送给后端的值: ${enabled}`);
+        debugLog(`[AppearanceStore LOG] setTerminalBackgroundEnabled 调用，准备发送给后端的值: ${enabled}`);
         await updateAppearanceSettings({ terminalBackgroundEnabled: enabled });
-        console.log(`[AppearanceStore LOG] setTerminalBackgroundEnabled 更新后端调用完成。`); 
+        debugLog(`[AppearanceStore LOG] setTerminalBackgroundEnabled 更新后端调用完成。`);
     }
- 
+
     /**
      * 设置终端背景蒙版透明度
      * @param opacity 透明度 (0-1)
@@ -382,7 +383,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
     async function setTerminalCustomHTML(html: string | null) {
         try {
             await updateAppearanceSettings({ terminal_custom_html: html });
-            // console.log('[AppearanceStore] Terminal custom HTML updated successfully.');
+            // debugLog('[AppearanceStore] Terminal custom HTML updated successfully.');
             // 可以在此调用 uiNotifications.store 来显示成功消息
         } catch (err: any) {
             console.error('设置终端自定义 HTML 失败:', err);
@@ -469,7 +470,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
                  // 查找默认主题的数字 ID (这里假设默认主题 ID 为 1，实际应从配置或查询获取)
                  // TODO: 需要一种可靠的方式获取默认主题的数字 ID
                  const defaultThemeIdNum = 1; // 临时硬编码，需要改进
-                 console.log(`[AppearanceStore] 删除的主题是当前激活主题，尝试切换到默认主题 ID: ${defaultThemeIdNum}`);
+                 debugLog(`[AppearanceStore] 删除的主题是当前激活主题，尝试切换到默认主题 ID: ${defaultThemeIdNum}`);
                  await setActiveTerminalTheme(defaultThemeIdNum.toString()); // setActiveTerminalTheme 需要字符串 ID
             }
             await loadInitialAppearanceData(); // 重新加载所有数据以更新列表
@@ -545,12 +546,12 @@ export const useAppearanceStore = defineStore('appearance', () => {
 
         // 2. 如果找到且已有 themeData，直接返回
         if (existingTheme?.themeData && Object.keys(existingTheme.themeData).length > 0) {
-            console.log(`[AppearanceStore] Theme data for ${themeId} already loaded.`);
+            debugLog(`[AppearanceStore] Theme data for ${themeId} already loaded.`);
             return existingTheme.themeData;
         }
 
         // 3. 如果未找到或缺少 themeData，从后端加载
-        console.log(`[AppearanceStore] Loading theme data for ${themeId} from backend...`);
+        debugLog(`[AppearanceStore] Loading theme data for ${themeId} from backend...`);
         try {
             const response = await apiClient.get<TerminalTheme>(`/terminal-themes/${themeId}`); // 假设后端提供此接口
             const fullTheme = response.data;
@@ -562,7 +563,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
                     // 确保响应性，可以考虑替换整个对象或使用 Vue.set (在 Vue 3 中不推荐)
                     // 简单的替换可能足够，因为 allTerminalThemes 本身是 ref
                      allTerminalThemes.value[index] = { ...allTerminalThemes.value[index], themeData: fullTheme.themeData };
-                     console.log(`[AppearanceStore] Updated theme data for ${themeId} in local store.`);
+                     debugLog(`[AppearanceStore] Updated theme data for ${themeId} in local store.`);
                 } else {
                     // 如果列表中不存在（理论上不应发生，因为初始加载了元数据），可以考虑添加到列表
                      console.warn(`[AppearanceStore] Theme metadata for ${themeId} not found in initial list, but loaded data.`);
@@ -654,15 +655,15 @@ export const useAppearanceStore = defineStore('appearance', () => {
     function startTerminalThemePreview(themeData: ITheme) {
         previewTerminalThemeData.value = themeData;
         isPreviewingTerminalTheme.value = true;
-        console.log('[AppearanceStore] Started terminal theme preview.');
+        debugLog('[AppearanceStore] Started terminal theme preview.');
     }
 
     function stopTerminalThemePreview() {
         previewTerminalThemeData.value = null;
         isPreviewingTerminalTheme.value = false;
-        console.log('[AppearanceStore] Stopped terminal theme preview.');
+        debugLog('[AppearanceStore] Stopped terminal theme preview.');
     }
- 
+
     // --- HTML Preset Actions ---
     async function fetchLocalHtmlPresets() {
         isLoadingHtmlPresets.value = true;
@@ -679,7 +680,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
             isLoadingHtmlPresets.value = false;
         }
     }
- 
+
     async function getLocalHtmlPresetContent(name: string): Promise<string> {
         try {
             const response = await apiClient.get<string>(`/appearance/html-presets/local/${name}`, { transformResponse: (res) => res }); // Expecting plain text
@@ -689,7 +690,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
             throw new Error(err.response?.data?.message || err.message || `获取主题 '${name}' 内容失败`);
         }
     }
- 
+
     async function createLocalHtmlPreset(name: string, content: string) {
         try {
             await apiClient.post('/appearance/html-presets/local', { name, content });
@@ -699,7 +700,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
             throw new Error(err.response?.data?.message || err.message || '创建本地 HTML 主题失败');
         }
     }
- 
+
     async function updateLocalHtmlPreset(name: string, content: string) {
         try {
             await apiClient.put(`/appearance/html-presets/local/${name}`, { content });
@@ -709,7 +710,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
             throw new Error(err.response?.data?.message || err.message || `更新主题 '${name}' 失败`);
         }
     }
- 
+
     async function deleteLocalHtmlPreset(name: string) {
         try {
             await apiClient.delete(`/appearance/html-presets/local/${name}`);
@@ -719,7 +720,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
             throw new Error(err.response?.data?.message || err.message || `删除主题 '${name}' 失败`);
         }
     }
- 
+
     async function fetchRemoteHtmlPresetsRepositoryUrl() {
         isLoadingHtmlPresets.value = true; // Use main loading or a specific one
         htmlPresetError.value = null;
@@ -742,7 +743,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
             isLoadingHtmlPresets.value = false;
         }
     }
- 
+
     async function updateRemoteHtmlPresetsRepositoryUrl(url: string) {
         try {
             await apiClient.put('/appearance/html-presets/remote/repository-url', { url });
@@ -754,7 +755,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
             throw new Error(err.response?.data?.message || err.message || '更新远程仓库链接失败');
         }
     }
- 
+
     async function fetchRemoteHtmlPresets(repoUrlParam?: string) {
         isLoadingHtmlPresets.value = true;
         htmlPresetError.value = null;
@@ -785,7 +786,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
             isLoadingHtmlPresets.value = false;
         }
     }
- 
+
     async function getRemoteHtmlPresetContent(fileUrl: string): Promise<string> {
         try {
             // Expecting plain text response
@@ -796,12 +797,12 @@ export const useAppearanceStore = defineStore('appearance', () => {
             throw new Error(err.response?.data?.message || err.message || '获取远程主题内容失败');
         }
     }
- 
+
     async function applyHtmlPreset(htmlContent: string) {
         // This action internally calls setTerminalCustomHTML
         await setTerminalCustomHTML(htmlContent);
     }
- 
+
     // --- Helper Functions ---
     /**
      * 将 UI 主题 (CSS 变量) 应用到文档根元素。
@@ -826,7 +827,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
             // --- 修改开始：使用 URL 构造函数改进 URL 拼接 ---
             const backendUrl = import.meta.env.VITE_API_BASE_URL || window.location.origin; // 如果未设置 VITE_API_BASE_URL，则回退到当前页面源
             const imagePath = pageBackgroundImage.value;
-            console.log(`[AppearanceStore applyPageBackground] Base URL: "${backendUrl}", Image Path: "${imagePath}"`);
+            debugLog(`[AppearanceStore applyPageBackground] Base URL: "${backendUrl}", Image Path: "${imagePath}"`);
 
             let fullImageUrl = '';
             try {
@@ -836,7 +837,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
                 // 确保 imagePath 是以 / 开头，如果不是则添加
                 const correctedPath = imagePath.startsWith('/') ? imagePath : `/${imagePath}`;
                 fullImageUrl = new URL(correctedPath, baseUrl).href;
-                console.log(`[AppearanceStore applyPageBackground] Constructed Full Image URL: "${fullImageUrl}"`);
+                debugLog(`[AppearanceStore applyPageBackground] Constructed Full Image URL: "${fullImageUrl}"`);
             } catch (e) {
                 console.error(`[AppearanceStore applyPageBackground] Error constructing image URL:`, e);
                 // URL 构建失败，清除背景并退出
@@ -857,7 +858,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
                     body.style.backgroundPosition = 'center'; // 居中显示
                     body.style.backgroundRepeat = 'no-repeat'; // 不重复
                     body.style.backgroundAttachment = 'fixed'; // 背景固定，不随滚动条滚动 (可选)
-                    console.log(`[AppearanceStore applyPageBackground] Applied background image: ${fullImageUrl}`);
+                    debugLog(`[AppearanceStore applyPageBackground] Applied background image: ${fullImageUrl}`);
                 } else {
                      console.warn(`[AppearanceStore applyPageBackground] Skipping background application due to invalid URL.`);
                      body.style.backgroundImage = 'none'; // 确保清除
@@ -866,12 +867,12 @@ export const useAppearanceStore = defineStore('appearance', () => {
         } else {
             // 如果没有设置背景图片，则清除背景
             body.style.backgroundImage = 'none';
-            console.log(`[AppearanceStore applyPageBackground] Cleared background image.`);
+            debugLog(`[AppearanceStore applyPageBackground] Cleared background image.`);
         }
          // 注意：直接设置 body 透明度会影响所有子元素，通常不建议。
          // 如果需要背景透明效果，通常结合伪元素或额外 div 实现。
          // 这里暂时不直接应用 pageBackgroundOpacity 到 body。
-        console.log('[AppearanceStore] 页面背景已应用:', pageBackgroundImage.value);
+        debugLog('[AppearanceStore] 页面背景已应用:', pageBackgroundImage.value);
     }
 
     // --- Watchers ---
@@ -893,19 +894,19 @@ export const useAppearanceStore = defineStore('appearance', () => {
         // State refs (原始数据)
         appearanceSettings,
         allTerminalThemes, // 导出重命名后的 ref
-        isPreviewingTerminalTheme, 
-        previewTerminalThemeData, 
+        isPreviewingTerminalTheme,
+        previewTerminalThemeData,
         currentUiTheme,
         activeTerminalThemeId,
-        currentTerminalTheme,     
-        effectiveTerminalTheme,   
+        currentTerminalTheme,
+        effectiveTerminalTheme,
         currentTerminalFontFamily,
         currentTerminalFontSize, // 这个 getter 会自动根据设备类型返回正确的字体大小
         terminalFontSizeDesktop, // + 用于在设置中分别显示/设置桌面端字号
         terminalFontSizeMobile,  // + 用于在设置中分别显示/设置移动端字号
         currentEditorFontSize,
         currentMobileEditorFontSize, // 移动端编辑器字号 getter
-        currentEditorFontFamily, 
+        currentEditorFontFamily,
         pageBackgroundImage,
         terminalBackgroundImage,
         currentTerminalBackgroundOverlayOpacity,
@@ -920,12 +921,12 @@ export const useAppearanceStore = defineStore('appearance', () => {
         setTerminalFontSizeMobile, // + 设置移动端字体大小
         setEditorFontSize,
         setMobileEditorFontSize, // 设置移动端编辑器字号 action
-        setEditorFontFamily, 
+        setEditorFontFamily,
         setTerminalBackgroundEnabled,
         createTerminalTheme,
-        updateTerminalTheme, 
-        deleteTerminalTheme, 
-        importTerminalTheme, 
+        updateTerminalTheme,
+        deleteTerminalTheme,
+        importTerminalTheme,
         exportTerminalTheme,
         uploadPageBackground,
         uploadTerminalBackground,
@@ -961,7 +962,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
         // Visibility control
         isStyleCustomizerVisible,
         toggleStyleCustomizer,
- 
+
         // HTML Presets State & Actions
         localHtmlPresets,
         remoteHtmlPresets,

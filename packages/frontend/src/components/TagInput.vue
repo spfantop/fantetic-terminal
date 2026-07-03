@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { debugLog } from '../composables/useDebugLog';
 import { ref, computed, watch, nextTick } from 'vue';
 // import { storeToRefs } from 'pinia'; // No longer needed directly
 import { useI18n } from 'vue-i18n';
@@ -29,6 +30,12 @@ const inputRef = ref<HTMLInputElement | null>(null); // 输入框引用
 const showSuggestions = ref(false); // 是否显示建议列表
 const selectedTagIds = ref<number[]>([]); // 本地维护选中的 tag_ids
 
+const isSameNumberList = (left: readonly number[], right: readonly number[]) => {
+  if (left.length !== right.length) return false;
+
+  const rightSet = new Set(right);
+  return left.every((value) => rightSet.has(value));
+};
 // Default values for props
 const availableTags = computed(() => props.availableTags ?? []);
 const placeholder = computed(() => props.placeholder ?? t('tags.inputPlaceholder', '添加或选择标签...'));
@@ -38,20 +45,18 @@ const allowDelete = computed(() => props.allowDelete !== false); // Default true
 // 监听 props.modelValue 的变化，同步到本地 selectedTagIds
 watch(() => props.modelValue, (newVal) => {
   // 只有在值确实不同的情况下才更新，避免无限循环
-  if (JSON.stringify(newVal.sort()) !== JSON.stringify(selectedTagIds.value.sort())) {
+  if (!isSameNumberList(newVal, selectedTagIds.value)) {
     selectedTagIds.value = [...newVal];
   }
-}, { immediate: true, deep: true });
+}, { immediate: true });
 
 // 监听本地 selectedTagIds 的变化，通知父组件
 watch(selectedTagIds, (newVal) => {
   // 只有在值确实不同的情况下才更新，避免无限循环
-  if (JSON.stringify(newVal.sort()) !== JSON.stringify(props.modelValue.sort())) {
+  if (!isSameNumberList(newVal, props.modelValue)) {
     emit('update:modelValue', [...newVal]);
   }
-}, { deep: true });
-
-
+});
 // 计算属性：所有标签的 Map，方便通过 ID 查找
 // Use availableTags prop for the map
 const tagsMap = computed(() => {
@@ -128,7 +133,7 @@ const handleKeyDown = async (event: KeyboardEvent) => {
         selectTag(existingTag);
     } else if (!existingTag && allowCreate.value) { // Only create if allowed and not existing
         // 如果是新标签，则 emit 事件让父组件处理创建
-        console.log(`[TagInput] Emitting create-tag for: ${trimmedInput}`); 
+        debugLog(`[TagInput] Emitting create-tag for: ${trimmedInput}`);
         emit('create-tag', trimmedInput);
         // 父组件负责创建、更新 availableTags prop，然后 TagInput 会响应式更新
         // 父组件也负责将新创建的 tag ID 添加到 modelValue
@@ -160,9 +165,9 @@ const removeTagLocally = (tagToRemove: GenericTag) => {
 
 // 处理全局删除标签 (点击标签上的 'x' 图标) - Emit event
 const handleDeleteTagGlobally = (tagToDelete: GenericTag) => {
-    console.log(`[TagInput] handleDeleteTagGlobally called for tag ID: ${tagToDelete.id}, Name: ${tagToDelete.name}`); 
+    debugLog(`[TagInput] handleDeleteTagGlobally called for tag ID: ${tagToDelete.id}, Name: ${tagToDelete.name}`);
     // Emit event for parent to handle deletion confirmation and API call
-    console.log(`[TagInput] Emitting delete-tag with ID: ${tagToDelete.id}`); 
+    debugLog(`[TagInput] Emitting delete-tag with ID: ${tagToDelete.id}`);
     emit('delete-tag', tagToDelete.id);
     // Parent should handle confirmation, call store action, and update modelValue/availableTags
     // We might still want to remove it locally immediately for better UX,

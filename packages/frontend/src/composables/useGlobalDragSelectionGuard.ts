@@ -1,55 +1,75 @@
 const DRAGGING_CLASS = 'fantetic-global-dragging';
 
-let activeGuardCount = 0;
-let previousCursor = '';
-let previousUserSelect = '';
-let previousWebkitUserSelect = '';
+type DragSelectionGuardState = {
+  activeGuardCount: number;
+  previousCursor: string;
+  previousUserSelect: string;
+  previousWebkitUserSelect: string;
+};
+
+const guardStateByDocument = new WeakMap<Document, DragSelectionGuardState>();
 
 const preventSelection = (event: Event) => {
   event.preventDefault();
 };
 
-const clearCurrentSelection = () => {
-  window.getSelection()?.removeAllRanges();
+const readGuardState = (targetDocument: Document) => {
+  let state = guardStateByDocument.get(targetDocument);
+  if (!state) {
+    state = {
+      activeGuardCount: 0,
+      previousCursor: '',
+      previousUserSelect: '',
+      previousWebkitUserSelect: '',
+    };
+    guardStateByDocument.set(targetDocument, state);
+  }
+  return state;
 };
 
-export const beginGlobalDragSelectionGuard = (cursor = '') => {
-  if (typeof document === 'undefined') return () => {};
+const clearCurrentSelection = (targetDocument: Document) => {
+  targetDocument.defaultView?.getSelection()?.removeAllRanges();
+};
+
+export const beginGlobalDragSelectionGuard = (cursor = '', targetDocument?: Document) => {
+  const guardDocument = targetDocument ?? (typeof document !== 'undefined' ? document : null);
+  if (!guardDocument?.body) return () => {};
 
   let released = false;
-  const bodyStyle = document.body.style as CSSStyleDeclaration & { webkitUserSelect?: string };
+  const state = readGuardState(guardDocument);
+  const bodyStyle = guardDocument.body.style as CSSStyleDeclaration & { webkitUserSelect?: string };
 
-  if (activeGuardCount === 0) {
-    previousCursor = bodyStyle.cursor;
-    previousUserSelect = bodyStyle.userSelect;
-    previousWebkitUserSelect = bodyStyle.webkitUserSelect ?? '';
-    document.addEventListener('selectstart', preventSelection, true);
-    document.addEventListener('dragstart', preventSelection, true);
+  if (state.activeGuardCount === 0) {
+    state.previousCursor = bodyStyle.cursor;
+    state.previousUserSelect = bodyStyle.userSelect;
+    state.previousWebkitUserSelect = bodyStyle.webkitUserSelect ?? '';
+    guardDocument.addEventListener('selectstart', preventSelection, true);
+    guardDocument.addEventListener('dragstart', preventSelection, true);
   }
 
-  activeGuardCount += 1;
-  document.body.classList.add(DRAGGING_CLASS);
+  state.activeGuardCount += 1;
+  guardDocument.body.classList.add(DRAGGING_CLASS);
   if (cursor) bodyStyle.cursor = cursor;
   bodyStyle.userSelect = 'none';
   bodyStyle.webkitUserSelect = 'none';
-  clearCurrentSelection();
+  clearCurrentSelection(guardDocument);
 
   return () => {
     if (released) return;
     released = true;
-    activeGuardCount = Math.max(0, activeGuardCount - 1);
+    state.activeGuardCount = Math.max(0, state.activeGuardCount - 1);
 
-    if (activeGuardCount > 0) {
-      clearCurrentSelection();
+    if (state.activeGuardCount > 0) {
+      clearCurrentSelection(guardDocument);
       return;
     }
 
-    document.body.classList.remove(DRAGGING_CLASS);
-    document.removeEventListener('selectstart', preventSelection, true);
-    document.removeEventListener('dragstart', preventSelection, true);
-    bodyStyle.cursor = previousCursor;
-    bodyStyle.userSelect = previousUserSelect;
-    bodyStyle.webkitUserSelect = previousWebkitUserSelect;
-    clearCurrentSelection();
+    guardDocument.body.classList.remove(DRAGGING_CLASS);
+    guardDocument.removeEventListener('selectstart', preventSelection, true);
+    guardDocument.removeEventListener('dragstart', preventSelection, true);
+    bodyStyle.cursor = state.previousCursor;
+    bodyStyle.userSelect = state.previousUserSelect;
+    bodyStyle.webkitUserSelect = state.previousWebkitUserSelect;
+    clearCurrentSelection(guardDocument);
   };
 };

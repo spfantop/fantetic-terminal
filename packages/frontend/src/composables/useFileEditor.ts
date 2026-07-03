@@ -1,3 +1,4 @@
+import { debugLog } from './useDebugLog';
 import { ref, readonly, type Ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 // 移除对 useSftpActions 的直接导入，因为方法是注入的
@@ -63,12 +64,12 @@ export function useFileEditor(
     // --- 方法 ---
 
     const openFile = async (filePath: string) => {
-        console.log(`[文件编辑器模块] 尝试打开文件: ${filePath}`);
+        debugLog(`[文件编辑器模块] 尝试打开文件: ${filePath}`);
         if (!filePath) return;
 
         // 如果已经是同一个文件，则不重新加载（除非需要强制刷新）
         // if (editingFilePath.value === filePath && isEditorVisible.value) {
-        //     console.log(`[文件编辑器模块] 文件 ${filePath} 已在编辑器中打开。`);
+        //     debugLog(`[文件编辑器模块] 文件 ${filePath} 已在编辑器中打开。`);
         //     return;
         // }
 
@@ -83,7 +84,7 @@ export function useFileEditor(
 
         try {
             const fileData = await sftpReadFile(filePath); // 调用注入的 readFile 方法
-            console.log(`[文件编辑器模块] 文件 ${filePath} 读取成功。编码: ${fileData.encoding}`);
+            debugLog(`[文件编辑器模块] 文件 ${filePath} 读取成功。编码: ${fileData.encoding}`);
 
             // 处理可能的 Base64 编码
             if (fileData.encoding === 'base64') {
@@ -119,7 +120,7 @@ export function useFileEditor(
             return;
         }
 
-        console.log(`[文件编辑器模块] 开始保存文件: ${editingFilePath.value}`);
+        debugLog(`[文件编辑器模块] 开始保存文件: ${editingFilePath.value}`);
         isSaving.value = true;
         saveStatus.value = 'saving';
         saveError.value = null;
@@ -128,7 +129,7 @@ export function useFileEditor(
 
         try {
             await sftpWriteFile(editingFilePath.value, contentToSave); // 调用注入的 writeFile 方法
-            console.log(`[文件编辑器模块] 文件 ${editingFilePath.value} 保存成功。`);
+            debugLog(`[文件编辑器模块] 文件 ${editingFilePath.value} 保存成功。`);
             isSaving.value = false;
             saveStatus.value = 'success';
             saveError.value = null;
@@ -157,7 +158,7 @@ export function useFileEditor(
     };
 
     const closeEditor = () => {
-        console.log('[文件编辑器模块] 关闭编辑器。');
+        debugLog('[文件编辑器模块] 关闭编辑器。');
         isEditorVisible.value = false;
         editingFilePath.value = null;
         editingFileContent.value = '';

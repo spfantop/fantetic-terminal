@@ -58,6 +58,7 @@ import { storeToRefs } from 'pinia';
 import { usePathHistoryStore, PathHistoryEntryFE } from '../stores/pathHistory.store';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
 import { useI18n } from 'vue-i18n';
+import { scheduleScrollIntoView } from '../composables/useRafScrollIntoView';
 
 const pathHistoryStore = usePathHistoryStore();
 const uiNotificationsStore = useUiNotificationsStore();
@@ -113,8 +114,8 @@ const scrollToSelected = async () => {
 
   const selectedItem = itemRefs.value[storeSelectedIndex.value];
   if (selectedItem) {
-    selectedItem.scrollIntoView({
-      behavior: 'smooth',
+    scheduleScrollIntoView(selectedItem, {
+      behavior: 'auto',
       block: 'nearest',
     });
   }

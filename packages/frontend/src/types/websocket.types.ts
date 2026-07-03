@@ -70,6 +70,10 @@ export interface SshSuspendStartReqPayload {
 export interface SshSuspendResumeReqPayload {
   suspendSessionId: string;
   newFrontendSessionId: string;
+  clientCapabilities?: {
+    sshBinaryOutput?: boolean;
+    sshBinaryInput?: boolean;
+  };
 }
 
 export interface SshSuspendTerminateReqPayload {
