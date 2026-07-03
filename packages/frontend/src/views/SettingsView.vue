@@ -316,6 +316,9 @@ onUnmounted(() => {
 }
 
 .settings-page {
+  display: flex;
+  min-height: 0;
+  height: 100%;
   padding: 1rem;
 }
 
@@ -326,18 +329,21 @@ onUnmounted(() => {
   padding: clamp(1rem, 2vw, 2rem);
   background: transparent;
   pointer-events: none;
+  overflow: auto;
 }
 
 .settings-shell {
   display: flex;
   width: min(100%, 82rem);
-  min-height: calc(100dvh - 2rem);
+  height: calc(100dvh - 2rem);
+  min-height: 0;
   margin: 0 auto;
   border: 1px solid var(--border-color);
   border-radius: 0.75rem;
   background: var(--app-bg-color);
   box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08);
   overflow: hidden;
+  min-width: 0;
 }
 
 .settings-dialog-shell {
@@ -346,7 +352,8 @@ onUnmounted(() => {
   top: 50%;
   width: min(58rem, calc(100vw - 2rem));
   height: min(42rem, calc(100dvh - 2rem));
-  min-height: min(34rem, calc(100dvh - 2rem));
+  min-height: min(24rem, calc(100dvh - 2rem));
+  max-height: calc(100dvh - 2rem);
   margin: 0;
   border-radius: 0.85rem;
   box-shadow: 0 24px 72px rgba(15, 23, 42, 0.22);
@@ -357,6 +364,7 @@ onUnmounted(() => {
 .settings-sidebar {
   width: 16rem;
   min-width: 16rem;
+  min-height: 0;
   border-right: 1px solid var(--border-color);
   background: var(--header-bg-color);
   user-select: none;
@@ -367,6 +375,7 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 0.5rem;
   height: 100%;
+  min-height: 0;
   padding: 0.75rem;
   overflow-y: auto;
 }
@@ -418,6 +427,7 @@ onUnmounted(() => {
   display: flex;
   flex: 1;
   min-width: 0;
+  min-height: 0;
   flex-direction: column;
   background: var(--app-bg-color);
 }
@@ -427,6 +437,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 0.9rem;
+  flex-shrink: 0;
   padding: 1.1rem 1.5rem 0.9rem;
   border-bottom: 1px solid var(--border-color);
   background: var(--app-bg-color);
@@ -496,7 +507,9 @@ onUnmounted(() => {
   flex: 1;
   min-height: 0;
   padding: 1rem 1.5rem 1.5rem;
+  overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 @media (max-width: 768px) {
@@ -505,7 +518,8 @@ onUnmounted(() => {
   }
 
   .settings-shell {
-    min-height: 100dvh;
+    height: 100dvh;
+    min-height: 0;
     border: 0;
     border-radius: 0;
     flex-direction: column;
@@ -519,7 +533,8 @@ onUnmounted(() => {
     left: 50%;
     top: 50%;
     height: min(90dvh, 44rem);
-    min-height: min(90dvh, 44rem);
+    min-height: min(20rem, 90dvh);
+    max-height: calc(100dvh - 1.5rem);
     border: 1px solid var(--border-color);
     border-radius: 0.75rem;
   }
@@ -527,12 +542,15 @@ onUnmounted(() => {
   .settings-sidebar {
     width: 100%;
     min-width: 0;
+    min-height: auto;
+    flex-shrink: 0;
     border-right: 0;
     border-bottom: 1px solid var(--border-color);
   }
 
   .settings-nav {
     flex-direction: row;
+    height: auto;
     padding: 0.5rem;
     overflow-x: auto;
     overflow-y: hidden;

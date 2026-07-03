@@ -876,18 +876,20 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 }
 
 .sm-memory-stats {
-  display: flex;
+  display: grid;
   flex: 1;
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(6.25rem, 1fr));
+  gap: 8px;
   min-width: 0;
 }
 
 .sm-memory-stat {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(2rem, 1fr);
   align-items: center;
-  gap: 5px;
+  column-gap: 5px;
+  row-gap: 2px;
   min-width: 0;
-  white-space: nowrap;
 }
 
 .sm-dot {
@@ -911,14 +913,20 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 
 .sm-memory-stat__label {
   color: var(--text-color-secondary);
+  overflow: hidden;
   font-size: 0.65rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sm-memory-stat__value {
   color: var(--text-color);
+  overflow: hidden;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.7rem;
   font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sm-net-interface {
@@ -937,7 +945,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 .sm-net-table__head,
 .sm-net-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(3.2rem, 0.8fr) minmax(4.5rem, 1fr) minmax(4.5rem, 1fr);
   gap: 6px;
 }
 
@@ -1015,7 +1023,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 .sm-proc-head,
 .sm-proc-row {
   display: grid;
-  grid-template-columns: 60px 52px minmax(0, 1fr);
+  grid-template-columns: minmax(3rem, 0.55fr) minmax(3rem, 0.55fr) minmax(0, 1.4fr);
   gap: 6px;
 }
 
@@ -1083,6 +1091,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 .sm-disk-device {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 8px;
 }
@@ -1104,8 +1113,9 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 }
 
 .sm-disk-io {
-  display: flex;
-  gap: 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+  gap: 10px;
   margin-bottom: 10px;
 }
 
@@ -1150,13 +1160,14 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 
 .sm-disk-summary {
   border-top: 1px solid color-mix(in srgb, var(--border-color) 42%, transparent);
+  overflow-x: auto;
   padding-top: 8px;
 }
 
 .sm-disk-summary__head,
 .sm-disk-summary__row {
   display: grid;
-  grid-template-columns: minmax(0, 0.8fr) repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(3.5rem, 0.85fr) repeat(3, minmax(3.5rem, 1fr));
   gap: 6px;
 }
 
@@ -1227,18 +1238,45 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
     padding: 8px;
   }
 
+  .sm-section__head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .sm-section__actions {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
   .sm-memory-row {
     align-items: flex-start;
     flex-direction: column;
   }
 
   .sm-memory-stats {
-    flex-wrap: wrap;
+    width: 100%;
+    grid-template-columns: repeat(auto-fit, minmax(5.75rem, 1fr));
+  }
+
+  .sm-net-table__head,
+  .sm-net-row {
+    grid-template-columns: minmax(3rem, 0.8fr) minmax(4rem, 1fr) minmax(4rem, 1fr);
+  }
+
+  .sm-proc-head,
+  .sm-proc-row {
+    grid-template-columns: minmax(2.75rem, 0.55fr) minmax(2.75rem, 0.55fr) minmax(0, 1.4fr);
   }
 
   .sm-disk-io {
-    flex-direction: column;
+    grid-template-columns: 1fr;
     gap: 8px;
+  }
+
+  .sm-disk-summary__head,
+  .sm-disk-summary__row {
+    min-width: 22rem;
   }
 }
 </style>
