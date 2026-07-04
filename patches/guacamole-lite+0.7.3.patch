@@ -1,13 +1,158 @@
 diff --git a/node_modules/guacamole-lite/lib/GuacdClient.js b/node_modules/guacamole-lite/lib/GuacdClient.js
-index 9c645f7..e46fe58 100644
+index 9c645f7..6d6b27f 100644
 --- a/node_modules/guacamole-lite/lib/GuacdClient.js
 +++ b/node_modules/guacamole-lite/lib/GuacdClient.js
-@@ -83,7 +83,7 @@ class GuacdClient {
+@@ -19,6 +19,8 @@ class GuacdClient {
+         this.handshakeReplySent = false;
+         this.receivedBuffer = '';
+         this.lastActivity = Date.now();
++        this.guacdInstructionSummaryCount = 0;
++        this.guacdInstructionSummaryLimit = 20;
+
+         this.guacdConnection = Net.connect(server.guacdOptions.port, server.guacdOptions.host);
+
+@@ -83,9 +85,9 @@ class GuacdClient {
              this.clientConnection.connectionSettings.connection.height,
              this.clientConnection.connectionSettings.connection.dpi
          ]);
 -        this.sendOpCode(['audio'].concat(this.clientConnection.query.GUAC_AUDIO || []));
 +        this.sendOpCode(['audio', 'audio/L16'].concat(this.clientConnection.query.GUAC_AUDIO || []));
          this.sendOpCode(['video'].concat(this.clientConnection.query.GUAC_VIDEO || []));
-         this.sendOpCode(['image']);
- 
+-        this.sendOpCode(['image']);
++        this.sendOpCode(['image', 'image/png', 'image/jpeg'].concat(this.clientConnection.query.GUAC_IMAGE || []));
+
+         let serverHandshake = this.getFirstOpCodeFromBuffer();
+
+@@ -109,7 +111,13 @@ class GuacdClient {
+     }
+
+     getConnectionOption(optionName) {
+-        return this.clientConnection.connectionSettings.connection[this.constructor.parseOpCodeAttribute(optionName)] || null
++        const attribute = this.constructor.parseOpCodeAttribute(optionName);
++
++        if (this.constructor.isProtocolVersionAttribute(attribute)) {
++            return this.constructor.getSupportedProtocolVersion(attribute);
++        }
++
++        return this.clientConnection.connectionSettings.connection[attribute] || null
+     }
+
+     getFirstOpCodeFromBuffer() {
+@@ -122,12 +130,14 @@ class GuacdClient {
+     }
+
+     sendOpCode(opCode) {
++        const logOpCode = this.constructor.formatOpCode(this.constructor.redactOpCodePartsForLog(opCode));
+         opCode = this.constructor.formatOpCode(opCode);
+-        this.log(this.server.LOGLEVEL.VERBOSE, 'Sending opCode: ' + opCode);
++        this.log(this.server.LOGLEVEL.VERBOSE, 'Sending opCode: ' + logOpCode);
+         this.send(opCode);
+     }
+
+     static formatOpCode(opCodeParts) {
++        opCodeParts = opCodeParts.slice();
+         opCodeParts.forEach((part, index, opCodeParts) => {
+             part = this.stringifyOpCodePart(part);
+             opCodeParts[index] = part.length + '.' + part;
+@@ -136,6 +146,14 @@ class GuacdClient {
+         return opCodeParts.join(',') + ';';
+     }
+
++    static redactOpCodePartsForLog(opCodeParts) {
++        if (opCodeParts[0] === 'connect') {
++            return ['connect', '[REDACTED]'];
++        }
++
++        return opCodeParts;
++    }
++
+     static stringifyOpCodePart(part) {
+         if (part === null) {
+             part = '';
+@@ -148,6 +166,78 @@ class GuacdClient {
+         return opCodeAttribute.substring(opCodeAttribute.indexOf('.') + 1, opCodeAttribute.length);
+     }
+
++    static isProtocolVersionAttribute(attribute) {
++        return /^VERSION_\d+_\d+_\d+$/.test(attribute);
++    }
++
++    static getSupportedProtocolVersion(serverProtocolVersion) {
++        const supportedProtocolVersions = [
++            'VERSION_1_5_0',
++            'VERSION_1_3_0',
++            'VERSION_1_1_0',
++            'VERSION_1_0_0'
++        ];
++
++        const parseVersion = (version) => version
++            .replace('VERSION_', '')
++            .split('_')
++            .map((part) => Number(part));
++
++        const [serverMajor, serverMinor, serverPatch] = parseVersion(serverProtocolVersion);
++
++        return supportedProtocolVersions.find((supportedVersion) => {
++            const [major, minor, patch] = parseVersion(supportedVersion);
++            if (major !== serverMajor) {
++                return major < serverMajor;
++            }
++            if (minor !== serverMinor) {
++                return minor < serverMinor;
++            }
++            return patch <= serverPatch;
++        }) || null;
++    }
++
++    logGuacdInstructionSummary(bufferPartToSend) {
++        if (this.guacdInstructionSummaryCount >= this.guacdInstructionSummaryLimit) {
++            return;
++        }
++
++        const summary = this.constructor.summarizeInstructionNames(bufferPartToSend);
++        if (summary.total === 0) {
++            return;
++        }
++
++        this.guacdInstructionSummaryCount += 1;
++        this.log(
++            this.server.LOGLEVEL.VERBOSE,
++            'Guacd instruction summary '
++                + this.guacdInstructionSummaryCount
++                + '/'
++                + this.guacdInstructionSummaryLimit
++                + ': '
++                + JSON.stringify(summary.counts)
++        );
++    }
++
++    static summarizeInstructionNames(bufferPartToSend) {
++        const counts = {};
++        const instructions = bufferPartToSend.split(';').filter(Boolean);
++
++        instructions.forEach((instruction) => {
++            const firstPart = instruction.split(',', 1)[0];
++            const delimiterIndex = firstPart.indexOf('.');
++            const name = delimiterIndex === -1
++                ? '(unknown)'
++                : firstPart.substring(delimiterIndex + 1);
++            counts[name] = (counts[name] || 0) + 1;
++        });
++
++        return {
++            total: instructions.length,
++            counts
++        };
++    }
++
+     processReceivedData(data) {
+         this.receivedBuffer += data;
+         this.lastActivity = Date.now();
+@@ -169,6 +259,7 @@ class GuacdClient {
+
+         if (bufferPartToSend) {
+             this.receivedBuffer = this.receivedBuffer.substring(delimiterPos + 1, this.receivedBuffer.length);
++            this.logGuacdInstructionSummary(bufferPartToSend);
+             this.clientConnection.send(bufferPartToSend);
+         }
+     }

@@ -826,6 +826,18 @@
             "tokenError": "トークンの取得に失敗しました",
             "tunnelError": "トンネルエラー"
         },
+        "resolution": {
+            "settings": "解像度設定",
+            "title": "解像度",
+            "auto": "固定解像度",
+            "manual": "固定解像度"
+        },
+        "quality": {
+            "title": "鮮明度",
+            "smooth": "軽快",
+            "balanced": "バランス",
+            "sharp": "鮮明"
+        },
         "reconnectTooltip": "リモートデスクトップに再接続",
         "status": {
             "connected": "接続済み",
@@ -1220,6 +1232,24 @@
             "fileManagerShowDeleteConfirmationLabel": "ファイルまたはフォルダーを削除する際に確認ダイアログを表示する",
             "fileManagerDeleteConfirmSuccess": "ファイルマネージャーの削除確認設定を保存しました。",
             "fileManagerDeleteConfirmError": "ファイルマネージャーの削除確認設定の保存に失敗しました。",
+            "remoteDesktopDefaults": {
+                "title": "RDP/VNC デフォルト設定",
+                "description": "新しく開く RDP/VNC セッションはこのデフォルト値を使用します。開いているセッションは右下のパネルから一時的に調整できます。",
+                "rdpTitle": "RDP",
+                "vncTitle": "VNC",
+                "fixedResolutionLabel": "固定解像度",
+                "qualityLabel": "画質",
+                "qualitySmooth": "スムーズ",
+                "qualityBalanced": "バランス",
+                "qualitySharp": "高画質",
+                "hint": "固定解像度が無効な場合、新しいセッションは現在のウィンドウサイズに追従します。",
+                "success": {
+                    "saved": "リモートデスクトップのデフォルト設定を保存しました。"
+                },
+                "error": {
+                    "saveFailed": "リモートデスクトップのデフォルト設定の保存に失敗しました。"
+                }
+            },
 "terminalRightClickPasteTitle": "ターミナル右クリック貼り付け",
         "terminalEnableRightClickPasteLabel": "ターミナルの右クリック貼り付けを有効にする",
         "terminalEnableRightClickPasteDescription": "ターミナル領域内でマウスの右ボタンを使用してクリップボードの内容を貼り付けることを許可します。",

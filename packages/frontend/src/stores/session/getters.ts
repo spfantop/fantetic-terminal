@@ -78,7 +78,7 @@ export const sessionTabsWithStatus = computed((): SessionTabInfoWithStatus[] => 
       .map(session => ({
         sessionId: session.sessionId,
         connectionName: session.connectionName,
-        status: session.kind === 'rdp' ? (session.rdpStatus ?? 'connecting') : session.wsManager.connectionStatus.value,
+        status: session.kind === 'rdp' || session.kind === 'vnc' ? (session.rdpStatus ?? 'connecting') : session.wsManager.connectionStatus.value,
         isMarkedForSuspend: session.kind === 'ssh' ? session.isMarkedForSuspend : false,
       }));
   } else {
@@ -88,7 +88,7 @@ export const sessionTabsWithStatus = computed((): SessionTabInfoWithStatus[] => 
       .map(session => ({
         sessionId: session.sessionId,
         connectionName: session.connectionName,
-        status: session.kind === 'rdp' ? (session.rdpStatus ?? 'connecting') : session.wsManager.connectionStatus.value,
+        status: session.kind === 'rdp' || session.kind === 'vnc' ? (session.rdpStatus ?? 'connecting') : session.wsManager.connectionStatus.value,
         isMarkedForSuspend: session.kind === 'ssh' ? session.isMarkedForSuspend : false,
       }));
   }

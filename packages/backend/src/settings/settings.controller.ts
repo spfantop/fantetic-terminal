@@ -90,6 +90,14 @@ export const settingsController = {
           'rdpModalHeight', //  RDP 模态框高度键
           'vncModalWidth', //  VNC 模态框宽度键
           'vncModalHeight', //  VNC 模态框高度键
+          'rdpDefaultFixedResolution',
+          'rdpDefaultWidth',
+          'rdpDefaultHeight',
+          'rdpDefaultQuality',
+          'vncDefaultFixedResolution',
+          'vncDefaultWidth',
+          'vncDefaultHeight',
+          'vncDefaultQuality',
           'ipBlacklistEnabled', // <-- 添加 IP 黑名单启用键
           'layoutLocked', // +++ 布局锁定键 +++
           'terminalScrollbackLimit', // 终端回滚行数键

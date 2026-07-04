@@ -54,6 +54,7 @@ export const useSessionStore = defineStore('session', () => {
   const openVncModal = (connection: ConnectionInfo) => modalActions.openVncModal(connection);
   const closeVncModal = () => modalActions.closeVncModal();
   const openRdpSession = (connection: ConnectionInfo) => sessionActions.openRdpSession(connection);
+  const openRemoteDesktopSession = (connection: ConnectionInfo) => sessionActions.openRemoteDesktopSession(connection);
   const updateRdpSessionStatus = (sessionId: string, status: Parameters<typeof sessionActions.updateRdpSessionStatus>[1], message: string) =>
     sessionActions.updateRdpSessionStatus(sessionId, status, message);
 
@@ -67,7 +68,6 @@ export const useSessionStore = defineStore('session', () => {
       connectionsStore,
       router,
       openRdpSessionAction: openRdpSession,
-      openVncModalAction: openVncModal,   // 传递包装后的 action
       t,
       navigateToWorkspace: options?.navigateToWorkspace,
     });
@@ -176,6 +176,7 @@ export const useSessionStore = defineStore('session', () => {
     openRdpModal,
     closeRdpModal,
     openRdpSession,
+    openRemoteDesktopSession,
     updateRdpSessionStatus,
     openVncModal,
     closeVncModal,

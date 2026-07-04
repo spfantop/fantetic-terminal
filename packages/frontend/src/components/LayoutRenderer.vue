@@ -159,6 +159,8 @@ const currentRightSidebarComponent = computed(() => {
   return activeRightSidebarPane.value ? componentMap[activeRightSidebarPane.value] : null;
 });
 
+const shouldRenderRootSidebars = computed(() => props.isRootRenderer && !props.terminalOnlyMode);
+
 const scopedActiveSession = computed(() => (
   props.activeSessionId ? sessionStore.sessions.get(props.activeSessionId) ?? null : null
 ));
@@ -684,7 +686,7 @@ const hasTerminalSessions = computed(() => {
  // Check if any terminal-like session can be rendered in this pane.
  for (const [sessionId, sessionState] of sessionStore.sessions) {
    if (!shouldRenderSession(sessionId)) continue;
-   if (sessionState.kind === 'ssh' || sessionState.kind === 'rdp') {
+   if (sessionState.kind === 'ssh' || sessionState.kind === 'rdp' || sessionState.kind === 'vnc') {
      return true;
    }
  }
@@ -936,44 +938,39 @@ const getIconClasses = (paneName: PaneName): string[] => {
 
 
 // --- Sidebar Resize Logic ---
-onMounted(() => {
-  const handleStabilizedTerminalResize = ({ sessionId, width, height }: { sessionId: string; width: number; height: number }) => {
-    if (props.layoutNode.component === 'terminal' && sessionId === props.activeSessionId && customHtmlLayerRef.value) {
-      customHtmlLayerRef.value.style.width = `${width}px`;
-      customHtmlLayerRef.value.style.height = `${height}px`;
+const handleStabilizedTerminalResize = ({ sessionId, width, height }: { sessionId: string; width: number; height: number }) => {
+  if (props.layoutNode.component === 'terminal' && sessionId === props.activeSessionId && customHtmlLayerRef.value) {
+    customHtmlLayerRef.value.style.width = `${width}px`;
+    customHtmlLayerRef.value.style.height = `${height}px`;
+  }
+};
+
+useSidebarResize({
+  sidebarRef: leftSidebarPanelRef,
+  handleRef: leftResizeHandleRef,
+  side: 'left',
+  onResizeEnd: (newWidth) => {
+    debugLog(`Left sidebar resize ended. New width: ${newWidth}px`);
+    if (activeLeftSidebarPane.value) {
+      settingsStore.updateSidebarPaneWidth(activeLeftSidebarPane.value, `${newWidth}px`);
     }
-  };
+  },
+});
+
+useSidebarResize({
+  sidebarRef: rightSidebarPanelRef,
+  handleRef: rightResizeHandleRef,
+  side: 'right',
+  onResizeEnd: (newWidth) => {
+    debugLog(`Right sidebar resize ended. New width: ${newWidth}px`);
+    if (activeRightSidebarPane.value) {
+      settingsStore.updateSidebarPaneWidth(activeRightSidebarPane.value, `${newWidth}px`);
+    }
+  },
+});
+
+onMounted(() => {
   subscribeToWorkspaceEvent('terminal:stabilizedResize', handleStabilizedTerminalResize);
-
-
-
-  // Left Sidebar Resize
-  useSidebarResize({
-    sidebarRef: leftSidebarPanelRef,
-    handleRef: leftResizeHandleRef,
-    side: 'left',
-    onResizeEnd: (newWidth) => {
-      debugLog(`Left sidebar resize ended. New width: ${newWidth}px`);
-      // +++ Update specific pane width +++
-      if (activeLeftSidebarPane.value) {
-        settingsStore.updateSidebarPaneWidth(activeLeftSidebarPane.value, `${newWidth}px`);
-      }
-    },
-  });
-
-  // Right Sidebar Resize
-  useSidebarResize({
-    sidebarRef: rightSidebarPanelRef,
-    handleRef: rightResizeHandleRef,
-    side: 'right',
-    onResizeEnd: (newWidth) => {
-      debugLog(`Right sidebar resize ended. New width: ${newWidth}px`);
-      // +++ Update specific pane width +++
-      if (activeRightSidebarPane.value) {
-        settingsStore.updateSidebarPaneWidth(activeRightSidebarPane.value, `${newWidth}px`);
-      }
-    },
-  });
 });
 
 // +++ Background Image Style +++
@@ -1052,13 +1049,7 @@ onBeforeUnmount(() => {
   pendingTerminalGridResizeUpdate = null;
   cleanupTerminalGridResizeListeners?.();
   releaseSplitpaneResizeSelectionGuard();
-  const handleStabilizedTerminalResizeHandler = ({ sessionId, width, height }: { sessionId: string; width: number; height: number }) => {
-    if (props.layoutNode.component === 'terminal' && sessionId === props.activeSessionId && customHtmlLayerRef.value) {
-      customHtmlLayerRef.value.style.width = `${width}px`;
-      customHtmlLayerRef.value.style.height = `${height}px`;
-    }
-  };
-  unsubscribeFromWorkspaceEvent('terminal:stabilizedResize', handleStabilizedTerminalResizeHandler); // Use the same handler reference if possible
+  unsubscribeFromWorkspaceEvent('terminal:stabilizedResize', handleStabilizedTerminalResize);
 });
 
 
@@ -1068,7 +1059,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="relative flex h-full min-h-0 w-full min-w-0 overflow-hidden">
     <!-- Left Sidebar Buttons -->
-    <div class="flex flex-col bg-sidebar py-1 z-10 flex-shrink-0 border-r border-border" v-if="isRootRenderer && sidebarPanes.left.length > 0">
+    <div class="flex flex-col bg-sidebar py-1 z-10 flex-shrink-0 border-r border-border" v-if="shouldRenderRootSidebars && sidebarPanes.left.length > 0">
         <button
             v-for="pane in sidebarPanes.left"
             :key="`left-${pane}`"
@@ -1197,7 +1188,7 @@ onBeforeUnmount(() => {
                                         @click="activateTerminalSession(sessionId)"
                                     />
                                     <RemoteDesktopSession
-                                        v-else-if="sessionState.kind === 'rdp'"
+                                        v-else-if="sessionState.kind === 'rdp' || sessionState.kind === 'vnc'"
                                         :session-id="sessionId"
                                         :connection="sessionState.connection ?? null"
                                         :is-active="isTerminalSessionActiveForLayout(sessionId)"
@@ -1294,12 +1285,14 @@ onBeforeUnmount(() => {
 
     <!-- Sidebar Overlay -->
     <div
+        v-if="shouldRenderRootSidebars"
         :class="['fixed inset-0 bg-transparent pointer-events-none z-[100] transition-opacity duration-300 ease-in-out',
                  {'opacity-100 visible': activeLeftSidebarPane || activeRightSidebarPane, 'opacity-0 invisible': !(activeLeftSidebarPane || activeRightSidebarPane)}]"
     ></div>
 
     <!-- Left Sidebar Panel -->
     <div ref="leftSidebarPanelRef"
+         v-if="shouldRenderRootSidebars"
          :class="['fixed top-0 bottom-0 left-0 max-w-[80vw] bg-background z-[110] transition-transform duration-300 ease-in-out flex flex-col overflow-hidden border-r border-border',
                   {'translate-x-0': !!activeLeftSidebarPane, '-translate-x-full': !activeLeftSidebarPane}]"
          :style="{ width: getSidebarPaneWidth(activeLeftSidebarPane) }">
@@ -1332,6 +1325,7 @@ onBeforeUnmount(() => {
 
     <!-- Right Sidebar Panel -->
      <div ref="rightSidebarPanelRef"
+          v-if="shouldRenderRootSidebars"
           :class="['fixed top-0 bottom-0 right-0 max-w-[80vw] bg-background z-[110] transition-transform duration-300 ease-in-out flex flex-col overflow-hidden border-l border-border',
                    {'translate-x-0': !!activeRightSidebarPane, 'translate-x-full': !activeRightSidebarPane}]"
           :style="{ width: getSidebarPaneWidth(activeRightSidebarPane) }">
@@ -1362,7 +1356,7 @@ onBeforeUnmount(() => {
     </div>
 
      <!-- Right Sidebar Buttons -->
-    <div class="flex flex-col bg-sidebar py-1 z-10 flex-shrink-0 border-l border-border" v-if="isRootRenderer && sidebarPanes.right.length > 0">
+    <div class="flex flex-col bg-sidebar py-1 z-10 flex-shrink-0 border-l border-border" v-if="shouldRenderRootSidebars && sidebarPanes.right.length > 0">
          <button
              v-for="pane in sidebarPanes.right"
             :key="`right-${pane}`"

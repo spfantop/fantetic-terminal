@@ -101,6 +101,121 @@
          </form>
       </div>
       <hr class="border-border/50"> 
+      <!-- Remote Desktop Defaults -->
+      <div class="settings-section-content">
+         <h3 class="text-base font-semibold text-foreground mb-3">{{ t('settings.workspace.remoteDesktopDefaults.title') }}</h3>
+         <form @submit.prevent="handleUpdateRemoteDesktopDefaults" class="space-y-4">
+           <p class="text-xs text-text-secondary mt-1">{{ t('settings.workspace.remoteDesktopDefaults.description') }}</p>
+           <div class="grid gap-4 md:grid-cols-2">
+             <fieldset class="space-y-3 rounded-md border border-border/70 p-3">
+               <legend class="px-1 text-sm font-medium text-foreground">{{ t('settings.workspace.remoteDesktopDefaults.rdpTitle') }}</legend>
+               <label class="flex items-center text-sm text-foreground cursor-pointer select-none" for="rdpDefaultFixedResolution">
+                 <input
+                   id="rdpDefaultFixedResolution"
+                   v-model="rdpDefaultFixedResolutionLocal"
+                   type="checkbox"
+                   class="h-4 w-4 rounded border-border text-primary focus:ring-primary mr-2 cursor-pointer"
+                 >
+                 {{ t('settings.workspace.remoteDesktopDefaults.fixedResolutionLabel') }}
+               </label>
+               <div class="grid grid-cols-2 gap-3">
+                 <label class="block text-sm font-medium text-text-secondary" for="rdpDefaultWidth">
+                   {{ t('common.width') }}
+                   <input
+                     id="rdpDefaultWidth"
+                     v-model.number="rdpDefaultWidthLocal"
+                     type="number"
+                     min="100"
+                     step="1"
+                     class="mt-1 w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                   >
+                 </label>
+                 <label class="block text-sm font-medium text-text-secondary" for="rdpDefaultHeight">
+                   {{ t('common.height') }}
+                   <input
+                     id="rdpDefaultHeight"
+                     v-model.number="rdpDefaultHeightLocal"
+                     type="number"
+                     min="100"
+                     step="1"
+                     class="mt-1 w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                   >
+                 </label>
+               </div>
+               <label class="block text-sm font-medium text-text-secondary" for="rdpDefaultQuality">
+                 {{ t('settings.workspace.remoteDesktopDefaults.qualityLabel') }}
+                 <select
+                   id="rdpDefaultQuality"
+                   v-model="rdpDefaultQualityLocal"
+                   class="mt-1 w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                 >
+                   <option value="smooth">{{ t('settings.workspace.remoteDesktopDefaults.qualitySmooth') }}</option>
+                   <option value="balanced">{{ t('settings.workspace.remoteDesktopDefaults.qualityBalanced') }}</option>
+                   <option value="sharp">{{ t('settings.workspace.remoteDesktopDefaults.qualitySharp') }}</option>
+                 </select>
+               </label>
+             </fieldset>
+             <fieldset class="space-y-3 rounded-md border border-border/70 p-3">
+               <legend class="px-1 text-sm font-medium text-foreground">{{ t('settings.workspace.remoteDesktopDefaults.vncTitle') }}</legend>
+               <label class="flex items-center text-sm text-foreground cursor-pointer select-none" for="vncDefaultFixedResolution">
+                 <input
+                   id="vncDefaultFixedResolution"
+                   v-model="vncDefaultFixedResolutionLocal"
+                   type="checkbox"
+                   class="h-4 w-4 rounded border-border text-primary focus:ring-primary mr-2 cursor-pointer"
+                 >
+                 {{ t('settings.workspace.remoteDesktopDefaults.fixedResolutionLabel') }}
+               </label>
+               <div class="grid grid-cols-2 gap-3">
+                 <label class="block text-sm font-medium text-text-secondary" for="vncDefaultWidth">
+                   {{ t('common.width') }}
+                   <input
+                     id="vncDefaultWidth"
+                     v-model.number="vncDefaultWidthLocal"
+                     type="number"
+                     min="100"
+                     step="1"
+                     class="mt-1 w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                   >
+                 </label>
+                 <label class="block text-sm font-medium text-text-secondary" for="vncDefaultHeight">
+                   {{ t('common.height') }}
+                   <input
+                     id="vncDefaultHeight"
+                     v-model.number="vncDefaultHeightLocal"
+                     type="number"
+                     min="100"
+                     step="1"
+                     class="mt-1 w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                   >
+                 </label>
+               </div>
+               <label class="block text-sm font-medium text-text-secondary" for="vncDefaultQuality">
+                 {{ t('settings.workspace.remoteDesktopDefaults.qualityLabel') }}
+                 <select
+                   id="vncDefaultQuality"
+                   v-model="vncDefaultQualityLocal"
+                   class="mt-1 w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                 >
+                   <option value="smooth">{{ t('settings.workspace.remoteDesktopDefaults.qualitySmooth') }}</option>
+                   <option value="balanced">{{ t('settings.workspace.remoteDesktopDefaults.qualityBalanced') }}</option>
+                   <option value="sharp">{{ t('settings.workspace.remoteDesktopDefaults.qualitySharp') }}</option>
+                 </select>
+               </label>
+             </fieldset>
+           </div>
+           <small class="block text-xs text-text-secondary">{{ t('settings.workspace.remoteDesktopDefaults.hint') }}</small>
+           <div class="flex items-center justify-between pt-2">
+              <button type="submit"
+                      :disabled="remoteDesktopDefaultsLoading"
+                      class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60">
+                {{ t('common.save') }}
+              </button>
+              <p v-if="remoteDesktopDefaultsMessage" :class="['text-sm', remoteDesktopDefaultsSuccess ? 'text-success' : 'text-error']">{{ remoteDesktopDefaultsMessage }}</p>
+           </div>
+         </form>
+      </div>
+      <hr class="border-border/50">
       <!-- Command Input Sync Target -->
       <div class="settings-section-content">
          <h3 class="text-base font-semibold text-foreground mb-3">{{ $t('settings.commandInputSync.title', '命令输入同步') }}</h3>
@@ -432,6 +547,18 @@ const {
   statusMonitorShowIpMessage,
   statusMonitorShowIpSuccess,
   handleUpdateStatusMonitorShowIpSetting,
+  rdpDefaultFixedResolutionLocal,
+  rdpDefaultWidthLocal,
+  rdpDefaultHeightLocal,
+  rdpDefaultQualityLocal,
+  vncDefaultFixedResolutionLocal,
+  vncDefaultWidthLocal,
+  vncDefaultHeightLocal,
+  vncDefaultQualityLocal,
+  remoteDesktopDefaultsLoading,
+  remoteDesktopDefaultsMessage,
+  remoteDesktopDefaultsSuccess,
+  handleUpdateRemoteDesktopDefaults,
 } = workspaceSettings;
 
 const {

@@ -1049,6 +1049,24 @@
       "fileManagerShowDeleteConfirmationLabel": "Show confirmation dialog when deleting files or folders",
       "fileManagerDeleteConfirmSuccess": "File manager delete confirmation setting saved.",
       "fileManagerDeleteConfirmError": "Failed to save file manager delete confirmation setting.",
+      "remoteDesktopDefaults": {
+        "title": "RDP/VNC Defaults",
+        "description": "New RDP/VNC sessions use these defaults. Open sessions can still be adjusted from the bottom-right panel.",
+        "rdpTitle": "RDP",
+        "vncTitle": "VNC",
+        "fixedResolutionLabel": "Fixed resolution",
+        "qualityLabel": "Quality",
+        "qualitySmooth": "Smooth",
+        "qualityBalanced": "Balanced",
+        "qualitySharp": "Sharp",
+        "hint": "When fixed resolution is off, new sessions follow the current window size.",
+        "success": {
+          "saved": "Remote desktop defaults saved."
+        },
+        "error": {
+          "saveFailed": "Failed to save remote desktop defaults."
+        }
+      },
 "terminalRightClickPasteTitle": "Terminal Right Click Paste",
         "terminalEnableRightClickPasteLabel": "Enable terminal right-click paste",
         "terminalEnableRightClickPasteDescription": "Allows pasting clipboard content using the right mouse button within the terminal area.",
@@ -1352,6 +1370,18 @@
       "inputError": "Error setting up input listeners.",
       "noConnection": "No connection information provided.",
       "tokenError": "Failed to retrieve token"
+    },
+    "resolution": {
+      "settings": "Resolution settings",
+      "title": "Resolution",
+      "auto": "Fixed resolution",
+      "manual": "Fixed resolution"
+    },
+    "quality": {
+      "title": "Clarity",
+      "smooth": "Smooth",
+      "balanced": "Balanced",
+      "sharp": "Sharp"
     },
     "reconnectTooltip": "Reconnect to the remote desktop"
   },

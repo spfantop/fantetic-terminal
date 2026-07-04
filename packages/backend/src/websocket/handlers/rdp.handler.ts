@@ -2,6 +2,18 @@ import WebSocket, { RawData } from 'ws';
 import { Request } from 'express';
 import { AuthenticatedWebSocket } from '../types';
 
+const redactTokenFromUrl = (targetUrl: string): string => {
+    try {
+        const parsedUrl = new URL(targetUrl);
+        if (parsedUrl.searchParams.has('token')) {
+            parsedUrl.searchParams.set('token', '[REDACTED]');
+        }
+        return parsedUrl.toString();
+    } catch (error) {
+        return targetUrl.replace(/([?&]token=)[^&]*/i, '$1[REDACTED]');
+    }
+};
+
 export function handleRdpProxyConnection(
     ws: AuthenticatedWebSocket,
     request: Request
@@ -55,8 +67,9 @@ export function handleRdpProxyConnection(
     const cleanRemoteGatewayWsBaseUrl = remoteGatewayWsBaseUrl.endsWith('/') ? remoteGatewayWsBaseUrl.slice(0, -1) : remoteGatewayWsBaseUrl;
 
     const remoteDesktopTargetUrl = `${cleanRemoteGatewayWsBaseUrl}/?token=${encodeURIComponent(rdpToken)}&width=${encodeURIComponent(rdpWidth)}&height=${encodeURIComponent(rdpHeight)}&dpi=${encodeURIComponent(calculatedDpi)}`;
+    const safeRemoteDesktopTargetUrl = redactTokenFromUrl(remoteDesktopTargetUrl);
 
-    console.log(`WebSocket: Remote Desktop Proxy for ${ws.username} attempting to connect to ${remoteDesktopTargetUrl}`);
+    console.log(`WebSocket: Remote Desktop Proxy for ${ws.username} attempting to connect to ${safeRemoteDesktopTargetUrl}`);
 
     const rdpWs = new WebSocket(remoteDesktopTargetUrl);
     let clientWsClosed = false;
@@ -92,7 +105,7 @@ export function handleRdpProxyConnection(
         clientWsClosed = true;
     });
     rdpWs.on('error', (error) => {
-         console.error(`[RDP 代理 RDP WS 错误] 用户: ${ws.username}, 会话: ${ws.sessionId}, 连接到 ${remoteDesktopTargetUrl} 时出错:`, error);
+         console.error(`[RDP 代理 RDP WS 错误] 用户: ${ws.username}, 会话: ${ws.sessionId}, 连接到 ${safeRemoteDesktopTargetUrl} 时出错:`, error);
          if (!clientWsClosed && ws.readyState !== WebSocket.CLOSED && ws.readyState !== WebSocket.CLOSING) {
             console.log(`[RDP 代理] 因 RDP WS 错误关闭客户端 WS。会话: ${ws.sessionId}`);
             ws.close(1011, `RDP WS Error: ${error.message}`);
@@ -113,7 +126,7 @@ export function handleRdpProxyConnection(
     });
     rdpWs.on('close', (code, reason) => {
         rdpWsClosed = true;
-         console.log(`[RDP 代理 RDP WS 关闭] 用户: ${ws.username}, 会话: ${ws.sessionId}, 到 ${remoteDesktopTargetUrl} 的连接已关闭。代码: ${code}, 原因: ${reason.toString()}`);
+         console.log(`[RDP 代理 RDP WS 关闭] 用户: ${ws.username}, 会话: ${ws.sessionId}, 到 ${safeRemoteDesktopTargetUrl} 的连接已关闭。代码: ${code}, 原因: ${reason.toString()}`);
         if (!clientWsClosed && ws.readyState !== WebSocket.CLOSED && ws.readyState !== WebSocket.CLOSING) {
             console.log(`[RDP 代理] 因 RDP WS 关闭而关闭客户端 WS。会话: ${ws.sessionId}`);
             ws.close(1000, 'RDP WS Closed');
@@ -122,6 +135,6 @@ export function handleRdpProxyConnection(
     });
 
     rdpWs.on('open', () => {
-         console.log(`[RDP 代理 RDP WS 打开] 用户: ${ws.username}, 会话: ${ws.sessionId}, 到 ${remoteDesktopTargetUrl} 的连接已建立。开始转发消息。`);
+         console.log(`[RDP 代理 RDP WS 打开] 用户: ${ws.username}, 会话: ${ws.sessionId}, 到 ${safeRemoteDesktopTargetUrl} 的连接已建立。开始转发消息。`);
     });
 }

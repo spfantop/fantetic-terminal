@@ -53,6 +53,30 @@ const clientOptions = {
 
 let guacServer: any;
 
+type RemoteDesktopConnectionConfig = Record<string, string | number | boolean | null | undefined>;
+
+const readConfigValue = (connectionConfig: RemoteDesktopConnectionConfig, ...keys: string[]): string | undefined => {
+    for (const key of keys) {
+        const value = connectionConfig[key];
+        if (value === null || typeof value === 'undefined' || value === '') {
+            continue;
+        }
+        return String(value);
+    }
+    return undefined;
+};
+
+const logRemoteDesktopSettingsSnapshot = (protocol: 'rdp' | 'vnc', settings: Record<string, unknown>) => {
+    const safeKeys = protocol === 'rdp'
+        ? ['width', 'height', 'dpi', 'security', 'ignore-cert', 'color-depth', 'force-lossless', 'resize-method', 'disable-gfx', 'enable-wallpaper']
+        : ['width', 'height', 'color-depth', 'force-lossless'];
+    const snapshot = safeKeys.reduce<Record<string, unknown>>((acc, key) => {
+        acc[key] = Object.prototype.hasOwnProperty.call(settings, key) ? settings[key] : '(omitted)';
+        return acc;
+    }, {});
+    console.log(`[Remote Gateway] ${protocol.toUpperCase()} guacd 参数快照: ${JSON.stringify(snapshot)}`);
+};
+
 try {
     console.log(`[Remote Gateway] 正在使用选项初始化 GuacamoleLite: WS 端口=${websocketOptions.port}, Guacd=${guacdOptions.host}:${guacdOptions.port}`);
     guacServer = new GuacamoleLite(websocketOptions, guacdOptions, clientOptions);
@@ -112,7 +136,7 @@ app.post('/api/remote-desktop/token', (req: Request, res: Response): void => {
         return;
     }
 
-    const { hostname, port, username, password, width, height, dpi, security, ignoreCert } = connectionConfig;
+    const { hostname, port, username, password, width, height, dpi, security } = connectionConfig;
 
     if (!hostname || !port) {
         res.status(400).json({ error: '缺少必需的连接参数 (hostname, port)' });
@@ -134,8 +158,16 @@ app.post('/api/remote-desktop/token', (req: Request, res: Response): void => {
         settings.username = username as string;
         settings.password = password as string;
         settings.security = security || 'any'; // RDP 特有，使用默认值 'any'
-        settings['ignore-cert'] = String(ignoreCert || 'true'); // RDP 特有
+        settings['ignore-cert'] = readConfigValue(connectionConfig, 'ignoreCert', 'ignore-cert') || 'true'; // RDP 特有
         settings.dpi = String(dpi || '96'); // RDP 特有
+        settings['color-depth'] = readConfigValue(connectionConfig, 'colorDepth', 'color-depth') || '24';
+        settings['force-lossless'] = readConfigValue(connectionConfig, 'forceLossless', 'force-lossless') || 'false';
+        const resizeMethod = readConfigValue(connectionConfig, 'resizeMethod', 'resize-method');
+        if (resizeMethod) {
+            settings['resize-method'] = resizeMethod;
+        }
+        settings['disable-gfx'] = readConfigValue(connectionConfig, 'disableGfx', 'disable-gfx') || 'true';
+        settings['enable-wallpaper'] = readConfigValue(connectionConfig, 'enableWallpaper', 'enable-wallpaper') || 'false';
     } else if (protocol === 'vnc') {
         if (typeof password === 'undefined') {
             res.status(400).json({ error: 'VNC 连接缺少 password' });
@@ -145,9 +177,11 @@ app.post('/api/remote-desktop/token', (req: Request, res: Response): void => {
         if (username) { // VNC 可选 username
             settings.username = username as string;
         }
-        // VNC 特有的其他参数可以根据需要从 connectionConfig 中获取并添加
-        // 例如: settings['enable-audio'] = connectionConfig.enableAudio || 'false';
+        settings['color-depth'] = readConfigValue(connectionConfig, 'colorDepth', 'color-depth') || '24';
+        settings['force-lossless'] = readConfigValue(connectionConfig, 'forceLossless', 'force-lossless') || 'false';
     }
+
+    logRemoteDesktopSettingsSnapshot(protocol, settings);
 
     const connectionParams = {
         connection: {

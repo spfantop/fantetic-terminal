@@ -186,14 +186,6 @@ const handleConnection = async () => {
               }
             }
           });
-          setTimeout(() => {
-            nextTick(() => {
-              if (vncDisplayRef.value && guacClient.value) {
-                const canvases = vncDisplayRef.value.querySelectorAll('canvas');
-                canvases.forEach((canvas) => { canvas.style.zIndex = '999'; });
-              }
-            });
-          }, 100);
           break;
         case 4: i18nKeyPart = 'disconnecting'; currentStatus = 'disconnected'; break;
         case 5: i18nKeyPart = 'disconnected'; currentStatus = 'disconnected'; break;
@@ -730,10 +722,9 @@ const stopResize = () => {
   position: relative;
 }
 
-.vnc-display-container :deep(div) {
+/* Guacamole places each layer's canvas at z-index:-1 so child layers can sit above it. */
+.vnc-display-container :deep(div[style*="position: absolute"]:first-child) {
+  z-index: 0;
 }
 
-.vnc-display-container :deep(canvas) {
-  z-index: 999;
-}
 </style>

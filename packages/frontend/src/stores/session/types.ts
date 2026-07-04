@@ -26,7 +26,7 @@ export type DockerManagerInstance = OriginalDockerManagerInstance;
 // 重新导出 FileTab 类型，使其可用于其他模块
 export type FileTab = OriginalFileTab;
 
-export type SessionKind = 'ssh' | 'rdp';
+export type SessionKind = 'ssh' | 'rdp' | 'vnc';
 
 export interface SessionState {
   sessionId: string;

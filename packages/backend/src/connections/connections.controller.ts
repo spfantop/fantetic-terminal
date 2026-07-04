@@ -366,6 +366,26 @@ import axios from 'axios'; // axios 仍可能用于错误检查类型
 
 // RDP_BACKEND_API_BASE and VNC_BACKEND_API_BASE are now handled in GuacamoleService
 
+const ALLOWED_REMOTE_DESKTOP_COLOR_DEPTHS = new Set(['16', '24']);
+
+const normalizeRemoteDesktopColorDepth = (value: unknown): string | undefined => {
+    const firstValue = Array.isArray(value) ? value[0] : value;
+    if (typeof firstValue !== 'string') return undefined;
+    return ALLOWED_REMOTE_DESKTOP_COLOR_DEPTHS.has(firstValue) ? firstValue : undefined;
+};
+
+const normalizeRemoteDesktopBoolean = (value: unknown): string | undefined => {
+    const firstValue = Array.isArray(value) ? value[0] : value;
+    if (firstValue === 'true') return 'true';
+    if (firstValue === 'false') return 'false';
+    return undefined;
+};
+
+const readRemoteDesktopDisplayOptions = (query: Request['query']) => ({
+    colorDepth: normalizeRemoteDesktopColorDepth(query.colorDepth),
+    forceLossless: normalizeRemoteDesktopBoolean(query.forceLossless),
+});
+
 /**
  * 获取 RDP 会话的 Guacamole 令牌 (通过调用 RDP 后端)
  * GET /api/v1/connections/:id/rdp-session
@@ -418,8 +438,9 @@ export const getRdpSessionToken = async (req: Request, res: Response): Promise<v
         const rdpWidth = width ? parseInt(width as string, 10) : undefined;
         const rdpHeight = height ? parseInt(height as string, 10) : undefined;
         const rdpDpi = dpi ? dpi as string : undefined;
+        const displayOptions = readRemoteDesktopDisplayOptions(req.query);
 
-        const guacamoleToken = await GuacamoleService.getRemoteDesktopToken('rdp', connection, decryptedPassword, rdpWidth, rdpHeight, rdpDpi);
+        const guacamoleToken = await GuacamoleService.getRemoteDesktopToken('rdp', connection, decryptedPassword, rdpWidth, rdpHeight, rdpDpi, displayOptions);
         
         console.log(`[Controller:getRdpSessionToken] Received Guacamole token via GuacamoleService for RDP connection ${connectionId}`);
 
@@ -505,8 +526,9 @@ export const getVncSessionToken = async (req: Request, res: Response): Promise<v
         const { width, height } = req.query;
         const initialWidth = width ? parseInt(width as string, 10) : undefined;
         const initialHeight = height ? parseInt(height as string, 10) : undefined;
+        const displayOptions = readRemoteDesktopDisplayOptions(req.query);
 
-        const guacamoleToken = await GuacamoleService.getRemoteDesktopToken('vnc', connection, decryptedPassword, initialWidth, initialHeight);
+        const guacamoleToken = await GuacamoleService.getRemoteDesktopToken('vnc', connection, decryptedPassword, initialWidth, initialHeight, undefined, displayOptions);
 
         console.log(`[Controller:getVncSessionToken] Received Guacamole token via GuacamoleService for VNC connection ${connectionId} with size ${initialWidth}x${initialHeight}`);
         

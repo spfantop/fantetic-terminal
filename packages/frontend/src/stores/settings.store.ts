@@ -79,6 +79,14 @@ interface SettingsState {
   rdpModalHeight?: string; //  RDP 模态框高度
   vncModalWidth?: string; //  VNC 模态框宽度
   vncModalHeight?: string; //  VNC 模态框高度
+  rdpDefaultFixedResolution?: string; // 'true' or 'false' - RDP 默认固定分辨率
+  rdpDefaultWidth?: string; // RDP 默认分辨率宽度
+  rdpDefaultHeight?: string; // RDP 默认分辨率高度
+  rdpDefaultQuality?: string; // RDP 默认清晰度
+  vncDefaultFixedResolution?: string; // 'true' or 'false' - VNC 默认固定分辨率
+  vncDefaultWidth?: string; // VNC 默认分辨率宽度
+  vncDefaultHeight?: string; // VNC 默认分辨率高度
+  vncDefaultQuality?: string; // VNC 默认清晰度
   ipBlacklistEnabled?: string;
   dashboardSortBy?: SortField;
   dashboardSortOrder?: SortOrder;
@@ -297,6 +305,31 @@ export const useSettingsStore = defineStore('settings', () => {
       if (settings.value.vncModalHeight === undefined) {
           settings.value.vncModalHeight = '768'; // 默认高度
       }
+      //  Remote desktop session defaults
+      if (settings.value.rdpDefaultFixedResolution === undefined) {
+          settings.value.rdpDefaultFixedResolution = 'false';
+      }
+      if (settings.value.rdpDefaultWidth === undefined) {
+          settings.value.rdpDefaultWidth = '1024';
+      }
+      if (settings.value.rdpDefaultHeight === undefined) {
+          settings.value.rdpDefaultHeight = '768';
+      }
+      if (settings.value.rdpDefaultQuality === undefined) {
+          settings.value.rdpDefaultQuality = 'balanced';
+      }
+      if (settings.value.vncDefaultFixedResolution === undefined) {
+          settings.value.vncDefaultFixedResolution = 'false';
+      }
+      if (settings.value.vncDefaultWidth === undefined) {
+          settings.value.vncDefaultWidth = '1024';
+      }
+      if (settings.value.vncDefaultHeight === undefined) {
+          settings.value.vncDefaultHeight = '768';
+      }
+      if (settings.value.vncDefaultQuality === undefined) {
+          settings.value.vncDefaultQuality = 'balanced';
+      }
         
       if (settings.value.dashboardSortBy === undefined) {
           settings.value.dashboardSortBy = 'last_connected_at';
@@ -427,6 +460,14 @@ export const useSettingsStore = defineStore('settings', () => {
         'rdpModalHeight', //  RDP 模态框高度键
         'vncModalWidth', //  VNC 模态框宽度键
         'vncModalHeight', //  VNC 模态框高度键
+        'rdpDefaultFixedResolution',
+        'rdpDefaultWidth',
+        'rdpDefaultHeight',
+        'rdpDefaultQuality',
+        'vncDefaultFixedResolution',
+        'vncDefaultWidth',
+        'vncDefaultHeight',
+        'vncDefaultQuality',
         'ipBlacklistEnabled',
         'dashboardSortBy',
         'dashboardSortOrder',
@@ -544,6 +585,14 @@ export const useSettingsStore = defineStore('settings', () => {
         'rdpModalHeight', //  RDP 模态框高度键
         'vncModalWidth', //  VNC 模态框宽度键
         'vncModalHeight', //  VNC 模态框高度键
+        'rdpDefaultFixedResolution',
+        'rdpDefaultWidth',
+        'rdpDefaultHeight',
+        'rdpDefaultQuality',
+        'vncDefaultFixedResolution',
+        'vncDefaultWidth',
+        'vncDefaultHeight',
+        'vncDefaultQuality',
         'ipBlacklistEnabled',
         'dashboardSortBy',
         'dashboardSortOrder',

@@ -98,11 +98,12 @@ const visibleActiveSessionId = computed(() => (
 const visibleActiveSession = computed(() => (
   visibleActiveSessionId.value ? sessionStore.sessions.get(visibleActiveSessionId.value) ?? null : null
 ));
-const isVisibleActiveSessionRdp = computed(() => visibleActiveSession.value?.kind === 'rdp');
+const isRemoteDesktopSessionKind = (kind?: string) => kind === 'rdp' || kind === 'vnc';
+const isVisibleActiveSessionRemoteDesktop = computed(() => isRemoteDesktopSessionKind(visibleActiveSession.value?.kind));
 const fullscreenSessionId = ref<string | null>(null);
 const isSessionFullscreenActive = computed(() => fullscreenSessionId.value !== null);
 const layoutActiveSessionId = computed(() => fullscreenSessionId.value ?? visibleActiveSessionId.value);
-const isTerminalOnlyMode = computed(() => isVisibleActiveSessionRdp.value || isSessionFullscreenActive.value);
+const isTerminalOnlyMode = computed(() => isVisibleActiveSessionRemoteDesktop.value || isSessionFullscreenActive.value);
 const FULLSCREEN_ESC_PRESS_THRESHOLD = 3;
 const FULLSCREEN_ESC_SEQUENCE_TIMEOUT_MS = 1200;
 const fullscreenEscPressCount = ref(0);
@@ -241,6 +242,7 @@ type PoppedOutTerminalState = {
   closeTimer: number;
   closeHandler: () => void;
   focusHandler: () => void;
+  resizeHandler: () => void;
   visibilityHandler: () => void;
 };
 
@@ -340,6 +342,13 @@ const dispatchResizeOnWindow = (targetWindow: Window) => {
   }
 };
 
+const REMOTE_DESKTOP_RESIZE_EVENT = 'remote-desktop:resize-request';
+
+const requestRemoteDesktopSessionResize = (sessionElement: HTMLElement) => {
+  const eventWindow = sessionElement.ownerDocument.defaultView ?? window;
+  sessionElement.dispatchEvent(new eventWindow.Event(REMOTE_DESKTOP_RESIZE_EVENT));
+};
+
 const rebindXtermRenderWindow = (sessionId: string, targetWindow: Window) => {
   const terminal = getTerminalForSession(sessionId);
   if (!terminal) {
@@ -405,6 +414,7 @@ const restorePoppedOutTerminalElement = (sessionId: string) => {
     state.windowRef.removeEventListener('beforeunload', state.closeHandler);
     state.windowRef.removeEventListener('focus', state.focusHandler);
     state.windowRef.removeEventListener('pageshow', state.focusHandler);
+    state.windowRef.removeEventListener('resize', state.resizeHandler);
     state.windowRef.document.removeEventListener('visibilitychange', state.visibilityHandler);
   } catch (error) {
     console.warn(`[WorkspaceView] Failed to remove pop-out window listeners for session ${sessionId}:`, error);
@@ -491,6 +501,7 @@ const focusPoppedOutSession = (sessionId: string, options: { force?: boolean; re
     }
     if (options.resize) {
       dispatchResizeOnWindow(state.windowRef);
+      requestRemoteDesktopSessionResize(state.sessionElement);
     }
   } catch (error) {
     console.warn(`[WorkspaceView] Failed to focus pop-out session ${sessionId}:`, error);
@@ -714,7 +725,8 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
   }
 
   const sessionForPopout = sessionStore.sessions.get(sessionId);
-  const popoutLayoutTree = sessionForPopout?.kind === 'rdp' ? sessionOnlyLayoutNode.value : layoutTree.value;
+  const isRemoteDesktopPopout = isRemoteDesktopSessionKind(sessionForPopout?.kind);
+  const popoutLayoutTree = isRemoteDesktopPopout ? sessionOnlyLayoutNode.value : layoutTree.value;
   if (!popoutLayoutTree) {
     console.warn(`[WorkspaceView] Cannot pop out session ${sessionId}: layout tree is not ready.`);
     windowRef?.close();
@@ -836,7 +848,7 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
         const sessionActiveEditorTabId = computed(() => getActiveEditorTabIdForSession(sessionId));
 
         return () => h(LayoutRenderer, {
-          isRootRenderer: sessionForPopout?.kind !== 'rdp',
+          isRootRenderer: !isRemoteDesktopPopout,
           layoutNode: popoutLayoutTree,
           activeSessionId: sessionId,
           includedSessionId: sessionId,
@@ -900,6 +912,11 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
 
   const closeHandler = () => restorePoppedOutTerminalElement(sessionId);
   const focusHandler = () => focusPoppedOutSession(sessionId, { resize: true });
+  const resizeHandler = () => {
+    if (isRemoteDesktopSessionKind(sessionStore.sessions.get(sessionId)?.kind)) {
+      requestRemoteDesktopSessionResize(sessionElement);
+    }
+  };
   const visibilityHandler = () => {
     if (popup.document.visibilityState === 'visible') {
       focusPoppedOutSession(sessionId, { resize: true });
@@ -916,6 +933,7 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
     closeTimer,
     closeHandler,
     focusHandler,
+    resizeHandler,
     visibilityHandler,
   });
   poppedOutTerminalMap.value = nextPoppedOutTerminalMap;
@@ -923,8 +941,15 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
   popup.addEventListener('beforeunload', closeHandler);
   popup.addEventListener('focus', focusHandler);
   popup.addEventListener('pageshow', focusHandler);
+  popup.addEventListener('resize', resizeHandler);
   popup.document.addEventListener('visibilitychange', visibilityHandler);
   popup.focus();
+  if (isRemoteDesktopPopout) {
+    popup.requestAnimationFrame(() => {
+      requestRemoteDesktopSessionResize(sessionElement);
+      popup.requestAnimationFrame(() => requestRemoteDesktopSessionResize(sessionElement));
+    });
+  }
   requestSessionResize(sessionId);
 };
 
@@ -1619,7 +1644,7 @@ const closeFileManagerModal = () => {
           :split-workspace-available="workspaceSplitAvailable"
           :merge-workspace-available="isWorkspaceSplitActive"
           :workspace-split-active="isWorkspaceSplitActive"
-          :show-layout-actions="!isVisibleActiveSessionRdp"
+          :show-layout-actions="!isVisibleActiveSessionRemoteDesktop"
           :show-split-action="true"
           @update:sessions="handleWorkspaceSessionOrderUpdate"
         />
@@ -1655,7 +1680,7 @@ const closeFileManagerModal = () => {
         :active-session-id="visibleActiveSessionId"
         :is-mobile="isMobile"
         :split-workspace-available="false"
-        :show-layout-actions="!isVisibleActiveSessionRdp"
+        :show-layout-actions="!isVisibleActiveSessionRemoteDesktop"
       />
       <div class="mobile-content-area">
           <LayoutRenderer
@@ -1677,7 +1702,7 @@ const closeFileManagerModal = () => {
         </div>
       </div>
       <CommandInputBar
-        v-if="!isVisibleActiveSessionRdp && !isSessionFullscreenActive"
+        v-if="!isVisibleActiveSessionRemoteDesktop && !isSessionFullscreenActive"
         class="mobile-command-bar"
         :is-mobile="isMobile"
         @send-command="handleSendCommand"
@@ -1691,7 +1716,7 @@ const closeFileManagerModal = () => {
       />
       <!-- +++ Use v-show for VirtualKeyboard and bind visibility +++ -->
       <VirtualKeyboard
-        v-if="!isVisibleActiveSessionRdp && !isSessionFullscreenActive"
+        v-if="!isVisibleActiveSessionRemoteDesktop && !isSessionFullscreenActive"
         v-show="isVirtualKeyboardVisible"
         class="mobile-virtual-keyboard"
         @send-key="handleVirtualKeyPress"

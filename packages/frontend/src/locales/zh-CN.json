@@ -1044,6 +1044,24 @@
       "fileManagerShowDeleteConfirmationLabel": "删除文件或文件夹时显示确认提示框",
       "fileManagerDeleteConfirmSuccess": "文件管理器删除确认设置已保存。",
       "fileManagerDeleteConfirmError": "保存文件管理器删除确认设置失败。",
+      "remoteDesktopDefaults": {
+        "title": "RDP/VNC 默认配置",
+        "description": "新打开的 RDP/VNC 会话会使用这里的默认值；已打开的会话仍可在右下角临时调整。",
+        "rdpTitle": "RDP",
+        "vncTitle": "VNC",
+        "fixedResolutionLabel": "固定分辨率",
+        "qualityLabel": "清晰度",
+        "qualitySmooth": "流畅",
+        "qualityBalanced": "均衡",
+        "qualitySharp": "清晰",
+        "hint": "未启用固定分辨率时，新会话会优先跟随窗口大小。",
+        "success": {
+          "saved": "远程桌面默认配置已保存。"
+        },
+        "error": {
+          "saveFailed": "保存远程桌面默认配置失败。"
+        }
+      },
 "terminalRightClickPasteTitle": "终端右键粘贴",
         "terminalEnableRightClickPasteLabel": "启用终端右键粘贴",
         "terminalEnableRightClickPasteDescription": "允许在终端区域内使用鼠标右键粘贴剪贴板内容。",
@@ -1356,6 +1374,18 @@
       "inputError": "设置输入监听器时出错。",
       "noConnection": "未提供连接信息。",
       "tokenError": "获取令牌失败"
+    },
+    "resolution": {
+      "settings": "分辨率设置",
+      "title": "分辨率",
+      "auto": "固定分辨率",
+      "manual": "固定分辨率"
+    },
+    "quality": {
+      "title": "清晰度",
+      "smooth": "流畅",
+      "balanced": "均衡",
+      "sharp": "清晰"
     },
     "reconnectTooltip": "重新连接到远程桌面"
   },

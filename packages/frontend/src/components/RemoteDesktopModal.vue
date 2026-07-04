@@ -55,6 +55,11 @@ let hasDragged = false;
 
 const MIN_MODAL_WIDTH = 1024;
 const MIN_MODAL_HEIGHT = 768;
+const DEFAULT_REMOTE_DESKTOP_WIDTH = 1024;
+const DEFAULT_REMOTE_DESKTOP_HEIGHT = 768;
+const MIN_REMOTE_DESKTOP_WIDTH = 640;
+const MIN_REMOTE_DESKTOP_HEIGHT = 480;
+const DISPLAY_SIZE_WAIT_FRAMES = 12;
 
 // Dynamically construct WebSocket URL based on environment
 let backendBaseUrl: string;
@@ -91,7 +96,15 @@ const handleConnection = async () => {
     const connectionsStore = useConnectionsStore();
 
     if (props.connection.type === 'RDP') {
-      const apiUrl = `connections/${props.connection.id}/rdp-session`;
+      const { width: widthToSend, height: heightToSend } = await waitForInitialRdpDisplaySize();
+      const dpiToSend = 96;
+
+      const tokenParams = new URLSearchParams({
+        width: String(widthToSend),
+        height: String(heightToSend),
+        dpi: String(dpiToSend),
+      });
+      const apiUrl = `connections/${props.connection.id}/rdp-session?${tokenParams.toString()}`;
       const response = await apiClient.post<{ token: string }>(apiUrl);
       token = response.data?.token;
       if (!token) {
@@ -99,17 +112,6 @@ const handleConnection = async () => {
       }
       statusMessage.value = t('remoteDesktopModal.status.connectingWs');
 
-      await nextTick();
-      let widthToSend = 800;
-      let heightToSend = 600;
-      const dpiToSend = 96;
-
-      if (rdpContainerRef.value) {
-        widthToSend = rdpContainerRef.value.clientWidth;
-        heightToSend = rdpContainerRef.value.clientHeight - 1;
-        widthToSend = Math.max(100, widthToSend);
-        heightToSend = Math.max(100, heightToSend);
-      }
       tunnelUrl = `${backendBaseUrl}/rdp-proxy?token=${encodeURIComponent(token)}&width=${widthToSend}&height=${heightToSend}&dpi=${dpiToSend}`;
 
     } else {
@@ -160,14 +162,6 @@ const handleConnection = async () => {
               displayEl.focus();
             }
           });
-          setTimeout(() => { // z-index fix for canvas
-            nextTick(() => {
-              if (rdpDisplayRef.value && guacClient.value) {
-                const canvases = rdpDisplayRef.value.querySelectorAll('canvas');
-                canvases.forEach((canvas) => { canvas.style.zIndex = '999'; });
-              }
-            });
-          }, 100);
           break;
         case 4: // DISCONNECTING
           i18nKeyPart = 'disconnecting';
@@ -196,6 +190,34 @@ const handleConnection = async () => {
     connectionStatus.value = 'error';
     disconnectGuacamole();
   }
+};
+
+const waitForAnimationFrame = () => new Promise<void>((resolve) => {
+  window.requestAnimationFrame(() => resolve());
+});
+
+const measureRdpDisplaySize = () => {
+  const width = Math.floor(rdpContainerRef.value?.clientWidth ?? 0);
+  const height = Math.floor(rdpContainerRef.value ? rdpContainerRef.value.clientHeight - 1 : 0);
+  return { width, height };
+};
+
+const normalizeRdpDisplaySize = ({ width, height }: { width: number; height: number }) => ({
+  width: width > 0 ? Math.max(MIN_REMOTE_DESKTOP_WIDTH, width) : DEFAULT_REMOTE_DESKTOP_WIDTH,
+  height: height > 0 ? Math.max(MIN_REMOTE_DESKTOP_HEIGHT, height) : DEFAULT_REMOTE_DESKTOP_HEIGHT,
+});
+
+const waitForInitialRdpDisplaySize = async () => {
+  for (let attempt = 0; attempt < DISPLAY_SIZE_WAIT_FRAMES; attempt += 1) {
+    await nextTick();
+    await waitForAnimationFrame();
+    const measured = measureRdpDisplaySize();
+    if (measured.width >= MIN_REMOTE_DESKTOP_WIDTH && measured.height >= MIN_REMOTE_DESKTOP_HEIGHT) {
+      return normalizeRdpDisplaySize(measured);
+    }
+  }
+
+  return normalizeRdpDisplaySize(measureRdpDisplaySize());
 };
 
 const trySyncClipboardOnDisplayFocus = async () => {
@@ -761,10 +783,9 @@ const stopResize = () => {
   position: relative;
 }
 
-.rdp-display-container :deep(div) {
+/* Guacamole places each layer's canvas at z-index:-1 so child layers can sit above it. */
+.rdp-display-container :deep(div[style*="position: absolute"]:first-child) {
+  z-index: 0;
 }
 
-.rdp-display-container :deep(canvas) {
-  z-index: 999;
-}
 </style>

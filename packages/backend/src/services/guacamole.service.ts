@@ -15,6 +15,11 @@ interface TokenResponse {
     token: string;
 }
 
+interface RemoteDesktopDisplayOptions {
+    colorDepth?: string;
+    forceLossless?: string;
+}
+
 /**
  * 从统一远程桌面网关服务获取 Guacamole 令牌
  * @param protocol 'rdp' 或 'vnc'
@@ -31,7 +36,8 @@ export const getRemoteDesktopToken = async (
     decryptedPassword?: string,
     width?: number,
     height?: number,
-    dpi?: string // DPI 主要用于 RDP
+    dpi?: string, // DPI 主要用于 RDP
+    displayOptions: RemoteDesktopDisplayOptions = {}
 ): Promise<string> => {
     if ((protocol === 'rdp' || protocol === 'vnc') && connection.auth_method === 'password' && !decryptedPassword) {
         console.warn(`[GuacamoleService:getRemoteDesktopToken] ${protocol.toUpperCase()} connection ${connection.id} uses password auth but password decryption failed or password not provided.`);
@@ -44,6 +50,12 @@ export const getRemoteDesktopToken = async (
         width: String(width || 1024), // 提供默认值
         height: String(height || 768), // 提供默认值
     };
+    if (displayOptions.colorDepth) {
+        connectionConfig.colorDepth = displayOptions.colorDepth;
+    }
+    if (displayOptions.forceLossless) {
+        connectionConfig.forceLossless = displayOptions.forceLossless;
+    }
 
     if (protocol === 'rdp') {
         if (!connection.username) {
@@ -55,6 +67,7 @@ export const getRemoteDesktopToken = async (
         connectionConfig.dpi = dpi || '96';
         connectionConfig.security = (connection as any).rdp_security || 'any';
         connectionConfig.ignoreCert = String((connection as any).rdp_ignore_cert ?? true);
+        connectionConfig.resizeMethod = (connection as any).rdp_resize_method || 'display-update';
     } else if (protocol === 'vnc') {
         connectionConfig.password = decryptedPassword || ''; // VNC 通常需要密码
         if (connection.username) { // VNC 用户名是可选的

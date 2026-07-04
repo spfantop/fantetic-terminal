@@ -3,11 +3,33 @@ import { useSettingsStore } from '../../stores/settings.store';
 import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
 
+type RemoteDesktopQualityProfile = 'smooth' | 'balanced' | 'sharp';
+
+const REMOTE_DESKTOP_QUALITY_PROFILES: RemoteDesktopQualityProfile[] = ['smooth', 'balanced', 'sharp'];
+const DEFAULT_REMOTE_DESKTOP_WIDTH = 1024;
+const DEFAULT_REMOTE_DESKTOP_HEIGHT = 768;
+const MIN_REMOTE_DESKTOP_SIZE = 100;
+
+const normalizeRemoteDesktopSizeSetting = (value: unknown, fallback: number) => {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue) || numericValue <= 0) {
+    return fallback;
+  }
+  return Math.max(MIN_REMOTE_DESKTOP_SIZE, Math.floor(numericValue));
+};
+
+const normalizeRemoteDesktopQualityProfile = (value: unknown): RemoteDesktopQualityProfile => {
+  return REMOTE_DESKTOP_QUALITY_PROFILES.includes(value as RemoteDesktopQualityProfile)
+    ? value as RemoteDesktopQualityProfile
+    : 'balanced';
+};
+
 export function useWorkspaceSettings() {
   const settingsStore = useSettingsStore();
   const { t } = useI18n();
 
   const {
+    settings,
     showPopupFileEditorBoolean,
     shareFileEditorTabsBoolean,
     autoCopyOnSelectBoolean,
@@ -311,6 +333,67 @@ export function useWorkspaceSettings() {
     }
   };
 
+  // --- Remote Desktop Defaults ---
+  const rdpDefaultFixedResolutionLocal = ref(false);
+  const rdpDefaultWidthLocal = ref(DEFAULT_REMOTE_DESKTOP_WIDTH);
+  const rdpDefaultHeightLocal = ref(DEFAULT_REMOTE_DESKTOP_HEIGHT);
+  const rdpDefaultQualityLocal = ref<RemoteDesktopQualityProfile>('balanced');
+  const vncDefaultFixedResolutionLocal = ref(false);
+  const vncDefaultWidthLocal = ref(DEFAULT_REMOTE_DESKTOP_WIDTH);
+  const vncDefaultHeightLocal = ref(DEFAULT_REMOTE_DESKTOP_HEIGHT);
+  const vncDefaultQualityLocal = ref<RemoteDesktopQualityProfile>('balanced');
+  const remoteDesktopDefaultsLoading = ref(false);
+  const remoteDesktopDefaultsMessage = ref('');
+  const remoteDesktopDefaultsSuccess = ref(false);
+
+  const syncRemoteDesktopDefaultsFromStore = () => {
+    const currentSettings = settings.value;
+    rdpDefaultFixedResolutionLocal.value = currentSettings.rdpDefaultFixedResolution === 'true';
+    rdpDefaultWidthLocal.value = normalizeRemoteDesktopSizeSetting(currentSettings.rdpDefaultWidth, DEFAULT_REMOTE_DESKTOP_WIDTH);
+    rdpDefaultHeightLocal.value = normalizeRemoteDesktopSizeSetting(currentSettings.rdpDefaultHeight, DEFAULT_REMOTE_DESKTOP_HEIGHT);
+    rdpDefaultQualityLocal.value = normalizeRemoteDesktopQualityProfile(currentSettings.rdpDefaultQuality);
+    vncDefaultFixedResolutionLocal.value = currentSettings.vncDefaultFixedResolution === 'true';
+    vncDefaultWidthLocal.value = normalizeRemoteDesktopSizeSetting(currentSettings.vncDefaultWidth, DEFAULT_REMOTE_DESKTOP_WIDTH);
+    vncDefaultHeightLocal.value = normalizeRemoteDesktopSizeSetting(currentSettings.vncDefaultHeight, DEFAULT_REMOTE_DESKTOP_HEIGHT);
+    vncDefaultQualityLocal.value = normalizeRemoteDesktopQualityProfile(currentSettings.vncDefaultQuality);
+  };
+
+  const handleUpdateRemoteDesktopDefaults = async () => {
+    remoteDesktopDefaultsLoading.value = true;
+    remoteDesktopDefaultsMessage.value = '';
+    remoteDesktopDefaultsSuccess.value = false;
+
+    const nextRdpWidth = normalizeRemoteDesktopSizeSetting(rdpDefaultWidthLocal.value, DEFAULT_REMOTE_DESKTOP_WIDTH);
+    const nextRdpHeight = normalizeRemoteDesktopSizeSetting(rdpDefaultHeightLocal.value, DEFAULT_REMOTE_DESKTOP_HEIGHT);
+    const nextVncWidth = normalizeRemoteDesktopSizeSetting(vncDefaultWidthLocal.value, DEFAULT_REMOTE_DESKTOP_WIDTH);
+    const nextVncHeight = normalizeRemoteDesktopSizeSetting(vncDefaultHeightLocal.value, DEFAULT_REMOTE_DESKTOP_HEIGHT);
+
+    try {
+      await settingsStore.updateMultipleSettings({
+        rdpDefaultFixedResolution: rdpDefaultFixedResolutionLocal.value ? 'true' : 'false',
+        rdpDefaultWidth: String(nextRdpWidth),
+        rdpDefaultHeight: String(nextRdpHeight),
+        rdpDefaultQuality: normalizeRemoteDesktopQualityProfile(rdpDefaultQualityLocal.value),
+        vncDefaultFixedResolution: vncDefaultFixedResolutionLocal.value ? 'true' : 'false',
+        vncDefaultWidth: String(nextVncWidth),
+        vncDefaultHeight: String(nextVncHeight),
+        vncDefaultQuality: normalizeRemoteDesktopQualityProfile(vncDefaultQualityLocal.value),
+      });
+      rdpDefaultWidthLocal.value = nextRdpWidth;
+      rdpDefaultHeightLocal.value = nextRdpHeight;
+      vncDefaultWidthLocal.value = nextVncWidth;
+      vncDefaultHeightLocal.value = nextVncHeight;
+      remoteDesktopDefaultsMessage.value = t('settings.workspace.remoteDesktopDefaults.success.saved', '远程桌面默认配置已保存。');
+      remoteDesktopDefaultsSuccess.value = true;
+    } catch (error: any) {
+      console.error('更新远程桌面默认配置失败:', error);
+      remoteDesktopDefaultsMessage.value = error.message || t('settings.workspace.remoteDesktopDefaults.error.saveFailed', '保存远程桌面默认配置失败。');
+      remoteDesktopDefaultsSuccess.value = false;
+    } finally {
+      remoteDesktopDefaultsLoading.value = false;
+    }
+  };
+
   // Watchers to sync local state with store state
   watch(showPopupFileEditorBoolean, (newValue) => { popupEditorEnabled.value = newValue; }, { immediate: true });
   watch(shareFileEditorTabsBoolean, (newValue) => { shareTabsEnabled.value = newValue; }, { immediate: true });
@@ -324,6 +407,7 @@ export function useWorkspaceSettings() {
   watch(terminalEnableRightClickPasteBoolean, (newValue) => { terminalEnableRightClickPasteLocal.value = newValue; }, { immediate: true });
   watch(showPopupFileManagerBoolean, (newValue) => { showPopupFileManagerLocal.value = newValue; }, { immediate: true }); // +++ Watch for popup file manager +++
   watch(statusMonitorShowIpBoolean, (newValue) => { statusMonitorShowIpEnabled.value = newValue; }, { immediate: true });
+  watch(settings, syncRemoteDesktopDefaultsFromStore, { immediate: true, deep: true });
 
 
   return {
@@ -399,5 +483,18 @@ export function useWorkspaceSettings() {
     statusMonitorShowIpMessage,
     statusMonitorShowIpSuccess,
     handleUpdateStatusMonitorShowIpSetting,
+
+    rdpDefaultFixedResolutionLocal,
+    rdpDefaultWidthLocal,
+    rdpDefaultHeightLocal,
+    rdpDefaultQualityLocal,
+    vncDefaultFixedResolutionLocal,
+    vncDefaultWidthLocal,
+    vncDefaultHeightLocal,
+    vncDefaultQualityLocal,
+    remoteDesktopDefaultsLoading,
+    remoteDesktopDefaultsMessage,
+    remoteDesktopDefaultsSuccess,
+    handleUpdateRemoteDesktopDefaults,
   };
 }

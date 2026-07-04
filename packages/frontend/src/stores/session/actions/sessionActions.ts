@@ -199,9 +199,9 @@ export const openNewSession = (
   }
 };
 
-export const openRdpSession = (connection: ConnectionInfo) => {
-  if (connection.type !== 'RDP') {
-    console.warn(`[SessionActions] openRdpSession 仅用于 RDP，会话类型为 ${connection.type}。`);
+export const openRemoteDesktopSession = (connection: ConnectionInfo) => {
+  if (connection.type !== 'RDP' && connection.type !== 'VNC') {
+    console.warn(`[SessionActions] openRemoteDesktopSession 仅用于 RDP/VNC，会话类型为 ${connection.type}。`);
     return;
   }
 
@@ -210,7 +210,7 @@ export const openRdpSession = (connection: ConnectionInfo) => {
     sessionId: newSessionId,
     connectionId: String(connection.id),
     connectionName: connection.name || connection.host,
-    kind: 'rdp',
+    kind: connection.type === 'RDP' ? 'rdp' : 'vnc',
     connection,
     rdpStatus: 'connecting',
     rdpStatusMessage: '',
@@ -221,7 +221,16 @@ export const openRdpSession = (connection: ConnectionInfo) => {
   newSessionsMap.set(newSessionId, newSession);
   sessions.value = newSessionsMap;
   activeSessionId.value = newSessionId;
-  debugLog(`[SessionActions] 已创建 RDP 会话实例: ${newSessionId} for connection ${connection.id}`);
+  debugLog(`[SessionActions] 已创建 ${connection.type} 会话实例: ${newSessionId} for connection ${connection.id}`);
+};
+
+export const openRdpSession = (connection: ConnectionInfo) => {
+  if (connection.type !== 'RDP') {
+    console.warn(`[SessionActions] openRdpSession 仅用于 RDP，会话类型为 ${connection.type}。`);
+    return;
+  }
+
+  openRemoteDesktopSession(connection);
 };
 
 export const updateRdpSessionStatus = (
@@ -230,7 +239,7 @@ export const updateRdpSessionStatus = (
   message: string,
 ) => {
   const session = sessions.value.get(sessionId);
-  if (!session || session.kind !== 'rdp') return;
+  if (!session || (session.kind !== 'rdp' && session.kind !== 'vnc')) return;
 
   session.rdpStatus = status;
   session.rdpStatusMessage = message;
@@ -259,7 +268,7 @@ export const closeSession = (sessionId: string) => {
   }
 
   // 1. 调用实例上的清理和断开方法
-  if (sessionToClose.kind === 'rdp') {
+  if (sessionToClose.kind === 'rdp' || sessionToClose.kind === 'vnc') {
     const newSessionsMap = new Map(sessions.value);
     newSessionsMap.delete(sessionId);
     sessions.value = newSessionsMap;
@@ -271,7 +280,7 @@ export const closeSession = (sessionId: string) => {
     }
 
     poppedOutSessionIds.value = poppedOutSessionIds.value.filter(poppedOutSessionId => poppedOutSessionId !== sessionId);
-    debugLog(`[SessionActions] 已关闭 RDP 会话: ${sessionId}`);
+    debugLog(`[SessionActions] 已关闭远程桌面会话: ${sessionId}`);
     return;
   }
 
@@ -325,12 +334,11 @@ export const handleConnectRequest = (
         connectionsStore: ReturnType<typeof useConnectionsStore>;
         router: ReturnType<typeof useRouter>;
         openRdpSessionAction: (connection: ConnectionInfo) => void;
-        openVncModalAction: (connection: ConnectionInfo) => void; // 来自 modalActions
         t: ReturnType<typeof useI18n>['t'];
         navigateToWorkspace?: boolean;
     }
 ) => {
-  const { connectionsStore, router, openRdpSessionAction, openVncModalAction, t, navigateToWorkspace = true } = dependencies;
+  const { connectionsStore, router, openRdpSessionAction, t, navigateToWorkspace = true } = dependencies;
 
   if (connection.type === 'RDP') {
     openRdpSessionAction(connection);
@@ -338,7 +346,10 @@ export const handleConnectRequest = (
       router.push({ name: 'Connections' });
     }
   } else if (connection.type === 'VNC') {
-    openVncModalAction(connection);
+    openRemoteDesktopSession(connection);
+    if (navigateToWorkspace) {
+      router.push({ name: 'Connections' });
+    }
   } else {
     const connIdStr = String(connection.id);
     let activeAndDisconnected = false;
