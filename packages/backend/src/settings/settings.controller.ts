@@ -103,6 +103,8 @@ export const settingsController = {
           'terminalScrollbackLimit', // 终端回滚行数键
           'fileManagerShowDeleteConfirmation', // 文件管理器删除确认键
           'terminalEnableRightClickPaste', // 终端右键粘贴键
+          'terminalHighlightEnabled', // 终端日志高亮开关
+          'terminalHighlightRules', // 终端日志高亮规则
           'showStatusMonitorIpAddress' // 添加状态监视器IP显示键 (与服务层和前端统一)
       ];
       const filteredSettings: Record<string, string> = {};

@@ -7,6 +7,12 @@ import type { PaneName } from './layout.store';
 import { useAuthStore } from './auth.store';
 import type { ConnectionInfo } from './connections.store';
 import { normalizeTimezone } from '../utils/dateTimeFormat';
+import {
+  DEFAULT_TERMINAL_HIGHLIGHT_RULES_JSON,
+  parseTerminalHighlightRules,
+  serializeTerminalHighlightRules,
+  type TerminalHighlightRule,
+} from '../utils/terminalOutputHighlighter';
 
 export type SortField = keyof Pick<ConnectionInfo, 'created_at' | 'last_connected_at' | 'updated_at' | 'name' | 'type'>;
 export type SortOrder = 'asc' | 'desc';
@@ -96,6 +102,8 @@ interface SettingsState {
   terminalScrollbackLimit?: string; //  终端回滚行数上限 (e.g., '5000', '0' for unlimited)
   fileManagerShowDeleteConfirmation?: string; //  'true' or 'false' - 文件管理器删除确认提示
   terminalEnableRightClickPaste?: string; //  'true' or 'false' - 终端右键粘贴
+  terminalHighlightEnabled?: string; // 'true' or 'false' - 终端日志高亮开关
+  terminalHighlightRules?: string; // 终端日志高亮规则 JSON
   showStatusMonitorIpAddress?: string; // 'true' or 'false' - 状态监视器显示IP地址
   quickCommandRowSizeMultiplier?: string; // +++ 快捷命令列表行大小乘数 (e.g., '1.0') +++
   quickCommandsCompactMode?: string; // +++ 快捷指令视图紧凑模式 (e.g., 'false') +++
@@ -370,6 +378,12 @@ export const useSettingsStore = defineStore('settings', () => {
         settings.value.terminalEnableRightClickPaste = 'true'; // 默认启用右键粘贴
         debugLog(`[SettingsStore] terminalEnableRightClickPaste not found, set to default: ${settings.value.terminalEnableRightClickPaste}`);
       }
+      if (settings.value.terminalHighlightEnabled === undefined) {
+        settings.value.terminalHighlightEnabled = 'false';
+      }
+      if (settings.value.terminalHighlightRules === undefined) {
+        settings.value.terminalHighlightRules = DEFAULT_TERMINAL_HIGHLIGHT_RULES_JSON;
+      }
       if (settings.value.showStatusMonitorIpAddress === undefined) {
         settings.value.showStatusMonitorIpAddress = 'false'; // 默认禁用状态监视器显示IP
         debugLog(`[SettingsStore] showStatusMonitorIpAddress not found, set to default: ${settings.value.showStatusMonitorIpAddress}`);
@@ -477,6 +491,8 @@ export const useSettingsStore = defineStore('settings', () => {
         'terminalScrollbackLimit',
         'fileManagerShowDeleteConfirmation',
         'terminalEnableRightClickPaste',
+        'terminalHighlightEnabled',
+        'terminalHighlightRules',
         'showStatusMonitorIpAddress',
         'quickCommandRowSizeMultiplier',
         'quickCommandsCompactMode'
@@ -507,8 +523,11 @@ export const useSettingsStore = defineStore('settings', () => {
                 debugLog(`[SettingsStore DEBUG] Updating terminalEnableRightClickPaste. Value type: ${typeof value}, Value: '${value}'`);
             }
             // --- 日志结束 ---
-            debugLog(`[SettingsStore] Attempting to update general setting - Key: ${key}, Value: ${value}`);
-            const payload = { [key]: value };
+            const valueToSave = key === 'terminalHighlightRules'
+              ? serializeTerminalHighlightRules(parseTerminalHighlightRules(value))
+              : value;
+            debugLog(`[SettingsStore] Attempting to update general setting - Key: ${key}, Value: ${valueToSave}`);
+            const payload = { [key]: valueToSave };
             debugLog('[SettingsStore] Sending PUT request to /settings with payload:', payload);
             apiPromise = apiClient.put('/settings', payload);
         } else {
@@ -519,7 +538,10 @@ export const useSettingsStore = defineStore('settings', () => {
         debugLog(`[SettingsStore] Successfully updated setting via API - Key: ${key}`);
 
         // Update store state *after* successful API call
-        settings.value = { ...settings.value, [key]: String(value) }; // Store as string internally
+        const storedValue = key === 'terminalHighlightRules' && typeof value === 'string'
+          ? serializeTerminalHighlightRules(parseTerminalHighlightRules(value))
+          : String(value);
+        settings.value = { ...settings.value, [key]: storedValue }; // Store as string internally
 
         // --- 保存到 localStorage  ---
         if (key === 'quickCommandsCompactMode' && (String(value) === 'true' || String(value) === 'false')) {
@@ -602,6 +624,8 @@ export const useSettingsStore = defineStore('settings', () => {
         'terminalScrollbackLimit',
         'fileManagerShowDeleteConfirmation',
         'terminalEnableRightClickPaste',
+        'terminalHighlightEnabled',
+        'terminalHighlightRules',
         'showStatusMonitorIpAddress',
         'quickCommandRowSizeMultiplier',
         'quickCommandsCompactMode'
@@ -623,6 +647,9 @@ export const useSettingsStore = defineStore('settings', () => {
             }
             if (key === 'timezone') {
                 filteredUpdates.timezone = normalizeTimezone(updates[key]);
+            }
+            if (key === 'terminalHighlightRules') {
+                filteredUpdates.terminalHighlightRules = serializeTerminalHighlightRules(parseTerminalHighlightRules(updates[key]));
             }
         } else {
              console.warn(`[SettingsStore] 尝试批量更新不允许的设置键: ${key}`);
@@ -942,6 +969,14 @@ export const useSettingsStore = defineStore('settings', () => {
       return settings.value.terminalEnableRightClickPaste !== 'false'; // Default to true
   });
 
+  const terminalHighlightEnabledBoolean = computed(() => {
+      return settings.value.terminalHighlightEnabled === 'true';
+  });
+
+  const terminalHighlightRulesList = computed<TerminalHighlightRule[]>(() => {
+      return parseTerminalHighlightRules(settings.value.terminalHighlightRules);
+  });
+
   const statusMonitorShowIpBoolean = computed(() => {
     return settings.value.showStatusMonitorIpAddress === 'true';
   });
@@ -1010,6 +1045,8 @@ export const useSettingsStore = defineStore('settings', () => {
     terminalScrollbackLimitNumber, //  Expose terminal scrollback limit getter
     fileManagerShowDeleteConfirmationBoolean, //  Expose file manager delete confirmation getter
     terminalEnableRightClickPasteBoolean, //  Expose terminal right click paste getter
+    terminalHighlightEnabledBoolean,
+    terminalHighlightRulesList,
     statusMonitorShowIpBoolean, // 暴露状态监视器显示IP getter
   };
   });

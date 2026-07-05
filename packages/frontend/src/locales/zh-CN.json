@@ -1085,6 +1085,37 @@
         "invalidInput": "请输入一个有效的非负整数。"
       }
     },
+    "terminalHighlight": {
+      "title": "终端日志高亮",
+      "enableLabel": "启用终端日志高亮",
+      "description": "在 SSH 文本输出写入终端前按规则添加 ANSI 高亮。已有颜色或控制序列的输出会自动跳过。",
+      "ruleEnabled": "启用规则",
+      "ruleName": "规则名称",
+      "pattern": "正则表达式",
+      "flags": "标志",
+      "foreground": "前景色",
+      "background": "背景色",
+      "priority": "优先级",
+      "bold": "粗体",
+      "underline": "下划线",
+      "addRule": "添加规则",
+      "resetPresets": "恢复系统预设",
+      "previewText": "测试文本",
+      "formMode": "表单编辑",
+      "jsonMode": "JSON 编辑",
+      "jsonLabel": "规则 JSON",
+      "jsonHint": "支持直接填写规则数组，也支持 { \"rules\": [...] } 文档格式；保存时会自动校验并规范化。",
+      "formatJson": "格式化 JSON",
+      "applyJson": "应用 JSON",
+      "newRuleName": "自定义规则",
+      "success": {
+        "saved": "终端日志高亮设置已保存。"
+      },
+      "error": {
+        "saveFailed": "保存终端日志高亮设置失败。",
+        "invalidJson": "请输入有效的高亮规则 JSON。"
+      }
+    },
     "ipBlacklist": {
       "title": "IP 黑名单管理",
       "description": "配置登录失败次数限制和自动封禁时长。本地地址 (127.0.0.1, ::1) 不会被封禁。",

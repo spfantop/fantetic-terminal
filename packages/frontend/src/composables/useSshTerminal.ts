@@ -1,5 +1,6 @@
 import { ref, readonly, type Ref, ComputedRef } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { storeToRefs } from 'pinia';
 import { sessions as globalSessionsRef, poppedOutSessionIds } from '../stores/session/state'; // +++ 导入全局 sessions state +++
 // import { useWebSocketConnection } from './useWebSocketConnection'; // 移除全局导入
 import type { Terminal } from 'xterm';
@@ -7,6 +8,8 @@ import type { SearchAddon, ISearchOptions } from '@xterm/addon-search'; // *** �
 import type { WebSocketMessage, MessagePayload } from '../types/websocket.types';
 import type { SshOutputHandler } from './useWebSocketConnection';
 import { debugLog } from './useDebugLog';
+import { useSettingsStore } from '../stores/settings.store';
+import { highlightTerminalOutput } from '../utils/terminalOutputHighlighter';
 
 type XtermWriteSyncTerminal = Terminal & {
     _core?: {
@@ -33,6 +36,8 @@ export interface SshTerminalDependencies {
 export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalDependencies, t: ReturnType<typeof useI18n>['t']) { // +++ Update type of t +++
     // 使用依赖注入的 WebSocket 函数
     const { sendMessage, sendSshInput, onMessage, onSshOutput, isConnected } = wsDeps;
+    const settingsStore = useSettingsStore();
+    const { terminalHighlightEnabledBoolean, terminalHighlightRulesList } = storeToRefs(settingsStore);
 
     const terminalInstance = ref<Terminal | null>(null);
     const searchAddon = ref<SearchAddon | null>(null); // Keep searchAddon ref
@@ -56,6 +61,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
     let outputDecodeTimer: ReturnType<typeof setTimeout> | null = null;
     let outputDecodeWindow: Window | null = null;
     let outputDecodeMicrotaskScheduled = false;
+    const terminalHighlightTextDecoder = new TextDecoder();
     const INPUT_FLUSH_DELAY = 8;
     const OUTPUT_FLUSH_FALLBACK_DELAY = 32;
     const INTERACTIVE_OUTPUT_FLUSH_LIMIT = 512;
@@ -139,7 +145,11 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
             if (textChunkList.length === 0) return;
             const text = textChunkList.join('');
             textChunkList = [];
-            await writeTerminalOutputAsync(term, text);
+            const highlightedText = highlightTerminalOutput(text, {
+                enabled: terminalHighlightEnabledBoolean.value,
+                rules: terminalHighlightRulesList.value,
+            });
+            await writeTerminalOutputAsync(term, highlightedText);
         };
 
         const flushBinaryChunks = async () => {
@@ -331,6 +341,22 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         return bytes;
     };
 
+    const shouldDecodeOutputForHighlight = () => (
+        terminalHighlightEnabledBoolean.value && terminalHighlightRulesList.value.length > 0
+    );
+
+    const scheduleTerminalByteOutput = (bytes: Uint8Array) => {
+        if (!shouldDecodeOutputForHighlight()) {
+            scheduleTerminalOutput(bytes);
+            return;
+        }
+
+        const text = terminalHighlightTextDecoder.decode(bytes, { stream: true });
+        if (text.length > 0) {
+            scheduleTerminalOutput(text);
+        }
+    };
+
     const compactPendingBase64OutputQueueIfNeeded = () => {
         if (pendingBase64OutputHeadIndex === 0) return;
         if (pendingBase64OutputHeadIndex >= pendingBase64OutputQueue.length) {
@@ -371,7 +397,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         pendingBase64OutputHeadIndex += 1;
 
         try {
-            scheduleTerminalOutput(decodeBase64Output(next.base64String));
+            scheduleTerminalByteOutput(decodeBase64Output(next.base64String));
         } catch (e) {
             console.error(`[会话 ${sessionId}][SSH终端模块] Base64 解码失败:`, e, '原始数据:', next.message?.payload);
             scheduleTerminalOutput(`\r\n[解码错误: ${e}]\r\n`);
@@ -480,7 +506,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
 
         let outputData = payload;
         if (encoding === 'binary' && outputData instanceof Uint8Array) {
-            scheduleTerminalOutput(outputData);
+            scheduleTerminalByteOutput(outputData);
             return;
         }
 

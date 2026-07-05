@@ -1090,6 +1090,37 @@
         "invalidInput": "Please enter a valid non-negative integer."
       }
     },
+    "terminalHighlight": {
+      "title": "Terminal Log Highlighting",
+      "enableLabel": "Enable terminal log highlighting",
+      "description": "Adds ANSI highlighting to SSH text output before it is written to the terminal. Output that already contains colors or control sequences is skipped automatically.",
+      "ruleEnabled": "Rule enabled",
+      "ruleName": "Rule name",
+      "pattern": "Regular expression",
+      "flags": "Flags",
+      "foreground": "Foreground",
+      "background": "Background",
+      "priority": "Priority",
+      "bold": "Bold",
+      "underline": "Underline",
+      "addRule": "Add rule",
+      "resetPresets": "Restore presets",
+      "previewText": "Test text",
+      "formMode": "Form editor",
+      "jsonMode": "JSON editor",
+      "jsonLabel": "Rules JSON",
+      "jsonHint": "You can use a rules array directly, or a { \"rules\": [...] } document. The JSON is validated and normalized before saving.",
+      "formatJson": "Format JSON",
+      "applyJson": "Apply JSON",
+      "newRuleName": "Custom rule",
+      "success": {
+        "saved": "Terminal log highlighting settings saved."
+      },
+      "error": {
+        "saveFailed": "Failed to save terminal log highlighting settings.",
+        "invalidJson": "Enter valid terminal highlight rules JSON."
+      }
+    },
     "ipBlacklist": {
       "title": "IP Blacklist Management",
       "description": "Configure login attempt limits and automatic ban duration. Local addresses (127.0.0.1, ::1) will not be banned.",

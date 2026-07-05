@@ -6,7 +6,8 @@
    "scripts": {
       "dev": "vite --host",
       "build": "vue-tsc --noEmit && vite build",
-      "preview": "vite preview"
+      "preview": "vite preview",
+      "test:highlighter": "esbuild test/terminalOutputHighlighter.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/terminalOutputHighlighter.behavior-test.mjs && node ../../.vite-codex-cache/terminalOutputHighlighter.behavior-test.mjs"
    },
    "dependencies": {
       "@codemirror/commands": "^6.8.1",

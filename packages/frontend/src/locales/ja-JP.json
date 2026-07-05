@@ -1274,6 +1274,37 @@
             "invalidInput": "有効な非負整数を入力してください。"
           }
         },
+        "terminalHighlight": {
+          "title": "ターミナルログハイライト",
+          "enableLabel": "ターミナルログハイライトを有効にする",
+          "description": "SSH テキスト出力をターミナルへ書き込む前に、ルールに従って ANSI ハイライトを追加します。既に色や制御シーケンスを含む出力は自動的にスキップされます。",
+          "ruleEnabled": "ルールを有効化",
+          "ruleName": "ルール名",
+          "pattern": "正規表現",
+          "flags": "フラグ",
+          "foreground": "前景色",
+          "background": "背景色",
+          "priority": "優先度",
+          "bold": "太字",
+          "underline": "下線",
+          "addRule": "ルールを追加",
+          "resetPresets": "プリセットを復元",
+          "previewText": "テストテキスト",
+          "formMode": "フォーム編集",
+          "jsonMode": "JSON 編集",
+          "jsonLabel": "ルール JSON",
+          "jsonHint": "ルール配列を直接入力するか、{ \"rules\": [...] } ドキュメント形式を使用できます。保存前に JSON を検証して正規化します。",
+          "formatJson": "JSON を整形",
+          "applyJson": "JSON を適用",
+          "newRuleName": "カスタムルール",
+          "success": {
+            "saved": "ターミナルログハイライト設定が保存されました。"
+          },
+          "error": {
+            "saveFailed": "ターミナルログハイライト設定の保存に失敗しました。",
+            "invalidJson": "有効なターミナルハイライトルール JSON を入力してください。"
+          }
+        },
         "about": {
             "version": "バージョン",
             "checkingUpdate": "更新を確認中...",

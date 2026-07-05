@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import { useAppearanceStore } from '../../stores/appearance.store';
 import { useUiNotificationsStore } from '../../stores/uiNotifications.store';
 import { storeToRefs } from 'pinia';
+import TerminalHighlightSettings from '../settings/TerminalHighlightSettings.vue';
 
 const { t } = useI18n();
 const appearanceStore = useAppearanceStore();
@@ -86,5 +87,9 @@ const handleSaveEditorFontFamily = async () => {
         <input type="text" id="editorFontFamilyOther" v-model="editableEditorFontFamily" class="border border-border px-[0.7rem] py-2 rounded text-sm bg-background text-foreground w-full box-border transition duration-200 ease-in-out focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary">
         <button @click="handleSaveEditorFontFamily" class="px-3 py-1.5 text-sm border border-border rounded bg-header hover:bg-border transition duration-200 ease-in-out whitespace-nowrap justify-self-start mt-1 md:mt-0">{{ t('common.save') }}</button>
     </div>
+
+    <hr class="my-4 md:my-6">
+
+    <TerminalHighlightSettings />
   </section>
 </template>
