@@ -975,7 +975,7 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
         : t('terminalTabBar.singleLineOutputTooltip', '切换为单行输出');
       const icon = singleLineToggleButton.querySelector('i');
       if (icon) {
-        icon.className = isSingleLineOutput ? 'fas fa-align-left' : 'fas fa-arrows-alt-h';
+        icon.className = 'fas fa-align-left';
       }
     };
     const handleSingleLineToggleClick = () => {
