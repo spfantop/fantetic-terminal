@@ -172,6 +172,9 @@ const handleWorkspaceConnectionConnect = (payload: { connectionId: number }) => 
 
 const handleOpenTransferProgressModal = () => {
   debugLog('[TabBar] Received ui:openTransferProgressModal event, opening modal.');
+  if (layoutStore.usedPanes.has('transferProgress')) {
+    return;
+  }
   showTransferProgressModal.value = true;
 };
 
@@ -403,6 +406,25 @@ const toggleWorkspaceSplit = () => {
   emitWorkspaceEvent('ui:toggleWorkspaceSplit', { paneId: props.workspacePaneId });
 };
 
+const activeSessionState = computed(() => (
+  props.activeSessionId ? sessionStore.sessions.get(props.activeSessionId) ?? null : null
+));
+
+const shouldShowSingleLineOutputToggle = computed(() => activeSessionState.value?.kind === 'ssh');
+
+const isActiveSessionSingleLineOutput = computed(() => (
+  shouldShowSingleLineOutputToggle.value && !!activeSessionState.value?.terminalSingleLineOutput
+));
+
+const singleLineOutputToggleIconClass = computed(() => (
+  isActiveSessionSingleLineOutput.value ? 'fas fa-arrows-alt-h' : 'fas fa-align-left'
+));
+
+const toggleSingleLineOutput = () => {
+  if (!props.activeSessionId || !shouldShowSingleLineOutputToggle.value) return;
+  sessionStore.toggleTerminalSingleLineOutput(props.activeSessionId);
+};
+
 const workspaceSplitTitle = computed(() => (
   props.workspaceSplitActive
     ? t('terminalTabBar.mergeWorkspaceTooltip', '合并窗口')
@@ -599,12 +621,16 @@ onBeforeUnmount(() => {
         >
           <i :class="[eyeIconClass, 'text-sm']"></i>
         </button>
-        <!-- 查看传输进度按钮 (移除 v-if="!isMobile" 以在移动端显示) -->
         <button
-                class="flex items-center justify-center px-3 h-full border-l border-border text-text-secondary hover:bg-border hover:text-foreground transition-colors duration-150"
-                @click="showTransferProgressModal = true"
-                :title="t('terminalTabBar.showTransferProgressTooltip', '查看传输进度')">
-          <i class="fas fa-tasks text-sm"></i>
+          v-if="shouldShowSingleLineOutputToggle"
+          type="button"
+          class="flex items-center justify-center px-3 h-full border-l border-border transition-colors duration-150"
+          :class="isActiveSessionSingleLineOutput ? 'bg-primary/10 text-primary hover:bg-primary/15' : 'text-text-secondary hover:bg-border hover:text-foreground'"
+          :aria-pressed="isActiveSessionSingleLineOutput"
+          :title="isActiveSessionSingleLineOutput ? t('terminalTabBar.multiLineOutputTooltip', '切换为多行输出') : t('terminalTabBar.singleLineOutputTooltip', '切换为单行输出')"
+          @click="toggleSingleLineOutput"
+        >
+          <i :class="[singleLineOutputToggleIconClass, 'text-sm']"></i>
         </button>
         <!-- +++ 使用 v-if 隐藏移动端的布局按钮 +++ -->
         <button v-if="!isMobile && props.showLayoutActions" class="flex items-center justify-center px-3 h-full border-l border-border text-text-secondary hover:bg-border hover:text-foreground transition-colors duration-150"

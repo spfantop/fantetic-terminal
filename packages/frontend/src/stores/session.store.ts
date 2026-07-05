@@ -57,6 +57,8 @@ export const useSessionStore = defineStore('session', () => {
   const openRemoteDesktopSession = (connection: ConnectionInfo) => sessionActions.openRemoteDesktopSession(connection);
   const updateRdpSessionStatus = (sessionId: string, status: Parameters<typeof sessionActions.updateRdpSessionStatus>[1], message: string) =>
     sessionActions.updateRdpSessionStatus(sessionId, status, message);
+  const toggleTerminalSingleLineOutput = (sessionId: string) =>
+    sessionActions.toggleTerminalSingleLineOutput(sessionId);
 
   // Session Actions
   const openNewSession = (connectionId: number | string) =>
@@ -178,6 +180,7 @@ export const useSessionStore = defineStore('session', () => {
     openRdpSession,
     openRemoteDesktopSession,
     updateRdpSessionStatus,
+    toggleTerminalSingleLineOutput,
     openVncModal,
     closeVncModal,
     updateSessionCommandInput,

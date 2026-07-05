@@ -14,6 +14,7 @@ import { useSidebarResize } from '../composables/useSidebarResize';
 import { beginGlobalDragSelectionGuard } from '../composables/useGlobalDragSelectionGuard';
 import { debugLog } from '../composables/useDebugLog';
 import { storeToRefs } from 'pinia';
+import TransferProgressModal from './TransferProgressModal.vue';
 
 
 // --- Props ---
@@ -137,6 +138,7 @@ const componentMap: Record<PaneName, Component> = {
   quickCommands: defineAsyncComponent(() => import('../views/QuickCommandsView.vue')),
   dockerManager: defineAsyncComponent(() => import('./DockerManager.vue')), // <--- 添加 dockerManager 映射
   suspendedSshSessions: defineAsyncComponent(() => import('../views/SuspendedSshSessionsView.vue')),
+  transferProgress: TransferProgressModal,
 };
 const RemoteDesktopSession = defineAsyncComponent(() => import('./RemoteDesktopSession.vue'));
 
@@ -705,6 +707,7 @@ const paneLabels = computed(() => ({
   quickCommands: t('layout.pane.quickCommands', '快捷指令'),
   dockerManager: t('layout.pane.dockerManager', 'Docker 管理器'),
   suspendedSshSessions: t('layout.panes.suspendedSshSessions', '挂起会话管理'),
+  transferProgress: t('layout.pane.transferProgress', '传输进度'),
 }));
 
 
@@ -784,6 +787,11 @@ const componentProps = computed(() => {
      return {
        class: 'flex flex-col flex-grow h-full overflow-auto', // 与 quickCommands 类似
      };
+   case 'transferProgress':
+     return {
+       class: 'flex flex-col flex-grow h-full overflow-hidden',
+       embedded: true,
+     };
    default:
      return { class: 'pane-content' };
  }
@@ -837,6 +845,11 @@ const sidebarProps = computed(() => (paneName: PaneName | null, side: 'left' | '
      return {
        ...baseProps,
        activeSessionId: props.activeSessionId, // 传递 activeSessionId
+     };
+   case 'transferProgress':
+     return {
+       ...baseProps,
+       embedded: true,
      };
     // Add cases for other components if they need specific props or event forwarding in the sidebar
     // case 'commandHistory': return { ...baseProps, onExecuteCommand: (cmd: string) => emit('sendCommand', cmd) };
@@ -906,6 +919,21 @@ const closeSidebars = () => {
   activeRightSidebarPane.value = null;
 };
 
+const openTransferProgressSidebar = () => {
+  if (!props.isRootRenderer || !shouldRenderRootSidebars.value) return;
+
+  if (sidebarPanes.value.left.includes('transferProgress')) {
+    activeLeftSidebarPane.value = 'transferProgress';
+    activeRightSidebarPane.value = null;
+    return;
+  }
+
+  if (sidebarPanes.value.right.includes('transferProgress')) {
+    activeRightSidebarPane.value = 'transferProgress';
+    activeLeftSidebarPane.value = null;
+  }
+};
+
 // 监听 activeSessionId 的变化，如果会话切换，则关闭侧栏 (可选行为)
 watch(() => props.activeSessionId, () => {
     // closeSidebars(); // 取消注释以在切换会话时关闭侧栏
@@ -931,6 +959,7 @@ const getIconClasses = (paneName: PaneName): string[] => {
     case 'editor': return ['fas', 'fa-file-alt'];
     case 'statusMonitor': return ['fas', 'fa-tachometer-alt'];
     case 'suspendedSshSessions': return ['fas', 'fa-pause-circle']; // 图标：暂停圈
+    case 'transferProgress': return ['fas', 'fa-tasks'];
     // Add other specific icons here if needed
     default: return ['fas', 'fa-question-circle']; // Default icon
   }
@@ -971,6 +1000,7 @@ useSidebarResize({
 
 onMounted(() => {
   subscribeToWorkspaceEvent('terminal:stabilizedResize', handleStabilizedTerminalResize);
+  subscribeToWorkspaceEvent('ui:openTransferProgressModal', openTransferProgressSidebar);
 });
 
 // +++ Background Image Style +++
@@ -1050,6 +1080,7 @@ onBeforeUnmount(() => {
   cleanupTerminalGridResizeListeners?.();
   releaseSplitpaneResizeSelectionGuard();
   unsubscribeFromWorkspaceEvent('terminal:stabilizedResize', handleStabilizedTerminalResize);
+  unsubscribeFromWorkspaceEvent('ui:openTransferProgressModal', openTransferProgressSidebar);
 });
 
 
@@ -1184,6 +1215,7 @@ onBeforeUnmount(() => {
                                         :class="getTerminalSessionClasses(sessionId)"
                                         :style="getTerminalSessionStyle(sessionId)"
                                         :options="{}"
+                                        :single-line-output="!!sessionState.terminalSingleLineOutput"
                                         :terminal-input-handler="terminalInputHandler"
                                         @click="activateTerminalSession(sessionId)"
                                     />

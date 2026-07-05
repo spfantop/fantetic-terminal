@@ -9,11 +9,17 @@ import { formatDateTimeWithSettings } from '../utils/dateTimeFormat';
 import { useDraggableDialog } from '../composables/useDraggableDialog';
 
 interface Props {
-  visible: boolean;
+  visible?: boolean;
+  embedded?: boolean;
 }
 
-const props = defineProps<Props>();
-const emit = defineEmits(['update:visible']);
+const props = withDefaults(defineProps<Props>(), {
+  visible: true,
+  embedded: false,
+});
+const emit = defineEmits<{
+  (e: 'update:visible', value: boolean): void;
+}>();
 const { t, locale } = useI18n(); // +++ 解构出 locale +++
 const connectionsStore = useConnectionsStore();
 const settingsStore = useSettingsStore();
@@ -22,6 +28,7 @@ const modalContentRef = ref<HTMLElement | null>(null);
 const { centerDialog, startDialogDrag } = useDraggableDialog({
   rootRef: modalRootRef,
   dialogRef: modalContentRef,
+  disabled: computed(() => props.embedded),
 });
 
 // Helper function to get connection name by ID
@@ -82,6 +89,7 @@ const transferTasks = ref<TransferTask[]>([]);
 const isLoading = ref(false);
 const errorLoading = ref<string | null>(null);
 const pollingIntervalId = ref<number | null>(null);
+const isTransferProgressActive = computed(() => props.embedded || props.visible);
 
 // Computed property for sorted and limited tasks
 const displayedTasks = computed(() => {
@@ -162,35 +170,39 @@ const formatDate = (dateInput: string | Date): string => {
   }
 };
 
-onMounted(() => {
-  if (props.visible) {
-    fetchTransferTasks();
-    if (pollingIntervalId.value === null) {
-       pollingIntervalId.value = window.setInterval(fetchTransferTasks, 5000);
-    }
+const startPolling = () => {
+  fetchTransferTasks();
+  if (pollingIntervalId.value === null) {
+     pollingIntervalId.value = window.setInterval(fetchTransferTasks, 5000);
   }
-});
+};
 
-onUnmounted(() => {
+const stopPolling = () => {
   if (pollingIntervalId.value !== null) {
     clearInterval(pollingIntervalId.value);
     pollingIntervalId.value = null;
   }
+};
+
+onMounted(() => {
+  if (isTransferProgressActive.value) {
+    if (!props.embedded) {
+      centerDialog();
+    }
+    startPolling();
+  }
 });
 
-watch(() => props.visible, (newVisible) => {
-  // internalVisible.value = newVisible; // 由下面的watch处理
-  if (newVisible) {
-    centerDialog();
-    fetchTransferTasks(); // 模态框可见时立即获取一次数据
-    if (pollingIntervalId.value === null) { // 只有在没有定时器时才启动
-      pollingIntervalId.value = window.setInterval(fetchTransferTasks, 5000);
+onUnmounted(stopPolling);
+
+watch(isTransferProgressActive, (isActive) => {
+  if (isActive) {
+    if (!props.embedded) {
+      centerDialog();
     }
+    startPolling();
   } else {
-    if (pollingIntervalId.value !== null) {
-      clearInterval(pollingIntervalId.value);
-      pollingIntervalId.value = null;
-    }
+    stopPolling();
   }
 }, { immediate: false }); // immediate: false 避免在组件初始化时立即执行，onMounted已处理首次加载
 
@@ -199,7 +211,7 @@ const internalVisible = ref(props.visible);
 
 // 监听 props.visible 的变化来更新 internalVisible
 watch(() => props.visible, (newVisibleValue) => {
-  internalVisible.value = newVisibleValue;
+  internalVisible.value = props.embedded || newVisibleValue;
 }, { immediate: true }); // 确保初始状态同步
 
 // 监听 internalVisible 的变化来 emit update:visible
@@ -210,7 +222,20 @@ watch(internalVisible, (newVal) => {
 });
 
 const handleClose = () => {
+  if (props.embedded) return;
   internalVisible.value = false;
+};
+
+const handleRootClick = () => {
+  if (!props.embedded) {
+    handleClose();
+  }
+};
+
+const handleHeaderPointerDown = (event: PointerEvent) => {
+  if (!props.embedded) {
+    startDialogDrag(event);
+  }
 };
 
 const isTaskCancellable = (taskStatus: TransferTask['status']): boolean => {
@@ -249,20 +274,28 @@ const handleCancelTask = async (taskId: string) => {
 </script>
 
 <template>
-  <div
+  <component
+    :is="props.embedded ? 'section' : 'div'"
     ref="modalRootRef"
     v-if="internalVisible"
-    class="fixed inset-0 bg-overlay flex justify-center items-center z-50 p-4"
-    @click.self="handleClose"
+    :class="props.embedded ? 'transfer-progress-embedded bg-background text-foreground flex flex-col h-full min-h-0 overflow-hidden' : 'fixed inset-0 bg-overlay flex justify-center items-center z-50 p-4'"
+    @click.self="handleRootClick"
   >
-    <div ref="modalContentRef" class="bg-background text-foreground p-6 rounded-lg shadow-xl border w-full max-w-3xl max-h-[85vh] flex flex-col" :style="{ borderColor: 'var(--border-color)' }">
+    <div
+      ref="modalContentRef"
+      :class="props.embedded ? 'transfer-progress-embedded-content bg-background text-foreground p-3 w-full h-full min-h-0 flex flex-col' : 'bg-background text-foreground p-6 rounded-lg shadow-xl border w-full max-w-3xl max-h-[85vh] flex flex-col'"
+      :style="{ borderColor: 'var(--border-color)' }"
+    >
       <!-- Header -->
-      <h3 class="text-xl font-semibold text-center mb-6 flex-shrink-0 cursor-move select-none" @pointerdown="startDialogDrag">
+      <h3
+        :class="props.embedded ? 'text-base font-semibold mb-3 flex-shrink-0 select-none' : 'text-xl font-semibold text-center mb-6 flex-shrink-0 cursor-move select-none'"
+        @pointerdown="handleHeaderPointerDown"
+      >
         {{ t('transferProgressModal.title', '文件传输进度') }}
       </h3>
 
       <!-- Content Area -->
-      <div class="flex-grow overflow-y-auto mb-6 pr-2 space-y-4 custom-scrollbar">
+      <div :class="['flex-grow overflow-y-auto pr-2 space-y-4 custom-scrollbar min-h-0', props.embedded ? 'mb-0' : 'mb-6']">
         <div v-if="isLoading && transferTasks.length === 0" class="text-center text-text-secondary py-10">
           <svg class="animate-spin h-8 w-8 text-primary mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -357,7 +390,7 @@ const handleCancelTask = async (taskId: string) => {
       </div>
 
       <!-- Footer -->
-      <div class="flex justify-end items-center pt-4 mt-auto flex-shrink-0 border-t" :style="{ borderTopColor: 'var(--border-color)' }">
+      <div v-if="!props.embedded" class="flex justify-end items-center pt-4 mt-auto flex-shrink-0 border-t" :style="{ borderTopColor: 'var(--border-color)' }">
         <button
           @click="handleClose"
           class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out"
@@ -366,7 +399,7 @@ const handleCancelTask = async (taskId: string) => {
         </button>
       </div>
     </div>
-  </div>
+  </component>
 </template>
 
 <style scoped>

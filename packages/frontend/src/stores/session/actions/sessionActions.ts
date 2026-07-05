@@ -68,6 +68,7 @@ export const openNewSession = (
       editorTabs: ref([]),
       activeEditorTabId: ref(null),
       commandInputContent: ref(''),
+      terminalSingleLineOutput: false,
       isMarkedForSuspend: false,
       createdAt: Date.now(),
       disposables: [],
@@ -244,6 +245,21 @@ export const updateRdpSessionStatus = (
   session.rdpStatus = status;
   session.rdpStatusMessage = message;
   sessions.value = new Map(sessions.value);
+};
+
+export const setTerminalSingleLineOutput = (sessionId: string, enabled: boolean) => {
+  const session = sessions.value.get(sessionId);
+  if (!session || session.kind !== 'ssh') return;
+
+  session.terminalSingleLineOutput = enabled;
+  sessions.value = new Map(sessions.value);
+};
+
+export const toggleTerminalSingleLineOutput = (sessionId: string) => {
+  const session = sessions.value.get(sessionId);
+  if (!session || session.kind !== 'ssh') return;
+
+  setTerminalSingleLineOutput(sessionId, !session.terminalSingleLineOutput);
 };
 
 export const activateSession = (sessionId: string) => {

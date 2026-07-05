@@ -21,6 +21,7 @@ const props = defineProps<{
   stream?: ReadableStream<string>; // 用于接收来自 WebSocket 的数据流 (可选)
   options?: object; // xterm 的配置选项
   terminalInputHandler?: (sessionId: string, data: string, batched?: boolean) => void;
+  singleLineOutput?: boolean;
 }>();
 
 
@@ -31,6 +32,7 @@ const unsubscribeFromWorkspaceEvent = useWorkspaceEventOff();
 
 const terminalRef = ref<HTMLElement | null>(null); // xterm 挂载点的引用 (内部容器)
 const terminalOuterWrapperRef = ref<HTMLElement | null>(null); // 最外层容器的引用，用于背景图
+const singleLineContentWidth = ref<string | null>(null);
 let terminal: Terminal | null = null;
 let fitAddon: FitAddon | null = null;
 let searchAddon: SearchAddon | null = null; // *** 添加 searchAddon 变量 ***
@@ -54,6 +56,7 @@ const RESIZE_THRESHOLD = 0.5; // px
 const RESIZE_EMIT_DELAY = 150;
 const STABILIZED_RESIZE_DELAY = 150;
 const RESIZE_TRANSACTION_SETTLE_DELAY = 80;
+const SINGLE_LINE_OUTPUT_COLS = 4096;
 
 type TerminalDimensions = {
   cols: number;
@@ -157,7 +160,7 @@ const isSamePixelSize = (a: TerminalPixelSize | null, b: TerminalPixelSize | nul
 );
 
 const readTerminalPixelSize = (): TerminalPixelSize | null => {
-  const element = terminalRef.value;
+  const element = terminalOuterWrapperRef.value ?? terminalRef.value;
   if (!element) return null;
 
   const width = element.clientWidth;
@@ -211,9 +214,10 @@ const proposeDimensionsFromCachedMetrics = (pixelSize: TerminalPixelSize, forceR
 
   const availableWidth = Math.max(0, pixelSize.width - metrics.paddingHorizontal - metrics.scrollbarWidth);
   const availableHeight = Math.max(0, pixelSize.height - metrics.paddingVertical);
+  const visibleCols = Math.max(2, Math.floor(availableWidth / metrics.cellWidth));
 
   return {
-    cols: Math.max(2, Math.floor(availableWidth / metrics.cellWidth)),
+    cols: props.singleLineOutput ? Math.max(SINGLE_LINE_OUTPUT_COLS, visibleCols) : visibleCols,
     rows: Math.max(1, Math.floor(availableHeight / metrics.cellHeight)),
   };
 };
@@ -222,6 +226,20 @@ const resizeTerminalToDimensions = (dimensions: TerminalDimensions) => {
   if (!terminal || isNaN(dimensions.cols) || isNaN(dimensions.rows)) return;
 
   terminal.resize(dimensions.cols, dimensions.rows);
+};
+
+const updateSingleLineContentWidth = () => {
+  if (!props.singleLineOutput || !terminal || !terminalRef.value) {
+    singleLineContentWidth.value = null;
+    return;
+  }
+
+  const metrics = cachedFitMetrics ?? refreshTerminalFitMetrics();
+  if (!metrics) return;
+
+  const visibleWidth = terminalOuterWrapperRef.value?.clientWidth ?? terminalRef.value.clientWidth;
+  const contentWidth = Math.ceil((terminal.cols * metrics.cellWidth) + metrics.paddingHorizontal + metrics.scrollbarWidth);
+  singleLineContentWidth.value = `${Math.max(visibleWidth, contentWidth)}px`;
 };
 
 const clearPendingResizeEmit = () => {
@@ -300,6 +318,7 @@ const fitTerminalToContainer = (options: { forceFit?: boolean; forceResizeEmit?:
 
     const currentDimensions = { cols: terminal.cols, rows: terminal.rows };
     lastAppliedDimensions = { ...currentDimensions };
+    updateSingleLineContentWidth();
 
     if (dimensionsChanged || options.forceResizeEmit) {
       if (options.forceResizeEmit) {
@@ -528,7 +547,7 @@ onMounted(() => {
     // 监听终端大小变化 (通过 ResizeObserver) - 主要处理浏览器窗口大小变化等
     // ResizeObserver 观察内部容器 terminalRef
     if (terminalRef.value) {
-        observedElement = terminalRef.value;
+        observedElement = terminalOuterWrapperRef.value ?? terminalRef.value;
         resizeObserver = new ResizeObserver((entries) => {
             if (!props.isActive || !terminal || !terminalRef.value) return;
 
@@ -587,6 +606,17 @@ onMounted(() => {
         } else {
             console.warn(`[Terminal ${props.sessionId}] Cannot handle isActive change: resizeObserver or observedElement missing.`);
         }
+    });
+
+    watch(() => props.singleLineOutput, () => {
+      if (!terminal) return;
+      if (!props.singleLineOutput) {
+        singleLineContentWidth.value = null;
+      }
+      invalidateTerminalFitMetrics();
+      nextTick(() => {
+        fitTerminalToContainer({ forceFit: true, forceResizeEmit: true, emitStabilizedNow: true });
+      });
     });
 
 
@@ -942,13 +972,27 @@ watchEffect(() => {
     });
   }
 });
+
+const terminalInnerStyle = computed(() => (
+  props.singleLineOutput && singleLineContentWidth.value
+    ? { width: singleLineContentWidth.value, minWidth: '100%' }
+    : undefined
+));
  
 </script>
 
 <template>
-  <div ref="terminalOuterWrapperRef" class="terminal-outer-wrapper" :data-terminal-session-id="props.sessionId">
+  <div
+    ref="terminalOuterWrapperRef"
+    :class="['terminal-outer-wrapper', { 'single-line-output': props.singleLineOutput }]"
+    :data-terminal-session-id="props.sessionId"
+  >
     <!-- xterm 实际挂载点 -->
-    <div ref="terminalRef" class="terminal-inner-container"></div>
+    <div
+      ref="terminalRef"
+      :class="['terminal-inner-container', { 'single-line-output': props.singleLineOutput }]"
+      :style="terminalInnerStyle"
+    ></div>
   </div>
 </template>
 
@@ -959,6 +1003,11 @@ watchEffect(() => {
   overflow: hidden;
   position: relative;
   contain: layout paint size;
+}
+
+.terminal-outer-wrapper.single-line-output {
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .terminal-inner-container {
@@ -973,6 +1022,22 @@ watchEffect(() => {
 .terminal-inner-container :deep(.xterm) {
   width: 100%;
   height: 100%;
+}
+
+.terminal-inner-container.single-line-output {
+  min-width: 100%;
+  overflow-x: visible;
+  overflow-y: hidden;
+}
+
+.terminal-inner-container.single-line-output :deep(.xterm),
+.terminal-inner-container.single-line-output :deep(.xterm-screen),
+.terminal-inner-container.single-line-output :deep(.xterm-helpers) {
+  min-width: 100%;
+}
+
+.terminal-inner-container.single-line-output :deep(.xterm-viewport) {
+  overflow-x: hidden !important;
 }
 
 /* 文字描边和阴影样式 */

@@ -1416,7 +1416,8 @@
       "commandHistory": "Command History",
       "quickCommands": "Quick Commands",
       "dockerManager": "Docker Manager",
-      "suspendedSshSessions": "Suspended Sessions Management"
+      "suspendedSshSessions": "Suspended Sessions Management",
+      "transferProgress": "Transfer Progress"
     },
     "panes": {
       "suspendedSshSessions": "Suspended Session Manager"
@@ -1649,7 +1650,9 @@
     "selectServerTitle": "Select server to connect",
     "showTransferProgressTooltip": "Show/Hide Transfer Progress",
     "splitWorkspaceTooltip": "Split Workspace",
-    "mergeWorkspaceTooltip": "Merge Workspace"
+    "mergeWorkspaceTooltip": "Merge Workspace",
+    "singleLineOutputTooltip": "Switch to single-line output",
+    "multiLineOutputTooltip": "Switch to multi-line output"
   },
   "tabs": {
     "contextMenu": {

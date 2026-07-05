@@ -244,6 +244,7 @@ type PoppedOutTerminalState = {
   focusHandler: () => void;
   resizeHandler: () => void;
   visibilityHandler: () => void;
+  singleLineButtonCleanup?: () => void;
 };
 
 type XtermWindowBoundTerminal = XtermTerminal & {
@@ -416,6 +417,7 @@ const restorePoppedOutTerminalElement = (sessionId: string) => {
     state.windowRef.removeEventListener('pageshow', state.focusHandler);
     state.windowRef.removeEventListener('resize', state.resizeHandler);
     state.windowRef.document.removeEventListener('visibilitychange', state.visibilityHandler);
+    state.singleLineButtonCleanup?.();
   } catch (error) {
     console.warn(`[WorkspaceView] Failed to remove pop-out window listeners for session ${sessionId}:`, error);
   }
@@ -815,6 +817,35 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
       width: 100%;
       height: 100%;
     }
+    .external-session-popout-actions {
+      display: flex;
+      margin-left: auto;
+      align-items: stretch;
+    }
+    .external-session-popout-action {
+      display: inline-flex;
+      width: 2.5rem;
+      height: 100%;
+      align-items: center;
+      justify-content: center;
+      border: 0;
+      border-left: 1px solid var(--border-color, #333);
+      background: transparent;
+      color: var(--text-color-secondary, #aaa);
+      cursor: pointer;
+      transition: background-color 0.15s ease, color 0.15s ease;
+    }
+    .external-session-popout-action:hover {
+      background: var(--hover-bg-color, rgba(255, 255, 255, 0.08));
+      color: var(--text-color, #fff);
+    }
+    .external-session-popout-action.is-active {
+      background: color-mix(in srgb, var(--primary-color, #3b82f6) 14%, transparent);
+      color: var(--primary-color, #3b82f6);
+    }
+    .external-session-popout-action[hidden] {
+      display: none;
+    }
   `;
   popup.document.head.appendChild(popoutStyle);
 
@@ -826,11 +857,17 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
         <span class="external-session-popout-status"></span>
         <span class="external-session-popout-tab-name"></span>
       </div>
+      <div class="external-session-popout-actions">
+        <button type="button" class="external-session-popout-action" data-single-line-output-toggle aria-pressed="false">
+          <i class="fas fa-align-left"></i>
+        </button>
+      </div>
     </div>
     <div class="external-session-popout-terminal"></div>
   `;
   shell.querySelector('.external-session-popout-tab-name')!.textContent = sessionName;
   popup.document.body.appendChild(shell);
+  const singleLineToggleButton = shell.querySelector<HTMLButtonElement>('[data-single-line-output-toggle]');
 
   const terminalHost = shell.querySelector<HTMLElement>('.external-session-popout-terminal');
   if (!terminalHost || !popoutLayoutTree) {
@@ -922,6 +959,44 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
       focusPoppedOutSession(sessionId, { resize: true });
     }
   };
+  let singleLineButtonCleanup: (() => void) | undefined;
+  if (singleLineToggleButton) {
+    const updateSingleLineToggleButton = () => {
+      const session = sessionStore.sessions.get(sessionId);
+      const shouldShow = session?.kind === 'ssh';
+      singleLineToggleButton.hidden = !shouldShow;
+      if (!shouldShow) return;
+
+      const isSingleLineOutput = !!session.terminalSingleLineOutput;
+      singleLineToggleButton.classList.toggle('is-active', isSingleLineOutput);
+      singleLineToggleButton.setAttribute('aria-pressed', String(isSingleLineOutput));
+      singleLineToggleButton.title = isSingleLineOutput
+        ? t('terminalTabBar.multiLineOutputTooltip', '切换为多行输出')
+        : t('terminalTabBar.singleLineOutputTooltip', '切换为单行输出');
+      const icon = singleLineToggleButton.querySelector('i');
+      if (icon) {
+        icon.className = isSingleLineOutput ? 'fas fa-align-left' : 'fas fa-arrows-alt-h';
+      }
+    };
+    const handleSingleLineToggleClick = () => {
+      if (sessionStore.sessions.get(sessionId)?.kind !== 'ssh') return;
+      sessionStore.toggleTerminalSingleLineOutput(sessionId);
+      requestSessionResize(sessionId);
+    };
+    singleLineToggleButton.addEventListener('click', handleSingleLineToggleClick);
+    const stopWatcher = watch(
+      () => {
+        const session = sessionStore.sessions.get(sessionId);
+        return session?.kind === 'ssh' ? session.terminalSingleLineOutput : null;
+      },
+      updateSingleLineToggleButton,
+      { immediate: true },
+    );
+    singleLineButtonCleanup = () => {
+      singleLineToggleButton.removeEventListener('click', handleSingleLineToggleClick);
+      stopWatcher();
+    };
+  }
   const nextPoppedOutTerminalMap = new Map(poppedOutTerminalMap.value);
   nextPoppedOutTerminalMap.set(sessionId, {
     sessionId,
@@ -935,6 +1010,7 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
     focusHandler,
     resizeHandler,
     visibilityHandler,
+    singleLineButtonCleanup,
   });
   poppedOutTerminalMap.value = nextPoppedOutTerminalMap;
 

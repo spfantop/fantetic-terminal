@@ -44,6 +44,7 @@ export interface SessionState {
   activeEditorTabId: Ref<string | null>; // 当前活动的编辑器标签页 ID
   // --- 命令输入框内容 ---
   commandInputContent: Ref<string>; // 当前会话的命令输入框内容
+  terminalSingleLineOutput?: boolean; // 终端输出是否使用单行宽列模式
   isResuming?: boolean; // 标记会话是否正在从挂起状态恢复
   isMarkedForSuspend?: boolean; // +++ 标记会话是否已被用户请求标记为待挂起 +++
   disposables?: (() => void)[]; // 用于存储清理函数，例如取消注册消息处理器
