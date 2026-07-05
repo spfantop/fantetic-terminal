@@ -420,7 +420,15 @@ const singleLineOutputToggleIconClass = computed(() => (
   isActiveSessionSingleLineOutput.value ? 'fas fa-arrows-alt-h' : 'fas fa-align-left'
 ));
 
-const toggleSingleLineOutput = () => {
+const releaseButtonFocus = (event?: Event) => {
+  const target = event?.currentTarget;
+  if (target instanceof HTMLElement) {
+    target.blur();
+  }
+};
+
+const toggleSingleLineOutput = (event?: MouseEvent) => {
+  releaseButtonFocus(event);
   if (!props.activeSessionId || !shouldShowSingleLineOutputToggle.value) return;
   sessionStore.toggleTerminalSingleLineOutput(props.activeSessionId);
 };
@@ -628,6 +636,7 @@ onBeforeUnmount(() => {
           :class="isActiveSessionSingleLineOutput ? 'bg-primary/10 text-primary hover:bg-primary/15' : 'text-text-secondary hover:bg-border hover:text-foreground'"
           :aria-pressed="isActiveSessionSingleLineOutput"
           :title="isActiveSessionSingleLineOutput ? t('terminalTabBar.multiLineOutputTooltip', '切换为多行输出') : t('terminalTabBar.singleLineOutputTooltip', '切换为单行输出')"
+          @pointerdown.prevent
           @click="toggleSingleLineOutput"
         >
           <i :class="[singleLineOutputToggleIconClass, 'text-sm']"></i>

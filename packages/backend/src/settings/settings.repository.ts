@@ -2,95 +2,11 @@ import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/conn
 import { SidebarConfig, LayoutNode, PaneName } from '../types/settings.types';
 import { CaptchaSettings } from '../types/settings.types';
 import * as sqlite3 from 'sqlite3';
+import defaultTerminalHighlightRulesDocument from './defaultTerminalHighlightRules.json';
 
 const SIDEBAR_CONFIG_KEY = 'sidebarConfig';
 const CAPTCHA_CONFIG_KEY = 'captchaConfig';
-const DEFAULT_TERMINAL_HIGHLIGHT_RULES_JSON = JSON.stringify([
-  {
-    id: 'preset-error',
-    name: 'error',
-    enabled: true,
-    pattern: '\\b(ERROR|FAIL(?:ED)?|FATAL|Exception)\\b',
-    flags: 'gi',
-    foreground: '#ef4444',
-    bold: true,
-    priority: 100,
-    presetId: 'error',
-  },
-  {
-    id: 'preset-warning',
-    name: 'warning',
-    enabled: true,
-    pattern: '\\b(WARN(?:ING)?|DEPRECATED)\\b',
-    flags: 'gi',
-    foreground: '#f59e0b',
-    bold: true,
-    priority: 90,
-    presetId: 'warning',
-  },
-  {
-    id: 'preset-success',
-    name: 'success',
-    enabled: true,
-    pattern: '\\b(SUCCESS|SUCCEEDED|PASS(?:ED)?|OK|DONE)\\b',
-    flags: 'gi',
-    foreground: '#22c55e',
-    priority: 80,
-    presetId: 'success',
-  },
-  {
-    id: 'preset-info',
-    name: 'info',
-    enabled: true,
-    pattern: '\\b(INFO|NOTICE)\\b',
-    flags: 'gi',
-    foreground: '#38bdf8',
-    priority: 70,
-    presetId: 'info',
-  },
-  {
-    id: 'preset-http-error',
-    name: 'httpError',
-    enabled: true,
-    pattern: '\\bHTTP/[0-9.]+\\s+[45][0-9]{2}\\b|\\b[45][0-9]{2}\\s+(?:Error|Failed|Failure)\\b',
-    flags: 'gi',
-    foreground: '#fb7185',
-    bold: true,
-    priority: 95,
-    presetId: 'httpError',
-  },
-  {
-    id: 'preset-url',
-    name: 'url',
-    enabled: true,
-    pattern: 'https?://[^\\s]+',
-    flags: 'gi',
-    foreground: '#60a5fa',
-    underline: true,
-    priority: 40,
-    presetId: 'url',
-  },
-  {
-    id: 'preset-ip',
-    name: 'ip',
-    enabled: false,
-    pattern: '\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b',
-    flags: 'g',
-    foreground: '#a78bfa',
-    priority: 30,
-    presetId: 'ip',
-  },
-  {
-    id: 'preset-timestamp',
-    name: 'timestamp',
-    enabled: false,
-    pattern: '\\b\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:?\\d{2})?\\b',
-    flags: 'g',
-    foreground: '#94a3b8',
-    priority: 20,
-    presetId: 'timestamp',
-  },
-]);
+const DEFAULT_TERMINAL_HIGHLIGHT_RULES_JSON = JSON.stringify(defaultTerminalHighlightRulesDocument);
 
 export interface Setting {
   key: string;
@@ -342,7 +258,7 @@ export const ensureDefaultSettingsExist = async (db: sqlite3.Database): Promise<
         timezone: 'UTC', // 时区默认值
         terminalScrollbackLimit: '5000', // 终端回滚行数默认值
         terminalEnableRightClickPaste: 'true', // 终端右键粘贴默认值
-        terminalHighlightEnabled: 'false',
+        terminalHighlightEnabled: 'true',
         terminalHighlightRules: DEFAULT_TERMINAL_HIGHLIGHT_RULES_JSON,
         rdpDefaultFixedResolution: 'false',
         rdpDefaultWidth: '1024',

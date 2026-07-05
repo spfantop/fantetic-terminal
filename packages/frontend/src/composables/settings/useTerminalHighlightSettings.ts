@@ -11,7 +11,24 @@ import {
   type TerminalHighlightRule,
 } from '../../utils/terminalOutputHighlighter';
 
-const DEFAULT_PREVIEW_TEXT = '2026-07-05 10:30:15 INFO service started\n2026-07-05 10:31:02 WARN retrying request\n2026-07-05 10:31:10 ERROR request failed https://example.com/api 500 Error';
+const DEFAULT_PREVIEW_TEXT = `peter@server:/opt/app (main)$ docker compose up -d --build
+root@prod:/var/log# tail -f /var/log/nginx/access.log
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk && echo "$JAVA_HOME"
+curl -X POST "https://example.com/api/login" -H 'Content-Type: application/json' --connect-timeout=5
+2026-07-05 22:55:08.123 INFO  [main] c.example.App - started in 1280 ms
+2026-07-05T22:55:09.181082768+09:00 ERROR request failed traceId=adMm1224399051239198720 path=/api/user/list
+2026/7/5 22:55:10 WARN Deprecated config import optional:nacos:api.yaml
+2026-07-05 22:55:11.456 INFO response={"code":200,"success":true,"url":"https://example.com/api?id=1","ip":"10.0.0.2","message":"JSON 内部整体同色，不拆 URL / IP / ERROR"} cost=35ms
+{"code":500,"success":false,"message":"整行 JSON 应该全部一种颜色","data":null,"traceId":"adMm1224399051239198720","ip":"192.168.1.10"}
+GET /api/user/list HTTP/1.1 500 Internal Server Error
+HTTP/1.1 302 Found
+HTTP/1.1 200 OK
+java.lang.NullPointerException: test exception
+    at com.example.App.main(App.java:42)
+Caused by: java.sql.SQLNonTransientConnectionException: Too many connections
+==> Preparing: SELECT id,name FROM sys_user WHERE status = ? ORDER BY id DESC limit 10
+git commit -m "feat: update terminal highlight" && git push origin main
+`;
 
 const createTerminalHighlightRulesDocument = (rules: TerminalHighlightRule[]) => {
   return JSON.stringify({ rules: normalizeTerminalHighlightRules(rules) }, null, 2);

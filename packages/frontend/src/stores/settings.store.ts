@@ -379,7 +379,7 @@ export const useSettingsStore = defineStore('settings', () => {
         debugLog(`[SettingsStore] terminalEnableRightClickPaste not found, set to default: ${settings.value.terminalEnableRightClickPaste}`);
       }
       if (settings.value.terminalHighlightEnabled === undefined) {
-        settings.value.terminalHighlightEnabled = 'false';
+        settings.value.terminalHighlightEnabled = 'true';
       }
       if (settings.value.terminalHighlightRules === undefined) {
         settings.value.terminalHighlightRules = DEFAULT_TERMINAL_HIGHLIGHT_RULES_JSON;

@@ -978,11 +978,17 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
         icon.className = 'fas fa-align-left';
       }
     };
-    const handleSingleLineToggleClick = () => {
+    const handleSingleLineTogglePointerDown = (event: PointerEvent) => {
+      event.preventDefault();
+    };
+    const handleSingleLineToggleClick = (event: MouseEvent) => {
+      event.preventDefault();
+      singleLineToggleButton.blur();
       if (sessionStore.sessions.get(sessionId)?.kind !== 'ssh') return;
       sessionStore.toggleTerminalSingleLineOutput(sessionId);
       requestSessionResize(sessionId);
     };
+    singleLineToggleButton.addEventListener('pointerdown', handleSingleLineTogglePointerDown);
     singleLineToggleButton.addEventListener('click', handleSingleLineToggleClick);
     const stopWatcher = watch(
       () => {
@@ -993,6 +999,7 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
       { immediate: true },
     );
     singleLineButtonCleanup = () => {
+      singleLineToggleButton.removeEventListener('pointerdown', handleSingleLineTogglePointerDown);
       singleLineToggleButton.removeEventListener('click', handleSingleLineToggleClick);
       stopWatcher();
     };

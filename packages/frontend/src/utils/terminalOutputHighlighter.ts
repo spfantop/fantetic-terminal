@@ -1,3 +1,5 @@
+import defaultTerminalHighlightRulesDocument from './defaultTerminalHighlightRules.json';
+
 export interface TerminalHighlightRule {
   id: string;
   name: string;
@@ -55,101 +57,27 @@ interface SgrStyleState {
   other: boolean;
 }
 
+interface CompiledTerminalHighlightRuleCacheEntry {
+  signature: string;
+  rules: CompiledTerminalHighlightRule[];
+}
+
 const ANSI_RESET = '\x1b[0m';
 const DEFAULT_MAX_LINE_LENGTH = 4000;
-const MAX_PATTERN_LENGTH = 256;
+const MAX_HIGHLIGHT_RANGES_PER_LINE = 256;
+const MAX_PATTERN_LENGTH = 1024;
 const VALID_FLAG_PATTERN = /^[gimsuy]*$/;
 const CONTROL_SEQUENCE_PATTERN = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/;
 const HEX_COLOR_PATTERN = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+const compiledTerminalHighlightRulesCache = new WeakMap<TerminalHighlightRule[], CompiledTerminalHighlightRuleCacheEntry>();
 
-export const DEFAULT_TERMINAL_HIGHLIGHT_RULES: TerminalHighlightRule[] = [
-  {
-    id: 'preset-error',
-    name: 'error',
-    enabled: true,
-    pattern: '\\b(ERROR|FAIL(?:ED)?|FATAL|Exception)\\b',
-    flags: 'gi',
-    foreground: '#ef4444',
-    bold: true,
-    priority: 100,
-    presetId: 'error',
-  },
-  {
-    id: 'preset-warning',
-    name: 'warning',
-    enabled: true,
-    pattern: '\\b(WARN(?:ING)?|DEPRECATED)\\b',
-    flags: 'gi',
-    foreground: '#f59e0b',
-    bold: true,
-    priority: 90,
-    presetId: 'warning',
-  },
-  {
-    id: 'preset-success',
-    name: 'success',
-    enabled: true,
-    pattern: '\\b(SUCCESS|SUCCEEDED|PASS(?:ED)?|OK|DONE)\\b',
-    flags: 'gi',
-    foreground: '#22c55e',
-    priority: 80,
-    presetId: 'success',
-  },
-  {
-    id: 'preset-info',
-    name: 'info',
-    enabled: true,
-    pattern: '\\b(INFO|NOTICE)\\b',
-    flags: 'gi',
-    foreground: '#38bdf8',
-    priority: 70,
-    presetId: 'info',
-  },
-  {
-    id: 'preset-http-error',
-    name: 'httpError',
-    enabled: true,
-    pattern: '\\bHTTP/[0-9.]+\\s+[45][0-9]{2}\\b|\\b[45][0-9]{2}\\s+(?:Error|Failed|Failure)\\b',
-    flags: 'gi',
-    foreground: '#fb7185',
-    bold: true,
-    priority: 95,
-    presetId: 'httpError',
-  },
-  {
-    id: 'preset-url',
-    name: 'url',
-    enabled: true,
-    pattern: 'https?://[^\\s]+',
-    flags: 'gi',
-    foreground: '#60a5fa',
-    underline: true,
-    priority: 40,
-    presetId: 'url',
-  },
-  {
-    id: 'preset-ip',
-    name: 'ip',
-    enabled: false,
-    pattern: '\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b',
-    flags: 'g',
-    foreground: '#a78bfa',
-    priority: 30,
-    presetId: 'ip',
-  },
-  {
-    id: 'preset-timestamp',
-    name: 'timestamp',
-    enabled: false,
-    pattern: '\\b\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:?\\d{2})?\\b',
-    flags: 'g',
-    foreground: '#94a3b8',
-    priority: 20,
-    presetId: 'timestamp',
-  },
-];
+const DEFAULT_TERMINAL_HIGHLIGHT_RULES_DOCUMENT = defaultTerminalHighlightRulesDocument as { rules: TerminalHighlightRule[] };
 
-export const DEFAULT_TERMINAL_HIGHLIGHT_RULES_JSON = JSON.stringify(DEFAULT_TERMINAL_HIGHLIGHT_RULES);
+export const DEFAULT_TERMINAL_HIGHLIGHT_RULES: TerminalHighlightRule[] = normalizeTerminalHighlightRules(
+  DEFAULT_TERMINAL_HIGHLIGHT_RULES_DOCUMENT.rules,
+);
+
+export const DEFAULT_TERMINAL_HIGHLIGHT_RULES_JSON = JSON.stringify(DEFAULT_TERMINAL_HIGHLIGHT_RULES_DOCUMENT);
 
 export function cloneDefaultTerminalHighlightRules(): TerminalHighlightRule[] {
   return DEFAULT_TERMINAL_HIGHLIGHT_RULES.map(rule => ({ ...rule }));
@@ -287,7 +215,13 @@ function extractTerminalHighlightRulesFromDocument(value: unknown): unknown {
 }
 
 function compileTerminalHighlightRules(rules: TerminalHighlightRule[]): CompiledTerminalHighlightRule[] {
-  return normalizeTerminalHighlightRules(rules)
+  const signature = createTerminalHighlightRulesSignature(rules);
+  const cached = compiledTerminalHighlightRulesCache.get(rules);
+  if (cached?.signature === signature) {
+    return cached.rules;
+  }
+
+  const compiledRules = normalizeTerminalHighlightRules(rules)
     .filter(rule => rule.enabled && (rule.foreground || rule.background || rule.bold || rule.underline))
     .sort((left, right) => (right.priority ?? 0) - (left.priority ?? 0))
     .map(rule => {
@@ -296,9 +230,16 @@ function compileTerminalHighlightRules(rules: TerminalHighlightRule[]): Compiled
       return regex && ansiStart ? { rule, regex, ansiStart } : null;
     })
     .filter((rule): rule is CompiledTerminalHighlightRule => rule !== null);
+
+  compiledTerminalHighlightRulesCache.set(rules, { signature, rules: compiledRules });
+  return compiledRules;
 }
 
 function highlightLinePreservingTerminalSequences(line: string, rules: CompiledTerminalHighlightRule[]): string {
+  if (!line.includes('\x1b')) {
+    return CONTROL_SEQUENCE_PATTERN.test(line) ? line : highlightLine(line, rules);
+  }
+
   let output = '';
   let textBuffer = '';
   let offset = 0;
@@ -336,6 +277,25 @@ function highlightLinePreservingTerminalSequences(line: string, rules: CompiledT
 
   flushTextBuffer();
   return output;
+}
+
+function createTerminalHighlightRulesSignature(rules: TerminalHighlightRule[]): string {
+  return rules
+    .map(rule => [
+      rule.id,
+      rule.name,
+      rule.enabled,
+      rule.pattern,
+      rule.flags,
+      rule.foreground,
+      rule.background,
+      rule.bold,
+      rule.underline,
+      rule.priority,
+      rule.stopOnMatch,
+      rule.presetId,
+    ].join('\u001f'))
+    .join('\u001e');
 }
 
 function highlightLine(line: string, rules: CompiledTerminalHighlightRule[]): string {
@@ -401,9 +361,15 @@ function collectHighlightRanges(line: string, rules: CompiledTerminalHighlightRu
 
       ranges.push({ start, end, ansiStart: compiled.ansiStart, rule: compiled.rule });
       matchedCurrentRule = true;
+      if (ranges.length >= MAX_HIGHLIGHT_RANGES_PER_LINE) {
+        break;
+      }
     }
 
     if (matchedCurrentRule && compiled.rule.stopOnMatch) {
+      break;
+    }
+    if (ranges.length >= MAX_HIGHLIGHT_RANGES_PER_LINE) {
       break;
     }
   }

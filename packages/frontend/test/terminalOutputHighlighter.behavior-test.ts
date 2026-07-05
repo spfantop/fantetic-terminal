@@ -1,5 +1,7 @@
 import { strict as assert } from 'node:assert';
 import {
+  DEFAULT_TERMINAL_HIGHLIGHT_RULES,
+  DEFAULT_TERMINAL_HIGHLIGHT_RULES_JSON,
   highlightTerminalOutput,
   parseTerminalHighlightRules,
   parseTerminalHighlightRulesDocument,
@@ -60,6 +62,43 @@ assert.equal(
   'ERROR failed\n',
 );
 
+const mutableRules: TerminalHighlightRule[] = [
+  {
+    id: 'mutable-error',
+    name: 'mutable-error',
+    enabled: true,
+    pattern: 'ERROR',
+    flags: 'g',
+    foreground: '#ef4444',
+    priority: 1,
+  },
+];
+assert.equal(
+  highlightTerminalOutput('ERROR\n', { enabled: true, rules: mutableRules }),
+  '\x1b[38;2;239;68;68mERROR\x1b[0m\n',
+);
+mutableRules[0].foreground = '#22c55e';
+assert.equal(
+  highlightTerminalOutput('ERROR\n', { enabled: true, rules: mutableRules }),
+  '\x1b[38;2;34;197;94mERROR\x1b[0m\n',
+);
+
+const broadRuleOutput = highlightTerminalOutput('A'.repeat(300), {
+  enabled: true,
+  rules: [
+    {
+      id: 'broad',
+      name: 'broad',
+      enabled: true,
+      pattern: '.',
+      flags: 'g',
+      foreground: '#ef4444',
+      priority: 1,
+    },
+  ],
+});
+assert.equal((broadRuleOutput.match(/\x1b\[38;2;239;68;68m/g) ?? []).length, 256);
+
 const parsedRules = parseTerminalHighlightRules(serializeTerminalHighlightRules(rules));
 assert.equal(parsedRules.length, 2);
 assert.equal(parsedRules[0].pattern, 'ERROR');
@@ -71,6 +110,10 @@ assert.equal(parsedDocumentRules.length, 2);
 assert.equal(parsedDocumentRules[0].pattern, 'ERROR');
 assert.throws(() => parseTerminalHighlightRulesDocument('{'), /valid JSON/);
 assert.throws(() => parseTerminalHighlightRulesDocument('{"rules":{}}'), /array/);
+
+assert.equal(DEFAULT_TERMINAL_HIGHLIGHT_RULES.length, 59);
+assert.ok(DEFAULT_TERMINAL_HIGHLIGHT_RULES.some(rule => rule.id === 'preset-common-command'));
+assert.equal(parseTerminalHighlightRules(DEFAULT_TERMINAL_HIGHLIGHT_RULES_JSON).length, 59);
 
 const previewSegments = previewTerminalHighlightSegments('ERROR failed', {
   enabled: true,
