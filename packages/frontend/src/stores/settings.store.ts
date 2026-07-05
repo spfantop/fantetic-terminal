@@ -160,9 +160,9 @@ export const useSettingsStore = defineStore('settings', () => {
       if (settings.value.showPopupFileEditor === undefined) {
           settings.value.showPopupFileEditor = 'true';
       }
-      // +++  showPopupFileManager 默认值 (改为 false) +++
+      // +++  showPopupFileManager 默认值 +++
       if (settings.value.showPopupFileManager === undefined) {
-          settings.value.showPopupFileManager = 'false'; // 默认禁用弹窗文件管理器
+          settings.value.showPopupFileManager = 'true'; // 默认启用弹窗文件管理器
       }
       if (settings.value.shareFileEditorTabs === undefined) {
           settings.value.shareFileEditorTabs = 'true';

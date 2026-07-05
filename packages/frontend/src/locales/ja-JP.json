@@ -117,7 +117,7 @@
     },
     "connections": {
         "batchEdit": {
-            "toggleLabel": "一括編集",
+            "toggleLabel": "一括操作",
             "selectAll": "すべて選択",
             "deselectAll": "すべて選択解除",
             "invertSelection": "選択を反転",
@@ -134,6 +134,9 @@
         "actions": {
             "testAllFiltered":"すべてテスト",
             "connect": "接続",
+            "connectSelected": "選択項目を接続",
+            "openAll": "すべて開く",
+            "openSelected": "選択項目を開く",
             "delete": "削除",
             "edit": "編集",
             "test": "テスト",
@@ -275,11 +278,18 @@
         "prompts": {
             "confirmDelete": "\"{name}\"接続を削除しますか？この操作は元に戻せません。"
         },
+        "messages": {
+            "noSshConnectionsToConnectAll": "現在の絞り込み条件で接続可能な SSH 接続はありません。",
+            "noSelectedSshConnectionsToConnect": "選択された SSH 接続はありません。",
+            "noConnectionsToOpen": "開ける接続はありません。",
+            "noSelectedConnectionsToOpen": "選択された接続はありません。"
+        },
         "status": {
             "never": "なし"
         },
         "folders": {
             "allFolders": "すべてのフォルダー",
+            "noFolder": "デフォルトフォルダー",
             "filterByFolder": "フォルダーで絞り込み",
             "filterByTags": "タグで絞り込み",
             "createFolder": "新しいフォルダー",
@@ -355,7 +365,7 @@
         "sessionsAndTags": "セッションとタグ",
         "activityWindow": "最新 {count} 件のイベント",
         "activityNoDetails": "詳細なし",
-        "noFolder": "フォルダーなし",
+        "noFolder": "デフォルトフォルダー",
         "unknownFolder": "不明なフォルダー",
         "noActiveSessions": "アクティブなセッションはありません",
         "noTaggedConnections": "タグ付き接続はありません",

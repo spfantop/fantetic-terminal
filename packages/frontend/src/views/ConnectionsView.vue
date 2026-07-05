@@ -212,6 +212,27 @@ const manualOrderedFilteredConnections = computed(() => {
 });
 
 const filteredAndSortedConnections = computed(() => manualOrderedFilteredConnections.value);
+const selectedBatchConnections = computed(() => (
+  connections.value
+    .filter(conn => selectedConnectionIdsForBatch.value.has(conn.id))
+    .sort(compareManualOrder)
+));
+const commandTargetConnections = computed(() => (
+  isBatchEditMode.value
+    ? selectedBatchConnections.value
+    : filteredAndSortedConnections.value
+));
+const commandTargetSshConnections = computed(() => commandTargetConnections.value.filter(conn => conn.type === 'SSH'));
+const connectAllActionTitle = computed(() => (
+  isBatchEditMode.value
+    ? t('connections.actions.connectSelected', '连接选中')
+    : t('workspaceConnectionList.connectAllSshInGroupMenu', '连接全部')
+));
+const openAllActionTitle = computed(() => (
+  isBatchEditMode.value
+    ? t('connections.actions.openSelected', '打开选中')
+    : t('connections.actions.openAll', '打开全部')
+));
 
 const serverListPanelStyle = computed(() => ({
   width: `${isServerPanelCollapsed.value ? SERVER_PANEL_COLLAPSED_WIDTH : serverPanelWidth.value}px`,
@@ -1483,13 +1504,18 @@ const getServerEntryMeta = (connection: ConnectionInfo): ServerEntryMeta => (
 
 // --- Connect All Filtered Connections ---
 const isConnectingAll = ref(false);
+const isOpeningAll = ref(false);
 
 const handleConnectAllFilteredConnections = async () => {
   if (isConnectingAll.value || isLoadingConnections.value) return;
 
-  const sshConnectionsToConnect = filteredAndSortedConnections.value.filter(conn => conn.type === 'SSH');
+  const sshConnectionsToConnect = commandTargetSshConnections.value;
   if (sshConnectionsToConnect.length === 0) {
-    console.warn(t('connections.messages.noSshConnectionsToConnectAll', '没有可连接的 SSH 筛选结果。'));
+    console.warn(
+      isBatchEditMode.value
+        ? t('connections.messages.noSelectedSshConnectionsToConnect', '没有选中的 SSH 连接。')
+        : t('connections.messages.noSshConnectionsToConnectAll', '没有可连接的 SSH 筛选结果。')
+    );
     // Optionally, use a UI notification if available in your project
     // e.g., uiNotificationsStore.addNotification({ message: t('connections.messages.noSshConnectionsToConnectAll'), type: 'info' });
     return;
@@ -1508,6 +1534,31 @@ const handleConnectAllFilteredConnections = async () => {
     // uiNotificationsStore.addNotification({ message: t('connections.errors.connectAllSshFailed', '连接全部 SSH 操作失败。'), type: 'error' });
   } finally {
     isConnectingAll.value = false;
+  }
+};
+
+const handleOpenAllTargetConnections = async () => {
+  if (isOpeningAll.value || isLoadingConnections.value) return;
+
+  const connectionsToOpen = commandTargetConnections.value;
+  if (connectionsToOpen.length === 0) {
+    console.warn(
+      isBatchEditMode.value
+        ? t('connections.messages.noSelectedConnectionsToOpen', '没有选中的连接。')
+        : t('connections.messages.noConnectionsToOpen', '没有可打开的连接。')
+    );
+    return;
+  }
+
+  isOpeningAll.value = true;
+  try {
+    for (const conn of connectionsToOpen) {
+      connectTo(conn);
+    }
+  } catch (error) {
+    console.error("Error opening all target connections:", error);
+  } finally {
+    isOpeningAll.value = false;
   }
 };
 
@@ -1600,11 +1651,20 @@ const handleConnectAllFilteredConnections = async () => {
                 </div>
               </div>
             </div>
+            <button
+              type="button"
+              class="server-icon-button server-add-button"
+              :aria-label="t('connections.addConnection', '添加新连接')"
+              :title="t('connections.addConnection', '添加新连接')"
+              @click="openAddConnectionForm()"
+            >
+              <i class="fas fa-plus"></i>
+            </button>
           </div>
 
           <div class="server-command-row">
             <div class="server-batch-toggle">
-              <span>{{ t('connections.batchEdit.toggleLabel', '批量修改') }}</span>
+              <span>{{ t('connections.batchEdit.toggleLabel', '批量操作') }}</span>
               <button
                 id="batch-edit-toggle"
                 type="button"
@@ -1623,8 +1683,9 @@ const handleConnectAllFilteredConnections = async () => {
                   type="button"
                   class="server-icon-button"
                   @click="handleConnectAllFilteredConnections"
-                  :disabled="isConnectingAll || isLoadingConnections || !filteredAndSortedConnections.some(c => c.type === 'SSH')"
-                  :title="t('workspaceConnectionList.connectAllSshInGroupMenu', '连接全部')"
+                  :disabled="isConnectingAll || isLoadingConnections || commandTargetSshConnections.length === 0"
+                  :aria-label="connectAllActionTitle"
+                  :title="connectAllActionTitle"
               >
                 <i v-if="isConnectingAll" class="fas fa-spinner fa-spin"></i>
                 <i v-else class="fas fa-network-wired"></i>
@@ -1632,8 +1693,20 @@ const handleConnectAllFilteredConnections = async () => {
               <button
                 type="button"
                 class="server-icon-button"
+                @click="handleOpenAllTargetConnections"
+                :disabled="isOpeningAll || isLoadingConnections || commandTargetConnections.length === 0"
+                :aria-label="openAllActionTitle"
+                :title="openAllActionTitle"
+              >
+                <i v-if="isOpeningAll" class="fas fa-spinner fa-spin"></i>
+                <i v-else class="fas fa-external-link-alt"></i>
+              </button>
+              <button
+                type="button"
+                class="server-icon-button"
                 @click="handleTestAllFilteredConnections"
                 :disabled="isTestingAll || isLoadingConnections || !filteredAndSortedConnections.some(c => c.type === 'SSH')"
+                :aria-label="t('connections.actions.testAllFiltered', '测试全部筛选的SSH连接')"
                 :title="t('connections.actions.testAllFiltered', '测试全部筛选的SSH连接')"
               >
                 <i v-if="isTestingAll" class="fas fa-spinner fa-spin"></i>

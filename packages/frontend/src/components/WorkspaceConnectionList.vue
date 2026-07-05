@@ -91,7 +91,7 @@ const listAreaRef = ref<HTMLElement | null>(null); // 列表容器的 ref
 
 // 目录路径与过滤
 const folderMap = computed(() => new Map(folders.value.map(folder => [folder.id, folder])));
-const folderRootLabel = computed(() => t('connections.folders.noFolder', '不归入文件夹'));
+const folderRootLabel = computed(() => t('connections.folders.noFolder', '默认文件夹'));
 
 const getFolderPath = (folderId?: number | null): string => {
   if (!folderId) return folderRootLabel.value;

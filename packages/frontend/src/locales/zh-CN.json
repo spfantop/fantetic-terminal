@@ -220,7 +220,7 @@
       "actions": "操作"
     },
     "batchEdit":{
-      "toggleLabel":"批量修改",
+      "toggleLabel":"批量操作",
       "selectAll": "全选",
       "deselectAll": "取消全选",
       "invertSelection": "反向选择",
@@ -237,6 +237,9 @@
     "actions": {
       "testAllFiltered":"测试全部",
       "connect": "连接",
+      "connectSelected": "连接选中",
+      "openAll": "打开全部",
+      "openSelected": "打开选中",
       "edit": "编辑",
       "delete": "删除",
       "test": "测试",
@@ -370,6 +373,12 @@
     "prompts": {
       "confirmDelete": "确定要删除连接 \"{name}\" 吗？此操作不可撤销。"
     },
+    "messages": {
+      "noSshConnectionsToConnectAll": "没有可连接的 SSH 筛选结果。",
+      "noSelectedSshConnectionsToConnect": "没有选中的 SSH 连接。",
+      "noConnectionsToOpen": "没有可打开的连接。",
+      "noSelectedConnectionsToOpen": "没有选中的连接。"
+    },
     "errors": {
       "deleteFailed": "删除连接失败: {error}",
       "createFailed": "添加连接失败: {error}",
@@ -390,6 +399,7 @@
     },
     "folders": {
       "allFolders": "所有文件夹",
+      "noFolder": "默认文件夹",
       "filterByFolder": "按文件夹筛选",
       "filterByTags": "按标签筛选",
       "createFolder": "新建文件夹",
@@ -1646,7 +1656,7 @@
     "sessionsAndTags": "会话与标签",
     "activityWindow": "最近 {count} 条事件",
     "activityNoDetails": "无详细信息",
-    "noFolder": "未归入文件夹",
+    "noFolder": "默认文件夹",
     "unknownFolder": "未知文件夹",
     "noActiveSessions": "当前没有活动会话",
     "noTaggedConnections": "暂无已标记连接",

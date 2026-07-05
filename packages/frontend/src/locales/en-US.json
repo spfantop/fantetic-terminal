@@ -219,7 +219,7 @@
       "actions": "Actions"
     },
     "batchEdit":{
-      "toggleLabel":"Batch Edit",
+      "toggleLabel":"Batch Actions",
       "selectAll": "Select All",
       "deselectAll": "Deselect All",
       "invertSelection": "Invert Selection",
@@ -236,6 +236,9 @@
     "actions": {
       "testAllFiltered":"Test All",
       "connect": "Connect",
+      "connectSelected": "Connect Selected",
+      "openAll": "Open All",
+      "openSelected": "Open Selected",
       "edit": "Edit",
       "delete": "Delete",
       "test": "Test",
@@ -370,6 +373,12 @@
     "prompts": {
       "confirmDelete": "Are you sure you want to delete the connection \"{name}\"? This cannot be undone."
     },
+    "messages": {
+      "noSshConnectionsToConnectAll": "No SSH connections are available in the current filter.",
+      "noSelectedSshConnectionsToConnect": "No selected SSH connections.",
+      "noConnectionsToOpen": "No connections are available to open.",
+      "noSelectedConnectionsToOpen": "No selected connections."
+    },
     "errors": {
       "deleteFailed": "Failed to delete connection: {error}",
       "createFailed": "Failed to add connection: {error}",
@@ -390,6 +399,7 @@
     },
     "folders": {
       "allFolders": "All folders",
+      "noFolder": "Default folder",
       "filterByFolder": "Filter by folder",
       "filterByTags": "Filter by tags",
       "createFolder": "New Folder",
@@ -1642,7 +1652,7 @@
     "sessionsAndTags": "Sessions & Tags",
     "activityWindow": "Latest {count} events",
     "activityNoDetails": "No details",
-    "noFolder": "No folder",
+    "noFolder": "Default folder",
     "unknownFolder": "Unknown folder",
     "noActiveSessions": "No active sessions",
     "noTaggedConnections": "No tagged connections",

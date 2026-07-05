@@ -186,7 +186,7 @@ const handleHostIconMouseLeave = () => {
         :disabled="props.isFolderLoading"
         class="w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
       >
-        <option :value="null">{{ t('connections.folders.noFolder', '不归入文件夹') }}</option>
+        <option :value="null">{{ t('connections.folders.noFolder', '默认文件夹') }}</option>
         <option v-for="folder in folderOptions" :key="folder.id" :value="folder.id">
           {{ folder.label }}
         </option>

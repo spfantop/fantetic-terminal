@@ -246,6 +246,7 @@ export const ensureDefaultSettingsExist = async (db: sqlite3.Database): Promise<
         layoutTree: JSON.stringify(defaultLayoutTreeStructure),
         autoCopyOnSelect: 'false',
         showPopupFileEditor: 'false',
+        showPopupFileManager: 'true',
         shareFileEditorTabs: 'true',
         layoutLocked: 'false',
         dockerManagerEnabled: 'true',
