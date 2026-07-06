@@ -12,6 +12,15 @@ import 'xterm/css/xterm.css';
 import { useWorkspaceEventEmitter, useWorkspaceEventOff, useWorkspaceEventSubscriber } from '../composables/workspaceEvents';
 import type { WorkspaceEventPayloads } from '../composables/workspaceEvents';
 import { debugLog } from '../composables/useDebugLog';
+import {
+  calculateTerminalZoomPercent,
+  clampTerminalFontSize,
+  isTerminalZoomReset,
+  resolveTerminalWheelZoomUpdate,
+  TERMINAL_TOUCH_ZOOM_MAX_FONT_SIZE,
+  TERMINAL_ZOOM_MIN_FONT_SIZE,
+  TERMINAL_ZOOM_POPUP_HIDE_DELAY,
+} from '../utils/terminalZoom';
 
 
 // 定义 props 和 emits
@@ -52,6 +61,7 @@ let cachedFitMetrics: TerminalFitMetrics | null = null;
 let resizeTransactionDepth = 0;
 let hasDeferredFitDuringResize = false;
 let resizeTransactionSettleTimer: number | null = null;
+let zoomPopupHideTimer: number | null = null;
 const RESIZE_THRESHOLD = 0.5; // px
 const RESIZE_EMIT_DELAY = 150;
 const STABILIZED_RESIZE_DELAY = 150;
@@ -126,7 +136,18 @@ const terminalTextStyleSignature = computed(() => [
   terminalTextShadowBlur.value,
   terminalTextShadowColor.value,
 ].join('|'));
- 
+const originalTerminalFontSize = ref(currentTerminalFontSize.value);
+const activeTerminalFontSize = ref(currentTerminalFontSize.value);
+const zoomPopupVisible = ref(false);
+const terminalZoomPercent = computed(() => calculateTerminalZoomPercent(
+  activeTerminalFontSize.value,
+  originalTerminalFontSize.value,
+));
+const isTerminalZoomAtOriginalSize = computed(() => isTerminalZoomReset(
+  activeTerminalFontSize.value,
+  originalTerminalFontSize.value,
+));
+  
 const isTerminalDomReady = ref(false); 
  
 // --- Settings Store ---
@@ -406,21 +427,6 @@ const emitTerminalInput = (data: string) => {
   }
   emitWorkspaceEvent('terminal:input', { sessionId: props.sessionId, data, batched: true });
 };
-// 创建防抖版的字体大小保存函数 (区分设备)
-const debouncedSaveFontSize = debounce(async (size: number) => {
-    try {
-        if (isMobile.value) {
-            await appearanceStore.setTerminalFontSizeMobile(size);
-            debugLog(`[Terminal ${props.sessionId}] Debounced MOBILE font size saved: ${size}`);
-        } else {
-            await appearanceStore.setTerminalFontSize(size);
-            debugLog(`[Terminal ${props.sessionId}] Debounced DESKTOP font size saved: ${size}`);
-        }
-    } catch (error) {
-        console.error(`[Terminal ${props.sessionId}] Debounced font size save failed:`, error);
-        // Optionally show an error to the user
-    }
-}, 500); // 500ms 防抖延迟，可以调整
 
 //  Helper function to convert setting value to xterm scrollback value
 const getScrollbackValue = (limit: number): number => {
@@ -428,6 +434,80 @@ const getScrollbackValue = (limit: number): number => {
     return Infinity; // 0 means unlimited for xterm
   }
   return Math.max(0, limit); // Ensure non-negative, return the number otherwise
+};
+
+const clearZoomPopupHideTimer = () => {
+  if (zoomPopupHideTimer !== null) {
+    window.clearTimeout(zoomPopupHideTimer);
+    zoomPopupHideTimer = null;
+  }
+};
+
+const revealTerminalZoomPopup = () => {
+  zoomPopupVisible.value = true;
+  clearZoomPopupHideTimer();
+  zoomPopupHideTimer = window.setTimeout(() => {
+    zoomPopupVisible.value = false;
+    zoomPopupHideTimer = null;
+  }, TERMINAL_ZOOM_POPUP_HIDE_DELAY);
+};
+
+const hideTerminalZoomPopup = () => {
+  clearZoomPopupHideTimer();
+  zoomPopupVisible.value = false;
+};
+
+const readActiveTerminalFontSize = () => (
+  terminal?.options.fontSize ?? activeTerminalFontSize.value ?? currentTerminalFontSize.value
+);
+
+const applyTerminalFontSize = (
+  nextSize: number,
+  options: { revealZoomPopup?: boolean } = {},
+) => {
+  if (!Number.isFinite(nextSize) || nextSize <= 0) return;
+
+  const normalizedSize = Math.round(nextSize);
+  const currentSize = readActiveTerminalFontSize();
+  activeTerminalFontSize.value = normalizedSize;
+
+  if (terminal && normalizedSize !== currentSize) {
+    terminal.options.fontSize = normalizedSize;
+    invalidateTerminalFitMetrics();
+    fitAndEmitResizeNow(terminal);
+  }
+
+  if (options.revealZoomPopup) {
+    revealTerminalZoomPopup();
+  }
+};
+
+const resetTerminalZoom = () => {
+  applyTerminalFontSize(originalTerminalFontSize.value, {
+    revealZoomPopup: true,
+  });
+};
+
+const handleTerminalWheel = (event: WheelEvent) => {
+  if (!event.ctrlKey) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+
+  if (!terminal) return;
+
+  const currentSize = readActiveTerminalFontSize();
+  const { fontSize: nextSize } = resolveTerminalWheelZoomUpdate(currentSize, event.deltaY);
+
+  if (nextSize !== currentSize) {
+    debugLog(`[Terminal ${props.sessionId}] Font size changed via wheel: ${nextSize}`);
+    applyTerminalFontSize(nextSize, {
+      revealZoomPopup: true,
+    });
+    return;
+  }
+
+  revealTerminalZoomPopup();
 };
 
 // --- 右键粘贴功能 ---
@@ -471,7 +551,7 @@ const handleTouchStart = (event: TouchEvent) => {
   if (event.touches.length === 2 && terminal) {
     event.preventDefault(); 
     initialPinchDistance = getDistanceBetweenTouches(event.touches);
-    currentFontSizeOnPinchStart = terminal.options.fontSize || currentTerminalFontSize.value;
+    currentFontSizeOnPinchStart = readActiveTerminalFontSize();
   }
 };
 
@@ -482,14 +562,17 @@ const handleTouchMove = (event: TouchEvent) => {
     if (currentDistance > 0) {
       const scale = currentDistance / initialPinchDistance;
       let newSize = Math.round(currentFontSizeOnPinchStart * scale);
-      newSize = Math.max(8, Math.min(newSize, 72)); 
+      newSize = clampTerminalFontSize(
+        newSize,
+        TERMINAL_ZOOM_MIN_FONT_SIZE,
+        TERMINAL_TOUCH_ZOOM_MAX_FONT_SIZE,
+      ); 
 
-      const currentTerminalOptFontSize = terminal.options.fontSize ?? currentTerminalFontSize.value;
+      const currentTerminalOptFontSize = readActiveTerminalFontSize();
       if (newSize !== currentTerminalOptFontSize) {
-        terminal.options.fontSize = newSize;
-        invalidateTerminalFitMetrics();
-        fitAndEmitResizeNow(terminal);
-        debouncedSaveFontSize(newSize); // 使用新的区分设备的保存函数
+        applyTerminalFontSize(newSize, {
+          revealZoomPopup: true,
+        });
       }
     }
   }
@@ -521,6 +604,9 @@ onMounted(() => {
       scrollOnUserInput: true, // 输入时滚动到底部
       ...props.options, // 合并外部传入的选项
     });
+    const mountedFontSize = terminal.options.fontSize ?? currentTerminalFontSize.value;
+    originalTerminalFontSize.value = mountedFontSize;
+    activeTerminalFontSize.value = mountedFontSize;
     
     // 注意: 终端数据的解码已在useSshTerminal.ts中进行处理
 
@@ -713,10 +799,9 @@ onMounted(() => {
     watch(currentTerminalFontSize, (newSize) => {
         if (terminal) {
             debugLog(`[Terminal ${props.sessionId}] 应用新终端字体大小: ${newSize}`);
-            terminal.options.fontSize = newSize;
-            invalidateTerminalFitMetrics();
-            // 字体大小变化需要重新 fit
-            fitAndEmitResizeNow(terminal);
+            originalTerminalFontSize.value = newSize;
+            hideTerminalZoomPopup();
+            applyTerminalFontSize(newSize);
         }
     });
 
@@ -786,35 +871,9 @@ onMounted(() => {
     });
 
 
-    // 重新添加鼠标滚轮缩放功能到内部容器 terminalRef
+    // 鼠标滚轮缩放功能添加到内部容器 terminalRef
     if (terminalRef.value) {
-      terminalRef.value.addEventListener('wheel', (event: WheelEvent) => {
-        if (event.ctrlKey) {
-          event.preventDefault(); // 阻止默认的滚动行为
-
-          if (terminal) {
-            let newSize;
-            const currentSize = terminal.options.fontSize ?? currentTerminalFontSize.value;
-            if (event.deltaY < 0) {
-              // 向上滚动，增大字体
-              newSize = Math.min(currentSize + 1, 40);
-            } else {
-              // 向下滚动，减小字体
-              newSize = Math.max(currentSize - 1, 8);
-            }
-
-            if (newSize !== currentSize) { // 仅在字体大小实际改变时执行
-                debugLog(`[Terminal ${props.sessionId}] Font size changed via wheel: ${newSize}`);
-                terminal.options.fontSize = newSize; // 先更新选项
-                invalidateTerminalFitMetrics();
-                fitAndEmitResizeNow(terminal); // 调用统一函数
-
-                // 调用防抖函数来保存设置
-                debouncedSaveFontSize(newSize); // 使用新的区分设备的保存函数
-            }
-          }
-        }
-      });
+      terminalRef.value.addEventListener('wheel', handleTerminalWheel, { passive: false });
     }
 
     // Add touch listeners for pinch zoom on mobile
@@ -847,6 +906,7 @@ onBeforeUnmount(() => {
     window.clearTimeout(resizeTransactionSettleTimer);
     resizeTransactionSettleTimer = null;
   }
+  clearZoomPopupHideTimer();
   pendingResizeDimensions = null;
 
   // Ensure observer is cleaned up
@@ -877,6 +937,10 @@ onBeforeUnmount(() => {
   
     // 确保在卸载时移除右键监听器
     removeContextMenuListener();
+
+    if (terminalRef.value) {
+      terminalRef.value.removeEventListener('wheel', handleTerminalWheel);
+    }
 
     // Remove touch listeners on unmount
     if (isMobile.value && terminalRef.value) {
@@ -993,6 +1057,28 @@ const terminalInnerStyle = computed(() => (
       :class="['terminal-inner-container', { 'single-line-output': props.singleLineOutput }]"
       :style="terminalInnerStyle"
     ></div>
+    <Transition name="terminal-zoom-popover">
+      <div
+        v-if="zoomPopupVisible"
+        class="terminal-zoom-popover"
+        role="status"
+        aria-live="polite"
+        @pointerdown.stop
+        @click.stop
+        @wheel.stop.prevent
+      >
+        <span class="terminal-zoom-popover__value">{{ terminalZoomPercent }}%</span>
+        <button
+          type="button"
+          class="terminal-zoom-popover__reset"
+          :disabled="isTerminalZoomAtOriginalSize"
+          title="还原原始比例"
+          @click.stop="resetTerminalZoom"
+        >
+          还原
+        </button>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -1038,6 +1124,79 @@ const terminalInnerStyle = computed(() => (
 
 .terminal-inner-container.single-line-output :deep(.xterm-viewport) {
   overflow-x: hidden !important;
+}
+
+.terminal-zoom-popover {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  max-width: min(220px, calc(100% - 20px));
+  padding: 5px 6px 5px 10px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--header-bg-color) 94%, var(--app-bg-color));
+  color: var(--text-color);
+  box-shadow: 0 10px 26px rgb(0 0 0 / 24%);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 12px;
+  line-height: 1;
+  user-select: none;
+  pointer-events: auto;
+  backdrop-filter: blur(10px);
+}
+
+.terminal-zoom-popover__value {
+  min-width: 4ch;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.terminal-zoom-popover__reset {
+  flex: 0 0 auto;
+  min-width: 42px;
+  max-width: 64px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--app-bg-color) 88%, var(--header-bg-color));
+  color: var(--text-color);
+  font: inherit;
+  font-weight: 600;
+  line-height: 22px;
+  text-align: center;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.terminal-zoom-popover__reset:hover:not(:disabled),
+.terminal-zoom-popover__reset:focus-visible:not(:disabled) {
+  border-color: color-mix(in srgb, var(--button-bg-color) 55%, var(--border-color));
+  background: color-mix(in srgb, var(--button-bg-color) 14%, var(--app-bg-color));
+  outline: none;
+}
+
+.terminal-zoom-popover__reset:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.terminal-zoom-popover-enter-active,
+.terminal-zoom-popover-leave-active {
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.terminal-zoom-popover-enter-from,
+.terminal-zoom-popover-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
 }
 
 /* 文字描边和阴影样式 */

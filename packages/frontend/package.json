@@ -11,7 +11,8 @@
       "test:add-connection-tags": "esbuild test/addConnectionFormTagSelection.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/addConnectionFormTagSelection.behavior-test.mjs && node ../../.vite-codex-cache/addConnectionFormTagSelection.behavior-test.mjs",
       "test:terminal-batch-input": "esbuild test/terminalBatchInput.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/terminalBatchInput.behavior-test.mjs && node ../../.vite-codex-cache/terminalBatchInput.behavior-test.mjs",
       "test:layout-panes": "esbuild test/layoutPanes.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/layoutPanes.behavior-test.mjs && node ../../.vite-codex-cache/layoutPanes.behavior-test.mjs",
-      "test:workspace-visible-sessions": "esbuild test/workspaceVisibleSessions.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/workspaceVisibleSessions.behavior-test.mjs && node ../../.vite-codex-cache/workspaceVisibleSessions.behavior-test.mjs"
+      "test:workspace-visible-sessions": "esbuild test/workspaceVisibleSessions.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/workspaceVisibleSessions.behavior-test.mjs && node ../../.vite-codex-cache/workspaceVisibleSessions.behavior-test.mjs",
+      "test:terminal-zoom": "esbuild test/terminalZoom.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/terminalZoom.behavior-test.mjs && node ../../.vite-codex-cache/terminalZoom.behavior-test.mjs"
    },
    "dependencies": {
       "@codemirror/commands": "^6.8.1",
