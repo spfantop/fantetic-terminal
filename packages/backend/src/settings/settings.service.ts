@@ -14,6 +14,10 @@ import {
     UpdateCaptchaSettingsDto,
     CaptchaProvider,
 } from '../types/settings.types';
+import {
+    isConfigurableLayoutPane,
+    normalizeConfigurablePaneList,
+} from './layoutPanes';
 
 // +++ 定义焦点切换完整配置接口 (与前端 store 保持一致) +++
 interface FocusItemConfig { // 单个项目的配置
@@ -393,16 +397,9 @@ export const settingsService = {
          throw new Error('无效的侧栏配置格式。必须包含 left 和 right 数组。');
      }
 
-     // Validate PaneName (using the type imported)
-     const validPaneNames: Set<PaneName> = new Set([
-         'connections', 'terminal', 'commandBar', 'fileManager',
-         'editor', 'statusMonitor', 'commandHistory', 'quickCommands',
-         'dockerManager', 'suspendedSshSessions', 'transferProgress'
-     ]);
-
      const validatePaneArray = (arr: any[], side: string) => {
-         if (!arr.every(item => typeof item === 'string' && validPaneNames.has(item as PaneName))) {
-             const invalidItems = arr.filter(item => typeof item !== 'string' || !validPaneNames.has(item as PaneName));
+         if (!arr.every(isConfigurableLayoutPane)) {
+             const invalidItems = arr.filter(item => !isConfigurableLayoutPane(item));
              throw new Error(`侧栏配置 (${side}) 包含无效的面板名称: ${invalidItems.join(', ')}`);
          }
      };
@@ -419,8 +416,8 @@ export const settingsService = {
 
      // Prepare the data in the exact SidebarConfig format expected by the repo
      const configToSave: SidebarConfig = {
-         left: configDto.left,
-         right: configDto.right,
+         left: normalizeConfigurablePaneList(configDto.left),
+         right: normalizeConfigurablePaneList(configDto.right),
      };
 
      // Directly call the specific repository function

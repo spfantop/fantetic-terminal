@@ -224,7 +224,7 @@ export const ensureDefaultSettingsExist = async (db: sqlite3.Database): Promise<
 
     const defaultSidebarPanesStructure: SidebarConfig = {
       left: [],
-      right: ["fileManager", "commandHistory", "quickCommands", "suspendedSshSessions", "dockerManager"]
+      right: ["fileManager", "commandHistory", "quickCommands", "terminalLineOutputToggle", "dockerManager"]
     };
 
     const defaultCaptchaSettings: CaptchaSettings = {

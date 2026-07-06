@@ -1,7 +1,9 @@
 // packages/backend/src/types/settings.types.ts
 
+import type { ConfigurableLayoutPane } from '../settings/layoutPanes';
+
 // Define PaneName here as it's logically related to layout/sidebar settings
-export type PaneName = 'connections' | 'terminal' | 'commandBar' | 'fileManager' | 'editor' | 'statusMonitor' | 'commandHistory' | 'quickCommands' | 'dockerManager' | 'suspendedSshSessions' | 'transferProgress';
+export type PaneName = ConfigurableLayoutPane;
 
 /**
  * 布局节点接口 (Mirrors frontend definition for backend use)
