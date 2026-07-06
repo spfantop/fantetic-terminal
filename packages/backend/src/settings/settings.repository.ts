@@ -6,6 +6,7 @@ import defaultTerminalHighlightRulesDocument from './defaultTerminalHighlightRul
 
 const SIDEBAR_CONFIG_KEY = 'sidebarConfig';
 const CAPTCHA_CONFIG_KEY = 'captchaConfig';
+const AI_PROVIDER_CONFIG_KEY = 'aiProviderConfig';
 const DEFAULT_TERMINAL_HIGHLIGHT_RULES_JSON = JSON.stringify(defaultTerminalHighlightRulesDocument);
 
 export interface Setting {
@@ -256,6 +257,15 @@ export const ensureDefaultSettingsExist = async (db: sqlite3.Database): Promise<
         statusMonitorIntervalSeconds: '3',
         [SIDEBAR_CONFIG_KEY]: JSON.stringify(defaultSidebarPanesStructure),
         [CAPTCHA_CONFIG_KEY]: JSON.stringify(defaultCaptchaSettings),
+        [AI_PROVIDER_CONFIG_KEY]: JSON.stringify({
+          enabled: false,
+          provider: 'openai',
+          baseUrl: 'https://api.openai.com/v1',
+          encryptedApiKey: '',
+          model: 'gpt-5-nano',
+          openaiEndpoint: '/chat/completions',
+          rateLimitEnabled: true,
+        }),
         timezone: 'UTC', // 时区默认值
         terminalScrollbackLimit: '5000', // 终端回滚行数默认值
         terminalEnableRightClickPaste: 'true', // 终端右键粘贴默认值

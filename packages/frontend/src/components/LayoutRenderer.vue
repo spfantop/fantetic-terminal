@@ -137,6 +137,7 @@ const componentMap: Partial<Record<PaneName, Component>> = {
   statusMonitor: defineAsyncComponent(() => import('./StatusMonitor.vue')),
   commandHistory: defineAsyncComponent(() => import('../views/CommandHistoryView.vue')),
   quickCommands: defineAsyncComponent(() => import('../views/QuickCommandsView.vue')),
+  aiAssistant: defineAsyncComponent(() => import('./AIAssistantPanel.vue')),
   dockerManager: defineAsyncComponent(() => import('./DockerManager.vue')), // <--- 添加 dockerManager 映射
   transferProgress: TransferProgressModal,
 };
@@ -705,6 +706,7 @@ const paneLabels = computed(() => ({
   statusMonitor: t('layout.pane.statusMonitor', '状态监视器'),
   commandHistory: t('layout.pane.commandHistory', '命令历史'),
   quickCommands: t('layout.pane.quickCommands', '快捷指令'),
+  aiAssistant: t('layout.pane.aiAssistant', 'AI 助手'),
   dockerManager: t('layout.pane.dockerManager', 'Docker 管理器'),
   terminalLineOutputToggle: t('layout.pane.terminalLineOutputToggle', '单/多行输出'),
   transferProgress: t('layout.pane.transferProgress', '传输进度'),
@@ -798,6 +800,7 @@ const componentProps = computed(() => {
          // --- 移除事件转发 ---
        };
      case 'commandHistory':
+    case 'aiAssistant':
     case 'quickCommands':
        return {
          class: 'flex flex-col flex-grow h-full overflow-auto', // 移除 pane-content，保留填充类
@@ -1020,6 +1023,7 @@ const getIconClasses = (paneName: PaneName): string[] => {
     case 'fileManager': return ['fas', 'fa-folder-open'];
     case 'commandHistory': return ['fas', 'fa-history'];
     case 'quickCommands': return ['fas', 'fa-bolt'];
+    case 'aiAssistant': return ['fas', 'fa-wand-magic-sparkles'];
     case 'dockerManager': return ['fab', 'fa-docker']; // Use 'fab' for Docker
     case 'editor': return ['fas', 'fa-file-alt'];
     case 'statusMonitor': return ['fas', 'fa-tachometer-alt'];

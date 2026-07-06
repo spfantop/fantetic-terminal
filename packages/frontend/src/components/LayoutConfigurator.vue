@@ -166,6 +166,7 @@ const paneLabels = computed(() => ({ // Assuming labels might depend on i18n
   statusMonitor: t('layout.pane.statusMonitor', '状态监视器'),
   commandHistory: t('layout.pane.commandHistory', '命令历史'),
   quickCommands: t('layout.pane.quickCommands', '快捷指令'),
+  aiAssistant: t('layout.pane.aiAssistant', 'AI 助手'),
   dockerManager: t('layout.pane.dockerManager', 'Docker 管理器'),
   terminalLineOutputToggle: t('layout.pane.terminalLineOutputToggle', '单/多行输出'),
   transferProgress: t('layout.pane.transferProgress', '传输进度'),

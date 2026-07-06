@@ -26,5 +26,32 @@
     "DATABASE_MIGRATION": "数据库迁移",
     "ADMIN_SETUP_COMPLETE": "初始管理员设置完成",
     "testNotification": "测试通知"
+  },
+  "ai": {
+    "settingsFetchFailed": "获取 AI 配置失败",
+    "settingsSaved": "AI 配置已保存",
+    "settingsSaveFailed": "保存 AI 配置失败",
+    "unsupportedProvider": "不支持的 AI Provider",
+    "baseUrlProtocolInvalid": "AI Base URL 仅支持 http 或 https",
+    "baseUrlLocalBlocked": "AI Base URL 不允许指向本机或本地域名",
+    "modelRequired": "模型不能为空",
+    "apiKeyRequired": "启用 AI 助手需要填写 API Key",
+    "queryRequired": "请输入命令描述",
+    "queryTooLong": "命令描述不能超过 500 个字符",
+    "disabled": "AI 功能未启用或未配置",
+    "emptyCommand": "AI 未能生成有效命令，请尝试更详细的描述",
+    "generateFailed": "生成命令失败",
+    "testSuccess": "连接测试成功",
+    "testFailed": "连接测试失败",
+    "requestBadModel": "请求参数错误，请检查模型名称是否正确",
+    "invalidApiKey": "API Key 无效或已过期，请检查配置",
+    "permissionDenied": "API Key 权限不足或账户被禁用",
+    "endpointNotFound": "请求的 API 端点或模型不存在，请检查 Base URL 和模型名称",
+    "htmlResponse": "AI 服务返回了网页 HTML，不是 API JSON。使用 One API 时 Base URL 通常需要填写到 /v1，例如 https://你的域名/v1",
+    "rateLimited": "API 请求频率超限或配额已耗尽",
+    "serviceUnavailable": "AI 服务暂时不可用，请稍后重试",
+    "connectFailed": "无法连接到 AI 服务，请检查网络连接或 Base URL 配置",
+    "requestConfigError": "请求配置错误",
+    "timeout": "AI 服务响应超时（{timeout}ms），请稍后重试或检查网络/Base URL 配置"
   }
 }

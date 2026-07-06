@@ -12,6 +12,11 @@ import SuspendedSshSessionsModal from './SuspendedSshSessionsModal.vue';
 import { useFileEditorStore } from '../stores/fileEditor.store'; 
 import { useWorkspaceEventEmitter } from '../composables/workspaceEvents';
 import { debugLog } from '../composables/useDebugLog';
+import { useNL2CMD } from '../composables/terminal/useNL2CMD';
+import {
+  resolveAICommandInputTarget,
+  shouldShowAICommandEntry,
+} from '../utils/aiCommandTarget';
 
 
 defineOptions({ inheritAttrs: false });
@@ -52,9 +57,17 @@ const isSearching = ref(false);
 const searchTerm = ref('');
 const showQuickCommands = ref(false); // +++ Add state for modal visibility +++
 const showSuspendedSshSessionsModal = ref(false); // +++ Add state for suspended SSH sessions modal +++
+const isAIActive = ref(false);
 // *** 移除本地的搜索结果 ref ***
 // const searchResultCount = ref(0);
 // const currentSearchResultIndex = ref(0);
+const nl2cmd = useNL2CMD();
+const {
+  query: nl2cmdQuery,
+  isLoading: nl2cmdLoading,
+  isAIEnabled,
+  generateCommand: generateNL2CMD,
+} = nl2cmd;
 
 // +++ 计算属性，用于获取和设置当前活动会话的命令输入 +++
 const currentSessionCommandInput = computed({
@@ -74,6 +87,15 @@ const currentSessionCommandInput = computed({
 });
 
 const currentTargetSessionId = computed(() => props.targetSessionId || activeSessionId.value);
+const aiCommandInputTargetId = computed(() => resolveAICommandInputTarget({
+  targetSessionId: props.targetSessionId,
+  activeSessionId: activeSessionId.value,
+}));
+const showAICommandEntry = computed(() => shouldShowAICommandEntry({
+  isMobile: props.isMobile,
+  isAIEnabled: isAIEnabled.value,
+}));
+const nl2cmdInputRef = ref<HTMLInputElement | null>(null);
 
 const sendCommand = () => {
   const command = currentSessionCommandInput.value; // 使用计算属性获取值
@@ -340,6 +362,37 @@ const handleQuickCommandExecute = (command: string) => {
 const clearTerminal = () => {
   emitWorkspaceEvent('terminal:clear', { sessionId: currentTargetSessionId.value || undefined });
 };
+
+const toggleAI = () => {
+  if (!isAIEnabled.value) return;
+  isAIActive.value = !isAIActive.value;
+  if (isAIActive.value) {
+    nl2cmdQuery.value = '';
+    nextTick(() => nl2cmdInputRef.value?.focus());
+  }
+};
+
+const submitNL2CMD = async () => {
+  const command = await generateNL2CMD();
+  const targetId = aiCommandInputTargetId.value;
+  const targetSession = targetId ? sessionStore.sessions.get(targetId) : null;
+  if (command && targetId && targetSession?.kind === 'ssh') {
+    updateSessionCommandInput(targetId, command);
+    isAIActive.value = false;
+    nextTick(() => commandInputRef.value?.focus());
+  }
+};
+
+const handleNL2CMDKeydown = async (event: KeyboardEvent) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    await submitNL2CMD();
+  } else if (event.key === 'Escape') {
+    event.preventDefault();
+    isAIActive.value = false;
+    nextTick(() => commandInputRef.value?.focus());
+  }
+};
 </script>
 
 <template>
@@ -371,16 +424,18 @@ const clearTerminal = () => {
       >
         <i class="fas fa-keyboard text-base"></i> <!-- Removed text-primary -->
       </button>
-      <!-- Command Input (Hide on mobile when searching) -->
+      <!-- Command Input (Hide on mobile when searching or AI active) -->
       <input
-        v-if="!props.isMobile || !isSearching"
+        v-if="!props.isMobile || (!isSearching && !isAIActive)"
         type="text"
         v-model="currentSessionCommandInput"
         :placeholder="t('commandInputBar.placeholder')"
         class="flex-grow min-w-0 px-4 py-1.5 border border-border/50 rounded-lg bg-input text-foreground text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-300 ease-in-out"
         :class="{
-          'basis-3/4': !props.isMobile && isSearching,      // Desktop searching: 3/4 width
-          'basis-full': !props.isMobile && !isSearching,   // Desktop non-searching: full width
+          'basis-3/4': !props.isMobile && isSearching && !isAIActive,
+          'basis-1/2': !props.isMobile && isAIActive && !isSearching,
+          'basis-1/3': !props.isMobile && isAIActive && isSearching,
+          'basis-full': !props.isMobile && !isSearching && !isAIActive,
           'w-0': props.isMobile  // Mobile non-searching: adjust width to fit
         }"
         ref="commandInputRef"
@@ -389,6 +444,36 @@ const clearTerminal = () => {
         @blur="handleCommandInputBlur"
       />
 
+      <!-- AI Assistant Input -->
+      <div
+        v-if="isAIActive"
+        class="flex-grow min-w-0 relative flex items-center transition-all duration-300 ease-in-out"
+        :class="{
+          'basis-1/2': !props.isMobile && !isSearching,
+          'basis-1/3': !props.isMobile && isSearching,
+          'w-full': props.isMobile
+        }"
+      >
+        <input
+          ref="nl2cmdInputRef"
+          v-model="nl2cmdQuery"
+          type="text"
+          :placeholder="t('ai.nl2cmd.placeholder')"
+          class="w-full px-4 py-1.5 pr-10 border border-border/50 rounded-lg bg-input text-foreground text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
+          @keydown="handleNL2CMDKeydown"
+        />
+        <button
+          type="button"
+          class="absolute right-1 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center text-text-secondary hover:text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          :disabled="nl2cmdLoading"
+          :title="t('ai.nl2cmd.generate')"
+          @click="submitNL2CMD"
+        >
+          <i v-if="!nl2cmdLoading" class="fas fa-paper-plane text-xs"></i>
+          <i v-else class="fas fa-spinner fa-spin text-xs"></i>
+        </button>
+      </div>
+
       <!-- Search Input (Show when searching, adjust width on mobile) -->
       <input
         v-if="isSearching"
@@ -396,7 +481,7 @@ const clearTerminal = () => {
         v-model="searchTerm"
         :placeholder="t('commandInputBar.searchPlaceholder')"
         class="flex-grow min-w-0 px-4 py-1.5 border border-border/50 rounded-lg bg-input text-foreground text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-300 ease-in-out"
-        :class="{ 'basis-1/4': !props.isMobile, 'w-0': props.isMobile }"
+        :class="{ 'basis-1/4': !props.isMobile && !isAIActive, 'basis-1/3': !props.isMobile && isAIActive, 'w-0': props.isMobile }"
         data-focus-id="terminalSearch"
         @keydown.enter.prevent="findNext"
         @keydown.shift.enter.prevent="findPrevious"
@@ -436,7 +521,6 @@ const clearTerminal = () => {
           <i v-if="!isSearching" class="fas fa-search text-base"></i>
           <i v-else class="fas fa-times text-base"></i>
         </button>
-
         <!-- Search navigation buttons (Hide on mobile when searching) -->
         <template v-if="isSearching && !props.isMobile"> <!-- +++ Add !props.isMobile condition +++ -->
           <button
@@ -454,6 +538,21 @@ const clearTerminal = () => {
             <i class="fas fa-arrow-down text-base"></i>
           </button>
         </template>
+        <!-- Search Toggle Button -->
+        <button
+            v-if="showAICommandEntry"
+            @click="toggleAI"
+            class="flex items-center justify-center w-8 h-8 border border-border/50 rounded-lg text-text-secondary transition-colors duration-200 hover:bg-border hover:text-foreground"
+            :class="{
+            'bg-primary/10 text-primary border-primary/50': isAIActive,
+            'opacity-50 cursor-not-allowed': !isAIEnabled
+          }"
+            :disabled="!isAIEnabled"
+            :title="isAIEnabled ? (isAIActive ? t('ai.nl2cmd.close') : t('ai.nl2cmd.open')) : t('ai.nl2cmd.enableInSettings')"
+        >
+          <i v-if="!isAIActive" class="fas fa-wand-magic-sparkles text-base"></i>
+          <i v-else class="fas fa-times text-base"></i>
+        </button>
         <!-- File Manager Button -->
         <button
           v-if="showPopupFileManagerBoolean || props.isMobile"

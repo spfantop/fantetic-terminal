@@ -16,6 +16,11 @@ assert.ok(
   'terminal single/multi-line output toggle should be tracked as an action pane',
 );
 
+assert.ok(
+  CONFIGURABLE_LAYOUT_PANES.includes('aiAssistant' as never),
+  'AI assistant must be accepted by backend sidebar settings so its saved position survives refresh',
+);
+
 assert.equal(
   isConfigurableLayoutPane('suspendedSshSessions'),
   false,
@@ -26,11 +31,12 @@ assert.deepEqual(
   normalizeConfigurablePaneList([
     'fileManager',
     'suspendedSshSessions',
+    'aiAssistant',
     'terminalLineOutputToggle',
     'fileManager',
     'unknown',
   ]),
-  ['fileManager', 'terminalLineOutputToggle'],
+  ['fileManager', 'aiAssistant', 'terminalLineOutputToggle'],
 );
 
 console.log('backend layout panes behavior ok');

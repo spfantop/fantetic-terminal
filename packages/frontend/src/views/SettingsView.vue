@@ -91,6 +91,11 @@
           <div v-else class="p-4 text-center text-muted-foreground">{{ $t('settings.loading', '加载中...') }}</div>
         </div>
 
+        <!-- AI Tab Content -->
+        <div v-if="activeTab === 'ai'">
+          <AISettingsSection />
+        </div>
+
         <!-- System Tab Content -->
         <div v-if="activeTab === 'system'">
           <SystemSettingsSection v-if="settings" />
@@ -144,6 +149,7 @@ import IpWhitelistSettings from '../components/settings/IpWhitelistSettings.vue'
 import IpBlacklistSettings from '../components/settings/IpBlacklistSettings.vue';
 import AboutSection from '../components/settings/AboutSection.vue';
 import WorkspaceSettingsSection from '../components/settings/WorkspaceSettingsSection.vue';
+import AISettingsSection from '../components/settings/AISettingsSection.vue';
 import SystemSettingsSection from '../components/settings/SystemSettingsSection.vue';
 import DataManagementSection from '../components/settings/DataManagementSection.vue';
 import AppearanceSection from '../components/settings/AppearanceSection.vue';
@@ -172,6 +178,7 @@ const tabs = ref([
   { key: 'appearance', label: t('settings.tabs.appearance', '外观'), icon: 'fas fa-palette' },
   { key: 'ipControl', label: t('settings.tabs.ipControl', 'IP 管控'), icon: 'fas fa-network-wired' },
   { key: 'workspace', label: t('settings.tabs.workspace', '工作区'), icon: 'fas fa-table-columns' },
+  { key: 'ai', label: t('settings.tabs.ai', 'AI 助手'), icon: 'fas fa-wand-magic-sparkles' },
   { key: 'notifications', label: t('settings.tabs.notifications', '通知管理'), icon: 'fas fa-bell' },
   { key: 'proxies', label: t('settings.tabs.proxies', '代理管理'), icon: 'fas fa-route' },
   { key: 'dataManagement', label: t('settings.tabs.dataManagement', '数据管理'), icon: 'fas fa-database' },

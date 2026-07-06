@@ -11,6 +11,11 @@ assert.ok(
 );
 
 assert.ok(
+  CONFIGURABLE_LAYOUT_PANES.includes('aiAssistant' as never),
+  'AI assistant must be configurable in layout manager',
+);
+
+assert.ok(
   ACTION_LAYOUT_PANES.includes('terminalLineOutputToggle'),
   'terminal single/multi-line output toggle should behave as a toolbar action pane',
 );
@@ -25,11 +30,12 @@ assert.deepEqual(
   normalizeConfigurablePaneList([
     'fileManager',
     'suspendedSshSessions',
+    'aiAssistant',
     'terminalLineOutputToggle',
     'fileManager',
     'unknown',
   ]),
-  ['fileManager', 'terminalLineOutputToggle'],
+  ['fileManager', 'aiAssistant', 'terminalLineOutputToggle'],
 );
 
 console.log('layoutPanes behavior ok');

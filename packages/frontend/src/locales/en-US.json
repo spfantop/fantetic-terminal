@@ -1218,7 +1218,29 @@
       "appearance": "Appearance",
       "proxies": "Proxies",
       "notifications": "Notifications",
+      "ai": "AI Assistant",
       "about": "About"
+    },
+    "ai": {
+      "title": "AI Assistant Settings",
+      "enableLabel": "Enable AI command assistant",
+      "provider": "AI Provider",
+      "endpoint": "API Endpoint",
+      "baseUrl": "Base URL",
+      "oneApiHint": "For One API / OpenAI-compatible services, enter the API root through /v1, for example https://your-domain/v1; do not use the admin dashboard URL.",
+      "apiKey": "API Key",
+      "model": "Model",
+      "showKey": "Show API Key",
+      "maskedKeyHint": "Saved keys are partially hidden. Enter a new key to replace it.",
+      "test": "Test connection",
+      "testing": "Testing...",
+      "loadFailed": "Failed to load AI settings",
+      "required": "Please complete the required settings",
+      "apiKeyRequired": "API Key is required when AI assistant is enabled",
+      "saveSuccess": "AI settings saved",
+      "saveFailed": "Failed to save AI settings",
+      "testSuccess": "Connection test succeeded",
+      "testFailed": "Connection test failed"
     },
     "loading": "Loading..."
   },
@@ -1444,6 +1466,43 @@
     "configureFocusSwitch": "Configure Focus Switcher",
     "clearTerminal": "Clear Terminal"
   },
+  "ai": {
+    "nl2cmd": {
+      "placeholder": "Describe the command you want to run...",
+      "generate": "Generate command",
+      "open": "AI command assistant",
+      "close": "Close AI command assistant",
+      "panelTitle": "AI Assistant",
+      "panelPlaceholder": "Describe the terminal command you want to generate...",
+      "noSession": "No SSH session",
+      "requiresSshSession": "Activate an SSH terminal session first.",
+      "fillsCommandInput": "Generated commands fill the command bar and are not executed automatically",
+      "generating": "Generating...",
+      "newSession": "New chat",
+      "history": "History",
+      "debug": "Debug",
+      "emptyTitle": "Describe the goal, generate the command",
+      "emptySubtitle": "AI turns natural language into a terminal command and fills only the current SSH command bar.",
+      "noHistory": "No history yet",
+      "historyMessages": "messages",
+      "noCommandGenerated": "No usable command was generated. Try a more specific description.",
+      "commandReady": "Command generated and filled into the current terminal command bar. Review it before pressing Enter.",
+      "fillAgain": "Fill",
+      "executeNow": "Run now",
+      "suggestions": {
+        "largeFiles": "Find the 10 largest files in the current directory",
+        "ports": "Show listening ports",
+        "disk": "Show disk usage sorted by size",
+        "logs": "Tail recent error logs"
+      },
+      "enableInSettings": "Enable AI assistant in Settings",
+      "settingsLoadFailed": "Failed to load AI settings",
+      "emptyPrompt": "Please enter a command description",
+      "generateFailed": "Failed to generate command",
+      "generated": "Command generated",
+      "dangerWarning": "Dangerous command warning: {warning}"
+    }
+  },
   "layout": {
     "loading": "Loading...",
     "configure": "Configure Layout",
@@ -1456,6 +1515,7 @@
       "statusMonitor": "Status Monitor",
       "commandHistory": "Command History",
       "quickCommands": "Quick Commands",
+      "aiAssistant": "AI Assistant",
       "dockerManager": "Docker Manager",
       "suspendedSshSessions": "Suspended Sessions Management",
       "terminalLineOutputToggle": "Single/Multi-line Output",
@@ -1912,4 +1972,3 @@
     "copiedError": "Failed to copy path"
   }
 }
-

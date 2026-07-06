@@ -7,6 +7,7 @@ export const CONFIGURABLE_LAYOUT_PANES = [
   'statusMonitor',
   'commandHistory',
   'quickCommands',
+  'aiAssistant',
   'dockerManager',
   'terminalLineOutputToggle',
   'transferProgress',

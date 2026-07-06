@@ -46,5 +46,32 @@
       "PASSKEY_DELETE_UNAUTHORIZED": "パスキー削除権限なし",
       "PASSKEY_NAME_UPDATED": "パスキー名更新済み",
       "PASSKEY_NAME_UPDATE_UNAUTHORIZED": "パスキー名更新権限なし"
+    },
+    "ai": {
+      "settingsFetchFailed": "AI 設定の取得に失敗しました",
+      "settingsSaved": "AI 設定を保存しました",
+      "settingsSaveFailed": "AI 設定の保存に失敗しました",
+      "unsupportedProvider": "サポートされていない AI Provider です",
+      "baseUrlProtocolInvalid": "AI Base URL は http または https のみ対応しています",
+      "baseUrlLocalBlocked": "AI Base URL に localhost またはローカルドメインは指定できません",
+      "modelRequired": "モデルは必須です",
+      "apiKeyRequired": "AI アシスタントを有効にするには API Key が必要です",
+      "queryRequired": "コマンドの説明を入力してください",
+      "queryTooLong": "コマンドの説明は 500 文字以内にしてください",
+      "disabled": "AI が有効化または設定されていません",
+      "emptyCommand": "AI が有効なコマンドを生成できませんでした。より詳しく説明してください",
+      "generateFailed": "コマンド生成に失敗しました",
+      "testSuccess": "接続テストに成功しました",
+      "testFailed": "接続テストに失敗しました",
+      "requestBadModel": "リクエストパラメータが無効です。モデル名を確認してください",
+      "invalidApiKey": "API Key が無効または期限切れです",
+      "permissionDenied": "API Key の権限が不足しているか、アカウントが無効です",
+      "endpointNotFound": "API エンドポイントまたはモデルが見つかりません。Base URL とモデルを確認してください",
+      "htmlResponse": "AI サービスが API JSON ではなく HTML ページを返しました。One API を使用する場合、Base URL は通常 /v1 まで含めます。例：https://your-domain/v1",
+      "rateLimited": "API リクエスト頻度制限またはクォータ超過です",
+      "serviceUnavailable": "AI サービスは一時的に利用できません。後でもう一度お試しください",
+      "connectFailed": "AI サービスに接続できません。ネットワークまたは Base URL を確認してください",
+      "requestConfigError": "リクエスト設定エラー",
+      "timeout": "AI サービスがタイムアウトしました（{timeout}ms）。後でもう一度試すか、ネットワーク/Base URL を確認してください"
     }
   }

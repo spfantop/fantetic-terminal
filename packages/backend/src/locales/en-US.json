@@ -46,5 +46,32 @@
     "PASSKEY_DELETE_UNAUTHORIZED": "Passkey Deletion Unauthorized",
     "PASSKEY_NAME_UPDATED": "Passkey Name Updated",
     "PASSKEY_NAME_UPDATE_UNAUTHORIZED": "Passkey Name Update Unauthorized"
+  },
+  "ai": {
+    "settingsFetchFailed": "Failed to fetch AI settings",
+    "settingsSaved": "AI settings saved",
+    "settingsSaveFailed": "Failed to save AI settings",
+    "unsupportedProvider": "Unsupported AI Provider",
+    "baseUrlProtocolInvalid": "AI Base URL only supports http or https",
+    "baseUrlLocalBlocked": "AI Base URL cannot point to localhost or local domains",
+    "modelRequired": "Model is required",
+    "apiKeyRequired": "API Key is required when AI assistant is enabled",
+    "queryRequired": "Please enter a command description",
+    "queryTooLong": "Command description cannot exceed 500 characters",
+    "disabled": "AI is not enabled or configured",
+    "emptyCommand": "AI did not generate a valid command. Try describing the task in more detail",
+    "generateFailed": "Failed to generate command",
+    "testSuccess": "Connection test succeeded",
+    "testFailed": "Connection test failed",
+    "requestBadModel": "Invalid request. Please check the model name",
+    "invalidApiKey": "API Key is invalid or expired",
+    "permissionDenied": "API Key permission is insufficient or the account is disabled",
+    "endpointNotFound": "API endpoint or model was not found. Check Base URL and model",
+    "htmlResponse": "AI service returned an HTML page instead of API JSON. For One API, Base URL usually needs to include /v1, for example https://your-domain/v1",
+    "rateLimited": "API rate limit exceeded or quota exhausted",
+    "serviceUnavailable": "AI service is temporarily unavailable. Please try again later",
+    "connectFailed": "Cannot connect to AI service. Check network or Base URL settings",
+    "requestConfigError": "Request configuration error",
+    "timeout": "AI service timed out ({timeout}ms). Please retry later or check network/Base URL settings"
   }
 }
