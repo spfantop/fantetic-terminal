@@ -78,11 +78,20 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+  batchTerminalInputActive: {
+    type: Boolean,
+    default: false,
+  },
+  batchTerminalInputAvailable: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 // 定义事件 (保留 update:sessions 用于 v-model)
 const emit = defineEmits<{
   (e: 'update:sessions', newSessions: SessionTabInfoWithStatus[]): void;
+  (e: 'toggle-batch-terminal-input'): void;
 }>();
 
 
@@ -433,6 +442,25 @@ const toggleSingleLineOutput = (event?: MouseEvent) => {
   sessionStore.toggleTerminalSingleLineOutput(props.activeSessionId);
 };
 
+const shouldShowBatchTerminalInputToggle = computed(() => (
+  shouldShowSingleLineOutputToggle.value && !props.isMobile
+));
+
+const batchTerminalInputToggleTitle = computed(() => {
+  if (!props.batchTerminalInputAvailable) {
+    return t('terminalTabBar.batchInputUnavailableTooltip', '分屏中至少需要两个 SSH 终端才能批量执行命令');
+  }
+  return props.batchTerminalInputActive
+    ? t('terminalTabBar.batchInputDisableTooltip', '关闭批量执行命令')
+    : t('terminalTabBar.batchInputEnableTooltip', '批量执行命令');
+});
+
+const toggleBatchTerminalInput = (event?: MouseEvent) => {
+  releaseButtonFocus(event);
+  if (!props.batchTerminalInputAvailable) return;
+  emit('toggle-batch-terminal-input');
+};
+
 const workspaceSplitTitle = computed(() => (
   props.workspaceSplitActive
     ? t('terminalTabBar.mergeWorkspaceTooltip', '合并窗口')
@@ -640,6 +668,20 @@ onBeforeUnmount(() => {
           @click="toggleSingleLineOutput"
         >
           <i :class="[singleLineOutputToggleIconClass, 'text-sm']"></i>
+        </button>
+        <button
+          v-if="shouldShowBatchTerminalInputToggle"
+          type="button"
+          class="flex items-center justify-center px-3 h-full border-l border-border transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+          :class="props.batchTerminalInputActive ? 'bg-primary/10 text-primary hover:bg-primary/15' : 'text-text-secondary hover:bg-border hover:text-foreground'"
+          :disabled="!props.batchTerminalInputAvailable"
+          :aria-disabled="!props.batchTerminalInputAvailable"
+          :aria-pressed="props.batchTerminalInputActive"
+          :title="batchTerminalInputToggleTitle"
+          @pointerdown.prevent
+          @click="toggleBatchTerminalInput"
+        >
+          <i class="fas fa-keyboard text-sm"></i>
         </button>
         <!-- +++ 使用 v-if 隐藏移动端的布局按钮 +++ -->
         <button v-if="!isMobile && props.showLayoutActions" class="flex items-center justify-center px-3 h-full border-l border-border text-text-secondary hover:bg-border hover:text-foreground transition-colors duration-150"

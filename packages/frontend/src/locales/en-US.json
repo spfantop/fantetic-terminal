@@ -1693,7 +1693,10 @@
     "splitWorkspaceTooltip": "Split Workspace",
     "mergeWorkspaceTooltip": "Merge Workspace",
     "singleLineOutputTooltip": "Switch to single-line output",
-    "multiLineOutputTooltip": "Switch to multi-line output"
+    "multiLineOutputTooltip": "Switch to multi-line output",
+    "batchInputEnableTooltip": "Batch execute commands",
+    "batchInputDisableTooltip": "Disable batch command execution",
+    "batchInputUnavailableTooltip": "Batch execute commands"
   },
   "tabs": {
     "contextMenu": {

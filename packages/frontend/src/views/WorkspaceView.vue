@@ -30,6 +30,7 @@ import {
 import type { WebSocketDependencies } from '../composables/useSftpActions'; 
 import { useDraggableDialog } from '../composables/useDraggableDialog';
 import { debugLog, debugLogLazy } from '../composables/useDebugLog';
+import { resolveTerminalBatchInputTargetIds } from '../utils/terminalBatchInput';
 
 // --- Setup ---
 const { t } = useI18n();
@@ -147,6 +148,7 @@ const getSshSessionForAction = (sessionId?: string) => {
 const workspaceSplitAvailable = computed(() => !isMobile.value && visibleSessionTabsWithStatus.value.length > 1);
 const isWorkspaceSplitActive = ref(false);
 const workspaceTabOrder = ref<string[]>([]);
+const isBatchTerminalInputActive = ref(false);
 
 const mergeWorkspaceSplit = () => {
   isWorkspaceSplitActive.value = false;
@@ -173,6 +175,26 @@ const orderedVisibleSessionTabs = computed(() => {
 });
 
 const workspaceSplitSessionIds = computed(() => orderedVisibleSessionTabs.value.map(tab => tab.sessionId));
+const workspaceSplitSshSessionIds = computed(() => (
+  workspaceSplitSessionIds.value.filter(sessionId => sessionStore.sessions.get(sessionId)?.kind === 'ssh')
+));
+const isBatchTerminalInputAvailable = computed(() => (
+  isWorkspaceSplitActive.value && workspaceSplitSshSessionIds.value.length > 1
+));
+
+watch(isBatchTerminalInputAvailable, (available) => {
+  if (!available) {
+    isBatchTerminalInputActive.value = false;
+  }
+});
+
+const toggleBatchTerminalInput = () => {
+  if (!isBatchTerminalInputAvailable.value) {
+    isBatchTerminalInputActive.value = false;
+    return;
+  }
+  isBatchTerminalInputActive.value = !isBatchTerminalInputActive.value;
+};
 
 watch(visibleSessionTabsWithStatus, (tabs) => {
   const visibleIds = new Set(tabs.map(tab => tab.sessionId));
@@ -1303,9 +1325,7 @@ const unsubscribeFromWorkspaceEvents = useWorkspaceEventOff();
    }
  };
 
- // 处理终端输入 (用于 Terminal)
- // 注意：LayoutRenderer 内部的 Terminal 组件需要 emit('terminal-input', sessionId, data)
- const handleTerminalInputData = (sessionId: string, data: string, batched?: boolean) => {
+ const handleSingleTerminalInputData = (sessionId: string, data: string, batched?: boolean) => {
    const manager = readTerminalInputManager(sessionId);
    if (!manager) {
      console.warn(`[WorkspaceView] handleTerminalInput: 未找到会话 ${sessionId} 或其 terminalManager`);
@@ -1335,6 +1355,27 @@ const unsubscribeFromWorkspaceEvents = useWorkspaceEventOff();
    } else {
      console.error(`[WorkspaceView] handleTerminalInput: 未找到 ID 为 ${session.connectionId} 的连接信息。`);
    }
+ };
+
+ // 处理终端输入 (用于 Terminal)
+ // 注意：LayoutRenderer 内部的 Terminal 组件需要 emit('terminal-input', sessionId, data)
+ const handleTerminalInputData = (sessionId: string, data: string, batched?: boolean) => {
+   const targetSessionIds = resolveTerminalBatchInputTargetIds({
+     sourceSessionId: sessionId,
+     batchEnabled: isBatchTerminalInputActive.value,
+     workspaceSplitActive: isWorkspaceSplitActive.value,
+     workspaceSplitSessionIds: workspaceSplitSessionIds.value,
+     sessions: sessionStore.sessions,
+   });
+
+   if (targetSessionIds.length <= 1) {
+     handleSingleTerminalInputData(sessionId, data, batched);
+     return;
+   }
+
+   targetSessionIds.forEach(targetSessionId => {
+     handleSingleTerminalInputData(targetSessionId, data, true);
+   });
  };
 
  const handleTerminalInput = (payload: WorkspaceEventPayloads['terminal:input']) => {
@@ -1727,9 +1768,12 @@ const closeFileManagerModal = () => {
           :split-workspace-available="workspaceSplitAvailable"
           :merge-workspace-available="isWorkspaceSplitActive"
           :workspace-split-active="isWorkspaceSplitActive"
+          :batch-terminal-input-active="isBatchTerminalInputActive"
+          :batch-terminal-input-available="isBatchTerminalInputAvailable"
           :show-layout-actions="!isVisibleActiveSessionRemoteDesktop"
           :show-split-action="true"
           @update:sessions="handleWorkspaceSessionOrderUpdate"
+          @toggle-batch-terminal-input="toggleBatchTerminalInput"
         />
         <div class="main-content-area">
           <LayoutRenderer

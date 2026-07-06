@@ -1640,7 +1640,10 @@
           "splitWorkspaceTooltip": "ワークスペースを分割",
           "mergeWorkspaceTooltip": "ワークスペースを結合",
           "singleLineOutputTooltip": "単一行出力に切り替え",
-          "multiLineOutputTooltip": "複数行出力に切り替え"
+          "multiLineOutputTooltip": "複数行出力に切り替え",
+          "batchInputEnableTooltip": "コマンドを一括実行",
+          "batchInputDisableTooltip": "コマンド一括実行を無効化",
+          "batchInputUnavailableTooltip": "コマンドを一括実行"
       },
       "tabs": {
         "contextMenu": {

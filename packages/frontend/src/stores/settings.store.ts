@@ -162,7 +162,7 @@ export const useSettingsStore = defineStore('settings', () => {
       }
       // +++  showPopupFileManager 默认值 +++
       if (settings.value.showPopupFileManager === undefined) {
-          settings.value.showPopupFileManager = 'true'; // 默认启用弹窗文件管理器
+          settings.value.showPopupFileManager = 'false'; // 默认禁用弹窗文件管理器
       }
       if (settings.value.shareFileEditorTabs === undefined) {
           settings.value.shareFileEditorTabs = 'true';
@@ -836,7 +836,7 @@ export const useSettingsStore = defineStore('settings', () => {
  
   // +++ Getter for popup file manager setting, returning boolean +++
   const showPopupFileManagerBoolean = computed(() => {
-      return settings.value.showPopupFileManager !== 'false'; // Default to true
+      return settings.value.showPopupFileManager === 'true'; // Default to false
   });
  
   // Getter for sharing setting, returning boolean

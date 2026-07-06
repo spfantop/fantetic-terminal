@@ -286,7 +286,7 @@ export function useWorkspaceSettings() {
   };
 
   // --- Popup File Manager ---
-  const showPopupFileManagerLocal = ref(true);
+  const showPopupFileManagerLocal = ref(false);
   const showPopupFileManagerLoading = ref(false);
   const showPopupFileManagerMessage = ref('');
   const showPopupFileManagerSuccess = ref(false);

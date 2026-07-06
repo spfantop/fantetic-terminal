@@ -1697,7 +1697,10 @@
     "splitWorkspaceTooltip": "窗口分割",
     "mergeWorkspaceTooltip": "合并窗口",
     "singleLineOutputTooltip": "切换为单行输出",
-    "multiLineOutputTooltip": "切换为多行输出"
+    "multiLineOutputTooltip": "切换为多行输出",
+    "batchInputEnableTooltip": "批量执行命令",
+    "batchInputDisableTooltip": "关闭批量执行命令",
+    "batchInputUnavailableTooltip": "批量执行命令"
   },
   "tabs": {
     "contextMenu": {
