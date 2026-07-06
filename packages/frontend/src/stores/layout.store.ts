@@ -1,10 +1,18 @@
 import { debugLog, debugLogLazy } from '../composables/useDebugLog';
 import { defineStore } from 'pinia';
-import { ref, computed, watch, type Ref, type ComputedRef } from 'vue';
+import { ref, computed, type Ref, type ComputedRef } from 'vue';
 import apiClient from '../utils/apiClient';
+import {
+  CONFIGURABLE_LAYOUT_PANES,
+  cloneDefaultSidebarPanes,
+  isConfigurableLayoutPane,
+  normalizeConfigurablePaneList,
+  type ConfigurableLayoutPane,
+  type SidebarPaneConfig,
+} from '../utils/layoutPanes';
 
 // 定义所有可用面板的名称
-export type PaneName = 'connections' | 'terminal' | 'commandBar' | 'fileManager' | 'editor' | 'statusMonitor' | 'commandHistory' | 'quickCommands' | 'dockerManager' | 'suspendedSshSessions' | 'transferProgress';
+export type PaneName = ConfigurableLayoutPane;
 
 // 定义布局节点接口
 export interface LayoutNode {
@@ -71,10 +79,7 @@ const getDefaultLayout = (): LayoutNode => ({
 });
 
 // 定义默认侧栏配置 (根据用户提供的配置更新)
-const getDefaultSidebarPanes = (): { left: PaneName[], right: PaneName[] } => ({
-  "left": [],
-  "right": ["fileManager", "commandHistory", "quickCommands", "suspendedSshSessions", "dockerManager"]
-});
+const getDefaultSidebarPanes = (): SidebarPaneConfig => cloneDefaultSidebarPanes();
 
 // 递归查找主布局树中使用的面板
 function getMainLayoutUsedPaneNames(node: LayoutNode | null): Set<PaneName> {
@@ -127,38 +132,34 @@ export function areSidebarPanesEqual(left: { left: PaneName[], right: PaneName[]
   const isSamePaneList = (a: PaneName[], b: PaneName[]) => a.length === b.length && a.every((pane, index) => pane === b[index]);
   return isSamePaneList(left.left, right.left) && isSamePaneList(left.right, right.right);
 }
-function stripSessionScopedTerminalPanes(node: LayoutNode | null): LayoutNode | null {
+function sanitizeLayoutTree(node: LayoutNode | null): LayoutNode | null {
   if (!node) return null;
 
   const clonedNode = { ...node };
-  if (clonedNode.type === 'pane' && clonedNode.component === 'terminal') {
-    delete clonedNode.sessionId;
+  if (clonedNode.type === 'pane') {
+    if (!isConfigurableLayoutPane(clonedNode.component)) {
+      return null;
+    }
+    if (clonedNode.component === 'terminal') {
+      delete clonedNode.sessionId;
+    }
+    return clonedNode;
   }
   if (clonedNode.type === 'container' && clonedNode.children) {
     clonedNode.children = clonedNode.children
-      .map(child => stripSessionScopedTerminalPanes(child))
+      .map(child => sanitizeLayoutTree(child))
       .filter(Boolean) as LayoutNode[];
   }
   return clonedNode;
 }
 
-// --- Validation Helper ---
-// Checks if a value is a valid PaneName
-function isValidPaneName(value: any, allPanes: PaneName[]): value is PaneName {
-    return typeof value === 'string' && allPanes.includes(value as PaneName);
-}
+function normalizeSidebarPaneConfig(value: { left?: unknown[]; right?: unknown[] } | null | undefined): SidebarPaneConfig | null {
+  if (!value || !Array.isArray(value.left) || !Array.isArray(value.right)) return null;
 
-// Checks if an array contains only unique, valid PaneName strings
-function isValidPaneNameArray(arr: any, allPanes: PaneName[]): arr is PaneName[] {
-    if (!Array.isArray(arr)) return false;
-    const seen = new Set<PaneName>();
-    for (const item of arr) {
-        if (!isValidPaneName(item, allPanes) || seen.has(item)) {
-            return false; // Not a valid PaneName or duplicate found
-        }
-        seen.add(item);
-    }
-    return true; // All items are unique and valid PaneNames
+  return {
+    left: normalizeConfigurablePaneList(value.left),
+    right: normalizeConfigurablePaneList(value.right),
+  };
 }
 
 
@@ -168,13 +169,9 @@ export const useLayoutStore = defineStore('layout', () => {
   // 主布局树结构
   const layoutTree: Ref<LayoutNode | null> = ref(null);
   // 侧栏面板配置
-  const sidebarPanes: Ref<{ left: PaneName[], right: PaneName[] }> = ref(getDefaultSidebarPanes());
+  const sidebarPanes: Ref<SidebarPaneConfig> = ref(getDefaultSidebarPanes());
   // 所有理论上可用的面板名称
-  const allPossiblePanes: Ref<PaneName[]> = ref([
-    'connections', 'terminal', 'commandBar', 'fileManager',
-    'editor', 'statusMonitor', 'commandHistory', 'quickCommands',
-    'dockerManager', 'suspendedSshSessions', 'transferProgress'
-  ]);
+  const allPossiblePanes: Ref<PaneName[]> = ref([...CONFIGURABLE_LAYOUT_PANES]);
   // 控制布局（Header/Footer）可见性的状态
   const isLayoutVisible: Ref<boolean> = ref(true); // 控制整体布局（Header/Footer）可见性
   // 控制主导航栏（Header）可见性的状态
@@ -227,7 +224,7 @@ function ensureNodeIds(node: LayoutNode | null): LayoutNode | null {
       if (response.data) {
         debugLog('[Layout Store] Step 1: Backend returned data.');
         // +++ 在赋值前确保 ID 存在 +++
-        loadedLayout = ensureNodeIds(stripSessionScopedTerminalPanes(response.data));
+        loadedLayout = ensureNodeIds(sanitizeLayoutTree(response.data));
         layoutLoadedFromBackend = true;
         debugLog('[Layout Store] Step 1: Layout processed with ensureNodeIds.');
         // 更新 localStorage (使用处理过的布局)
@@ -247,16 +244,15 @@ function ensureNodeIds(node: LayoutNode | null): LayoutNode | null {
     // 2. 尝试从后端加载侧栏配置 (侧栏逻辑不变)
     try {
         debugLog('[Layout Store] Step 2: Attempting to load sidebar config from backend...');
-        const response = await apiClient.get<{ left: any[], right: any[] } | null>('/settings/sidebar');
-        if (response.data &&
-            isValidPaneNameArray(response.data.left, allPossiblePanes.value) &&
-            isValidPaneNameArray(response.data.right, allPossiblePanes.value))
+        const response = await apiClient.get<{ left: unknown[], right: unknown[] } | null>('/settings/sidebar');
+        const normalizedSidebarPanes = normalizeSidebarPaneConfig(response.data);
+        if (normalizedSidebarPanes)
         {
-            sidebarPanes.value = response.data as { left: PaneName[], right: PaneName[] };
+            sidebarPanes.value = normalizedSidebarPanes;
             sidebarLoadedFromBackend = true;
             debugLog('[Layout Store] Step 2: Sidebar config loaded from backend.');
             try {
-                localStorage.setItem(SIDEBAR_STORAGE_KEY, JSON.stringify(response.data));
+                localStorage.setItem(SIDEBAR_STORAGE_KEY, JSON.stringify(normalizedSidebarPanes));
             } catch (lsError) {
                 console.error('[Layout Store] Step 2: Failed to save backend sidebar config to localStorage:', lsError);
             }
@@ -277,7 +273,7 @@ function ensureNodeIds(node: LayoutNode | null): LayoutNode | null {
           const parsedLayout = JSON.parse(savedLayout) as LayoutNode;
           debugLog('[Layout Store] Step 3: Parsed layout from localStorage.');
           // +++ 在赋值前确保 ID 存在 +++
-          loadedLayout = ensureNodeIds(stripSessionScopedTerminalPanes(parsedLayout));
+          loadedLayout = ensureNodeIds(sanitizeLayoutTree(parsedLayout));
           debugLog('[Layout Store] Step 3: Layout processed with ensureNodeIds.');
         } else {
           // 4. 如果 localStorage 也没有，使用默认主布局
@@ -302,12 +298,11 @@ function ensureNodeIds(node: LayoutNode | null): LayoutNode | null {
         try {
             const savedSidebars = localStorage.getItem(SIDEBAR_STORAGE_KEY);
             if (savedSidebars) {
-                const parsedSidebars = JSON.parse(savedSidebars) as { left: any[], right: any[] };
-                if (parsedSidebars &&
-                    isValidPaneNameArray(parsedSidebars.left, allPossiblePanes.value) &&
-                    isValidPaneNameArray(parsedSidebars.right, allPossiblePanes.value))
+                const parsedSidebars = JSON.parse(savedSidebars) as { left: unknown[], right: unknown[] };
+                const normalizedSidebarPanes = normalizeSidebarPaneConfig(parsedSidebars);
+                if (normalizedSidebarPanes)
                 {
-                    sidebarPanes.value = parsedSidebars as { left: PaneName[], right: PaneName[] };
+                    sidebarPanes.value = normalizedSidebarPanes;
                     debugLog('[Layout Store] Step 5: Sidebar config loaded from localStorage.');
                 } else {
                      console.warn('[Layout Store] Step 5: Invalid sidebar config in localStorage. Applying default.');
@@ -360,7 +355,7 @@ function ensureNodeIds(node: LayoutNode | null): LayoutNode | null {
   async function updateLayoutTree(newTree: LayoutNode | null) { // Make async
     // 可选：添加验证逻辑
     if (newTree) {
-        newTree = stripSessionScopedTerminalPanes(newTree);
+        newTree = sanitizeLayoutTree(newTree);
     }
     // Check if the tree actually changed before updating and persisting
     if (!areLayoutNodesEqual(newTree, layoutTree.value)) {
@@ -374,15 +369,14 @@ function ensureNodeIds(node: LayoutNode | null): LayoutNode | null {
   }
 
   // 更新侧栏配置
-  async function updateSidebarPanes(newPanes: { left: PaneName[], right: PaneName[] }) { // Make async
+  async function updateSidebarPanes(newPanes: SidebarPaneConfig) { // Make async
     // --- Add Validation ---
-    if (newPanes &&
-        isValidPaneNameArray(newPanes.left, allPossiblePanes.value) &&
-        isValidPaneNameArray(newPanes.right, allPossiblePanes.value))
+    const normalizedPanes = normalizeSidebarPaneConfig(newPanes);
+    if (normalizedPanes)
     {
         // Check if panes actually changed
-        if (!areSidebarPanesEqual(newPanes, sidebarPanes.value)) {
-            sidebarPanes.value = newPanes as { left: PaneName[], right: PaneName[] }; // Assign validated data
+        if (!areSidebarPanesEqual(normalizedPanes, sidebarPanes.value)) {
+            sidebarPanes.value = normalizedPanes; // Assign validated data
             debugLogLazy(() => ['[Layout Store] 侧栏配置已通过验证并更新。 New sidebarPanes value:', JSON.parse(JSON.stringify(sidebarPanes.value))]);
             // --- Directly call persist ---
             await persistSidebarPanes(); // Await persistence directly

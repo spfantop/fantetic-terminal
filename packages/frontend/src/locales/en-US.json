@@ -1458,6 +1458,7 @@
       "quickCommands": "Quick Commands",
       "dockerManager": "Docker Manager",
       "suspendedSshSessions": "Suspended Sessions Management",
+      "terminalLineOutputToggle": "Single/Multi-line Output",
       "transferProgress": "Transfer Progress"
     },
     "panes": {
@@ -1694,6 +1695,8 @@
     "mergeWorkspaceTooltip": "Merge Workspace",
     "singleLineOutputTooltip": "Switch to single-line output",
     "multiLineOutputTooltip": "Switch to multi-line output",
+    "singleLineOutputUnavailableTooltip": "Single/Multi-line Output",
+    "openSuspendedSessionsTooltip": "Suspended Session Manager",
     "batchInputEnableTooltip": "Batch execute commands",
     "batchInputDisableTooltip": "Disable batch command execution",
     "batchInputUnavailableTooltip": "Batch execute commands"

@@ -7,6 +7,7 @@ import type { PaneName } from './layout.store';
 import { useAuthStore } from './auth.store';
 import type { ConnectionInfo } from './connections.store';
 import { normalizeTimezone } from '../utils/dateTimeFormat';
+import { CONFIGURABLE_LAYOUT_PANES } from '../utils/layoutPanes';
 import {
   DEFAULT_TERMINAL_HIGHLIGHT_RULES_JSON,
   parseTerminalHighlightRules,
@@ -210,7 +211,7 @@ export const useSettingsStore = defineStore('settings', () => {
       //  Load and parse sidebar pane widths
       const defaultPaneWidth = '350px';
       // +++ Ensure PaneName type is available or define it here +++
-      const knownPanes: PaneName[] = ['connections', 'fileManager', 'editor', 'statusMonitor', 'commandHistory', 'quickCommands', 'dockerManager', 'suspendedSshSessions', 'transferProgress']; // Add all possible sidebar panes
+      const knownPanes: PaneName[] = [...CONFIGURABLE_LAYOUT_PANES]; // Add all possible sidebar panes
       let loadedWidths: Record<string, string> = {};
       try {
           if (settings.value.sidebarPaneWidths) {

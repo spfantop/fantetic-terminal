@@ -1462,6 +1462,7 @@
       "quickCommands": "快捷指令",
       "dockerManager": "Docker 管理器",
       "suspendedSshSessions": "挂起会话管理",
+      "terminalLineOutputToggle": "单/多行输出",
       "transferProgress": "传输进度"
     },
     "panes": {
@@ -1698,6 +1699,8 @@
     "mergeWorkspaceTooltip": "合并窗口",
     "singleLineOutputTooltip": "切换为单行输出",
     "multiLineOutputTooltip": "切换为多行输出",
+    "singleLineOutputUnavailableTooltip": "单/多行输出",
+    "openSuspendedSessionsTooltip": "挂起会话管理器",
     "batchInputEnableTooltip": "批量执行命令",
     "batchInputDisableTooltip": "关闭批量执行命令",
     "batchInputUnavailableTooltip": "批量执行命令"

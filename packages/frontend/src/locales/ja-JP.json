@@ -653,6 +653,7 @@
             "statusMonitor": "ステータスモニター",
             "terminal": "ターミナル",
             "suspendedSshSessions": "中断されたセッション管理",
+            "terminalLineOutputToggle": "単一行/複数行出力",
             "transferProgress": "転送進捗"
         },
         "panes": {
@@ -1641,6 +1642,8 @@
           "mergeWorkspaceTooltip": "ワークスペースを結合",
           "singleLineOutputTooltip": "単一行出力に切り替え",
           "multiLineOutputTooltip": "複数行出力に切り替え",
+          "singleLineOutputUnavailableTooltip": "単一行/複数行出力",
+          "openSuspendedSessionsTooltip": "中断されたセッション管理者",
           "batchInputEnableTooltip": "コマンドを一括実行",
           "batchInputDisableTooltip": "コマンド一括実行を無効化",
           "batchInputUnavailableTooltip": "コマンドを一括実行"

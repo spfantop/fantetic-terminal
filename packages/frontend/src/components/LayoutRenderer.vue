@@ -15,6 +15,7 @@ import { beginGlobalDragSelectionGuard } from '../composables/useGlobalDragSelec
 import { debugLog } from '../composables/useDebugLog';
 import { storeToRefs } from 'pinia';
 import TransferProgressModal from './TransferProgressModal.vue';
+import { isActionLayoutPane } from '../utils/layoutPanes';
 
 
 // --- Props ---
@@ -127,7 +128,7 @@ const customHtmlLayerRef = ref<HTMLElement | null>(null); // +++ Ref for custom 
 
 // --- Component Mapping ---
 // 使用 defineAsyncComponent 优化加载，并映射 PaneName 到实际组件
-const componentMap: Record<PaneName, Component> = {
+const componentMap: Partial<Record<PaneName, Component>> = {
   connections: defineAsyncComponent(() => import('./WorkspaceConnectionList.vue')),
   terminal: defineAsyncComponent(() => import('./Terminal.vue')),
   commandBar: defineAsyncComponent(() => import('./CommandInputBar.vue')),
@@ -137,7 +138,6 @@ const componentMap: Record<PaneName, Component> = {
   commandHistory: defineAsyncComponent(() => import('../views/CommandHistoryView.vue')),
   quickCommands: defineAsyncComponent(() => import('../views/QuickCommandsView.vue')),
   dockerManager: defineAsyncComponent(() => import('./DockerManager.vue')), // <--- 添加 dockerManager 映射
-  suspendedSshSessions: defineAsyncComponent(() => import('../views/SuspendedSshSessionsView.vue')),
   transferProgress: TransferProgressModal,
 };
 const RemoteDesktopSession = defineAsyncComponent(() => import('./RemoteDesktopSession.vue'));
@@ -706,9 +706,37 @@ const paneLabels = computed(() => ({
   commandHistory: t('layout.pane.commandHistory', '命令历史'),
   quickCommands: t('layout.pane.quickCommands', '快捷指令'),
   dockerManager: t('layout.pane.dockerManager', 'Docker 管理器'),
-  suspendedSshSessions: t('layout.panes.suspendedSshSessions', '挂起会话管理'),
+  terminalLineOutputToggle: t('layout.pane.terminalLineOutputToggle', '单/多行输出'),
   transferProgress: t('layout.pane.transferProgress', '传输进度'),
 }));
+
+const isActiveSessionSingleLineOutput = computed(() => (
+  !!scopedActiveSshSession.value?.terminalSingleLineOutput
+));
+
+const terminalLineOutputToggleTitle = computed(() => {
+  if (!scopedActiveSshSession.value) {
+    return t('terminalTabBar.singleLineOutputUnavailableTooltip', '仅 SSH 终端支持单/多行输出');
+  }
+  return isActiveSessionSingleLineOutput.value
+    ? t('terminalTabBar.multiLineOutputTooltip', '切换为多行输出')
+    : t('terminalTabBar.singleLineOutputTooltip', '切换为单行输出');
+});
+
+const terminalLineOutputToggleIconClass = computed(() => 'fas fa-align-left');
+
+const releaseButtonFocus = (event?: Event) => {
+  const target = event?.currentTarget;
+  if (target instanceof HTMLElement) {
+    target.blur();
+  }
+};
+
+const toggleTerminalLineOutput = (event?: MouseEvent) => {
+  releaseButtonFocus(event);
+  if (!scopedActiveSshSession.value) return;
+  sessionStore.toggleTerminalSingleLineOutput(scopedActiveSshSession.value.sessionId);
+};
 
 
 // 为特定组件计算需要传递的 Props (主布局)
@@ -782,10 +810,6 @@ const componentProps = computed(() => {
        // 假设 DockerManager 会发出 'docker-command' 事件
        // onDockerCommand: (payload: { containerId: string; command: 'up' | 'down' | 'restart' | 'stop' }) => emit('dockerCommand', payload),
        // 暂时不添加事件转发，等组件实现后再确定
-     };
-   case 'suspendedSshSessions':
-     return {
-       class: 'flex flex-col flex-grow h-full overflow-auto', // 与 quickCommands 类似
      };
    case 'transferProgress':
      return {
@@ -904,6 +928,11 @@ const handlePaneResize = (eventData: { panes: Array<{ size: number; [key: string
 
 // 打开/切换侧栏面板
 const toggleSidebarPane = (side: 'left' | 'right', paneName: PaneName) => {
+  if (paneName === 'terminalLineOutputToggle') {
+    toggleTerminalLineOutput();
+    return;
+  }
+
   if (side === 'left') {
     activeLeftSidebarPane.value = activeLeftSidebarPane.value === paneName ? null : paneName;
     if (activeLeftSidebarPane.value) activeRightSidebarPane.value = null; // Close other side
@@ -934,6 +963,42 @@ const openTransferProgressSidebar = () => {
   }
 };
 
+const isSidebarPaneDisabled = (paneName: PaneName) => (
+  paneName === 'terminalLineOutputToggle' && !scopedActiveSshSession.value
+);
+
+const isSidebarPaneButtonActive = (side: 'left' | 'right', paneName: PaneName) => {
+  if (paneName === 'terminalLineOutputToggle') {
+    return isActiveSessionSingleLineOutput.value;
+  }
+  return side === 'left'
+    ? activeLeftSidebarPane.value === paneName
+    : activeRightSidebarPane.value === paneName;
+};
+
+const getSidebarPaneTitle = (paneName: PaneName) => (
+  paneName === 'terminalLineOutputToggle'
+    ? terminalLineOutputToggleTitle.value
+    : paneLabels.value[paneName] || paneName
+);
+
+const getSidebarPaneButtonClasses = (side: 'left' | 'right', paneName: PaneName) => [
+  'flex items-center justify-center w-10 h-10 mb-1 text-text-secondary hover:bg-hover hover:text-foreground transition-colors duration-150 cursor-pointer text-lg disabled:opacity-40 disabled:cursor-not-allowed',
+  { 'bg-primary text-white hover:bg-primary-dark': isSidebarPaneButtonActive(side, paneName) },
+];
+
+const handleSidebarPaneButtonPointerDown = (event: PointerEvent, paneName: PaneName) => {
+  if (isActionLayoutPane(paneName)) {
+    event.preventDefault();
+  }
+};
+
+const handleSidebarPaneButtonClick = (event: MouseEvent, side: 'left' | 'right', paneName: PaneName) => {
+  releaseButtonFocus(event);
+  if (isSidebarPaneDisabled(paneName)) return;
+  toggleSidebarPane(side, paneName);
+};
+
 // 监听 activeSessionId 的变化，如果会话切换，则关闭侧栏 (可选行为)
 watch(() => props.activeSessionId, () => {
     // closeSidebars(); // 取消注释以在切换会话时关闭侧栏
@@ -958,7 +1023,7 @@ const getIconClasses = (paneName: PaneName): string[] => {
     case 'dockerManager': return ['fab', 'fa-docker']; // Use 'fab' for Docker
     case 'editor': return ['fas', 'fa-file-alt'];
     case 'statusMonitor': return ['fas', 'fa-tachometer-alt'];
-    case 'suspendedSshSessions': return ['fas', 'fa-pause-circle']; // 图标：暂停圈
+    case 'terminalLineOutputToggle': return ['fas', 'fa-align-left'];
     case 'transferProgress': return ['fas', 'fa-tasks'];
     // Add other specific icons here if needed
     default: return ['fas', 'fa-question-circle']; // Default icon
@@ -1094,10 +1159,14 @@ onBeforeUnmount(() => {
         <button
             v-for="pane in sidebarPanes.left"
             :key="`left-${pane}`"
-            @click="toggleSidebarPane('left', pane)"
-            :class="['flex items-center justify-center w-10 h-10 mb-1 text-text-secondary hover:bg-hover hover:text-foreground transition-colors duration-150 cursor-pointer text-lg',
-                     { 'bg-primary text-white hover:bg-primary-dark': activeLeftSidebarPane === pane }]"
-            :title="paneLabels[pane] || pane"
+            type="button"
+            :disabled="isSidebarPaneDisabled(pane)"
+            :aria-disabled="isSidebarPaneDisabled(pane)"
+            :aria-pressed="isActionLayoutPane(pane) ? isSidebarPaneButtonActive('left', pane) : undefined"
+            @pointerdown="handleSidebarPaneButtonPointerDown($event, pane)"
+            @click="handleSidebarPaneButtonClick($event, 'left', pane)"
+            :class="getSidebarPaneButtonClasses('left', pane)"
+            :title="getSidebarPaneTitle(pane)"
         >
             <i :class="getIconClasses(pane)"></i>
         </button>
@@ -1257,6 +1326,25 @@ onBeforeUnmount(() => {
                         </div>
                    </div>
                </template>
+                 <!-- Terminal line output toggle action -->
+                 <template v-else-if="layoutNode.component === 'terminalLineOutputToggle'">
+                    <div class="flex-grow flex items-center justify-center bg-header text-sm p-4">
+                      <button
+                        type="button"
+                        class="inline-flex items-center gap-2 px-3 py-2 rounded border border-border text-text-secondary hover:bg-border hover:text-foreground transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                        :class="isActiveSessionSingleLineOutput ? 'bg-primary/10 text-primary hover:bg-primary/15' : ''"
+                        :disabled="!scopedActiveSshSession"
+                        :aria-disabled="!scopedActiveSshSession"
+                        :aria-pressed="isActiveSessionSingleLineOutput"
+                        :title="terminalLineOutputToggleTitle"
+                        @pointerdown.prevent
+                        @click="toggleTerminalLineOutput"
+                      >
+                        <i :class="[terminalLineOutputToggleIconClass, 'text-sm']"></i>
+                        <span>{{ paneLabels.terminalLineOutputToggle }}</span>
+                      </button>
+                    </div>
+                 </template>
                  <!-- FileManager -->
                  <template v-else-if="layoutNode.component === 'fileManager'">
                         <component
@@ -1392,10 +1480,14 @@ onBeforeUnmount(() => {
          <button
              v-for="pane in sidebarPanes.right"
             :key="`right-${pane}`"
-            @click="toggleSidebarPane('right', pane)"
-            :class="['flex items-center justify-center w-10 h-10 mb-1 text-text-secondary hover:bg-hover hover:text-foreground transition-colors duration-150 cursor-pointer text-lg',
-                     { 'bg-primary text-white hover:bg-primary-dark': activeRightSidebarPane === pane }]"
-            :title="paneLabels[pane] || pane"
+            type="button"
+            :disabled="isSidebarPaneDisabled(pane)"
+            :aria-disabled="isSidebarPaneDisabled(pane)"
+            :aria-pressed="isActionLayoutPane(pane) ? isSidebarPaneButtonActive('right', pane) : undefined"
+            @pointerdown="handleSidebarPaneButtonPointerDown($event, pane)"
+            @click="handleSidebarPaneButtonClick($event, 'right', pane)"
+            :class="getSidebarPaneButtonClasses('right', pane)"
+            :title="getSidebarPaneTitle(pane)"
         >
              <i :class="getIconClasses(pane)"></i>
         </button>

@@ -7,6 +7,7 @@ import { storeToRefs } from 'pinia';
 import WorkspaceConnectionListComponent from './WorkspaceConnectionList.vue';
 import TabBarContextMenu from './TabBarContextMenu.vue';
 import TransferProgressModal from './TransferProgressModal.vue';
+import SuspendedSshSessionsModal from './SuspendedSshSessionsModal.vue';
 import { useSessionStore } from '../stores/session.store';
 import { useConnectionsStore, type ConnectionInfo } from '../stores/connections.store';
 import { useLayoutStore } from '../stores/layout.store';
@@ -117,6 +118,7 @@ const { centerDialog: centerConnectionListPopup, startDialogDrag: startConnectio
 });
 const draggableSessions = ref<SessionTabInfoWithStatus[]>([]); // + Local state for draggable
 const showTransferProgressModal = ref(false); // 控制传输进度模态框的显示状态
+const showSuspendedSshSessionsModal = ref(false);
 const isConnectionsRoute = ref(normalizeRoutePath(route.path) === '/connections');
 const isConnectionsServerPanelCollapsed = ref(false);
 
@@ -419,16 +421,6 @@ const activeSessionState = computed(() => (
   props.activeSessionId ? sessionStore.sessions.get(props.activeSessionId) ?? null : null
 ));
 
-const shouldShowSingleLineOutputToggle = computed(() => activeSessionState.value?.kind === 'ssh');
-
-const isActiveSessionSingleLineOutput = computed(() => (
-  shouldShowSingleLineOutputToggle.value && !!activeSessionState.value?.terminalSingleLineOutput
-));
-
-const singleLineOutputToggleIconClass = computed(() => (
-  isActiveSessionSingleLineOutput.value ? 'fas fa-arrows-alt-h' : 'fas fa-align-left'
-));
-
 const releaseButtonFocus = (event?: Event) => {
   const target = event?.currentTarget;
   if (target instanceof HTMLElement) {
@@ -436,14 +428,8 @@ const releaseButtonFocus = (event?: Event) => {
   }
 };
 
-const toggleSingleLineOutput = (event?: MouseEvent) => {
-  releaseButtonFocus(event);
-  if (!props.activeSessionId || !shouldShowSingleLineOutputToggle.value) return;
-  sessionStore.toggleTerminalSingleLineOutput(props.activeSessionId);
-};
-
 const shouldShowBatchTerminalInputToggle = computed(() => (
-  shouldShowSingleLineOutputToggle.value && !props.isMobile
+  activeSessionState.value?.kind === 'ssh' && !props.isMobile
 ));
 
 const batchTerminalInputToggleTitle = computed(() => {
@@ -459,6 +445,15 @@ const toggleBatchTerminalInput = (event?: MouseEvent) => {
   releaseButtonFocus(event);
   if (!props.batchTerminalInputAvailable) return;
   emit('toggle-batch-terminal-input');
+};
+
+const openSuspendedSshSessionsModal = (event?: MouseEvent) => {
+  releaseButtonFocus(event);
+  showSuspendedSshSessionsModal.value = true;
+};
+
+const closeSuspendedSshSessionsModal = () => {
+  showSuspendedSshSessionsModal.value = false;
 };
 
 const workspaceSplitTitle = computed(() => (
@@ -658,18 +653,6 @@ onBeforeUnmount(() => {
           <i :class="[eyeIconClass, 'text-sm']"></i>
         </button>
         <button
-          v-if="shouldShowSingleLineOutputToggle"
-          type="button"
-          class="flex items-center justify-center px-3 h-full border-l border-border transition-colors duration-150"
-          :class="isActiveSessionSingleLineOutput ? 'bg-primary/10 text-primary hover:bg-primary/15' : 'text-text-secondary hover:bg-border hover:text-foreground'"
-          :aria-pressed="isActiveSessionSingleLineOutput"
-          :title="isActiveSessionSingleLineOutput ? t('terminalTabBar.multiLineOutputTooltip', '切换为多行输出') : t('terminalTabBar.singleLineOutputTooltip', '切换为单行输出')"
-          @pointerdown.prevent
-          @click="toggleSingleLineOutput"
-        >
-          <i :class="[singleLineOutputToggleIconClass, 'text-sm']"></i>
-        </button>
-        <button
           v-if="shouldShowBatchTerminalInputToggle"
           type="button"
           class="flex items-center justify-center px-3 h-full border-l border-border transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
@@ -682,6 +665,16 @@ onBeforeUnmount(() => {
           @click="toggleBatchTerminalInput"
         >
           <i class="fas fa-keyboard text-sm"></i>
+        </button>
+        <button
+          v-if="!isMobile && props.showLayoutActions"
+          type="button"
+          class="flex items-center justify-center px-3 h-full border-l border-border text-text-secondary hover:bg-border hover:text-foreground transition-colors duration-150"
+          :title="t('terminalTabBar.openSuspendedSessionsTooltip', '挂起会话管理器')"
+          @pointerdown.prevent
+          @click="openSuspendedSshSessionsModal"
+        >
+          <i class="fas fa-pause-circle text-sm"></i>
         </button>
         <!-- +++ 使用 v-if 隐藏移动端的布局按钮 +++ -->
         <button v-if="!isMobile && props.showLayoutActions" class="flex items-center justify-center px-3 h-full border-l border-border text-text-secondary hover:bg-border hover:text-foreground transition-colors duration-150"
@@ -721,5 +714,9 @@ onBeforeUnmount(() => {
     />
     <!-- 传输进度模态框 -->
     <TransferProgressModal v-model:visible="showTransferProgressModal" />
+    <SuspendedSshSessionsModal
+      :is-visible="showSuspendedSshSessionsModal"
+      @close="closeSuspendedSshSessionsModal"
+    />
   </div>
 </template>
