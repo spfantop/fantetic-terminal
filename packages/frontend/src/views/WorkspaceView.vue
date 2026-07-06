@@ -31,6 +31,10 @@ import type { WebSocketDependencies } from '../composables/useSftpActions';
 import { useDraggableDialog } from '../composables/useDraggableDialog';
 import { debugLog, debugLogLazy } from '../composables/useDebugLog';
 import { resolveTerminalBatchInputTargetIds } from '../utils/terminalBatchInput';
+import {
+  resolveVisibleActiveSessionId,
+  resolveWorkspaceLayoutActiveSessionId,
+} from '../utils/workspaceVisibleSessions';
 
 // --- Setup ---
 const { t } = useI18n();
@@ -91,11 +95,11 @@ const isSessionPopoutActive = computed(() => poppedOutSessionIds.value.length > 
 const visibleSessionTabsWithStatus = computed(() => (
   sessionTabsWithStatus.value.filter(tab => !poppedOutSessionIdSet.value.has(tab.sessionId))
 ));
-const visibleActiveSessionId = computed(() => (
-  visibleSessionTabsWithStatus.value.some(tab => tab.sessionId === activeSessionId.value)
-    ? activeSessionId.value
-    : null
-));
+const visibleSessionIds = computed(() => visibleSessionTabsWithStatus.value.map(tab => tab.sessionId));
+const visibleActiveSessionId = computed(() => resolveVisibleActiveSessionId({
+  activeSessionId: activeSessionId.value,
+  visibleSessionIds: visibleSessionIds.value,
+}));
 const visibleActiveSession = computed(() => (
   visibleActiveSessionId.value ? sessionStore.sessions.get(visibleActiveSessionId.value) ?? null : null
 ));
@@ -103,7 +107,13 @@ const isRemoteDesktopSessionKind = (kind?: string) => kind === 'rdp' || kind ===
 const isVisibleActiveSessionRemoteDesktop = computed(() => isRemoteDesktopSessionKind(visibleActiveSession.value?.kind));
 const fullscreenSessionId = ref<string | null>(null);
 const isSessionFullscreenActive = computed(() => fullscreenSessionId.value !== null);
-const layoutActiveSessionId = computed(() => fullscreenSessionId.value ?? visibleActiveSessionId.value);
+const lastVisibleLayoutActiveSessionId = ref<string | null>(null);
+const layoutActiveSessionId = computed(() => resolveWorkspaceLayoutActiveSessionId({
+  activeSessionId: activeSessionId.value,
+  visibleSessionIds: visibleSessionIds.value,
+  previousLayoutActiveSessionId: lastVisibleLayoutActiveSessionId.value,
+  fullscreenSessionId: fullscreenSessionId.value,
+}));
 const isTerminalOnlyMode = computed(() => isVisibleActiveSessionRemoteDesktop.value || isSessionFullscreenActive.value);
 const FULLSCREEN_ESC_PRESS_THRESHOLD = 3;
 const FULLSCREEN_ESC_SEQUENCE_TIMEOUT_MS = 1200;
@@ -213,6 +223,12 @@ watch([workspaceSplitAvailable, isMobile], () => {
   }
 });
 
+watch(layoutActiveSessionId, (sessionId) => {
+  if (sessionId && visibleSessionIds.value.includes(sessionId)) {
+    lastVisibleLayoutActiveSessionId.value = sessionId;
+  }
+}, { immediate: true });
+
 const handleWorkspaceSessionOrderUpdate = (newSessions: SessionTabInfoWithStatus[]) => {
   workspaceTabOrder.value = newSessions.map(session => session.sessionId);
 };
@@ -266,7 +282,6 @@ type PoppedOutTerminalState = {
   focusHandler: () => void;
   resizeHandler: () => void;
   visibilityHandler: () => void;
-  singleLineButtonCleanup?: () => void;
 };
 
 type XtermWindowBoundTerminal = XtermTerminal & {
@@ -439,7 +454,6 @@ const restorePoppedOutTerminalElement = (sessionId: string) => {
     state.windowRef.removeEventListener('pageshow', state.focusHandler);
     state.windowRef.removeEventListener('resize', state.resizeHandler);
     state.windowRef.document.removeEventListener('visibilitychange', state.visibilityHandler);
-    state.singleLineButtonCleanup?.();
   } catch (error) {
     console.warn(`[WorkspaceView] Failed to remove pop-out window listeners for session ${sessionId}:`, error);
   }
@@ -794,41 +808,6 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
       background: var(--app-bg-color, #111);
       color: var(--text-color, #f5f5f5);
     }
-    .external-session-popout-tabbar {
-      display: flex;
-      height: 2.5rem;
-      flex-shrink: 0;
-      align-items: stretch;
-      border-bottom: 1px solid var(--border-color, #333);
-      background: var(--header-bg-color, #171717);
-      overflow: hidden;
-    }
-    .external-session-popout-tab {
-      display: inline-flex;
-      max-width: min(22rem, 70vw);
-      min-width: 11rem;
-      align-items: center;
-      gap: 0.5rem;
-      padding: 0 0.9rem;
-      border-right: 1px solid var(--border-color, #333);
-      background: var(--app-bg-color, #111);
-      color: var(--text-color, #fff);
-      font-size: 0.86rem;
-      font-weight: 600;
-    }
-    .external-session-popout-status {
-      width: 0.5rem;
-      height: 0.5rem;
-      flex-shrink: 0;
-      border-radius: 999px;
-      background: var(--color-success, #22c55e);
-    }
-    .external-session-popout-tab-name {
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
     .external-session-popout-terminal {
       position: relative;
       flex: 1;
@@ -839,57 +818,15 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
       width: 100%;
       height: 100%;
     }
-    .external-session-popout-actions {
-      display: flex;
-      margin-left: auto;
-      align-items: stretch;
-    }
-    .external-session-popout-action {
-      display: inline-flex;
-      width: 2.5rem;
-      height: 100%;
-      align-items: center;
-      justify-content: center;
-      border: 0;
-      border-left: 1px solid var(--border-color, #333);
-      background: transparent;
-      color: var(--text-color-secondary, #aaa);
-      cursor: pointer;
-      transition: background-color 0.15s ease, color 0.15s ease;
-    }
-    .external-session-popout-action:hover {
-      background: var(--hover-bg-color, rgba(255, 255, 255, 0.08));
-      color: var(--text-color, #fff);
-    }
-    .external-session-popout-action.is-active {
-      background: color-mix(in srgb, var(--primary-color, #3b82f6) 14%, transparent);
-      color: var(--primary-color, #3b82f6);
-    }
-    .external-session-popout-action[hidden] {
-      display: none;
-    }
   `;
   popup.document.head.appendChild(popoutStyle);
 
   const shell = popup.document.createElement('div');
   shell.className = 'external-session-popout';
   shell.innerHTML = `
-    <div class="external-session-popout-tabbar">
-      <div class="external-session-popout-tab">
-        <span class="external-session-popout-status"></span>
-        <span class="external-session-popout-tab-name"></span>
-      </div>
-      <div class="external-session-popout-actions">
-        <button type="button" class="external-session-popout-action" data-single-line-output-toggle aria-pressed="false">
-          <i class="fas fa-align-left"></i>
-        </button>
-      </div>
-    </div>
     <div class="external-session-popout-terminal"></div>
   `;
-  shell.querySelector('.external-session-popout-tab-name')!.textContent = sessionName;
   popup.document.body.appendChild(shell);
-  const singleLineToggleButton = shell.querySelector<HTMLButtonElement>('[data-single-line-output-toggle]');
 
   const terminalHost = shell.querySelector<HTMLElement>('.external-session-popout-terminal');
   if (!terminalHost || !popoutLayoutTree) {
@@ -981,51 +918,6 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
       focusPoppedOutSession(sessionId, { resize: true });
     }
   };
-  let singleLineButtonCleanup: (() => void) | undefined;
-  if (singleLineToggleButton) {
-    const updateSingleLineToggleButton = () => {
-      const session = sessionStore.sessions.get(sessionId);
-      const shouldShow = session?.kind === 'ssh';
-      singleLineToggleButton.hidden = !shouldShow;
-      if (!shouldShow) return;
-
-      const isSingleLineOutput = !!session.terminalSingleLineOutput;
-      singleLineToggleButton.classList.toggle('is-active', isSingleLineOutput);
-      singleLineToggleButton.setAttribute('aria-pressed', String(isSingleLineOutput));
-      singleLineToggleButton.title = isSingleLineOutput
-        ? t('terminalTabBar.multiLineOutputTooltip', '切换为多行输出')
-        : t('terminalTabBar.singleLineOutputTooltip', '切换为单行输出');
-      const icon = singleLineToggleButton.querySelector('i');
-      if (icon) {
-        icon.className = 'fas fa-align-left';
-      }
-    };
-    const handleSingleLineTogglePointerDown = (event: PointerEvent) => {
-      event.preventDefault();
-    };
-    const handleSingleLineToggleClick = (event: MouseEvent) => {
-      event.preventDefault();
-      singleLineToggleButton.blur();
-      if (sessionStore.sessions.get(sessionId)?.kind !== 'ssh') return;
-      sessionStore.toggleTerminalSingleLineOutput(sessionId);
-      requestSessionResize(sessionId);
-    };
-    singleLineToggleButton.addEventListener('pointerdown', handleSingleLineTogglePointerDown);
-    singleLineToggleButton.addEventListener('click', handleSingleLineToggleClick);
-    const stopWatcher = watch(
-      () => {
-        const session = sessionStore.sessions.get(sessionId);
-        return session?.kind === 'ssh' ? session.terminalSingleLineOutput : null;
-      },
-      updateSingleLineToggleButton,
-      { immediate: true },
-    );
-    singleLineButtonCleanup = () => {
-      singleLineToggleButton.removeEventListener('pointerdown', handleSingleLineTogglePointerDown);
-      singleLineToggleButton.removeEventListener('click', handleSingleLineToggleClick);
-      stopWatcher();
-    };
-  }
   const nextPoppedOutTerminalMap = new Map(poppedOutTerminalMap.value);
   nextPoppedOutTerminalMap.set(sessionId, {
     sessionId,
@@ -1039,7 +931,6 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
     focusHandler,
     resizeHandler,
     visibilityHandler,
-    singleLineButtonCleanup,
   });
   poppedOutTerminalMap.value = nextPoppedOutTerminalMap;
 
