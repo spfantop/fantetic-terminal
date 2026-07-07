@@ -8,6 +8,7 @@ const routerIndex = readFileSync(resolve('src/router/index.ts'), 'utf8');
 const connectionsView = readFileSync(resolve('src/views/ConnectionsView.vue'), 'utf8');
 const settingsView = readFileSync(resolve('src/views/SettingsView.vue'), 'utf8');
 const settingsOverlayView = readFileSync(resolve('src/views/SettingsOverlayView.vue'), 'utf8');
+const terminalVue = readFileSync(resolve('src/components/Terminal.vue'), 'utf8');
 const terminalTabBar = readFileSync(resolve('src/components/TerminalTabBar.vue'), 'utf8');
 
 const tabKeys = createSettingsTabs((key, fallback) => fallback || key).map(tab => tab.key);
@@ -103,8 +104,31 @@ assert.match(
 
 assert.match(
   connectionsView,
-  /\.server-list-panel\s*\{[\s\S]*overflow-x:\s*visible;[\s\S]*overflow-y:\s*hidden;/,
-  'the server list panel should allow the tag filter popup to overflow horizontally past its border',
+  /\.server-list-panel\s*\{[\s\S]*overflow:\s*hidden;/,
+  'the server list panel should not show a horizontal scrollbar at the bottom',
+);
+
+assert.ok(
+  connectionsView.includes('<teleport to="body">') && connectionsView.includes(':style="tagFilterMenuStyle"'),
+  'the tag filter popup should be rendered outside the clipped server panel',
+);
+
+assert.ok(
+  /class="[^"]*\bterminal-tabs-scroll\b/.test(terminalTabBar)
+    && terminalTabBar.includes('.terminal-tabs-scroll::-webkit-scrollbar'),
+  'the terminal tab scroller should hide its scrollbar while preserving horizontal scrolling',
+);
+
+assert.match(
+  terminalVue,
+  /\.terminal-inner-container\s+:deep\(\.xterm-viewport\)\s*\{[\s\S]*scrollbar-width:\s*none;[\s\S]*-ms-overflow-style:\s*none;/,
+  'the terminal content viewport should hide its scrollbar while preserving terminal scrollback',
+);
+
+assert.match(
+  terminalVue,
+  /\.terminal-inner-container\s+:deep\(\.xterm-viewport\)::-webkit-scrollbar\s*\{[\s\S]*width:\s*0;[\s\S]*height:\s*0;/,
+  'the terminal content viewport should hide WebKit scrollbars',
 );
 
 assert.match(

@@ -598,7 +598,7 @@ onBeforeUnmount(() => {
     >
       <i :class="[workspaceSplitIconClass, 'text-sm']"></i>
     </button>
-    <div class="flex items-center overflow-x-auto flex-shrink min-w-0 h-full"> <!-- Ensure inner div has h-full -->
+    <div class="terminal-tabs-scroll flex items-center overflow-x-auto flex-shrink min-w-0 h-full"> <!-- Ensure inner div has h-full -->
       <draggable
         v-model="draggableSessions"
         item-key="sessionId"
@@ -723,3 +723,14 @@ onBeforeUnmount(() => {
     />
   </div>
 </template>
+
+<style scoped>
+.terminal-tabs-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.terminal-tabs-scroll::-webkit-scrollbar {
+  display: none;
+}
+</style>

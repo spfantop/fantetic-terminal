@@ -122,6 +122,7 @@ const searchQuery = ref('');
 const serverListPanelRef = ref<HTMLElement | null>(null);
 const tagFilterButtonRef = ref<HTMLElement | null>(null);
 const tagFilterMenuRef = ref<HTMLElement | null>(null);
+const tagFilterMenuStyle = ref<Record<string, string>>({});
 const serverActionButtonRef = ref<HTMLElement | null>(null);
 const serverActionMenuRef = ref<HTMLElement | null>(null);
 const serverPanelWidth = ref(getInitialServerPanelWidth());
@@ -793,8 +794,26 @@ const isTagSelected = (tagId: number) => selectedTagIds.value.includes(tagId);
 
 const tagNameById = computed(() => new Map((tags.value as TagInfo[]).map(tag => [tag.id, tag.name])));
 
+const updateTagFilterMenuPosition = () => {
+  const buttonRect = tagFilterButtonRef.value?.getBoundingClientRect();
+  if (!buttonRect) return;
+
+  const menuWidth = Math.min(240, Math.max(0, window.innerWidth * 0.72));
+  const left = Math.max(8, Math.min(window.innerWidth - menuWidth - 8, buttonRect.right - menuWidth));
+  tagFilterMenuStyle.value = {
+    position: 'fixed',
+    top: `${buttonRect.bottom + 7}px`,
+    left: `${left}px`,
+    width: `${menuWidth}px`,
+  };
+};
+
 const toggleTagFilterMenu = () => {
-  isTagFilterOpen.value = !isTagFilterOpen.value;
+  const nextOpen = !isTagFilterOpen.value;
+  if (nextOpen) {
+    updateTagFilterMenuPosition();
+  }
+  isTagFilterOpen.value = nextOpen;
 };
 
 const clearServerActionMenuCloseTimer = () => {
@@ -927,6 +946,9 @@ const handleServerPanelToggleRequest = () => {
 const handleServerPanelViewportResize = () => {
   if (window.innerWidth <= SERVER_PANEL_AUTO_COLLAPSE_WIDTH && !isServerPanelCollapsed.value) {
     collapseServerPanel();
+  }
+  if (isTagFilterOpen.value) {
+    updateTagFilterMenuPosition();
   }
 };
 
@@ -1670,42 +1692,6 @@ const handleOpenAllTargetConnections = async () => {
                 <i class="fas fa-tag"></i>
                 <span v-if="selectedTagCount > 0" class="server-tag-filter-count">{{ selectedTagCount }}</span>
               </button>
-              <div
-                v-if="isTagFilterOpen"
-                ref="tagFilterMenuRef"
-                class="server-tag-filter-menu"
-                @click.stop
-              >
-                <div class="server-tag-filter-menu-header">
-                  <span>{{ t('connections.table.tags', '标签') }}</span>
-                  <button type="button" :disabled="selectedTagCount === 0" @click="clearTagFilters">
-                    {{ t('common.clear', '清除') }}
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  class="server-tag-filter-item"
-                  :class="{ active: selectedTagCount === 0 }"
-                  @click="clearTagFilters"
-                >
-                  <i class="fas fa-layer-group"></i>
-                  <span>{{ t('dashboard.filterTags.all', '所有标签') }}</span>
-                </button>
-                <button
-                  v-for="tag in (tags as TagInfo[])"
-                  :key="tag.id"
-                  type="button"
-                  class="server-tag-filter-item"
-                  :class="{ active: isTagSelected(tag.id) }"
-                  @click="toggleTagFilter(tag.id)"
-                >
-                  <i :class="['fas', isTagSelected(tag.id) ? 'fa-check-square' : 'fa-square']"></i>
-                  <span>{{ tag.name }}</span>
-                </button>
-                <div v-if="tags.length === 0" class="server-tag-filter-empty">
-                  {{ t('tags.noTags', '暂无标签') }}
-                </div>
-              </div>
             </div>
             <button
               type="button"
@@ -2111,6 +2097,46 @@ const handleOpenAllTargetConnections = async () => {
         ></button>
       </section>
 
+      <teleport to="body">
+        <div
+          v-if="isTagFilterOpen"
+          ref="tagFilterMenuRef"
+          class="server-tag-filter-menu"
+          :style="tagFilterMenuStyle"
+          @click.stop
+        >
+          <div class="server-tag-filter-menu-header">
+            <span>{{ t('connections.table.tags', '标签') }}</span>
+            <button type="button" :disabled="selectedTagCount === 0" @click="clearTagFilters">
+              {{ t('common.clear', '清除') }}
+            </button>
+          </div>
+          <button
+            type="button"
+            class="server-tag-filter-item"
+            :class="{ active: selectedTagCount === 0 }"
+            @click="clearTagFilters"
+          >
+            <i class="fas fa-layer-group"></i>
+            <span>{{ t('dashboard.filterTags.all', '所有标签') }}</span>
+          </button>
+          <button
+            v-for="tag in (tags as TagInfo[])"
+            :key="tag.id"
+            type="button"
+            class="server-tag-filter-item"
+            :class="{ active: isTagSelected(tag.id) }"
+            @click="toggleTagFilter(tag.id)"
+          >
+            <i :class="['fas', isTagSelected(tag.id) ? 'fa-check-square' : 'fa-square']"></i>
+            <span>{{ tag.name }}</span>
+          </button>
+          <div v-if="tags.length === 0" class="server-tag-filter-empty">
+            {{ t('tags.noTags', '暂无标签') }}
+          </div>
+        </div>
+      </teleport>
+
       <section class="connection-workspace">
         <WorkspaceView />
       </section>
@@ -2222,8 +2248,7 @@ const handleOpenAllTargetConnections = async () => {
   flex-shrink: 0;
   border-right: 2px solid color-mix(in srgb, var(--border-color) 78%, transparent);
   background: color-mix(in srgb, var(--header-bg-color) 92%, var(--app-bg-color));
-  overflow-x: visible;
-  overflow-y: hidden;
+  overflow: hidden;
   transition: width 0.12s ease, min-width 0.12s ease;
 }
 
@@ -2378,11 +2403,8 @@ const handleOpenAllTargetConnections = async () => {
 }
 
 .server-tag-filter-menu {
-  position: absolute;
-  top: calc(100% + 0.45rem);
-  right: 0;
+  position: fixed;
   z-index: 120;
-  width: min(15rem, 72vw);
   max-height: 18rem;
   padding: 0.35rem;
   border: 1px solid var(--border-color);

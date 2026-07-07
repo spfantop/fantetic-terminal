@@ -1110,6 +1110,16 @@ const terminalInnerStyle = computed(() => (
   height: 100%;
 }
 
+.terminal-inner-container :deep(.xterm-viewport) {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.terminal-inner-container :deep(.xterm-viewport)::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
 .terminal-inner-container.single-line-output {
   min-width: 100%;
   overflow-x: visible;
