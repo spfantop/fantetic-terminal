@@ -15,7 +15,8 @@
       "test:terminal-zoom": "esbuild test/terminalZoom.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/terminalZoom.behavior-test.mjs && node ../../.vite-codex-cache/terminalZoom.behavior-test.mjs",
       "test:focus-switcher-config": "esbuild test/focusSwitcherConfig.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/focusSwitcherConfig.behavior-test.mjs && node ../../.vite-codex-cache/focusSwitcherConfig.behavior-test.mjs",
       "test:ai-command-target": "esbuild test/aiCommandTarget.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/aiCommandTarget.behavior-test.mjs && node ../../.vite-codex-cache/aiCommandTarget.behavior-test.mjs",
-      "test:ai-assistant-history": "esbuild test/aiAssistantHistory.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/aiAssistantHistory.behavior-test.mjs && node ../../.vite-codex-cache/aiAssistantHistory.behavior-test.mjs"
+      "test:ai-assistant-history": "esbuild test/aiAssistantHistory.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/aiAssistantHistory.behavior-test.mjs && node ../../.vite-codex-cache/aiAssistantHistory.behavior-test.mjs",
+      "test:navigation-relocation": "esbuild test/navigationRelocation.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/navigationRelocation.behavior-test.mjs && node ../../.vite-codex-cache/navigationRelocation.behavior-test.mjs"
    },
    "dependencies": {
       "@codemirror/commands": "^6.8.1",

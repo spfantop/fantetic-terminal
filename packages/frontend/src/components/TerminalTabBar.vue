@@ -31,6 +31,9 @@ const SERVER_PANEL_COLLAPSED_EVENT = 'fantetic:connections-server-panel-collapse
 const SERVER_PANEL_TOGGLE_EVENT = 'fantetic:connections-server-panel-toggle';
 
 const normalizeRoutePath = (path: string) => path.replace(/\/+$/, '') || '/';
+const isConnectionsPagePath = (path: string) => (
+  path === '/' || path === '/connections'
+);
 
 // 定义 Props
 const props = defineProps({
@@ -119,7 +122,7 @@ const { centerDialog: centerConnectionListPopup, startDialogDrag: startConnectio
 const draggableSessions = ref<SessionTabInfoWithStatus[]>([]); // + Local state for draggable
 const showTransferProgressModal = ref(false); // 控制传输进度模态框的显示状态
 const showSuspendedSshSessionsModal = ref(false);
-const isConnectionsRoute = ref(normalizeRoutePath(route.path) === '/connections');
+const isConnectionsRoute = ref(isConnectionsPagePath(normalizeRoutePath(route.path)));
 const isConnectionsServerPanelCollapsed = ref(false);
 
 const sessionsSyncKey = computed(() => (
@@ -347,7 +350,7 @@ const isWorkspaceRoute = ref(normalizeRoutePath(route.path) === '/workspace'); /
 watch(() => route.path, (newPath) => {
   const normalizedPath = normalizeRoutePath(newPath);
   isWorkspaceRoute.value = normalizedPath === '/workspace';
-  isConnectionsRoute.value = normalizedPath === '/connections';
+  isConnectionsRoute.value = isConnectionsPagePath(normalizedPath);
   if (isWorkspaceRoute.value) {
     // 进入 /workspace 时，不需要在这里加载 Header 状态，App.vue 会处理
     debugLog('[TabBar] Entered /workspace route. Header toggle button is now active.');
@@ -358,7 +361,7 @@ watch(() => route.path, (newPath) => {
 onMounted(() => {
   const normalizedPath = normalizeRoutePath(route.path);
   isWorkspaceRoute.value = normalizedPath === '/workspace';
-  isConnectionsRoute.value = normalizedPath === '/connections';
+  isConnectionsRoute.value = isConnectionsPagePath(normalizedPath);
   if (isWorkspaceRoute.value) {
     // 初始加载时，不需要在这里加载 Header 状态，App.vue 会处理
     debugLog('[TabBar] Mounted on /workspace route. Header toggle button is now active.');

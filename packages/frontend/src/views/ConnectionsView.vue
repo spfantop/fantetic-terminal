@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue';
+import { RouterLink } from 'vue-router';
 import type { ComponentPublicInstance } from 'vue';
 import draggable from 'vuedraggable';
 import AddConnectionForm from '../components/AddConnectionForm.vue';
@@ -9,6 +10,7 @@ import WorkspaceView from './WorkspaceView.vue';
 import { useConnectionsStore } from '../stores/connections.store';
 import { useSessionStore } from '../stores/session.store';
 import { useTagsStore } from '../stores/tags.store';
+import { useAuthStore } from '../stores/auth.store';
 import type { TagInfo } from '../stores/tags.store';
 import { useI18n } from 'vue-i18n';
 import type { ConnectionInfo } from '../stores/connections.store';
@@ -18,6 +20,7 @@ import { storeToRefs } from 'pinia';
 import type { ConnectionFolderInfo } from '../stores/connections.store';
 import { beginGlobalDragSelectionGuard } from '../composables/useGlobalDragSelectionGuard';
 import { useWorkspaceEventEmitter } from '../composables/workspaceEvents';
+import { useThemeToggle } from '../composables/useThemeToggle';
 
 const { t } = useI18n();
 const { showConfirmDialog } = useConfirmDialog();
@@ -25,10 +28,18 @@ const { showAlertDialog } = useAlertDialog();
 const connectionsStore = useConnectionsStore();
 const sessionStore = useSessionStore();
 const tagsStore = useTagsStore();
+const authStore = useAuthStore();
 const emitWorkspaceEvent = useWorkspaceEventEmitter();
+const {
+  isDarkUiThemeActive,
+  isSwitchingTheme,
+  themeToggleLabel,
+  toggleTheme,
+} = useThemeToggle(t);
 
 const { connections, folders, isLoading: isLoadingConnections, isFoldersLoading } = storeToRefs(connectionsStore);
 const { tags } = storeToRefs(tagsStore);
+const { isAuthenticated } = storeToRefs(authStore);
 
 const LS_FILTER_FOLDER_KEY = 'connections_view_filter_folder';
 const LS_FILTER_TAGS_KEY = 'connections_view_filter_tags';
@@ -36,8 +47,9 @@ const LS_SERVER_PANEL_WIDTH_KEY = 'connections_view_server_panel_width';
 const LS_SERVER_PANEL_COLLAPSED_KEY = 'connections_view_server_panel_collapsed';
 const SERVER_PANEL_COLLAPSED_EVENT = 'fantetic:connections-server-panel-collapsed';
 const SERVER_PANEL_TOGGLE_EVENT = 'fantetic:connections-server-panel-toggle';
-const SERVER_PANEL_DEFAULT_WIDTH = 384;
+const SERVER_ACTION_MENU_CLOSE_DELAY_MS = 220;
 const SERVER_PANEL_MIN_WIDTH = 280;
+const SERVER_PANEL_DEFAULT_WIDTH = SERVER_PANEL_MIN_WIDTH;
 const SERVER_PANEL_MAX_WIDTH = 560;
 const SERVER_PANEL_COLLAPSED_WIDTH = 6;
 const SERVER_PANEL_COLLAPSE_THRESHOLD = 180;
@@ -110,6 +122,8 @@ const searchQuery = ref('');
 const serverListPanelRef = ref<HTMLElement | null>(null);
 const tagFilterButtonRef = ref<HTMLElement | null>(null);
 const tagFilterMenuRef = ref<HTMLElement | null>(null);
+const serverActionButtonRef = ref<HTMLElement | null>(null);
+const serverActionMenuRef = ref<HTMLElement | null>(null);
 const serverPanelWidth = ref(getInitialServerPanelWidth());
 const isServerPanelCollapsed = ref(getInitialServerPanelCollapsed());
 const isServerPanelResizing = ref(false);
@@ -117,7 +131,9 @@ const serverPanelResizeOriginLeft = ref(0);
 let releaseServerPanelResizeGuard: (() => void) | null = null;
 let serverPanelResizeFrameId: number | null = null;
 let pendingServerPanelWidth: number | null = null;
+let serverActionMenuCloseTimer: number | null = null;
 const isTagFilterOpen = ref(false);
+const isServerActionMenuOpen = ref(false);
 const isDraggingConnection = ref(false);
 const expandedServerFolders = ref<Record<string, boolean>>({});
 const editingFolderId = ref<number | null>(null);
@@ -752,6 +768,7 @@ onMounted(async () => {
 onUnmounted(() => {
   document.removeEventListener('click', handleDocumentClick);
   document.removeEventListener('keydown', handleServerContextMenuKeydown);
+  clearServerActionMenuCloseTimer();
   window.removeEventListener('resize', handleServerPanelViewportResize);
   window.removeEventListener(SERVER_PANEL_TOGGLE_EVENT, handleServerPanelToggleRequest);
   stopServerPanelResize();
@@ -780,6 +797,17 @@ const toggleTagFilterMenu = () => {
   isTagFilterOpen.value = !isTagFilterOpen.value;
 };
 
+const clearServerActionMenuCloseTimer = () => {
+  if (serverActionMenuCloseTimer === null) return;
+  window.clearTimeout(serverActionMenuCloseTimer);
+  serverActionMenuCloseTimer = null;
+};
+
+const openServerActionMenu = () => {
+  clearServerActionMenuCloseTimer();
+  isServerActionMenuOpen.value = true;
+};
+
 const toggleTagFilter = (tagId: number) => {
   selectedTagIds.value = isTagSelected(tagId)
     ? selectedTagIds.value.filter(id => id !== tagId)
@@ -792,6 +820,24 @@ const clearTagFilters = () => {
 
 const closeTagFilterMenu = () => {
   isTagFilterOpen.value = false;
+};
+
+const closeServerActionMenu = () => {
+  clearServerActionMenuCloseTimer();
+  isServerActionMenuOpen.value = false;
+};
+
+const scheduleServerActionMenuClose = () => {
+  clearServerActionMenuCloseTimer();
+  serverActionMenuCloseTimer = window.setTimeout(() => {
+    serverActionMenuCloseTimer = null;
+    isServerActionMenuOpen.value = false;
+  }, SERVER_ACTION_MENU_CLOSE_DELAY_MS);
+};
+
+const handleLogout = () => {
+  closeServerActionMenu();
+  authStore.logout();
 };
 
 const getTagNames = (tagIds: number[] | undefined): string[] => {
@@ -849,6 +895,7 @@ const collapseServerPanel = () => {
   if (isServerPanelCollapsed.value) return;
   isServerPanelCollapsed.value = true;
   closeServerContextMenu();
+  closeServerActionMenu();
   cancelRenameFolder();
   saveServerPanelCollapsed();
   notifyServerPanelCollapsed();
@@ -991,6 +1038,7 @@ const handleServerContextMenuKeydown = (event: KeyboardEvent) => {
   if (event.key === 'Escape') {
     closeServerContextMenu();
     closeTagFilterMenu();
+    closeServerActionMenu();
   }
 };
 
@@ -998,6 +1046,14 @@ const handleDocumentClick = (event: MouseEvent) => {
   closeServerContextMenu();
 
   const target = event.target as Node | null;
+  if (
+    target
+    && (serverActionButtonRef.value?.contains(target) || serverActionMenuRef.value?.contains(target))
+  ) {
+    return;
+  }
+  closeServerActionMenu();
+
   if (
     target
     && (tagFilterButtonRef.value?.contains(target) || tagFilterMenuRef.value?.contains(target))
@@ -1978,6 +2034,71 @@ const handleOpenAllTargetConnections = async () => {
               <span>{{ t('dashboard.noConnections', '没有连接记录') }}</span>
             </div>
           </div>
+
+          <div class="server-bottom-actions">
+            <div
+              class="server-actions-menu-wrap"
+              @mouseenter="openServerActionMenu"
+              @mouseleave="scheduleServerActionMenuClose"
+              @focusin="openServerActionMenu"
+            >
+              <button
+                ref="serverActionButtonRef"
+                type="button"
+                class="server-bottom-button"
+                :class="{ active: isServerActionMenuOpen }"
+                :aria-label="t('dock.actions', '操作菜单')"
+                :title="t('dock.actions', '操作菜单')"
+                @click.stop="openServerActionMenu"
+              >
+                <i class="fas fa-user-gear"></i>
+              </button>
+              <div
+                v-if="isServerActionMenuOpen"
+                ref="serverActionMenuRef"
+                class="server-actions-menu"
+                @click.stop
+              >
+                <RouterLink
+                  :to="{ name: 'Settings' }"
+                  class="server-actions-menu-item"
+                  @click="closeServerActionMenu"
+                >
+                  <i class="fas fa-gear"></i>
+                  <span>{{ t('nav.settings') }}</span>
+                </RouterLink>
+                <RouterLink
+                  v-if="!isAuthenticated"
+                  :to="{ name: 'Login' }"
+                  class="server-actions-menu-item"
+                  @click="closeServerActionMenu"
+                >
+                  <i class="fas fa-right-to-bracket"></i>
+                  <span>{{ t('nav.login') }}</span>
+                </RouterLink>
+                <button
+                  v-else
+                  type="button"
+                  class="server-actions-menu-item danger"
+                  @click="handleLogout"
+                >
+                  <i class="fas fa-right-from-bracket"></i>
+                  <span>{{ t('nav.logout') }}</span>
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              class="server-bottom-button"
+              :aria-label="themeToggleLabel"
+              :title="themeToggleLabel"
+              :disabled="isSwitchingTheme"
+              @click="toggleTheme"
+            >
+              <i :class="isDarkUiThemeActive ? 'fas fa-sun' : 'fas fa-moon'"></i>
+            </button>
+          </div>
         </div>
 
         <button
@@ -2101,7 +2222,8 @@ const handleOpenAllTargetConnections = async () => {
   flex-shrink: 0;
   border-right: 2px solid color-mix(in srgb, var(--border-color) 78%, transparent);
   background: color-mix(in srgb, var(--header-bg-color) 92%, var(--app-bg-color));
-  overflow: hidden;
+  overflow-x: visible;
+  overflow-y: hidden;
   transition: width 0.12s ease, min-width 0.12s ease;
 }
 
@@ -2258,7 +2380,7 @@ const handleOpenAllTargetConnections = async () => {
   position: absolute;
   top: calc(100% + 0.45rem);
   right: 0;
-  z-index: 20;
+  z-index: 120;
   width: min(15rem, 72vw);
   max-height: 18rem;
   padding: 0.35rem;
@@ -2504,6 +2626,115 @@ const handleOpenAllTargetConnections = async () => {
 .server-list-body::-webkit-scrollbar-thumb {
   border-radius: 999px;
   background: color-mix(in srgb, var(--border-color) 82%, var(--text-color-secondary));
+}
+
+.server-bottom-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.5rem;
+  flex-shrink: 0;
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+}
+
+.server-bottom-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.45rem;
+  height: 2.45rem;
+  flex-shrink: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+  background: var(--app-bg-color);
+  color: var(--text-color-secondary);
+  cursor: pointer;
+  transition: color 0.12s ease, background-color 0.12s ease, border-color 0.12s ease;
+}
+
+.server-bottom-button:hover,
+.server-bottom-button:focus-visible,
+.server-bottom-button.active {
+  border-color: color-mix(in srgb, var(--link-active-color) 52%, var(--border-color));
+  background: var(--nav-item-active-bg-color);
+  color: var(--link-active-color);
+}
+
+.server-bottom-button:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.server-bottom-button i {
+  color: currentColor;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.server-actions-menu-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.server-actions-menu {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 0.5rem);
+  z-index: 30;
+  min-width: 12rem;
+  padding: 0.35rem;
+  border: 1px solid var(--border-color);
+  border-radius: 0.55rem;
+  background: var(--header-bg-color);
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.18);
+}
+
+.server-actions-menu-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 0.65rem;
+  padding: 0.55rem 0.65rem;
+  border: 0;
+  border-radius: 0.42rem;
+  background: transparent;
+  color: var(--text-color);
+  cursor: pointer;
+  font-size: 0.86rem;
+  text-align: left;
+  text-decoration: none;
+}
+
+.server-actions-menu-item:hover,
+.server-actions-menu-item:focus-visible,
+.server-actions-menu-item.router-link-active {
+  background: var(--nav-item-active-bg-color);
+  color: var(--link-active-color);
+}
+
+.server-actions-menu-item.danger {
+  color: var(--color-error);
+}
+
+.server-actions-menu-item.danger:hover,
+.server-actions-menu-item.danger:focus-visible {
+  background: color-mix(in srgb, var(--color-error) 14%, transparent);
+  color: var(--color-error);
+}
+
+.server-actions-menu-item i {
+  width: 1.05rem;
+  color: currentColor;
+  text-align: center;
+}
+
+.server-actions-menu-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .server-folder-tree {

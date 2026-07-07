@@ -633,7 +633,7 @@ const formatAuditDetails = (details: AuditLogEntry['details']) => {
               <span class="panel-kicker">{{ t('dashboard.recentActivity') }}</span>
               <h2>{{ t('dashboard.activityWindow', { count: recentAuditLogs.length }) }}</h2>
             </div>
-            <RouterLink :to="{ name: 'AuditLogs' }" class="panel-link">
+            <RouterLink :to="{ name: 'Settings', query: { tab: 'auditLogs' } }" class="panel-link">
               {{ t('dashboard.viewFullAuditLog') }}
             </RouterLink>
           </div>

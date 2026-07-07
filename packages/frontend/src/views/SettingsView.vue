@@ -21,7 +21,7 @@
             :key="tab.key"
             type="button"
             :class="['settings-nav-item', { active: activeTab === tab.key }]"
-            @click="activeTab = tab.key"
+            @click="selectTab(tab.key)"
           >
             <i :class="tab.icon"></i>
             <span>{{ tab.label }}</span>
@@ -48,6 +48,15 @@
           >
             <i class="fas fa-xmark"></i>
           </button>
+          <button
+            v-if="!props.isDialog"
+            type="button"
+            class="settings-close-button"
+            :aria-label="t('common.close')"
+            @click="closePage"
+          >
+            <i class="fas fa-xmark"></i>
+          </button>
         </header>
 
         <div v-if="settingsError" class="p-4 border-l-4 border-error bg-error/10 text-error rounded">
@@ -55,6 +64,11 @@
         </div>
 
         <div v-else class="settings-content-body">
+        <!-- Dashboard Tab Content -->
+        <div v-if="activeTab === 'dashboard'">
+          <DashboardView />
+        </div>
+
         <!-- Security Tab Content -->
         <div v-if="activeTab === 'security'">
           <div v-if="settings" class="p-4 bg-background text-foreground">
@@ -107,6 +121,11 @@
           <DataManagementSection v-if="settings" />
           <div v-else class="p-4 text-center text-muted-foreground">{{ $t('settings.loading', '加载中...') }}</div>
         </div>
+
+        <!-- Audit Logs Tab Content -->
+        <div v-if="activeTab === 'auditLogs'">
+          <AuditLogView />
+        </div>
         
         <!-- Appearance Tab Content -->
         <div v-if="activeTab === 'appearance'">
@@ -135,10 +154,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
-import { useAuthStore } from '../stores/auth.store';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { useSettingsStore } from '../stores/settings.store';
-import { useAppearanceStore } from '../stores/appearance.store'; 
 import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
 import ChangePasswordForm from '../components/settings/ChangePasswordForm.vue';
@@ -155,6 +173,9 @@ import DataManagementSection from '../components/settings/DataManagementSection.
 import AppearanceSection from '../components/settings/AppearanceSection.vue';
 import ProxiesView from './ProxiesView.vue';
 import NotificationsView from './NotificationsView.vue';
+import DashboardView from './DashboardView.vue';
+import AuditLogView from './AuditLogView.vue';
+import { createSettingsTabs, type SettingsTabKey } from '../utils/settingsTabs';
 
 const props = withDefaults(defineProps<{
   isDialog?: boolean;
@@ -166,25 +187,21 @@ const emit = defineEmits<{
   close: [];
 }>();
 
-const authStore = useAuthStore();
 const settingsStore = useSettingsStore();
-const appearanceStore = useAppearanceStore(); // 实例化外观 store
 const { t } = useI18n();
+const route = useRoute();
+const router = useRouter();
 
 // Define tabs for settings sections
-const tabs = ref([
-  { key: 'system', label: t('settings.tabs.system', '系统'), icon: 'fas fa-sliders' },
-  { key: 'security', label: t('settings.tabs.security', '安全'), icon: 'fas fa-shield-halved' },
-  { key: 'appearance', label: t('settings.tabs.appearance', '外观'), icon: 'fas fa-palette' },
-  { key: 'ipControl', label: t('settings.tabs.ipControl', 'IP 管控'), icon: 'fas fa-network-wired' },
-  { key: 'workspace', label: t('settings.tabs.workspace', '工作区'), icon: 'fas fa-table-columns' },
-  { key: 'ai', label: t('settings.tabs.ai', 'AI 助手'), icon: 'fas fa-wand-magic-sparkles' },
-  { key: 'notifications', label: t('settings.tabs.notifications', '通知管理'), icon: 'fas fa-bell' },
-  { key: 'proxies', label: t('settings.tabs.proxies', '代理管理'), icon: 'fas fa-route' },
-  { key: 'dataManagement', label: t('settings.tabs.dataManagement', '数据管理'), icon: 'fas fa-database' },
-  { key: 'about', label: t('settings.tabs.about', '关于'), icon: 'fas fa-circle-info' },
-]);
-const activeTab = ref(tabs.value[0].key);
+const tabs = ref(createSettingsTabs(t));
+const isSettingsTabKey = (value: unknown): value is SettingsTabKey => (
+  typeof value === 'string' && tabs.value.some(tab => tab.key === value)
+);
+const readRouteTab = (): SettingsTabKey | null => {
+  const tabQuery = Array.isArray(route.query.tab) ? route.query.tab[0] : route.query.tab;
+  return isSettingsTabKey(tabQuery) ? tabQuery : null;
+};
+const activeTab = ref<SettingsTabKey>(props.isDialog ? tabs.value[0].key : (readRouteTab() || tabs.value[0].key));
 const activeTabInfo = computed(() => tabs.value.find(tab => tab.key === activeTab.value) || tabs.value[0]);
 const dialogShellRef = ref<HTMLElement | null>(null);
 const dialogPosition = ref<{ left: number; top: number } | null>(null);
@@ -210,14 +227,16 @@ const dialogStyle = computed(() => {
 // 使用 storeToRefs 获取响应式 getter，包括 language
 const {
     settings,
-    isLoading: settingsLoading,
     error: settingsError,
-    language: storeLanguage,
 } = storeToRefs(settingsStore);
 
 
 const closeDialog = () => {
   emit('close');
+};
+
+const closePage = () => {
+  void router.push({ name: 'Connections' });
 };
 
 const handleBackdropClick = () => {
@@ -231,6 +250,26 @@ const handleKeydown = (event: KeyboardEvent) => {
     closeDialog();
   }
 };
+
+const selectTab = (tabKey: SettingsTabKey) => {
+  activeTab.value = tabKey;
+  if (props.isDialog) return;
+
+  void router.replace({
+    query: {
+      ...route.query,
+      tab: tabKey,
+    },
+  });
+};
+
+watch(() => route.query.tab, () => {
+  if (props.isDialog) return;
+  const routeTab = readRouteTab();
+  if (routeTab) {
+    activeTab.value = routeTab;
+  }
+});
 
 const clampDialogPosition = (left: number, top: number) => {
   const dialogEl = dialogShellRef.value;
