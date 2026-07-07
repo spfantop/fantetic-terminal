@@ -3,6 +3,7 @@ import { SidebarConfig, LayoutNode, PaneName } from '../types/settings.types';
 import { CaptchaSettings } from '../types/settings.types';
 import * as sqlite3 from 'sqlite3';
 import defaultTerminalHighlightRulesDocument from './defaultTerminalHighlightRules.json';
+import { createDefaultFocusSwitcherConfig } from './focusSwitcherConfig';
 
 const SIDEBAR_CONFIG_KEY = 'sidebarConfig';
 const CAPTCHA_CONFIG_KEY = 'captchaConfig';
@@ -242,7 +243,7 @@ export const ensureDefaultSettingsExist = async (db: sqlite3.Database): Promise<
         ipWhitelist: '',
         maxLoginAttempts: '5',
         loginBanDuration: '300',
-        focusSwitcherSequence: JSON.stringify(["quickCommandsSearch", "commandHistorySearch", "fileManagerSearch", "commandInput", "terminalSearch"]),
+        focusSwitcherSequence: JSON.stringify(createDefaultFocusSwitcherConfig()),
         navBarVisible: 'true',
         layoutTree: JSON.stringify(defaultLayoutTreeStructure),
         autoCopyOnSelect: 'false',

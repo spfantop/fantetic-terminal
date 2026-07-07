@@ -21,6 +21,10 @@ import { useDialogStore } from './stores/dialog.store';
 import SettingsView from './views/SettingsView.vue';
 import { darkUiTheme, defaultUiTheme } from './features/appearance/config/default-themes';
 import { debugLog } from './composables/useDebugLog';
+import {
+  shouldEnableFocusSwitcherHotkeys,
+  shouldSuppressFocusSwitcherKeyDefault,
+} from './utils/focusSwitcherConfig';
 
 const { t } = useI18n();
 const authStore = useAuthStore();
@@ -89,11 +93,18 @@ let pendingDockHoverPoint: { x: number; y: number } | null = null;
 let dockHoverRectCache: { dock?: DOMRect; hoverBar?: DOMRect; actionMenu?: DOMRect; stamp: number } | null = null;
 const DOCK_HOVER_RECT_CACHE_MS = 120;
 // --- 移除 shortcutTriggeredInKeyDown 标志 ---
+const focusSwitcherKeyboardListenerOptions: AddEventListenerOptions = { capture: true };
+
+const suppressPlainAltDefault = (event: KeyboardEvent) => {
+  if (!shouldSuppressFocusSwitcherKeyDefault(isFocusSwitcherHotkeyRoute.value, event.key, event.altKey)) return;
+  event.preventDefault();
+  event.stopPropagation();
+};
 
 onMounted(() => {
   // +++ 全局 Alt 键监听器 +++
-  window.addEventListener('keydown', handleAltKeyDown); // +++ 监听 keydown 设置状态 +++
-  window.addEventListener('keyup', handleGlobalKeyUp);   // +++ 监听 keyup 执行切换 +++
+  window.addEventListener('keydown', handleAltKeyDown, focusSwitcherKeyboardListenerOptions); // +++ 监听 keydown 设置状态 +++
+  window.addEventListener('keyup', handleGlobalKeyUp, focusSwitcherKeyboardListenerOptions);   // +++ 监听 keyup 执行切换 +++
   document.addEventListener('mousemove', handleDockHoverTracking);
   window.addEventListener('mouseout', handleDockMouseOut);
   window.addEventListener(CONNECTIONS_SERVER_PANEL_COLLAPSED_EVENT, handleConnectionsServerPanelCollapsedChange);
@@ -126,8 +137,8 @@ watch([dockWidth, isDockCollapsed, isDockActionMenuHovering], () => {
 
 // +++ 卸载钩子以移除监听器 +++
 onUnmounted(() => {
-  window.removeEventListener('keydown', handleAltKeyDown); // +++ 移除 keydown 监听 +++
-  window.removeEventListener('keyup', handleGlobalKeyUp);   // +++ 移除 keyup 监听 +++
+  window.removeEventListener('keydown', handleAltKeyDown, focusSwitcherKeyboardListenerOptions); // +++ 移除 keydown 监听 +++
+  window.removeEventListener('keyup', handleGlobalKeyUp, focusSwitcherKeyboardListenerOptions);   // +++ 移除 keyup 监听 +++
   document.removeEventListener('mousemove', handleDockHoverTracking);
   window.removeEventListener('mouseout', handleDockMouseOut);
   window.removeEventListener(CONNECTIONS_SERVER_PANEL_COLLAPSED_EVENT, handleConnectionsServerPanelCollapsedChange);
@@ -147,6 +158,7 @@ const normalizedRoutePath = computed(() => {
 // *** 计算属性，判断是否在 workspace 路由 ***
 const isWorkspaceRoute = computed(() => normalizedRoutePath.value === '/workspace');
 const isConnectionsRoute = computed(() => normalizedRoutePath.value === '/connections');
+const isFocusSwitcherHotkeyRoute = computed(() => shouldEnableFocusSwitcherHotkeys(normalizedRoutePath.value));
 const isAuthRoute = computed(() => normalizedRoutePath.value === '/login' || normalizedRoutePath.value === '/setup');
 const shouldAllowDock = computed(() => !isAuthRoute.value && (!isWorkspaceRoute.value || isHeaderVisible.value));
 const shouldRenderDock = computed(() => shouldAllowDock.value && !(isConnectionsRoute.value && isConnectionsServerPanelCollapsed.value));
@@ -455,9 +467,11 @@ const closeSettingsDialog = () => {
 
 // +++ 处理 Alt 键按下的事件处理函数，并记录快捷键 +++
 const handleAltKeyDown = async (event: KeyboardEvent) => { // +++ 改为 async +++
-  if (!isWorkspaceRoute.value) return; // 只在 workspace 路由下执行
+  suppressPlainAltDefault(event);
+  if (!isFocusSwitcherHotkeyRoute.value) return; // 只在工作区类路由下执行
   // 只在 Alt 键首次按下时设置状态
-  if (event.key === 'Alt' && !event.repeat) {
+  if (event.key === 'Alt') {
+    if (event.repeat) return;
     isAltPressed.value = true;
     altShortcutKey.value = null;
     // console.log('[App] Alt key pressed down.');
@@ -508,7 +522,8 @@ const handleAltKeyDown = async (event: KeyboardEvent) => { // +++ 改为 async +
 
 // +++ 全局键盘事件处理函数，监听 keyup，优先处理快捷键 +++
 const handleGlobalKeyUp = async (event: KeyboardEvent) => {
-  if (!isWorkspaceRoute.value) return; // 只在 workspace 路由下执行
+  suppressPlainAltDefault(event);
+  if (!isFocusSwitcherHotkeyRoute.value) return; // 只在工作区类路由下执行
   if (event.key === 'Alt') {
     const altWasPressed = isAltPressed.value;
     const triggeredShortcutKey = altShortcutKey.value; // 记录松开时是否有记录的快捷键
