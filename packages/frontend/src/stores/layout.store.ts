@@ -4,12 +4,15 @@ import { ref, computed, type Ref, type ComputedRef } from 'vue';
 import apiClient from '../utils/apiClient';
 import {
   CONFIGURABLE_LAYOUT_PANES,
-  cloneDefaultSidebarPanes,
   isConfigurableLayoutPane,
   normalizeConfigurablePaneList,
   type ConfigurableLayoutPane,
   type SidebarPaneConfig,
 } from '../utils/layoutPanes';
+import {
+  cloneDefaultSidebarPanes,
+  createDefaultLayout,
+} from '../utils/defaultLayoutConfig';
 
 // 定义所有可用面板的名称
 export type PaneName = ConfigurableLayoutPane;
@@ -36,47 +39,7 @@ function generateId(): string {
 }
 
 // 定义默认布局结构 (根据用户提供的配置更新，但使用 generateId)
-const getDefaultLayout = (): LayoutNode => ({
-  id: generateId(), // Generate new ID
-  type: "container",
-  direction: "horizontal",
-  children: [
-    {
-      id: generateId(), // Generate new ID
-      type: "container",
-      direction: "vertical",
-      size: 77.75542049934297,
-      children: [
-        {
-          id: generateId(), // Generate new ID
-          type: "pane",
-          component: "terminal",
-          size: 94.00342561521252
-        },
-        {
-          id: generateId(), // Generate new ID
-          type: "pane",
-          component: "commandBar",
-          size: 5.996574384787479
-        }
-      ]
-    },
-    {
-      id: generateId(), // Generate new ID
-      type: "container",
-      direction: "vertical",
-      children: [
-        {
-          id: generateId(), // Generate new ID
-          type: "pane",
-          component: "statusMonitor",
-          size: 100
-        }
-      ],
-      size: 22.244579500657025
-    }
-  ]
-});
+const getDefaultLayout = (): LayoutNode => createDefaultLayout(generateId);
 
 // 定义默认侧栏配置 (根据用户提供的配置更新)
 const getDefaultSidebarPanes = (): SidebarPaneConfig => cloneDefaultSidebarPanes();

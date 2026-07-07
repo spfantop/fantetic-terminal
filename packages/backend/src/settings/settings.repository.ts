@@ -4,6 +4,10 @@ import { CaptchaSettings } from '../types/settings.types';
 import * as sqlite3 from 'sqlite3';
 import defaultTerminalHighlightRulesDocument from './defaultTerminalHighlightRules.json';
 import { createDefaultFocusSwitcherConfig } from './focusSwitcherConfig';
+import {
+    createDefaultLayoutTreeStructure,
+    createDefaultSidebarPanesStructure,
+} from './defaultLayoutConfig';
 
 const SIDEBAR_CONFIG_KEY = 'sidebarConfig';
 const CAPTCHA_CONFIG_KEY = 'captchaConfig';
@@ -196,38 +200,8 @@ export const setCaptchaConfig = async (config: CaptchaSettings): Promise<void> =
  * 此函数应在数据库初始化期间调用。
  */
 export const ensureDefaultSettingsExist = async (db: sqlite3.Database): Promise<void> => {
-    type OmitIdRecursive<T> = T extends object
-      ? { [K in keyof Omit<T, 'id'>]: OmitIdRecursive<T[K]> }
-      : T;
-
-    const defaultLayoutTreeStructure: OmitIdRecursive<LayoutNode> = {
-      type: "container",
-      direction: "horizontal",
-      children: [
-        {
-          type: "container",
-          direction: "vertical",
-          size: 77.75542049934297,
-          children: [
-            { type: "pane", component: "terminal", size: 94.00342561521252 },
-            { type: "pane", component: "commandBar", size: 5.996574384787479 }
-          ]
-        },
-        {
-          type: "container",
-          direction: "vertical",
-          children: [
-            { type: "pane", component: "statusMonitor", size: 100 }
-          ],
-          size: 22.244579500657025
-        }
-      ]
-    };
-
-    const defaultSidebarPanesStructure: SidebarConfig = {
-      left: [],
-      right: ["fileManager", "commandHistory", "quickCommands", "terminalLineOutputToggle", "dockerManager"]
-    };
+    const defaultLayoutTreeStructure = createDefaultLayoutTreeStructure();
+    const defaultSidebarPanesStructure = createDefaultSidebarPanesStructure();
 
     const defaultCaptchaSettings: CaptchaSettings = {
         enabled: false,

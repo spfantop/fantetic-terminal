@@ -26,11 +26,6 @@ export type SidebarPaneConfig = {
   right: ConfigurableLayoutPane[];
 };
 
-export const DEFAULT_SIDEBAR_PANES: SidebarPaneConfig = {
-  left: [],
-  right: ['fileManager', 'commandHistory', 'quickCommands', 'terminalLineOutputToggle', 'dockerManager'],
-};
-
 const configurablePaneSet = new Set<string>(CONFIGURABLE_LAYOUT_PANES);
 const actionPaneSet = new Set<string>(ACTION_LAYOUT_PANES);
 
@@ -55,7 +50,3 @@ export const normalizeConfigurablePaneList = (value: readonly unknown[]): Config
   return panes;
 };
 
-export const cloneDefaultSidebarPanes = (): SidebarPaneConfig => ({
-  left: [...DEFAULT_SIDEBAR_PANES.left],
-  right: [...DEFAULT_SIDEBAR_PANES.right],
-});

@@ -4,6 +4,16 @@ import {
   CONFIGURABLE_LAYOUT_PANES,
   normalizeConfigurablePaneList,
 } from '../src/utils/layoutPanes';
+import {
+  createDefaultLayout,
+  DEFAULT_SIDEBAR_PANES,
+} from '../src/utils/defaultLayoutConfig';
+
+const listPaneComponents = (node: { type: string; component?: string; children?: unknown[] } | null): string[] => {
+  if (!node) return [];
+  if (node.type === 'pane' && node.component) return [node.component];
+  return (node.children || []).flatMap((child) => listPaneComponents(child as any));
+};
 
 assert.ok(
   CONFIGURABLE_LAYOUT_PANES.includes('terminalLineOutputToggle'),
@@ -36,6 +46,18 @@ assert.deepEqual(
     'unknown',
   ]),
   ['fileManager', 'aiAssistant', 'terminalLineOutputToggle'],
+);
+
+assert.deepEqual(
+  DEFAULT_SIDEBAR_PANES.right,
+  ['terminalLineOutputToggle', 'aiAssistant', 'fileManager', 'quickCommands', 'dockerManager'],
+  'default right sidebar panes should match the requested layout manager order',
+);
+
+assert.equal(
+  listPaneComponents(createDefaultLayout(() => 'test-id')).includes('statusMonitor'),
+  false,
+  'default workspace layout should not include a status monitor container',
 );
 
 console.log('layoutPanes behavior ok');
