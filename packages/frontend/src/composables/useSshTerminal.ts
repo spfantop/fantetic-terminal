@@ -9,7 +9,7 @@ import type { WebSocketMessage, MessagePayload } from '../types/websocket.types'
 import type { SshOutputHandler } from './useWebSocketConnection';
 import { debugLog } from './useDebugLog';
 import { useSettingsStore } from '../stores/settings.store';
-import { highlightTerminalOutput } from '../utils/terminalOutputHighlighter';
+import { createTerminalOutputHighlightStream } from '../utils/terminalOutputHighlighter';
 
 type XtermWriteSyncTerminal = Terminal & {
     _core?: {
@@ -52,6 +52,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
     let inputFlushTimer: ReturnType<typeof setTimeout> | null = null;
     let outputFlushFrame: number | null = null;
     let outputFlushTimer: ReturnType<typeof setTimeout> | null = null;
+    let outputIdleFlushTimer: ReturnType<typeof setTimeout> | null = null;
     let outputFlushMicrotaskScheduled = false;
     let isOutputWriteInProgress = false;
     let pendingOutputBytes = 0;
@@ -62,8 +63,10 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
     let outputDecodeWindow: Window | null = null;
     let outputDecodeMicrotaskScheduled = false;
     const terminalHighlightTextDecoder = new TextDecoder();
+    const terminalOutputHighlightStream = createTerminalOutputHighlightStream();
     const INPUT_FLUSH_DELAY = 8;
     const OUTPUT_FLUSH_FALLBACK_DELAY = 32;
+    const OUTPUT_IDLE_FLUSH_DELAY = 48;
     const INTERACTIVE_OUTPUT_FLUSH_LIMIT = 512;
     // 大输出按帧分批写入，避免 xterm 解析长期占用主线程。
     const OUTPUT_FRAME_BUDGET_BYTES = 64 * 1024;
@@ -137,6 +140,32 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         return merged;
     };
 
+    const getTerminalHighlightOptions = () => ({
+        enabled: terminalHighlightEnabledBoolean.value,
+        rules: terminalHighlightRulesList.value,
+    });
+
+    const writeHighlightedTextOutput = async (term: Terminal, text: string) => {
+        const highlightedText = terminalOutputHighlightStream.write(text, getTerminalHighlightOptions());
+        if (highlightedText) {
+            await writeTerminalOutputAsync(term, highlightedText);
+        }
+    };
+
+    const flushHighlightedTextOutput = async (term: Terminal) => {
+        const highlightedText = terminalOutputHighlightStream.flush(getTerminalHighlightOptions());
+        if (highlightedText) {
+            await writeTerminalOutputAsync(term, highlightedText);
+        }
+    };
+
+    const cancelOutputIdleFlush = () => {
+        if (outputIdleFlushTimer !== null) {
+            clearTimeout(outputIdleFlushTimer);
+            outputIdleFlushTimer = null;
+        }
+    };
+
     const writeOutputBatch = async (term: Terminal, chunkList: (string | Uint8Array)[]) => {
         let textChunkList: string[] = [];
         let binaryChunkList: Uint8Array[] = [];
@@ -145,15 +174,12 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
             if (textChunkList.length === 0) return;
             const text = textChunkList.join('');
             textChunkList = [];
-            const highlightedText = highlightTerminalOutput(text, {
-                enabled: terminalHighlightEnabledBoolean.value,
-                rules: terminalHighlightRulesList.value,
-            });
-            await writeTerminalOutputAsync(term, highlightedText);
+            await writeHighlightedTextOutput(term, text);
         };
 
         const flushBinaryChunks = async () => {
             if (binaryChunkList.length === 0) return;
+            await flushHighlightedTextOutput(term);
             const binary = mergeBinaryOutputChunks(binaryChunkList);
             binaryChunkList = [];
             await writeTerminalOutputAsync(term, binary);
@@ -244,7 +270,16 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         outputFlushTimer = setTimeout(() => { void flushTerminalOutput('timer'); }, OUTPUT_FLUSH_FALLBACK_DELAY);
     };
 
-    async function flushTerminalOutput(source: 'microtask' | 'frame' | 'timer' = 'microtask') {
+    const scheduleOutputIdleFlush = () => {
+        if (!terminalInstance.value || outputIdleFlushTimer !== null) return;
+
+        outputIdleFlushTimer = setTimeout(() => {
+            outputIdleFlushTimer = null;
+            void flushTerminalOutput('idle');
+        }, OUTPUT_IDLE_FLUSH_DELAY);
+    };
+
+    async function flushTerminalOutput(source: 'microtask' | 'frame' | 'timer' | 'idle' = 'microtask') {
         outputFlushMicrotaskScheduled = false;
         const term = terminalInstance.value;
 
@@ -256,9 +291,12 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
             clearTimeout(outputFlushTimer);
             outputFlushTimer = null;
         }
+        if (source !== 'idle') {
+            cancelOutputIdleFlush();
+        }
 
         if (isOutputWriteInProgress) return;
-        if (!term || getPendingOutputChunkCount() === 0) return;
+        if (!term || (getPendingOutputChunkCount() === 0 && !terminalOutputHighlightStream.hasPending())) return;
 
         if (source === 'microtask' && pendingOutputBytes > INTERACTIVE_OUTPUT_FLUSH_LIMIT) {
             scheduleOutputFrameFlush();
@@ -267,11 +305,15 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
 
         const shouldLimitBatch = source !== 'microtask' && pendingOutputBytes > OUTPUT_FRAME_BUDGET_BYTES;
         const chunkList = takeOutputBatch(shouldLimitBatch);
-        if (chunkList.length === 0) return;
+        if (chunkList.length === 0 && !terminalOutputHighlightStream.hasPending()) return;
 
         isOutputWriteInProgress = true;
         try {
-            await writeOutputBatch(term, chunkList);
+            if (chunkList.length > 0) {
+                await writeOutputBatch(term, chunkList);
+            } else {
+                await flushHighlightedTextOutput(term);
+            }
         } finally {
             isOutputWriteInProgress = false;
         }
@@ -279,10 +321,13 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         if (terminalInstance.value !== term) return;
         if (getPendingOutputChunkCount() > 0) {
             scheduleOutputFrameFlush();
+        } else if (terminalOutputHighlightStream.hasPending()) {
+            scheduleOutputIdleFlush();
         }
     }
 
     const scheduleTerminalOutput = (data: string | Uint8Array) => {
+        cancelOutputIdleFlush();
         const outputLength = enqueueTerminalOutput(data);
         if (!terminalInstance.value || isOutputWriteInProgress || outputFlushFrame !== null || outputFlushTimer !== null) return;
 
@@ -687,9 +732,11 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
             clearTimeout(outputFlushTimer);
             outputFlushTimer = null;
         }
+        cancelOutputIdleFlush();
         pendingOutputBuffer.length = 0;
         pendingOutputHeadIndex = 0;
         pendingOutputBytes = 0;
+        terminalOutputHighlightStream.reset();
         if (inputFlushTimer !== null) {
             clearTimeout(inputFlushTimer);
             inputFlushTimer = null;

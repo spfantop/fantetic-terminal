@@ -1,13 +1,23 @@
 <template>
-  <div ref="modalRootRef" class="fixed inset-0 bg-overlay flex justify-center items-center z-50">
+  <div ref="modalRootRef" class="fixed inset-0 bg-overlay flex justify-center items-center z-[70]">
     <div
       ref="modalContentRef"
-      class="bg-background text-foreground p-6 rounded-xl border border-border/50 shadow-2xl flex flex-col"
+      class="relative bg-background text-foreground p-6 rounded-xl border border-border/50 shadow-2xl flex flex-col"
       :style="{
         width: resizableWidth ? `${resizableWidth}px` : undefined,
         height: resizableHeight ? `${resizableHeight}px` : undefined,
       }"
     >
+      <button
+        type="button"
+        class="quick-command-form-close absolute top-3 right-3 w-8 h-8 rounded-lg text-text-secondary hover:text-foreground hover:bg-border/70 transition-colors duration-150 flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-primary/50"
+        :title="t('common.close', '关闭')"
+        :aria-label="t('common.close', '关闭')"
+        @pointerdown.stop
+        @click="closeForm"
+      >
+        <i class="fas fa-xmark"></i>
+      </button>
       <h2 class="m-0 mb-6 text-center text-xl font-semibold cursor-move select-none" @pointerdown="startDialogDrag">{{ isEditing ? t('quickCommands.form.titleEdit', '编辑快捷指令') : t('quickCommands.form.titleAdd', '添加快捷指令') }}</h2>
       <div class="flex-grow flex space-x-6 min-h-0">
         <!-- 左侧：变量管理 -->

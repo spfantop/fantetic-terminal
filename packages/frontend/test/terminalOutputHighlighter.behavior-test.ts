@@ -7,6 +7,7 @@ import {
   parseTerminalHighlightRulesDocument,
   previewTerminalHighlightSegments,
   serializeTerminalHighlightRules,
+  createTerminalOutputHighlightStream,
   type TerminalHighlightRule,
 } from '../src/utils/terminalOutputHighlighter';
 
@@ -129,3 +130,52 @@ assert.deepEqual(previewSegments, [
   },
   { text: ' failed' },
 ]);
+
+const streamHighlighter = createTerminalOutputHighlightStream();
+const commandRule: TerminalHighlightRule[] = [
+  {
+    id: 'grep-command',
+    name: 'grep-command',
+    enabled: true,
+    pattern: '\\bgrep\\b',
+    flags: 'g',
+    foreground: '#DCDCAA',
+    bold: true,
+    priority: 10,
+  },
+];
+
+assert.equal(
+  streamHighlighter.write('root@BBT:~# gre', { enabled: true, rules: commandRule }),
+  'root@BBT:~# ',
+);
+assert.equal(
+  streamHighlighter.write('p -n --color=always\r\n', { enabled: true, rules: commandRule }),
+  '\x1b[1;38;2;220;220;170mgrep\x1b[0m -n --color=always\r\n',
+);
+assert.equal(streamHighlighter.flush({ enabled: true, rules: commandRule }), '');
+
+assert.equal(
+  streamHighlighter.write('root@BBT:~# gre', { enabled: true, rules: commandRule }),
+  'root@BBT:~# ',
+);
+assert.equal(
+  streamHighlighter.flush({ enabled: true, rules: commandRule }),
+  'gre',
+);
+
+const promptStreamHighlighter = createTerminalOutputHighlightStream();
+assert.equal(
+  promptStreamHighlighter.write('\r\n', { enabled: true, rules: commandRule }),
+  '',
+);
+assert.equal(
+  promptStreamHighlighter.write('root@BBT:~# ', { enabled: true, rules: commandRule }),
+  '\r\nroot@BBT:~# ',
+);
+
+const completeLineStreamHighlighter = createTerminalOutputHighlightStream();
+assert.equal(
+  completeLineStreamHighlighter.write('DONE\r\n', { enabled: true, rules: commandRule }),
+  'DONE\r\n',
+);

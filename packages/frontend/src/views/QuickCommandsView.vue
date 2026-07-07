@@ -200,11 +200,13 @@
     </div>
 
     <!-- 添加/编辑表单模态框 -->
-    <AddEditQuickCommandForm
-      v-if="isFormVisible"
-      :command-to-edit="commandToEdit"
-      @close="closeForm"
-    />
+    <Teleport to="body">
+      <AddEditQuickCommandForm
+        v-if="isFormVisible"
+        :command-to-edit="commandToEdit"
+        @close="closeForm"
+      />
+    </Teleport>
 
     <!-- Context Menu for Quick Commands -->
     <div

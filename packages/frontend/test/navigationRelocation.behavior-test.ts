@@ -12,6 +12,8 @@ const dataManagementSection = readFileSync(resolve('src/components/settings/Data
 const dataManagementComposable = readFileSync(resolve('src/composables/settings/useDataManagement.ts'), 'utf8');
 const terminalVue = readFileSync(resolve('src/components/Terminal.vue'), 'utf8');
 const terminalTabBar = readFileSync(resolve('src/components/TerminalTabBar.vue'), 'utf8');
+const quickCommandsView = readFileSync(resolve('src/views/QuickCommandsView.vue'), 'utf8');
+const addEditQuickCommandForm = readFileSync(resolve('src/components/AddEditQuickCommandForm.vue'), 'utf8');
 
 const tabKeys = createSettingsTabs((key, fallback) => fallback || key).map(tab => tab.key);
 
@@ -162,6 +164,20 @@ assert.ok(
     && dataManagementComposable.includes("formData.append('connectionsZip', file)")
     && dataManagementComposable.includes('connectionsStore.fetchConnections()'),
   'data management import should upload the ZIP and refresh imported data',
+);
+
+assert.ok(
+  quickCommandsView.includes('<Teleport to="body">')
+    && quickCommandsView.includes('<AddEditQuickCommandForm')
+    && quickCommandsView.includes('</Teleport>'),
+  'quick command add/edit form should teleport to body so it is not clipped by the sidebar or quick command popup',
+);
+
+assert.ok(
+  addEditQuickCommandForm.includes('quick-command-form-close')
+    && addEditQuickCommandForm.includes('@click="closeForm"')
+    && addEditQuickCommandForm.includes('fa-xmark'),
+  'quick command add/edit modal should include a top-right close button',
 );
 
 assert.match(
