@@ -2294,6 +2294,7 @@ const handleOpenAllTargetConnections = async () => {
 }
 
 .server-filter-row {
+  position: relative;
   margin-bottom: 0.5rem;
 }
 
@@ -2343,7 +2344,7 @@ const handleOpenAllTargetConnections = async () => {
 }
 
 .server-tag-filter {
-  position: relative;
+  position: static;
   flex-shrink: 0;
 }
 
