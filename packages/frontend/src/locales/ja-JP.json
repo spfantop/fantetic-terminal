@@ -1372,6 +1372,16 @@
         "decryptKeyInfo": "解凍パスワードは、data/.env ファイル内の ENCRYPTION_KEY です。このファイルを安全に保管してください。",
         "buttonText": "エクスポートを開始"
     },
+    "importConnections": {
+        "title": "接続データのインポート",
+        "description": "このシステムからエクスポートした暗号化 ZIP をアップロードし、現在の ENCRYPTION_KEY で解凍して接続、タグ、SSH キーをインポートします。",
+        "buttonText": "インポートを開始",
+        "selectFileFirst": "エクスポート済み ZIP ファイルを先に選択してください。",
+        "success": "インポートが完了しました。",
+        "partialSuccess": "インポートは完了しましたが、一部の項目で失敗しました。",
+        "error": "接続のインポート中にエラーが発生しました。",
+        "summary": "接続 {successCount} 件をインポート、{skippedCount} 件をスキップ、{failureCount} 件失敗。SSH キー {importedSshKeyCount} 件をインポート、{skippedSshKeyCount} 件をスキップ。"
+    },
     "tabs": {
       "security": "セキュリティ",
       "ipControl": "IP制御",

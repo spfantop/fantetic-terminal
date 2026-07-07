@@ -8,6 +8,8 @@ const routerIndex = readFileSync(resolve('src/router/index.ts'), 'utf8');
 const connectionsView = readFileSync(resolve('src/views/ConnectionsView.vue'), 'utf8');
 const settingsView = readFileSync(resolve('src/views/SettingsView.vue'), 'utf8');
 const settingsOverlayView = readFileSync(resolve('src/views/SettingsOverlayView.vue'), 'utf8');
+const dataManagementSection = readFileSync(resolve('src/components/settings/DataManagementSection.vue'), 'utf8');
+const dataManagementComposable = readFileSync(resolve('src/composables/settings/useDataManagement.ts'), 'utf8');
 const terminalVue = readFileSync(resolve('src/components/Terminal.vue'), 'utf8');
 const terminalTabBar = readFileSync(resolve('src/components/TerminalTabBar.vue'), 'utf8');
 
@@ -146,6 +148,20 @@ assert.match(
 assert.ok(
   settingsOverlayView.includes('<ConnectionsView />') && settingsOverlayView.includes('<SettingsView is-dialog'),
   'settings overlay should show the server page behind the settings dialog',
+);
+
+assert.ok(
+  dataManagementSection.includes('settings.importConnections.title')
+    && dataManagementSection.includes('@submit.prevent="submitImportConnections"')
+    && dataManagementSection.includes('accept=".zip,application/zip,application/x-zip-compressed"'),
+  'data management should provide an encrypted ZIP import form',
+);
+
+assert.ok(
+  dataManagementComposable.includes("apiClient.post<ImportConnectionsResult>('/settings/import-connections'")
+    && dataManagementComposable.includes("formData.append('connectionsZip', file)")
+    && dataManagementComposable.includes('connectionsStore.fetchConnections()'),
+  'data management import should upload the ZIP and refresh imported data',
 );
 
 assert.match(

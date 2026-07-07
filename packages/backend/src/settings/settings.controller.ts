@@ -3,7 +3,7 @@ import { settingsService } from './settings.service';
 import { AuditLogService } from '../audit/audit.service';
 import { NotificationService } from '../notifications/notification.service'; 
 import { ipBlacklistService } from '../auth/ip-blacklist.service';
-import { exportConnectionsAsEncryptedZip } from '../services/import-export.service'; 
+import { exportConnectionsAsEncryptedZip, importConnectionsFromEncryptedZip } from '../services/import-export.service'; 
 import { UpdateSidebarConfigDto, UpdateCaptchaSettingsDto, CaptchaSettings } from '../types/settings.types'; 
 import { AppearanceSettings, UpdateAppearanceDto } from '../types/appearance.types';
 import { getAppearanceSettings, updateAppearanceSettings as updateAppearanceSettingsInRepo } from '../appearance/appearance.repository';
@@ -579,7 +579,7 @@ async setCaptchaConfig(req: Request, res: Response): Promise<void> {
  /**
   * 导出所有连接配置为加密的 ZIP 文件
   */
- async exportAllConnections(req: Request, res: Response): Promise<void> {
+  async exportAllConnections(req: Request, res: Response): Promise<void> {
    try {
      const encryptedZipBuffer = await exportConnectionsAsEncryptedZip(true);
 
@@ -598,6 +598,35 @@ async setCaptchaConfig(req: Request, res: Response): Promise<void> {
      } else {
          res.status(500).json({ message: i18next.t('error.exportFailedGeneric'), error: error.message });
      }
+   }
+ },
+
+ /**
+  * 导入加密 ZIP 连接配置
+  */
+ async importAllConnections(req: Request, res: Response): Promise<void> {
+   const file = req.file as Express.Multer.File | undefined;
+   if (!file) {
+     res.status(400).json({ message: '未找到上传的 ZIP 文件。' });
+     return;
+   }
+
+   try {
+     const result = await importConnectionsFromEncryptedZip(file.buffer);
+     const status = result.failureCount > 0 ? 207 : 200;
+     res.status(status).json({
+       message: result.failureCount > 0
+         ? `导入完成，但存在 ${result.failureCount} 个错误。成功导入 ${result.successCount} 条，跳过 ${result.skippedCount} 条。`
+         : `导入成功完成。共导入 ${result.successCount} 条连接，跳过 ${result.skippedCount} 条。`,
+       ...result,
+     });
+   } catch (error: any) {
+     console.error('[控制器] 导入连接 ZIP 时出错:', error);
+     if (error.message && (error.message.includes('ENCRYPTION_KEY is not set') || error.message.includes('ZIP 解压密码错误'))) {
+       res.status(400).json({ message: '导入失败：无法使用当前 ENCRYPTION_KEY 解压该 ZIP 文件。', error: error.message });
+       return;
+     }
+     res.status(500).json({ message: '导入连接 ZIP 失败', error: error.message });
    }
  } // <-- No comma after the last method if it's truly the last one
 

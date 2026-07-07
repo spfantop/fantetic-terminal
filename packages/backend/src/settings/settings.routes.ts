@@ -1,9 +1,23 @@
 import express from 'express';
+import multer from 'multer';
 import { settingsController } from './settings.controller';
 import { isAuthenticated } from '../auth/auth.middleware';
 
 const router = express.Router();
 
+const importConnectionsUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const filename = file.originalname.toLowerCase();
+    if (file.mimetype === 'application/zip' || file.mimetype === 'application/x-zip-compressed' || filename.endsWith('.zip')) {
+      cb(null, true);
+      return;
+    }
+    (req as any).fileValidationError = '只允许上传 ZIP 文件。';
+    cb(null, false);
+  },
+});
 
 // GET /api/v1/settings/captcha - 获取公共 CAPTCHA 配置 (不含密钥)
 router.get('/captcha', settingsController.getCaptchaConfig);
@@ -73,6 +87,22 @@ router.put('/show-quick-command-tags', settingsController.setShowQuickCommandTag
 // +++ 导出所有连接路由 +++
 // GET /api/v1/settings/export-connections - 导出所有连接为加密的 ZIP 文件
 router.get('/export-connections', settingsController.exportAllConnections);
+// POST /api/v1/settings/import-connections - 导入加密 ZIP 连接配置
+router.post('/import-connections', (req, res, next) => {
+  importConnectionsUpload.single('connectionsZip')(req, res, (err: any) => {
+    if ((req as any).fileValidationError) {
+      return res.status(400).json({ message: (req as any).fileValidationError });
+    }
+    if (err instanceof multer.MulterError) {
+      return res.status(400).json({ message: `文件上传错误: ${err.message}` });
+    }
+    if (err) {
+      console.error('Unexpected error during connection ZIP upload:', err);
+      return res.status(500).json({ message: '文件上传处理失败' });
+    }
+    next();
+  });
+}, settingsController.importAllConnections);
  
 // +++ 显示状态监视器IP地址路由 +++
 // GET /api/v1/settings/show-status-monitor-ip-address - 获取设置

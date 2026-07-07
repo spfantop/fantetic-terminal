@@ -777,6 +777,16 @@
         "decryptKeyInfo": "The decryption password is the ENCRYPTION_KEY in your data/.env file. Please keep this file secure.",
         "buttonText": "Start Export"
       },
+      "importConnections": {
+        "title": "Import Connection Data",
+        "description": "Upload an encrypted ZIP exported from this system. It will be decrypted with the current ENCRYPTION_KEY and import connections, tags, and SSH keys.",
+        "buttonText": "Start Import",
+        "selectFileFirst": "Select an exported ZIP file first.",
+        "success": "Import completed successfully.",
+        "partialSuccess": "Import completed with some failures.",
+        "error": "An error occurred while importing connections.",
+        "summary": "Imported {successCount} connections, skipped {skippedCount}, failed {failureCount}; imported {importedSshKeyCount} SSH keys, skipped {skippedSshKeyCount}."
+      },
     
       "timezone": {
         "title": "Timezone Settings",

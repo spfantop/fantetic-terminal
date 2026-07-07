@@ -2,9 +2,14 @@
 import * as ConnectionRepository from '../connections/connection.repository';
 import * as ProxyRepository from '../proxies/proxy.repository';
 import * as TagService from '../tags/tag.service'; 
+import * as ConnectionService from '../connections/connection.service';
+import * as SshKeyService from '../ssh_keys/ssh_key.service';
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
 import { decrypt, getEncryptionKeyBuffer as getCryptoKeyBuffer } from '../utils/crypto'; 
 import { getAllDecryptedSshKeys, DecryptedSshKeyDetails } from '../ssh_keys/ssh_key.service'; 
+import type { CreateConnectionInput } from '../types/connection.types';
+import { readEncryptedZipEntries } from './encrypted-zip-reader';
+import { parseConnectionImportScript, type ParsedConnectionImportItem } from './connection-import-script';
 import archiver from 'archiver';
 archiver.registerFormat('zip-encrypted', require("archiver-zip-encrypted"));
 
@@ -81,6 +86,84 @@ export interface ImportResult {
     failureCount: number;
     errors: { connectionName?: string; message: string }[];
 }
+
+export interface ZipImportResult extends ImportResult {
+    skippedCount: number;
+    importedSshKeyCount: number;
+    skippedSshKeyCount: number;
+    warnings: string[];
+}
+
+const sanitizeExportedSshKeyName = (name: string): string => name.replace(/[<>:"/\\|?*]/g, '_');
+
+const readSshKeyNameFromZipPath = (pathInZip: string): string => {
+    const filename = pathInZip.split('/').pop() || pathInZip;
+    return filename.replace(/\.txt$/i, '');
+};
+
+const resolveImportedSshKeyName = (pathInZip: string, referencedKeyNames: string[]): string => {
+    const fileBaseName = readSshKeyNameFromZipPath(pathInZip);
+    const matchedReference = referencedKeyNames.find(name => sanitizeExportedSshKeyName(name) === fileBaseName);
+    return matchedReference || fileBaseName;
+};
+
+const resolveTagIdsByName = async (tagNames: string[]): Promise<number[]> => {
+    if (tagNames.length === 0) return [];
+
+    const allTags = await TagService.getAllTags();
+    const tagMap = new Map(allTags.map(tag => [tag.name, tag.id]));
+    const tagIds: number[] = [];
+
+    for (const rawName of tagNames) {
+        const tagName = rawName.trim();
+        if (!tagName) continue;
+
+        const existingTagId = tagMap.get(tagName);
+        if (existingTagId) {
+            tagIds.push(existingTagId);
+            continue;
+        }
+
+        const createdTag = await TagService.createTag(tagName);
+        tagMap.set(createdTag.name, createdTag.id);
+        tagIds.push(createdTag.id);
+    }
+
+    return tagIds;
+};
+
+const buildConnectionInputFromParsedItem = async (
+    item: ParsedConnectionImportItem,
+    sshKeyMap: Map<string, number>,
+): Promise<CreateConnectionInput> => {
+    const tagIds = await resolveTagIdsByName(item.tags);
+    const input: CreateConnectionInput = {
+        name: item.name,
+        type: item.type,
+        host: item.host,
+        port: item.port,
+        username: item.username,
+        auth_method: item.auth_method,
+        folder_id: null,
+        icon: null,
+        notes: item.notes ?? null,
+        tag_ids: tagIds,
+        jump_chain: null,
+    };
+
+    if (item.auth_method === 'key') {
+        const keyName = item.ssh_key_name;
+        const keyId = keyName ? sshKeyMap.get(keyName) : undefined;
+        if (!keyName || !keyId) {
+            throw new Error(`SSH 密钥 "${keyName || '未知'}" 未找到，无法导入该连接。`);
+        }
+        input.ssh_key_id = keyId;
+    } else {
+        input.password = item.password;
+    }
+
+    return input;
+};
 
 
 /**
@@ -506,4 +589,88 @@ export const importConnections = async (fileBuffer: Buffer): Promise<ImportResul
         errors.push({ message: `事务处理失败: ${error.message}` });
         return { successCount, failureCount, errors };
     }
+};
+
+export const importConnectionsFromEncryptedZip = async (fileBuffer: Buffer): Promise<ZipImportResult> => {
+    const zipPassword = process.env.ENCRYPTION_KEY;
+    if (!zipPassword || zipPassword.trim() === '') {
+        throw new Error('ENCRYPTION_KEY is not set or is empty, cannot decrypt the ZIP file.');
+    }
+
+    const entries = readEncryptedZipEntries(fileBuffer, zipPassword);
+    const connectionsScript = entries.get('connections.txt');
+    if (!connectionsScript) {
+        throw new Error('导入失败：ZIP 中未找到 connections.txt。');
+    }
+
+    const parsed = parseConnectionImportScript(connectionsScript.toString('utf8'));
+    const result: ZipImportResult = {
+        successCount: 0,
+        skippedCount: 0,
+        failureCount: parsed.errors.length,
+        importedSshKeyCount: 0,
+        skippedSshKeyCount: 0,
+        errors: parsed.errors.map(error => ({
+            connectionName: `第 ${error.lineNumber} 行`,
+            message: error.message,
+        })),
+        warnings: [],
+    };
+
+    const existingSshKeys = await SshKeyService.getAllSshKeyNames();
+    const sshKeyMap = new Map(existingSshKeys.map(key => [key.name, key.id]));
+    const referencedKeyNames = parsed.connections
+        .map(connection => connection.ssh_key_name)
+        .filter((name): name is string => !!name);
+    const passphraseByKeyName = new Map<string, string>();
+    parsed.connections.forEach(connection => {
+        if (connection.ssh_key_name && connection.passphrase) {
+            passphraseByKeyName.set(connection.ssh_key_name, connection.passphrase);
+        }
+    });
+
+    for (const [pathInZip, keyContent] of entries) {
+        if (!pathInZip.startsWith('ssh_keys/') || !pathInZip.toLowerCase().endsWith('.txt')) continue;
+
+        const keyName = resolveImportedSshKeyName(pathInZip, referencedKeyNames);
+        if (sshKeyMap.has(keyName)) {
+            result.skippedSshKeyCount += 1;
+            continue;
+        }
+
+        try {
+            const createdKey = await SshKeyService.createSshKey({
+                name: keyName,
+                private_key: keyContent.toString('utf8'),
+                passphrase: passphraseByKeyName.get(keyName),
+            });
+            sshKeyMap.set(createdKey.name, createdKey.id);
+            result.importedSshKeyCount += 1;
+        } catch (error: any) {
+            result.warnings.push(`SSH 密钥 "${keyName}" 导入失败：${error.message || '未知错误'}`);
+        }
+    }
+
+    for (const parsedConnection of parsed.connections) {
+        try {
+            const existingConnection = await ConnectionRepository.findConnectionByName(parsedConnection.name);
+            if (existingConnection) {
+                result.skippedCount += 1;
+                result.warnings.push(`连接 "${parsedConnection.name}" 已存在，已跳过。`);
+                continue;
+            }
+
+            const input = await buildConnectionInputFromParsedItem(parsedConnection, sshKeyMap);
+            await ConnectionService.createConnection(input);
+            result.successCount += 1;
+        } catch (error: any) {
+            result.failureCount += 1;
+            result.errors.push({
+                connectionName: parsedConnection.name,
+                message: error.message || '导入连接失败。',
+            });
+        }
+    }
+
+    return result;
 };

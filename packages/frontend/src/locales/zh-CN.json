@@ -1210,6 +1210,16 @@
         "decryptKeyInfo": "解压密码是您 data/.env 文件中的 ENCRYPTION_KEY。请妥善保管此文件。",
         "buttonText": "开始导出"
     },
+    "importConnections": {
+        "title": "导入连接数据",
+        "description": "上传从本系统导出的加密 ZIP 文件，将自动按当前 ENCRYPTION_KEY 解压并导入连接、标签和 SSH 密钥。",
+        "buttonText": "开始导入",
+        "selectFileFirst": "请先选择导出的 ZIP 文件。",
+        "success": "导入成功完成。",
+        "partialSuccess": "导入完成，但有部分项目失败。",
+        "error": "导入连接时发生错误。",
+        "summary": "连接导入 {successCount} 条，跳过 {skippedCount} 条，失败 {failureCount} 条；SSH 密钥导入 {importedSshKeyCount} 个，跳过 {skippedSshKeyCount} 个。"
+    },
     "tabs": {
       "security": "安全",
       "ipControl": "IP 管控",
