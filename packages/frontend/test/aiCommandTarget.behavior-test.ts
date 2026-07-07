@@ -33,8 +33,14 @@ assert.equal(
 
 assert.equal(
   shouldShowAICommandEntry({ isMobile: false, isAIEnabled: false }),
+  false,
+  'desktop command bar should hide the AI command entry when AI is not enabled',
+);
+
+assert.equal(
+  shouldShowAICommandEntry({ isMobile: false, isAIEnabled: true }),
   true,
-  'desktop command bar should keep the AI command entry discoverable even before AI is enabled',
+  'desktop command bar should show the AI command entry when AI is enabled',
 );
 
 assert.equal(

@@ -9,5 +9,5 @@ export function shouldShowAICommandEntry(options: {
   isMobile?: boolean;
   isAIEnabled: boolean;
 }): boolean {
-  return !options.isMobile;
+  return !options.isMobile && options.isAIEnabled;
 }
