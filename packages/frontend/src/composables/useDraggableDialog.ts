@@ -1,4 +1,5 @@
 import { nextTick, onBeforeUnmount, type Ref } from 'vue';
+import { useResizable, type UseResizableOptions } from './useResizable';
 
 type DisabledResolver = boolean | Ref<boolean> | (() => boolean);
 
@@ -7,6 +8,7 @@ interface DraggableDialogOptions {
   dialogRef: Ref<HTMLElement | null>;
   disabled?: DisabledResolver;
   margin?: number;
+  resizable?: boolean | UseResizableOptions;
 }
 
 interface DragState {
@@ -20,6 +22,10 @@ interface DragState {
 
 export function useDraggableDialog(options: DraggableDialogOptions) {
   const margin = options.margin ?? 8;
+  const isResizableEnabled = options.resizable !== false;
+  const resizeState = isResizableEnabled
+    ? useResizable(options.dialogRef, typeof options.resizable === 'object' ? options.resizable : {})
+    : null;
   let dragState: DragState | null = null;
   let previousUserSelect = '';
 
@@ -164,5 +170,6 @@ export function useDraggableDialog(options: DraggableDialogOptions) {
     centerDialog,
     startDialogDrag,
     stopDialogDrag,
+    isResizing: resizeState?.isResizing,
   };
 }

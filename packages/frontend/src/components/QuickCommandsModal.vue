@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { defineProps, defineEmits, watch, onMounted, ref } from 'vue';
+import { defineProps, defineEmits, watch, onMounted, ref, computed } from 'vue';
 import QuickCommandsView from '../views/QuickCommandsView.vue'; // 导入视图
 import { useWorkspaceEventSubscriber } from '../composables/workspaceEvents'; // 导入事件订阅器
 import { useDraggableDialog } from '../composables/useDraggableDialog';
+import { useResizable } from '../composables/useResizable';
 import { debugLog } from '../composables/useDebugLog';
 
 const props = defineProps<{
@@ -22,7 +23,18 @@ const modalContentRef = ref<HTMLElement | null>(null);
 const { centerDialog, startDialogDrag } = useDraggableDialog({
   rootRef: modalRootRef,
   dialogRef: modalContentRef,
+  resizable: false,
 });
+const { width: modalWidth, height: modalHeight } = useResizable(modalContentRef, {
+  minWidth: 420,
+  minHeight: 360,
+  maxWidth: window.innerWidth - 24,
+  maxHeight: window.innerHeight - 24,
+});
+const modalResizeStyle = computed(() => ({
+  width: modalWidth.value ? `${modalWidth.value}px` : 'min(36rem, calc(100vw - 2rem))',
+  height: modalHeight.value ? `${modalHeight.value}px` : 'min(42rem, 85vh)',
+}));
 
 // 处理从 QuickCommandsView 传来的事件
 const handleCommandExecute = (command: string) => {
@@ -66,7 +78,8 @@ onMounted(() => {
 
 <template>
   <div ref="modalRootRef" v-if="isVisible" class="fixed inset-0 bg-overlay flex justify-center items-center z-50 p-4" @click.self="closeModal">
-    <div ref="modalContentRef" class="bg-background text-foreground p-4 rounded-lg shadow-xl border border-border w-full max-w-lg max-h-[85vh] flex flex-col relative">
+    <div ref="modalContentRef" class="bg-background text-foreground p-4 rounded-lg shadow-xl border border-border flex flex-col relative" :style="modalResizeStyle">
+      <span class="quick-command-modal-resize-hint" aria-hidden="true"></span>
       <!-- Close Button -->
       <button class="absolute top-2 right-2 p-1 text-text-secondary hover:text-foreground z-10" @pointerdown.stop @click="closeModal" title="关闭">
          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -87,5 +100,16 @@ onMounted(() => {
 /* Add any specific modal styles if needed */
 .bg-overlay {
   background-color: rgba(0, 0, 0, 0.6);
+}
+
+.quick-command-modal-resize-hint {
+  position: absolute;
+  right: 0.35rem;
+  bottom: 0.35rem;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-right: 2px solid color-mix(in srgb, var(--text-color-secondary) 55%, transparent);
+  border-bottom: 2px solid color-mix(in srgb, var(--text-color-secondary) 55%, transparent);
+  pointer-events: none;
 }
 </style>

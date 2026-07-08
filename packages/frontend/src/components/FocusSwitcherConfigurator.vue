@@ -7,6 +7,7 @@ import { useFocusSwitcherStore, type FocusableInput, type FocusItemConfig, type 
 import { storeToRefs } from 'pinia';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
 import { useDraggableDialog } from '../composables/useDraggableDialog';
+import { useResizable } from '../composables/useResizable';
 
 // 本地接口，仅用于右侧列表显示
 interface SequenceDisplayItem extends FocusableInput {}
@@ -34,6 +35,13 @@ const dialogRef = ref<HTMLElement | null>(null);
 const { startDialogDrag } = useDraggableDialog({
   rootRef: dialogRootRef,
   dialogRef,
+  resizable: false,
+});
+const { width: resizableDialogWidth, height: resizableDialogHeight } = useResizable(dialogRef, {
+  minWidth: 720,
+  minHeight: 460,
+  maxWidth: window.innerWidth - 24,
+  maxHeight: window.innerHeight - 24,
 });
 const initialDialogState = { width: 900, height: 600 }; // *** 增加初始尺寸 ***
 const dialogStyle = reactive({
@@ -127,6 +135,11 @@ watch(() => props.isVisible, async (newValue) => { // ++ Make async for potentia
   }
 });
 
+watch([resizableDialogWidth, resizableDialogHeight], ([nextWidth, nextHeight]) => {
+  if (nextWidth) dialogStyle.width = `${nextWidth}px`;
+  if (nextHeight) dialogStyle.height = `${nextHeight}px`;
+});
+
 // 监听本地序列（包括快捷键）变化，标记未保存更改
 // --- 修改：监听 localSequence 和 localItemConfigs 的变化 ---
 watch([localSequence, localItemConfigs], () => {
@@ -209,6 +222,7 @@ const localAvailableInputs = computed(() => {
 <template>
   <div ref="dialogRootRef" v-if="isVisible" class="fixed inset-0 bg-overlay flex justify-center items-start z-[1000] pointer-events-none" @click.self="closeDialog">
     <div ref="dialogRef" class="bg-dialog text-dialog-text rounded-lg shadow-xl flex flex-col overflow-hidden absolute pointer-events-auto cursor-default" :style="dialogStyle">
+      <span class="focus-switcher-resize-hint" aria-hidden="true"></span>
       <header class="flex justify-between items-center p-4 border-b border-border bg-header cursor-move select-none" @pointerdown="startDialogDrag">
         <h2 class="text-lg font-semibold">{{ t('focusSwitcher.configTitle', '配置 Alt 焦点切换') }}</h2>
         <button class="bg-transparent border-none text-2xl cursor-pointer text-text-secondary hover:text-foreground leading-none p-0" @pointerdown.stop @click="closeDialog" :title="t('common.close', '关闭')">&times;</button>
@@ -347,4 +361,18 @@ const captureShortcut = (event: KeyboardEvent, itemConfig: FocusItemConfig) => {
   }
 };
 </script>
+
+<style scoped>
+.focus-switcher-resize-hint {
+  position: absolute;
+  right: 0.35rem;
+  bottom: 0.35rem;
+  width: 0.8rem;
+  height: 0.8rem;
+  border-right: 2px solid color-mix(in srgb, var(--text-color-secondary) 55%, transparent);
+  border-bottom: 2px solid color-mix(in srgb, var(--text-color-secondary) 55%, transparent);
+  pointer-events: none;
+  z-index: 1;
+}
+</style>
 

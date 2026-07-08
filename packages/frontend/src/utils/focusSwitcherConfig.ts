@@ -96,7 +96,9 @@ export const shouldSuppressFocusSwitcherKeyDefault = (
 );
 
 export const shouldEnableFocusSwitcherHotkeys = (normalizedRoutePath: string): boolean => (
-  normalizedRoutePath === '/workspace'
+  normalizedRoutePath === '/'
+  || normalizedRoutePath === '/settings'
+  || normalizedRoutePath === '/workspace'
   || normalizedRoutePath === '/connections'
   || normalizedRoutePath.startsWith('/workspace/')
   || normalizedRoutePath.startsWith('/connections/')

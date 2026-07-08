@@ -1,6 +1,6 @@
 import { ref, onMounted, onBeforeUnmount, type Ref, watch } from 'vue';
 
-interface UseResizableOptions {
+export interface UseResizableOptions {
   minWidth?: number;
   minHeight?: number;
   maxWidth?: number;
@@ -72,6 +72,10 @@ export function useResizable(
 
     width.value = pendingSize.width;
     height.value = pendingSize.height;
+    if (elementRef.value) {
+      elementRef.value.style.width = `${pendingSize.width}px`;
+      elementRef.value.style.height = `${pendingSize.height}px`;
+    }
     pendingSize = null;
   };
 

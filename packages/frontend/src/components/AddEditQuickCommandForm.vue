@@ -151,6 +151,7 @@ const { centerDialog, startDialogDrag } = useDraggableDialog({
   rootRef: modalRootRef,
   dialogRef: modalContentRef,
   disabled: isSubmitting,
+  resizable: false,
 });
 const R_MIN_WIDTH = 800; // 可调整大小的最小宽度 (像素)
 const R_MIN_HEIGHT = 700; // 可调整大小的最小高度 (像素)

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { RouterView, useRoute } from 'vue-router';
+import { RouterView, useRoute, useRouter } from 'vue-router';
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useAuthStore } from './stores/auth.store';
@@ -14,6 +14,7 @@ import FileEditorOverlay from './components/FileEditorOverlay.vue';
 import FocusSwitcherConfigurator from './components/FocusSwitcherConfigurator.vue';
 import VncModal from './components/VncModal.vue';
 import ConfirmDialog from './components/common/ConfirmDialog.vue';
+import SettingsView from './views/SettingsView.vue';
 import { useDialogStore } from './stores/dialog.store';
 import { debugLog } from './composables/useDebugLog';
 import {
@@ -36,6 +37,7 @@ const { isVncModalOpen, vncConnectionInfo } = storeToRefs(sessionStore); // +++ 
 const { isMobile } = useDeviceDetection();
 
 const route = useRoute();
+const router = useRouter();
 
 // +++ 存储上一次由切换器聚焦的 ID +++
 const lastFocusedIdBySwitcher = ref<string | null>(null);
@@ -86,6 +88,11 @@ const normalizedRoutePath = computed(() => {
 });
 
 const isFocusSwitcherHotkeyRoute = computed(() => shouldEnableFocusSwitcherHotkeys(normalizedRoutePath.value));
+const isSettingsOverlayVisible = computed(() => route.name === 'Connections' && route.query.settings === '1');
+
+const closeSettingsOverlay = () => {
+  void router.push({ name: 'Connections' });
+};
 
 // +++ 处理 Alt 键按下的事件处理函数，并记录快捷键 +++
 const handleAltKeyDown = async (event: KeyboardEvent) => { // +++ 改为 async +++
@@ -97,12 +104,16 @@ const handleAltKeyDown = async (event: KeyboardEvent) => { // +++ 改为 async +
     isAltPressed.value = true;
     altShortcutKey.value = null;
     // console.log('[App] Alt key pressed down.');
-  } else if (isAltPressed.value && !['Control', 'Shift', 'Alt', 'Meta'].includes(event.key)) {
+  } else if (
+    (isAltPressed.value || (event.altKey && !event.ctrlKey && !event.metaKey))
+    && !['Control', 'Shift', 'Alt', 'Meta'].includes(event.key)
+  ) {
     // 如果 Alt 正被按住，且按下了非修饰键 (移除 !shortcutTriggeredInKeyDown 检查)
     let key = event.key;
     if (key.length === 1) key = key.toUpperCase();
 
     if (/^[a-zA-Z0-9]$/.test(key)) {
+        isAltPressed.value = true;
         altShortcutKey.value = key; // 记录按键
         const shortcutString = `Alt+${key}`;
         debugLog(`[App] KeyDown: Alt+${key} detected. Checking shortcut: ${shortcutString}`);
@@ -237,6 +248,12 @@ const handleGlobalKeyUp = async (event: KeyboardEvent) => {
 
     <!-- 根据设置条件渲染全局文件编辑器弹窗 -->
     <FileEditorOverlay v-if="showPopupFileEditorBoolean" :is-mobile="isMobile" />
+
+    <SettingsView
+      v-if="isSettingsOverlayVisible"
+      is-dialog
+      @close="closeSettingsOverlay"
+    />
 
     <!-- +++ 条件渲染焦点切换配置器 (使用 v-show 保持实例) +++ -->
     <FocusSwitcherConfigurator

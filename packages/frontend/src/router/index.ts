@@ -49,7 +49,7 @@ const routes: Array<RouteRecordRaw> = [
   {
     path: '/settings',
     name: 'Settings',
-    component: () => import('../views/SettingsOverlayView.vue')
+    redirect: { name: 'Connections', query: { settings: '1' } }
   },
   // 通知管理页面
   {
@@ -61,7 +61,7 @@ const routes: Array<RouteRecordRaw> = [
   {
     path: '/audit-logs',
     name: 'AuditLogs',
-    redirect: { name: 'Settings', query: { tab: 'auditLogs' } }
+    redirect: { name: 'Connections', query: { settings: '1', tab: 'auditLogs' } }
   },
   // 初始设置页面
   {

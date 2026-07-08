@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router';
-import ConnectionsView from './ConnectionsView.vue';
 import SettingsView from './SettingsView.vue';
 
 const router = useRouter();
@@ -12,7 +11,6 @@ const closeSettingsOverlay = () => {
 
 <template>
   <div class="settings-overlay-view">
-    <ConnectionsView />
     <SettingsView is-dialog @close="closeSettingsOverlay" />
   </div>
 </template>

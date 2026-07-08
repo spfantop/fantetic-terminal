@@ -14,6 +14,9 @@ const terminalVue = readFileSync(resolve('src/components/Terminal.vue'), 'utf8')
 const terminalTabBar = readFileSync(resolve('src/components/TerminalTabBar.vue'), 'utf8');
 const quickCommandsView = readFileSync(resolve('src/views/QuickCommandsView.vue'), 'utf8');
 const addEditQuickCommandForm = readFileSync(resolve('src/components/AddEditQuickCommandForm.vue'), 'utf8');
+const quickCommandsModal = readFileSync(resolve('src/components/QuickCommandsModal.vue'), 'utf8');
+const focusSwitcherConfigurator = readFileSync(resolve('src/components/FocusSwitcherConfigurator.vue'), 'utf8');
+const draggableDialogComposable = readFileSync(resolve('src/composables/useDraggableDialog.ts'), 'utf8');
 
 const tabKeys = createSettingsTabs((key, fallback) => fallback || key).map(tab => tab.key);
 
@@ -143,13 +146,20 @@ assert.match(
 
 assert.match(
   routerIndex,
-  /path:\s*'\/settings'[\s\S]*component:\s*\(\)\s*=>\s*import\('\.\.\/views\/SettingsOverlayView\.vue'\)/,
-  'settings should render as an overlay on top of the server page',
+  /path:\s*'\/settings'[\s\S]*redirect:\s*\{\s*name:\s*'Connections'[\s\S]*query:\s*\{\s*settings:\s*'1'\s*\}/,
+  'settings path should redirect to a query overlay on the home server route so the server page instance stays mounted',
 );
 
 assert.ok(
-  settingsOverlayView.includes('<ConnectionsView />') && settingsOverlayView.includes('<SettingsView is-dialog'),
-  'settings overlay should show the server page behind the settings dialog',
+  !settingsOverlayView.includes('<ConnectionsView />'),
+  'settings overlay should not create a second server page instance behind the settings dialog',
+);
+
+assert.ok(
+  appVue.includes('<SettingsView')
+    && appVue.includes('isSettingsOverlayVisible')
+    && appVue.includes('closeSettingsOverlay'),
+  'App.vue should host the settings dialog as a top-level overlay while preserving the server page instance',
 );
 
 assert.ok(
@@ -181,9 +191,44 @@ assert.ok(
 );
 
 assert.match(
-  settingsOverlayView,
+  appVue,
   /router\.push\(\{\s*name:\s*'Connections'\s*\}\)/,
   'closing the settings overlay should return to the home server route',
+);
+
+assert.ok(
+  settingsView.includes("from '../composables/useResizable'")
+    && settingsView.includes('useResizable(dialogShellRef')
+    && settingsView.includes('settings-resize-hint'),
+  'settings dialog should be resizable from its border',
+);
+
+assert.ok(
+  quickCommandsModal.includes("from '../composables/useResizable'")
+    && quickCommandsModal.includes('useResizable(modalContentRef')
+    && quickCommandsModal.includes('quick-command-modal-resize-hint'),
+  'quick commands modal should be resizable from its border',
+);
+
+assert.ok(
+  focusSwitcherConfigurator.includes("from '../composables/useResizable'")
+    && focusSwitcherConfigurator.includes('useResizable(dialogRef')
+    && focusSwitcherConfigurator.includes('focus-switcher-resize-hint'),
+  'focus switcher configurator should be resizable from its border',
+);
+
+assert.ok(
+  draggableDialogComposable.includes("from './useResizable'")
+    && draggableDialogComposable.includes('resizable?: boolean | UseResizableOptions')
+    && draggableDialogComposable.includes('options.resizable !== false'),
+  'common draggable dialogs should support border resizing by default',
+);
+
+assert.ok(
+  addEditQuickCommandForm.includes('resizable: false')
+    && quickCommandsModal.includes('resizable: false')
+    && focusSwitcherConfigurator.includes('resizable: false'),
+  'dialogs with explicit resize handling should disable the draggable default resize listener',
 );
 
 console.log('navigation relocation behavior ok');

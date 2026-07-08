@@ -14,6 +14,7 @@
       :aria-modal="props.isDialog ? 'true' : undefined"
       :aria-label="props.isDialog ? t('nav.settings') : undefined"
     >
+      <span v-if="props.isDialog" class="settings-resize-hint" aria-hidden="true"></span>
       <aside class="settings-sidebar" aria-label="设置">
         <nav class="settings-nav">
           <button
@@ -176,6 +177,7 @@ import NotificationsView from './NotificationsView.vue';
 import DashboardView from './DashboardView.vue';
 import AuditLogView from './AuditLogView.vue';
 import { createSettingsTabs, type SettingsTabKey } from '../utils/settingsTabs';
+import { useResizable } from '../composables/useResizable';
 
 const props = withDefaults(defineProps<{
   isDialog?: boolean;
@@ -204,6 +206,12 @@ const readRouteTab = (): SettingsTabKey | null => {
 const activeTab = ref<SettingsTabKey>(props.isDialog ? tabs.value[0].key : (readRouteTab() || tabs.value[0].key));
 const activeTabInfo = computed(() => tabs.value.find(tab => tab.key === activeTab.value) || tabs.value[0]);
 const dialogShellRef = ref<HTMLElement | null>(null);
+const { width: dialogWidth, height: dialogHeight } = useResizable(dialogShellRef, {
+  minWidth: 640,
+  minHeight: 420,
+  maxWidth: window.innerWidth - 24,
+  maxHeight: window.innerHeight - 24,
+});
 const dialogPosition = ref<{ left: number; top: number } | null>(null);
 const dialogDragState = ref<{
   pointerId: number;
@@ -213,9 +221,15 @@ const dialogDragState = ref<{
   initialTop: number;
 } | null>(null);
 const dialogStyle = computed(() => {
-  if (!dialogPosition.value) return undefined;
+  const style: Record<string, string | undefined> = {
+    width: dialogWidth.value ? `${dialogWidth.value}px` : undefined,
+    height: dialogHeight.value ? `${dialogHeight.value}px` : undefined,
+  };
+
+  if (!dialogPosition.value) return style;
 
   return {
+    ...style,
     left: `${dialogPosition.value.left}px`,
     top: `${dialogPosition.value.top}px`,
     margin: '0',
@@ -405,6 +419,17 @@ onUnmounted(() => {
   box-shadow: 0 24px 72px rgba(15, 23, 42, 0.22);
   pointer-events: auto;
   transform: translate(-50%, -50%);
+}
+
+.settings-resize-hint {
+  position: absolute;
+  right: 0.35rem;
+  bottom: 0.35rem;
+  width: 0.8rem;
+  height: 0.8rem;
+  border-right: 2px solid color-mix(in srgb, var(--text-color-secondary) 55%, transparent);
+  border-bottom: 2px solid color-mix(in srgb, var(--text-color-secondary) 55%, transparent);
+  pointer-events: none;
 }
 
 .settings-sidebar {

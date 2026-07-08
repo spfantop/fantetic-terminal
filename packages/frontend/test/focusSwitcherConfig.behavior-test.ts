@@ -107,6 +107,12 @@ assert.equal(
 );
 
 assert.equal(
+  shouldEnableFocusSwitcherHotkeys('/'),
+  true,
+  'focus switcher hotkeys should be active on the home server route',
+);
+
+assert.equal(
   shouldEnableFocusSwitcherHotkeys('/connections'),
   true,
   'focus switcher hotkeys should be active on the connections workspace route',
@@ -120,8 +126,8 @@ assert.equal(
 
 assert.equal(
   shouldEnableFocusSwitcherHotkeys('/settings'),
-  false,
-  'focus switcher hotkeys should stay inactive outside workspace-like routes',
+  true,
+  'settings overlay should keep focus switcher hotkeys active because it sits on top of the server route',
 );
 
 console.log('focus switcher config behavior ok');
