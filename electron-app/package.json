@@ -1,0 +1,90 @@
+{
+  "name": "fantetic-electron-app",
+  "version": "1.0.0",
+  "description": "Electron application for Fantetic Terminal",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder"
+  },
+  "keywords": [
+    "electron",
+    "fantetic",
+    "terminal"
+  ],
+  "author": "",
+  "homepage": "https://github.com/spfantop/fantetic-terminal",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.0.0"
+  },
+  "dependencies": {
+    "electron-store": "^10.0.1",
+    "express": "^5.1.0"
+  },
+  "build": {
+    "appId": "com.fantetic.terminal",
+    "productName": "Fantetic Terminal",
+    "asar": true,
+    "directories": {
+      "output": "dist_electron",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../packages/frontend/dist",
+        "to": "packages/frontend/dist",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../packages/backend/dist",
+        "to": "packages/backend/dist",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../packages/backend/package.json",
+        "to": "packages/backend/package.json"
+      },
+      {
+        "from": "../node_modules",
+        "to": "node_modules",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "../packages/frontend/public/icons/icon-512x512.png"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "icon": "../packages/frontend/public/icons/icon-512x512.png"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "../packages/frontend/public/icons/icon-512x512.png",
+      "maintainer": "Fantetic"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

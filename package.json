@@ -11,6 +11,10 @@
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
+    "build:frontend": "npm --workspace @fantetic-terminal/frontend run build",
+    "build:backend": "npm --workspace @fantetic-terminal/backend run build",
+    "build:app": "npm run build:frontend && npm run build:backend && npm --prefix electron-app run build",
+    "dev:app": "node electron-app/dev-app.js",
     "postinstall": "patch-package"
   },
   "repository": {

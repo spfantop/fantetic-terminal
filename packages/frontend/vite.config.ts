@@ -11,6 +11,8 @@ export default defineConfig({
     (monacoEditorPlugin as any).default({})
   ],
   server: {
+    port: 22457,
+    strictPort: true,
     proxy: {
       // 将所有 /api 开头的请求代理到后端服务器
       '/api': {

@@ -158,5 +158,6 @@ dist-scripts/
 /tsc
 
 /packages/backend/data
+/packages/backend/app-data-backend/
 electron-app/node_modules/
 electron-app/dist_electron/
