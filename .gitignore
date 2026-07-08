@@ -161,3 +161,4 @@ dist-scripts/
 /packages/backend/app-data-backend/
 electron-app/node_modules/
 electron-app/dist_electron/
+electron-app/runtime/

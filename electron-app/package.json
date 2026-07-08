@@ -6,7 +6,8 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-    "build": "electron-builder"
+    "prepare:runtime": "node build-tools/prepare-runtime.js",
+    "build": "npm run prepare:runtime && electron-builder"
   },
   "keywords": [
     "electron",
@@ -39,26 +40,8 @@
     ],
     "extraResources": [
       {
-        "from": "../packages/frontend/dist",
-        "to": "packages/frontend/dist",
-        "filter": [
-          "**/*"
-        ]
-      },
-      {
-        "from": "../packages/backend/dist",
-        "to": "packages/backend/dist",
-        "filter": [
-          "**/*"
-        ]
-      },
-      {
-        "from": "../packages/backend/package.json",
-        "to": "packages/backend/package.json"
-      },
-      {
-        "from": "../node_modules",
-        "to": "node_modules",
+        "from": "runtime/packages",
+        "to": "packages",
         "filter": [
           "**/*"
         ]

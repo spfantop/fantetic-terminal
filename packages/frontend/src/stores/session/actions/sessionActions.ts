@@ -16,7 +16,7 @@ import { createDockerManager, type DockerManagerDependencies } from '../../../co
 import { registerSshSuspendHandlers } from './sshSuspendActions'; 
 import { debugLog } from '../../../composables/useDebugLog';
 import type { WsConnectionStatus } from '../../../composables/useWebSocketConnection';
-import { resolveWebSocketBaseUrl } from '../../../utils/runtimeConfig';
+import { isRemoteDesktopFeatureAvailable, resolveWebSocketBaseUrl } from '../../../utils/runtimeConfig';
 // --- 辅助函数 (特定于此模块的 actions) ---
 const findConnectionInfo = (connectionId: number | string, connectionsStore: ReturnType<typeof useConnectionsStore>): ConnectionInfo | undefined => {
   return connectionsStore.connections.find(c => c.id === Number(connectionId));
@@ -204,6 +204,10 @@ export const openRemoteDesktopSession = (connection: ConnectionInfo) => {
     console.warn(`[SessionActions] openRemoteDesktopSession 仅用于 RDP/VNC，会话类型为 ${connection.type}。`);
     return;
   }
+  if (!isRemoteDesktopFeatureAvailable()) {
+    console.warn('[SessionActions] Electron App 未内置 guacd，已禁用 RDP/VNC 会话。');
+    return;
+  }
 
   const newSessionId = generateSessionId();
   const newSession = {
@@ -354,6 +358,10 @@ export const handleConnectRequest = (
     }
 ) => {
   const { connectionsStore, router, openRdpSessionAction, t, navigateToWorkspace = true } = dependencies;
+  if ((connection.type === 'RDP' || connection.type === 'VNC') && !isRemoteDesktopFeatureAvailable()) {
+    console.warn('[SessionActions] Electron App 未内置 guacd，已忽略 RDP/VNC 连接请求。');
+    return;
+  }
 
   if (connection.type === 'RDP') {
     openRdpSessionAction(connection);

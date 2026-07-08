@@ -178,6 +178,7 @@ import DashboardView from './DashboardView.vue';
 import AuditLogView from './AuditLogView.vue';
 import { createSettingsTabs, type SettingsTabKey } from '../utils/settingsTabs';
 import { useResizable } from '../composables/useResizable';
+import { isAccountFeatureAvailable } from '../utils/runtimeConfig';
 
 const props = withDefaults(defineProps<{
   isDialog?: boolean;
@@ -193,9 +194,10 @@ const settingsStore = useSettingsStore();
 const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
+const accountFeatureAvailable = isAccountFeatureAvailable();
 
 // Define tabs for settings sections
-const tabs = ref(createSettingsTabs(t));
+const tabs = ref(createSettingsTabs(t).filter(tab => accountFeatureAvailable || tab.key !== 'security'));
 const isSettingsTabKey = (value: unknown): value is SettingsTabKey => (
   typeof value === 'string' && tabs.value.some(tab => tab.key === value)
 );

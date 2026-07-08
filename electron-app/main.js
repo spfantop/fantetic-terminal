@@ -77,6 +77,16 @@ const startProductionServices = async () => {
   return `http://localhost:${PROD_FRONTEND_PORT}`;
 };
 
+const pipeProcessOutput = (processName, childProcess) => {
+  childProcess.stdout.on('data', (data) => {
+    console.log(`[${processName} STDOUT] ${data.toString().trim()}`);
+  });
+
+  childProcess.stderr.on('data', (data) => {
+    console.error(`[${processName} STDERR] ${data.toString().trim()}`);
+  });
+};
+
 const startBackendProcess = (backendDataPath) => {
   const backendResourcesPath = path.join(process.resourcesPath, 'packages/backend');
   backendProcess = spawn(process.execPath, ['dist/index.js'], {
@@ -86,19 +96,14 @@ const startBackendProcess = (backendDataPath) => {
       ...process.env,
       APP_BACKEND_DATA_PATH: backendDataPath,
       ELECTRON_RUN_AS_NODE: '1',
+      FANTETIC_APP_MODE: 'electron',
       PORT: String(PROD_BACKEND_PORT),
       RP_ORIGIN: `http://localhost:${PROD_FRONTEND_PORT}`,
       NODE_ENV: 'production',
     },
   });
 
-  backendProcess.stdout.on('data', (data) => {
-    console.log(`[Backend STDOUT] ${data.toString().trim()}`);
-  });
-
-  backendProcess.stderr.on('data', (data) => {
-    console.error(`[Backend STDERR] ${data.toString().trim()}`);
-  });
+  pipeProcessOutput('Backend', backendProcess);
 
   backendProcess.on('close', (code) => {
     console.log(`[Backend Process] exited with code ${code}`);
@@ -146,6 +151,7 @@ const stopProductionServices = () => {
       }
     }, 5000);
   }
+
 };
 
 app.commandLine.appendSwitch('disable-features', 'OutOfBlinkCors');

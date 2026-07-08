@@ -8,6 +8,7 @@ import { useConnectionsStore } from '../stores/connections.store';
 import Guacamole from 'guacamole-common-js';
 import apiClient from '../utils/apiClient';
 import { ConnectionInfo } from '../stores/connections.store';
+import { resolveRemoteDesktopProxyWebSocketUrl } from '../utils/runtimeConfig';
 
 const { t } = useI18n();
 const settingsStore = useSettingsStore(); 
@@ -61,19 +62,6 @@ const MIN_REMOTE_DESKTOP_WIDTH = 640;
 const MIN_REMOTE_DESKTOP_HEIGHT = 480;
 const DISPLAY_SIZE_WAIT_FRAMES = 12;
 
-// Dynamically construct WebSocket URL based on environment
-let backendBaseUrl: string;
-const LOCAL_BACKEND_URL = 'ws://localhost:3001'; // For RDP proxy via main backend
-
-// Determine WebSocket URL based on hostname for RDP
-if (window.location.hostname === 'localhost') {
-  backendBaseUrl = LOCAL_BACKEND_URL;
-} else {
-  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsHostAndPort = window.location.host;
-  backendBaseUrl = `${wsProtocol}//${wsHostAndPort}/ws`; // Assuming RDP proxy is at /ws path
-}
-
 const handleConnection = async () => {
   if (!props.connection || !rdpDisplayRef.value) {
     statusMessage.value = t('remoteDesktopModal.errors.missingInfo');
@@ -112,7 +100,7 @@ const handleConnection = async () => {
       }
       statusMessage.value = t('remoteDesktopModal.status.connectingWs');
 
-      tunnelUrl = `${backendBaseUrl}/rdp-proxy?token=${encodeURIComponent(token)}&width=${widthToSend}&height=${heightToSend}&dpi=${dpiToSend}`;
+      tunnelUrl = resolveRemoteDesktopProxyWebSocketUrl(token, widthToSend, heightToSend);
 
     } else {
       throw new Error(`Unsupported connection type: ${props.connection.type}`);

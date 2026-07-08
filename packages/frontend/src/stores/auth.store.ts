@@ -2,6 +2,7 @@ import { debugLog } from '../composables/useDebugLog';
 import { defineStore } from 'pinia';
 import apiClient from '../utils/apiClient'; 
 import router from '../router'; 
+import { isAccountFeatureAvailable } from '../utils/runtimeConfig';
 
 // 扩展的用户信息接口，包含 2FA 状态和语言偏好
 interface UserInfo {
@@ -10,6 +11,12 @@ interface UserInfo {
     isTwoFactorEnabled?: boolean; // 后端 /status 接口会返回这个
     language?: string; // 历史字段，界面语言以系统设置为准
 }
+
+const APP_LOCAL_USER: UserInfo = {
+    id: 1,
+    username: 'local-app',
+    isTwoFactorEnabled: false,
+};
 
 // Passkey Information Interface
 export interface PasskeyInfo { // + Export 接口
@@ -166,6 +173,14 @@ export const useAuthStore = defineStore('auth', {
 
         // 登出 Action
         async logout() {
+            if (!isAccountFeatureAvailable()) {
+                this.isAuthenticated = true;
+                this.user = APP_LOCAL_USER;
+                this.needsSetup = false;
+                this.loginRequires2FA = false;
+                return;
+            }
+
             this.isLoading = true;
             this.error = null;
             this.loginRequires2FA = false; // 重置 2FA 状态
@@ -190,6 +205,14 @@ export const useAuthStore = defineStore('auth', {
 
         // 检查并更新认证状态 Action
         async checkAuthStatus() {
+            if (!isAccountFeatureAvailable()) {
+                this.isAuthenticated = true;
+                this.user = APP_LOCAL_USER;
+                this.loginRequires2FA = false;
+                this.isLoading = false;
+                return;
+            }
+
             this.isLoading = true;
             try {
                 const response = await apiClient.get<{ isAuthenticated: boolean; user: UserInfo }>('/auth/status'); // 使用 apiClient
@@ -296,6 +319,11 @@ export const useAuthStore = defineStore('auth', {
 
         // 检查是否需要初始设置
         async checkSetupStatus() {
+            if (!isAccountFeatureAvailable()) {
+                this.needsSetup = false;
+                return false;
+            }
+
             // 不需要设置 isLoading，这个检查应该在后台快速完成
             try {
                 const response = await apiClient.get<{ needsSetup: boolean }>('/auth/needs-setup'); // 使用 apiClient

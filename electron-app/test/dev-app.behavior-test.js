@@ -3,6 +3,7 @@ const path = require('node:path');
 
 const {
   DEV_FRONTEND_PORT,
+  DEV_BACKEND_PORT,
   createDevProcessSpecs,
   createSpawnConfig,
 } = require('../dev-app');
@@ -11,6 +12,7 @@ const rootDir = path.resolve('D:/repo/fantetic-terminal');
 const specs = createDevProcessSpecs({ rootDir, npmCommand: 'npm.cmd' });
 
 assert.equal(DEV_FRONTEND_PORT, 22457);
+assert.equal(DEV_BACKEND_PORT, 3001);
 assert.deepEqual(
   specs.map((spec) => spec.name),
   ['backend', 'frontend', 'electron'],
@@ -21,6 +23,9 @@ assert.deepEqual(specs[0], {
   command: 'npm.cmd',
   args: ['--workspace', '@fantetic-terminal/backend', 'run', 'dev'],
   cwd: rootDir,
+  env: {
+    FANTETIC_APP_MODE: 'electron',
+  },
 });
 
 assert.deepEqual(specs[1], {
@@ -39,6 +44,9 @@ assert.deepEqual(specs[1], {
     '--strictPort',
   ],
   cwd: rootDir,
+  env: {
+    VITE_FANTETIC_APP_MODE: 'electron',
+  },
 });
 
 assert.deepEqual(specs[2], {
@@ -64,7 +72,10 @@ assert.deepEqual(createSpawnConfig(specs[0], {
   options: {
     cwd: rootDir,
     stdio: 'inherit',
-    env: testEnv,
+    env: {
+      ...testEnv,
+      FANTETIC_APP_MODE: 'electron',
+    },
   },
 });
 
@@ -77,7 +88,10 @@ assert.deepEqual(createSpawnConfig(specs[0], {
   options: {
     cwd: rootDir,
     stdio: 'inherit',
-    env: testEnv,
+    env: {
+      ...testEnv,
+      FANTETIC_APP_MODE: 'electron',
+    },
   },
 });
 

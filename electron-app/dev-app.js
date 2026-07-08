@@ -28,7 +28,10 @@ const createSpawnConfig = (spec, {
   const options = {
     cwd: spec.cwd,
     stdio: 'inherit',
-    env,
+    env: {
+      ...env,
+      ...(spec.env ?? {}),
+    },
   };
 
   if (platform === 'win32') {
@@ -55,6 +58,9 @@ const createDevProcessSpecs = ({
     command: npmCommand,
     args: ['--workspace', '@fantetic-terminal/backend', 'run', 'dev'],
     cwd: rootDir,
+    env: {
+      FANTETIC_APP_MODE: 'electron',
+    },
   },
   {
     name: 'frontend',
@@ -72,6 +78,9 @@ const createDevProcessSpecs = ({
       '--strictPort',
     ],
     cwd: rootDir,
+    env: {
+      VITE_FANTETIC_APP_MODE: 'electron',
+    },
   },
   {
     name: 'electron',

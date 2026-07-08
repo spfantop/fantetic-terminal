@@ -1,6 +1,7 @@
 import { debugLog } from '../composables/useDebugLog';
 import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router';
 import { useAuthStore } from '../stores/auth.store'; // 导入 Auth Store
+import { isAccountFeatureAvailable } from '../utils/runtimeConfig';
 
 // 路由配置
 const routes: Array<RouteRecordRaw> = [
@@ -79,6 +80,15 @@ const router = createRouter({
 
 // 添加全局前置守卫
 router.beforeEach((to, from, next) => {
+  if (!isAccountFeatureAvailable()) {
+    if (to.name === 'Login' || to.name === 'Setup') {
+      next({ name: 'Connections' });
+      return;
+    }
+    next();
+    return;
+  }
+
   // 在守卫内部获取 store 实例，确保 Pinia 已初始化
   const authStore = useAuthStore();
 

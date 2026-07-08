@@ -10,9 +10,11 @@ export const ELECTRON_BACKEND_PORT = 22458;
 
 export const readRuntimeConfigEnv = (): RuntimeConfigEnv => {
   const userAgent = navigator.userAgent.toLowerCase();
+  const isElectronAppMode = import.meta.env.VITE_FANTETIC_APP_MODE === 'electron';
 
   return {
-    isElectron: userAgent.includes('electron') || Boolean((window as any).electronAPI),
+    isElectron:
+      isElectronAppMode || userAgent.includes('electron') || Boolean((window as any).electronAPI),
     isProd: import.meta.env.PROD,
     locationProtocol: window.location.protocol,
     locationHost: window.location.host,
@@ -34,4 +36,32 @@ export const resolveWebSocketBaseUrl = (env: RuntimeConfigEnv = readRuntimeConfi
     : env.locationHost;
 
   return `${protocol}//${host}/ws/`;
+};
+
+export const isRemoteDesktopFeatureAvailable = (
+  env: RuntimeConfigEnv = readRuntimeConfigEnv(),
+): boolean => {
+  return !env.isElectron;
+};
+
+export const isAccountFeatureAvailable = (
+  env: RuntimeConfigEnv = readRuntimeConfigEnv(),
+): boolean => {
+  return !env.isElectron;
+};
+
+export const resolveRemoteDesktopProxyWebSocketUrl = (
+  token: string,
+  width: number,
+  height: number,
+  env: RuntimeConfigEnv = readRuntimeConfigEnv(),
+): string => {
+  const params = new URLSearchParams({
+    token,
+    width: String(width),
+    height: String(height),
+    dpi: '96',
+  });
+
+  return `${resolveWebSocketBaseUrl(env)}rdp-proxy?${params.toString()}`;
 };

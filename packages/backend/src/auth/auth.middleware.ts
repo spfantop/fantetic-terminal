@@ -1,9 +1,22 @@
 import { Request, Response, NextFunction } from 'express';
+import {
+    ELECTRON_APP_USERNAME,
+    ELECTRON_APP_USER_ID,
+    isElectronAppMode,
+} from '../config/app-mode';
 
 /**
  * 认证中间件：检查用户是否已登录 (通过 session 中的 userId 判断)
  */
 export const isAuthenticated = (req: Request, res: Response, next: NextFunction): void => {
+    if (isElectronAppMode()) {
+        req.session.userId = ELECTRON_APP_USER_ID;
+        req.session.username = ELECTRON_APP_USERNAME;
+        req.session.requiresTwoFactor = false;
+        next();
+        return;
+    }
+
     if (req.session && req.session.userId) {
         // 用户已登录，继续处理请求
         next();

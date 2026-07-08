@@ -11,6 +11,11 @@ import { settingsService } from '../settings/settings.service';
 import { passkeyService } from '../passkey/passkey.service'; // +++ Passkey Service
 import { passkeyRepository } from '../passkey/passkey.repository'; // +++ Passkey Repository
 import { userRepository } from '../user/user.repository'; // For passkey auth success
+import {
+    ELECTRON_APP_USERNAME,
+    ELECTRON_APP_USER_ID,
+    isElectronAppMode,
+} from '../config/app-mode';
 
 const notificationService = new NotificationService();
 const auditLogService = new AuditLogService();
@@ -445,6 +450,21 @@ export const login = async (req: Request, res: Response): Promise<void> => {
  * 获取当前用户的认证状态 (GET /api/v1/auth/status)
  */
 export const getAuthStatus = async (req: Request, res: Response): Promise<void> => {
+    if (isElectronAppMode()) {
+        req.session.userId = ELECTRON_APP_USER_ID;
+        req.session.username = ELECTRON_APP_USERNAME;
+        req.session.requiresTwoFactor = false;
+        res.status(200).json({
+            isAuthenticated: true,
+            user: {
+                id: ELECTRON_APP_USER_ID,
+                username: ELECTRON_APP_USERNAME,
+                isTwoFactorEnabled: false
+            }
+        });
+        return;
+    }
+
     const userId = req.session.userId;
     const username = req.session.username;
 
@@ -796,6 +816,11 @@ export const disable2FA = async (req: Request, res: Response): Promise<void> => 
  * 如果数据库中没有用户，则需要设置。
  */
 export const needsSetup = async (req: Request, res: Response): Promise<void> => {
+    if (isElectronAppMode()) {
+        res.status(200).json({ needsSetup: false });
+        return;
+    }
+
     try {
         const db = await getDbInstance(); 
         const row = await getDb<{ count: number }>(db, 'SELECT COUNT(*) as count FROM users');

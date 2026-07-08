@@ -3,6 +3,11 @@ import url from 'url';
 import { Request, RequestHandler } from 'express';
 import { WebSocketServer } from 'ws';
 import { AuthenticatedWebSocket } from './types';
+import {
+    ELECTRON_APP_USERNAME,
+    ELECTRON_APP_USER_ID,
+    isElectronAppMode,
+} from '../config/app-mode';
 
 export function initializeUpgradeHandler(
     server: http.Server,
@@ -50,6 +55,15 @@ export function initializeUpgradeHandler(
 
         // @ts-ignore Express-session 类型问题
         sessionParser(request, {} as any, () => {
+            if (isElectronAppMode()) {
+                if (!request.session) {
+                    request.session = {} as any;
+                }
+                request.session.userId = ELECTRON_APP_USER_ID;
+                request.session.username = ELECTRON_APP_USERNAME;
+                request.session.requiresTwoFactor = false;
+            }
+
             // --- 认证检查 ---
             if (!request.session || !request.session.userId) {
                 console.log(`WebSocket 认证失败 (Path: ${pathname})：未找到会话或用户未登录。`);
