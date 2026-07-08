@@ -7,7 +7,6 @@ const appVue = readFileSync(resolve('src/App.vue'), 'utf8');
 const routerIndex = readFileSync(resolve('src/router/index.ts'), 'utf8');
 const connectionsView = readFileSync(resolve('src/views/ConnectionsView.vue'), 'utf8');
 const settingsView = readFileSync(resolve('src/views/SettingsView.vue'), 'utf8');
-const settingsOverlayView = readFileSync(resolve('src/views/SettingsOverlayView.vue'), 'utf8');
 const dataManagementSection = readFileSync(resolve('src/components/settings/DataManagementSection.vue'), 'utf8');
 const dataManagementComposable = readFileSync(resolve('src/composables/settings/useDataManagement.ts'), 'utf8');
 const terminalVue = readFileSync(resolve('src/components/Terminal.vue'), 'utf8');
@@ -148,11 +147,6 @@ assert.match(
   routerIndex,
   /path:\s*'\/settings'[\s\S]*redirect:\s*\{\s*name:\s*'Connections'[\s\S]*query:\s*\{\s*settings:\s*'1'\s*\}/,
   'settings path should redirect to a query overlay on the home server route so the server page instance stays mounted',
-);
-
-assert.ok(
-  !settingsOverlayView.includes('<ConnectionsView />'),
-  'settings overlay should not create a second server page instance behind the settings dialog',
 );
 
 assert.ok(
