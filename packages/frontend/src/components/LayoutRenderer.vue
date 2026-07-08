@@ -169,7 +169,7 @@ const scopedActiveSession = computed(() => (
 ));
 
 const scopedActiveSshSession = computed(() => (
-  scopedActiveSession.value?.kind === 'ssh' ? scopedActiveSession.value : null
+  scopedActiveSession.value?.kind === 'ssh' || scopedActiveSession.value?.kind === 'telnet' ? scopedActiveSession.value : null
 ));
 
 const terminalPaneSessionId = computed(() => (
@@ -689,7 +689,7 @@ const hasTerminalSessions = computed(() => {
  // Check if any terminal-like session can be rendered in this pane.
  for (const [sessionId, sessionState] of sessionStore.sessions) {
    if (!shouldRenderSession(sessionId)) continue;
-   if (sessionState.kind === 'ssh' || sessionState.kind === 'rdp' || sessionState.kind === 'vnc') {
+   if (sessionState.kind === 'ssh' || sessionState.kind === 'telnet' || sessionState.kind === 'rdp' || sessionState.kind === 'vnc') {
      return true;
    }
  }
@@ -718,7 +718,7 @@ const isActiveSessionSingleLineOutput = computed(() => (
 
 const terminalLineOutputToggleTitle = computed(() => {
   if (!scopedActiveSshSession.value) {
-    return t('terminalTabBar.singleLineOutputUnavailableTooltip', '仅 SSH 终端支持单/多行输出');
+    return t('terminalTabBar.singleLineOutputUnavailableTooltip', '仅终端会话支持单/多行输出');
   }
   return isActiveSessionSingleLineOutput.value
     ? t('terminalTabBar.multiLineOutputTooltip', '切换为多行输出')
@@ -1229,7 +1229,7 @@ onBeforeUnmount(() => {
 
             <!-- Pane Node -->
             <template v-else-if="layoutNode.type === 'pane'">
-                <!-- Terminal Pane: Render ALL SSH sessions, show only the active one -->
+                <!-- Terminal Pane: Render all shell sessions, show only the active one -->
                <template v-if="layoutNode.component === 'terminal'">
                    <div
                        ref="terminalGridRef"
@@ -1281,7 +1281,8 @@ onBeforeUnmount(() => {
                            <template v-if="shouldRenderSession(sessionId)">
                                <keep-alive v-if="sessionId !== externalTerminalSessionId">
                                     <component
-                                        v-if="sessionState.kind === 'ssh'"
+                                        v-if="sessionState.kind === 'ssh' || sessionState.kind === 'telnet'"
+                                        :key="sessionId"
                                         :is="componentMap.terminal"
                                         :session-id="sessionId"
                                         :is-active="isTerminalSessionActiveForLayout(sessionId)"
@@ -1324,8 +1325,8 @@ onBeforeUnmount(() => {
                              :style="{ zIndex: 4 }">
                             <div class="flex flex-col items-center justify-center p-8 w-full h-full">
                                 <i class="fas fa-plug text-4xl mb-3 text-text-secondary"></i>
-                                <span class="text-lg font-medium text-text-secondary mb-2">{{ terminalPaneSessionId ? t('layout.noSshSessionActive.title', '无活动的 SSH 会话') : t('layout.noActiveSession.title') }}</span>
-                                <div class="text-xs text-text-secondary mt-2">{{ terminalPaneSessionId ? t('layout.noSshSessionActive.message', '请激活一个 SSH 会话以使用此终端面板。') : t('layout.noActiveSession.message') }}</div>
+                                <span class="text-lg font-medium text-text-secondary mb-2">{{ terminalPaneSessionId ? t('layout.noSshSessionActive.title', '无活动的终端会话') : t('layout.noActiveSession.title') }}</span>
+                                <div class="text-xs text-text-secondary mt-2">{{ terminalPaneSessionId ? t('layout.noSshSessionActive.message', '请激活一个 SSH/Telnet 会话以使用此终端面板。') : t('layout.noActiveSession.message') }}</div>
                             </div>
                         </div>
                    </div>

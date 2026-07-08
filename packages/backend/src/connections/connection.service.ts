@@ -57,6 +57,10 @@ const _validateAndProcessJumpChain = async (
 
 const auditLogService = new AuditLogService(); 
 
+const normalizeConnectionUsername = (username?: string | null): string => {
+    return username?.trim() ?? '';
+};
+
 /**
  * 获取所有连接（包含标签）
  */
@@ -221,11 +225,11 @@ export const createConnection = async (input: CreateConnectionInput): Promise<Co
 
     // 1. 验证输入 (包含 type)
     // Convert type to uppercase for validation and consistency
-    const connectionType = input.type?.toUpperCase() as 'SSH' | 'RDP' | 'VNC' | undefined; // Ensure type safety
-    if (!connectionType || !['SSH', 'RDP', 'VNC'].includes(connectionType)) {
-        throw new Error('必须提供有效的连接类型 (SSH, RDP 或 VNC)。');
+    const connectionType = input.type?.toUpperCase() as 'SSH' | 'RDP' | 'VNC' | 'TELNET' | undefined; // Ensure type safety
+    if (!connectionType || !['SSH', 'RDP', 'VNC', 'TELNET'].includes(connectionType)) {
+        throw new Error('必须提供有效的连接类型 (SSH, TELNET, RDP 或 VNC)。');
     }
-    if (!input.host || !input.username) {
+    if (!input.host || (connectionType !== 'TELNET' && !input.username)) {
         throw new Error('缺少必要的连接信息 (host, username)。');
     }
     // Type-specific validation using the uppercase version
@@ -259,6 +263,13 @@ export const createConnection = async (input: CreateConnectionInput): Promise<Co
         }
         if (input.ssh_key_id || input.private_key) {
             throw new Error('VNC 连接不支持 SSH 密钥认证。');
+        }
+    } else if (connectionType === 'TELNET') {
+        if (input.auth_method && input.auth_method !== 'password') {
+            throw new Error('Telnet 连接的认证方式必须是 password。');
+        }
+        if (input.ssh_key_id || input.private_key) {
+            throw new Error('Telnet 连接不支持 SSH 密钥认证。');
         }
     }
 
@@ -304,9 +315,15 @@ export const createConnection = async (input: CreateConnectionInput): Promise<Co
         encryptedPrivateKey = null;
         encryptedPassphrase = null;
         sshKeyIdToSave = null;
-    } else { // VNC
+    } else if (connectionType === 'VNC') {
         encryptedPassword = encrypt(input.password!);
         authMethodForDb = 'password'; // VNC always uses password auth
+        encryptedPrivateKey = null;
+        encryptedPassphrase = null;
+        sshKeyIdToSave = null;
+    } else {
+        encryptedPassword = input.password ? encrypt(input.password) : null;
+        authMethodForDb = 'password';
         encryptedPrivateKey = null;
         encryptedPassphrase = null;
         sshKeyIdToSave = null;
@@ -318,6 +335,8 @@ export const createConnection = async (input: CreateConnectionInput): Promise<Co
         defaultPort = 3389;
     } else if (connectionType === 'VNC') {
         defaultPort = 5900; // Default VNC port
+    } else if (connectionType === 'TELNET') {
+        defaultPort = 23;
     }
     // +++ Explicitly type connectionData using the local alias +++
     const connectionData: ConnectionDataForRepo = {
@@ -325,7 +344,7 @@ export const createConnection = async (input: CreateConnectionInput): Promise<Co
         type: connectionType,
         host: input.host,
         port: input.port ?? defaultPort, // Use type-specific default port
-        username: input.username,
+        username: normalizeConnectionUsername(input.username),
         auth_method: authMethodForDb, // Use determined auth method
         encrypted_password: encryptedPassword,
         encrypted_private_key: encryptedPrivateKey, // Null if using ssh_key_id or RDP
@@ -383,7 +402,7 @@ export const updateConnection = async (id: number, input: UpdateConnectionInput)
     const dataToUpdate: Partial<Omit<ConnectionRepository.FullConnectionData & { ssh_key_id?: number | null; jump_chain?: number[] | null; proxy_type?: 'proxy' | 'jump' | null }, 'id' | 'created_at' | 'last_connected_at' | 'tag_ids'>> = {};
     let needsCredentialUpdate = false;
     // Determine the final type, converting input type to uppercase if provided
-    const targetType = input.type?.toUpperCase() as 'SSH' | 'RDP' | 'VNC' | undefined || currentFullConnection.type;
+    const targetType = input.type?.toUpperCase() as 'SSH' | 'RDP' | 'VNC' | 'TELNET' | undefined || currentFullConnection.type;
 
     // 处理 jump_chain 和 proxy_id
     if (input.jump_chain !== undefined || input.proxy_id !== undefined) {
@@ -526,7 +545,7 @@ export const updateConnection = async (id: number, input: UpdateConnectionInput)
             dataToUpdate.encrypted_passphrase = null;
             dataToUpdate.ssh_key_id = null; // RDP cannot use ssh_key_id
         }
-    } else { // targetType is 'VNC'
+    } else if (targetType === 'VNC') {
         // VNC only uses password
         if (input.password !== undefined) { // Check if password was provided
             dataToUpdate.encrypted_password = input.password ? encrypt(input.password) : null;
@@ -538,6 +557,17 @@ export const updateConnection = async (id: number, input: UpdateConnectionInput)
             dataToUpdate.encrypted_private_key = null;
             dataToUpdate.encrypted_passphrase = null;
             dataToUpdate.ssh_key_id = null; // VNC cannot use ssh_key_id
+        }
+    } else {
+        if (input.password !== undefined) {
+            dataToUpdate.encrypted_password = input.password ? encrypt(input.password) : null;
+            needsCredentialUpdate = true;
+        }
+        if (targetType !== currentFullConnection.type || needsCredentialUpdate || Object.keys(dataToUpdate).includes('type')) {
+            dataToUpdate.auth_method = 'password';
+            dataToUpdate.encrypted_private_key = null;
+            dataToUpdate.encrypted_passphrase = null;
+            dataToUpdate.ssh_key_id = null;
         }
     }
 

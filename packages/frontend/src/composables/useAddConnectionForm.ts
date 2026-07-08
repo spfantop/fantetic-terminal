@@ -17,6 +17,9 @@ import {
 } from '../utils/serverIcons';
 import { appendSelectedTagId } from '../utils/tagSelection';
 
+type ConnectionType = 'SSH' | 'RDP' | 'VNC' | 'TELNET';
+const normalizeConnectionUsername = (username?: string | null): string => username?.trim() ?? '';
+
 // Define Props interface based on the component's props
 interface AddConnectionFormProps {
   connectionToEdit: ConnectionInfo | null;
@@ -51,7 +54,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
 
   // 表单数据模型
   const initialFormData = {
-    type: 'SSH' as 'SSH' | 'RDP' | 'VNC',
+    type: 'SSH' as ConnectionType,
     name: '',
     host: '',
     port: 22,
@@ -71,6 +74,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
     vncPassword: '',
   };
   const formData = reactive({ ...initialFormData });
+  const telnetDefaultPort = 23;
 
   const formError = ref<string | null>(null); // 表单级别的错误信息
   const advancedConnectionMode = ref<'proxy' | 'jump'>('proxy');
@@ -115,7 +119,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
   watch(connectionToEdit, (newVal) => {
       formError.value = null; // 清除错误
       if (newVal) {
-          formData.type = newVal.type as 'SSH' | 'RDP' | 'VNC';
+          formData.type = newVal.type as ConnectionType;
           formData.name = newVal.name;
           formData.host = newVal.host;
           formData.port = newVal.port;
@@ -184,7 +188,8 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
       const oldTypeIcon = formData.icon;
       const shouldUseTypeDefaultIcon = isDefaultServerIconForType(oldTypeIcon, 'SSH')
         || isDefaultServerIconForType(oldTypeIcon, 'RDP')
-        || isDefaultServerIconForType(oldTypeIcon, 'VNC');
+        || isDefaultServerIconForType(oldTypeIcon, 'VNC')
+        || isDefaultServerIconForType(oldTypeIcon, 'TELNET');
 
       if (newType === 'RDP') {
           if (formData.port === 22 || formData.port === 5900 || formData.port === 5901) formData.port = 3389;
@@ -194,6 +199,10 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
           if (formData.port === 3389 || formData.port === 5900 || formData.port === 5901) formData.port = 22;
       } else if (newType === 'VNC') {
           if (formData.port === 22 || formData.port === 3389) formData.port = 5900;
+          formData.auth_method = 'password';
+          formData.selected_ssh_key_id = null;
+      } else if (newType === 'TELNET') {
+          if (formData.port === 22 || formData.port === 3389 || formData.port === 5900 || formData.port === 5901) formData.port = telnetDefaultPort;
           formData.auth_method = 'password';
           formData.selected_ssh_key_id = null;
       }
@@ -272,7 +281,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
   // Helper function to parse a single script line using minimist
 
   
-  const parseScriptLine = (line: string): { type: 'SSH' | 'RDP' | 'VNC', userHostPort: string, name: string, password: string | null, keyName: string | null, proxyName: string | null, tags: string[], note: string | null, error?: string } => {
+  const parseScriptLine = (line: string): { type: ConnectionType, userHostPort: string, name: string, password: string | null, keyName: string | null, proxyName: string | null, tags: string[], note: string | null, error?: string } => {
     line = line.trim();
     if (!line) {
       return { type: 'SSH', userHostPort: '', name: '', password: null, keyName: null, proxyName: null, tags: [], note: null, error: t('connections.form.scriptErrorEmptyLine', 'Input line cannot be empty') };
@@ -293,7 +302,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
     const defaultName = `${user}@${host}`; // Default name
 
     // 3. Initialize results and defaults
-    let type: 'SSH' | 'RDP' | 'VNC' = 'SSH';
+    let type: ConnectionType = 'SSH';
     let name: string = defaultName;
     let password: string | null = null;
     let keyName: string | null = null;
@@ -337,7 +346,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
            switch (key) {
              case 'type':
                const typeValue = value.toUpperCase();
-               if (typeValue === 'SSH' || typeValue === 'RDP' || typeValue === 'VNC') {
+               if (typeValue === 'SSH' || typeValue === 'RDP' || typeValue === 'VNC' || typeValue === 'TELNET') {
                  type = typeValue;
                } else {
                  return { type, userHostPort: userHostPortPart, name, password, keyName, proxyName, tags, note, error: t('connections.form.scriptErrorInvalidType', { value: args[i] }) };
@@ -386,6 +395,10 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
        if (keyName) {
          return { type, userHostPort: userHostPortPart, name, password, keyName, proxyName, tags, note, error: t('connections.form.scriptErrorKeyNotApplicableForVnc') };
       }
+    } else if (type === 'TELNET') {
+      if (keyName) {
+        return { type, userHostPort: userHostPortPart, name, password, keyName, proxyName, tags, note, error: t('connections.form.scriptErrorKeyNotApplicableForTelnet', 'Telnet 不支持 SSH 密钥。') };
+      }
     }
 
     return { type, userHostPort: userHostPortPart, name, password, keyName, proxyName, tags, note };
@@ -419,7 +432,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
 
       const [userHost, portStr] = parsed.userHostPort.split(':');
       const [username, host] = userHost.split('@');
-      const port = portStr ? parseInt(portStr, 10) : (parsed.type === 'RDP' ? 3389 : (parsed.type === 'VNC' ? 5900 : 22));
+      const port = portStr ? parseInt(portStr, 10) : (parsed.type === 'RDP' ? 3389 : (parsed.type === 'VNC' ? 5900 : (parsed.type === 'TELNET' ? telnetDefaultPort : 22)));
 
       if (!username || !host) {
           uiNotificationsStore.showError(t('connections.form.scriptErrorInvalidUserHostFormat', { line }));
@@ -427,7 +440,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
           break;
       }
       if (isNaN(port) || port <= 0 || port > 65535) {
-          uiNotificationsStore.showError(t('connections.form.scriptErrorInvalidPort', { line, port: portStr || (parsed.type === 'RDP' ? '3389' : (parsed.type === 'VNC' ? '5900' : '22')) }));
+          uiNotificationsStore.showError(t('connections.form.scriptErrorInvalidPort', { line, port: portStr || (parsed.type === 'RDP' ? '3389' : (parsed.type === 'VNC' ? '5900' : (parsed.type === 'TELNET' ? String(telnetDefaultPort) : '22'))) }));
           allConnectionsValid = false;
           break;
       }
@@ -469,6 +482,9 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
           break;
         }
         connectionData.password = parsed.password;
+      } else if (parsed.type === 'TELNET') {
+        connectionData.auth_method = 'password';
+        if (parsed.password) connectionData.password = parsed.password;
       }
       connectionsToAdd.push(connectionData);
     }
@@ -539,7 +555,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
 
       if (connData.type !== 'SSH' || connData.auth_method !== 'key') delete connData.ssh_key_id;
       if (connData.type === 'SSH' && connData.auth_method === 'key') delete connData.password;
-      if (connData.type !== 'SSH') delete connData.auth_method;
+      if (connData.type !== 'SSH' && connData.type !== 'TELNET') delete connData.auth_method;
 
       fullyProcessedConnections.push(connData);
     }
@@ -607,7 +623,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
     const availableTagIds = tags.value.map(t_ => t_.id);
     const currentSelectedValidTagIds = formData.tag_ids.filter(id => availableTagIds.includes(id));
 
-    if (!formData.host || !formData.username) {
+    if (!formData.host || (formData.type !== 'TELNET' && !formData.username)) {
       uiNotificationsStore.showError(t('connections.form.errorRequiredFields'));
       return;
     }
@@ -683,7 +699,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
                     name: formData.name ? `${formData.name}-${ipSuffix}` : currentIp,
                     host: currentIp,
                     port: formData.port,
-                    username: formData.username,
+                    username: normalizeConnectionUsername(formData.username),
                     notes: formData.notes,
                     proxy_id: formData.proxy_id || null,
                     folder_id: formData.folder_id,
@@ -705,11 +721,14 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
                 } else if (formData.type === 'VNC') {
                     dataForThisIp.password = formData.vncPassword;
                     delete dataForThisIp.auth_method;
+                } else if (formData.type === 'TELNET') {
+                    dataForThisIp.auth_method = 'password';
+                    if (formData.password) dataForThisIp.password = formData.password;
                 }
                 
                 if (dataForThisIp.type !== 'SSH' || dataForThisIp.auth_method !== 'key') delete dataForThisIp.ssh_key_id;
                 if (dataForThisIp.type === 'SSH' && dataForThisIp.auth_method === 'key') delete dataForThisIp.password;
-                if (dataForThisIp.type !== 'SSH') delete dataForThisIp.auth_method;
+                if (dataForThisIp.type !== 'SSH' && dataForThisIp.type !== 'TELNET') delete dataForThisIp.auth_method;
 
                 const success = await connectionsStore.addConnection(dataForThisIp);
                 if (success) {
@@ -751,7 +770,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
         host: formData.host.trim(),
         port: formData.port,
         notes: formData.notes,
-        username: formData.username,
+        username: normalizeConnectionUsername(formData.username),
         proxy_id: formData.proxy_id || null,
         proxy_type: formData.proxy_type,
         folder_id: formData.folder_id,
@@ -775,11 +794,14 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
     } else if (formData.type === 'VNC') {
         if (formData.vncPassword) dataToSend.password = formData.vncPassword;
         delete dataToSend.auth_method;
+    } else if (formData.type === 'TELNET') {
+        dataToSend.auth_method = 'password';
+        if (formData.password) dataToSend.password = formData.password;
     }
     
     if (dataToSend.type !== 'SSH' || dataToSend.auth_method !== 'key') delete dataToSend.ssh_key_id;
     if (dataToSend.type === 'SSH' && dataToSend.auth_method === 'key') delete dataToSend.password;
-    if (dataToSend.type !== 'SSH') delete dataToSend.auth_method;
+    if (dataToSend.type !== 'SSH' && dataToSend.type !== 'TELNET') delete dataToSend.auth_method;
 
     let success = false;
     if (isEditMode.value && connectionToEdit.value) {
@@ -859,22 +881,23 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
         response = await apiClient.post(`/connections/${connectionToEdit.value.id}/test`);
       } else {
         const dataToSend = {
+            type: formData.type,
             host: formData.host,
             port: formData.port,
-            username: formData.username,
+            username: normalizeConnectionUsername(formData.username),
             auth_method: formData.auth_method,
             password: formData.auth_method === 'password' ? formData.password : undefined,
             proxy_id: formData.proxy_id || null,
             ssh_key_id: formData.auth_method === 'key' ? formData.selected_ssh_key_id : undefined,
         };
 
-        if (!dataToSend.host || !dataToSend.port || !dataToSend.username || !dataToSend.auth_method) {
+        if (!dataToSend.host || !dataToSend.port || (formData.type === 'SSH' && (!dataToSend.username || !dataToSend.auth_method))) {
           throw new Error(t('connections.test.errorMissingFields'));
         }
-        if (dataToSend.auth_method === 'password' && !formData.password) {
+        if (formData.type === 'SSH' && dataToSend.auth_method === 'password' && !formData.password) {
            throw new Error(t('connections.form.errorPasswordRequired'));
        }
-       if (dataToSend.auth_method === 'key' && !dataToSend.ssh_key_id) {
+       if (formData.type === 'SSH' && dataToSend.auth_method === 'key' && !dataToSend.ssh_key_id) {
           throw new Error(t('connections.form.errorSshKeyRequired'));
        }
         response = await apiClient.post('/connections/test-unsaved', dataToSend);

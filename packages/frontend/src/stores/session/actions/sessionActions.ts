@@ -21,6 +21,8 @@ const findConnectionInfo = (connectionId: number | string, connectionsStore: Ret
   return connectionsStore.connections.find(c => c.id === Number(connectionId));
 };
 
+const isTerminalShellSessionKind = (kind?: string) => kind === 'ssh' || kind === 'telnet';
+
 // --- Actions ---
 export const openNewSession = (
     connectionOrId: ConnectionInfo | number | string,
@@ -48,8 +50,8 @@ export const openNewSession = (
     // TODO: 向用户显示错误
     return;
   }
-  if (connInfo.type !== 'SSH') {
-    console.warn(`[SessionActions] openNewSession 仅用于 SSH，会话类型为 ${connInfo.type}。`);
+  if (connInfo.type !== 'SSH' && connInfo.type !== 'TELNET') {
+    console.warn(`[SessionActions] openNewSession 仅用于 SSH/Telnet，会话类型为 ${connInfo.type}。`);
     return;
   }
 
@@ -64,7 +66,7 @@ export const openNewSession = (
       sessionId: newSessionId,
       connectionId: dbConnId,
       connectionName: connInfo.name || connInfo.host,
-      kind: 'ssh',
+      kind: connInfo.type === 'TELNET' ? 'telnet' : 'ssh',
       editorTabs: ref([]),
       activeEditorTabId: ref(null),
       commandInputContent: ref(''),
@@ -82,7 +84,8 @@ export const openNewSession = (
           isResumeFlow: isResume,
           getIsMarkedForSuspend: () => {
               return !!newSessionPartial.isMarkedForSuspend;
-          }
+          },
+          protocol: connInfo.type === 'TELNET' ? 'telnet' : 'ssh',
       }
   );
   newSessionPartial.wsManager = wsManager; // 将 wsManager 添加回部分对象
@@ -90,11 +93,12 @@ export const openNewSession = (
   const sshTerminalDeps: SshTerminalDependencies = {
       sendMessage: wsManager.sendMessage,
       sendSshInput: wsManager.sendSshInput,
+      sendTelnetInput: wsManager.sendTelnetInput,
       onMessage: wsManager.onMessage,
       onSshOutput: wsManager.onSshOutput,
       isConnected: wsManager.isConnected,
   };
-  const terminalManager = createSshTerminalManager(newSessionId, sshTerminalDeps, t);
+  const terminalManager = createSshTerminalManager(newSessionId, sshTerminalDeps, t, { protocol: connInfo.type === 'TELNET' ? 'telnet' : 'ssh' });
   const statusMonitorDeps: StatusMonitorDependencies = {
       onMessage: wsManager.onMessage,
       isConnected: wsManager.isConnected,
@@ -128,7 +132,7 @@ export const openNewSession = (
   // +++ 在连接前设置 ssh:connected 处理器以更新 sessionId +++
   const originalFrontendSessionIdForHandler = newSessionId; // 捕获初始ID给闭包
 
-  const unregisterConnectedHandler = wsManager.onMessage('ssh:connected', (connectedPayload: any) => {
+  const unregisterConnectedHandler = wsManager.onMessage(connInfo.type === 'TELNET' ? 'telnet:connected' : 'ssh:connected', (connectedPayload: any) => {
     const backendSID = connectedPayload.sessionId as string;
     const backendCID = String(connectedPayload.connectionId);
 
@@ -200,6 +204,17 @@ export const openNewSession = (
   }
 };
 
+export const openTelnetSession = (
+    connectionOrId: ConnectionInfo | number | string,
+    dependencies: {
+        connectionsStore: ReturnType<typeof useConnectionsStore>;
+        t: ReturnType<typeof useI18n>['t'];
+    },
+    existingSessionId?: string
+) => {
+  openNewSession(connectionOrId, dependencies, existingSessionId);
+};
+
 export const openRemoteDesktopSession = (connection: ConnectionInfo) => {
   if (connection.type !== 'RDP' && connection.type !== 'VNC') {
     console.warn(`[SessionActions] openRemoteDesktopSession 仅用于 RDP/VNC，会话类型为 ${connection.type}。`);
@@ -249,7 +264,7 @@ export const updateRdpSessionStatus = (
 
 export const setTerminalSingleLineOutput = (sessionId: string, enabled: boolean) => {
   const session = sessions.value.get(sessionId);
-  if (!session || session.kind !== 'ssh') return;
+  if (!session || !isTerminalShellSessionKind(session.kind)) return;
 
   session.terminalSingleLineOutput = enabled;
   sessions.value = new Map(sessions.value);
@@ -257,7 +272,7 @@ export const setTerminalSingleLineOutput = (sessionId: string, enabled: boolean)
 
 export const toggleTerminalSingleLineOutput = (sessionId: string) => {
   const session = sessions.value.get(sessionId);
-  if (!session || session.kind !== 'ssh') return;
+  if (!session || !isTerminalShellSessionKind(session.kind)) return;
 
   setTerminalSingleLineOutput(sessionId, !session.terminalSingleLineOutput);
 };
@@ -363,6 +378,12 @@ export const handleConnectRequest = (
     }
   } else if (connection.type === 'VNC') {
     openRemoteDesktopSession(connection);
+    if (navigateToWorkspace) {
+      router.push({ name: 'Connections' });
+    }
+  } else if (connection.type === 'TELNET') {
+    const connIdStr = String(connection.id);
+    openTelnetSession(connIdStr, { connectionsStore, t });
     if (navigateToWorkspace) {
       router.push({ name: 'Connections' });
     }

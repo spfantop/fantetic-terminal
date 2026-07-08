@@ -23,12 +23,13 @@ export function createWebSocketConnectionManager(
     sessionId: string,
     dbConnectionId: string,
     t: ReturnType<typeof useI18n>['t'],
-    options?: { isResumeFlow?: boolean; getIsMarkedForSuspend?: () => boolean }
+    options?: { isResumeFlow?: boolean; getIsMarkedForSuspend?: () => boolean; protocol?: 'ssh' | 'telnet' }
 ) {
     // --- Instance State ---
     // 每个实例拥有独立的 WebSocket 对象、状态和消息处理器
     const ws = shallowRef<WebSocket | null>(null); // WebSocket 实例
     const isResumeFlow = options?.isResumeFlow ?? false; // 获取恢复流程标志
+    const connectionProtocol = options?.protocol ?? 'ssh';
     const connectionStatus = ref<WsConnectionStatus>('disconnected'); // 连接状态 (使用导出的类型)
     const statusMessage = ref<string>(''); // 状态描述文本
     const isSftpReady = ref<boolean>(false); // SFTP 是否就绪
@@ -288,7 +289,14 @@ export function createWebSocketConnectionManager(
                 // 状态保持 'connecting' 直到收到 ssh:connected
                 if (!isResumeFlow) {
                     // 对于普通连接，发送 ssh:connect 并等待 ssh:connected 来更新状态
-                    sendMessage({ type: 'ssh:connect', payload: { connectionId: instanceDbConnectionId, clientCapabilities: { sshBinaryOutput: true, sshBinaryInput: true } } });
+                    sendMessage({
+                        type: `${connectionProtocol}:connect`,
+                        payload: {
+                            connectionId: instanceDbConnectionId,
+                            frontendSessionId: instanceSessionId,
+                            clientCapabilities: { sshBinaryOutput: true, sshBinaryInput: connectionProtocol === 'ssh' },
+                        },
+                    });
                 } else {
                     // 对于恢复流程，WebSocket 打开即表示连接基础已建立
                     // 后续的 SSH_SUSPEND_RESUME_REQUEST 会完成会话的恢复
@@ -309,19 +317,19 @@ export function createWebSocketConnectionManager(
                     const message = parseIncomingMessage(rawData);
 
                     // --- 更新此实例的连接状态 ---
-                    if (message.type === 'ssh:connected') {
+                    if (message.type === 'ssh:connected' || message.type === 'telnet:connected') {
                         serverSupportsSshBinaryInput = message.payload?.serverCapabilities?.sshBinaryInput === true;
                         if (connectionStatus.value !== 'connected') {
                             connectionStatus.value = 'connected';
                             statusMessage.value = getStatusText('connected');
                         }
-                    } else if (message.type === 'ssh:disconnected') {
+                    } else if (message.type === 'ssh:disconnected' || message.type === 'telnet:disconnected') {
                         if (connectionStatus.value !== 'disconnected') {
                             connectionStatus.value = 'disconnected';
                             statusMessage.value = getStatusText('disconnected', { reason: message.payload || '未知原因' });
                             isSftpReady.value = false; // SSH 断开，SFTP 也应不可用
                         }
-                    } else if (message.type === 'ssh:error' || message.type === 'error') {
+                    } else if (message.type === 'ssh:error' || message.type === 'telnet:error' || message.type === 'error') {
                         if (connectionStatus.value !== 'disconnected' && connectionStatus.value !== 'error') {
                             connectionStatus.value = 'error';
                             let errorMsg = message.payload || '未知错误';
@@ -618,6 +626,26 @@ export function createWebSocketConnectionManager(
         }
     };
 
+    const encodeBase64Utf8 = (data: string) => {
+        const bytes = textEncoder.encode(data);
+        let binary = '';
+        const chunkSize = 0x8000;
+        for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+            binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+        }
+        return btoa(binary);
+    };
+
+    const sendTelnetInput = (targetSessionId: string, data: string) => {
+        sendMessage({
+            type: 'telnet:input',
+            payload: {
+                sessionId: targetSessionId,
+                data: encodeBase64Utf8(data),
+            },
+        });
+    };
+
     /**
      * 注册一个消息处理器
      * @param {string} type - 要监听的消息类型
@@ -670,6 +698,7 @@ export function createWebSocketConnectionManager(
         disconnect,
         sendMessage,
         sendSshInput,
+        sendTelnetInput,
         onSshOutput,
         onMessage,
     };

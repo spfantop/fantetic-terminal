@@ -144,15 +144,16 @@ export const serverIconOptions: ServerIconOption[] = [
   createIconOption('mdiServerOutline', DEFAULT_SERVER_OUTLINE_PATH),
 ];
 
-export const getDefaultServerIconKey = (type?: 'SSH' | 'RDP' | 'VNC'): ServerIconKey => {
+export const getDefaultServerIconKey = (type?: 'SSH' | 'RDP' | 'VNC' | 'TELNET'): ServerIconKey => {
   if (type === 'RDP') return 'mdiMicrosoftWindows';
   if (type === 'VNC') return 'mdiMonitor';
+  if (type === 'TELNET') return 'mdiConsoleLine';
   return 'mdiServerOutline';
 };
 
 export const normalizeServerIconKey = (
   icon?: string | null,
-  type?: 'SSH' | 'RDP' | 'VNC',
+  type?: 'SSH' | 'RDP' | 'VNC' | 'TELNET',
 ): ServerIconKey => {
   if (icon && icon.startsWith('mdi')) return icon;
   if (icon && legacyIconMap[icon]) return legacyIconMap[icon];
@@ -161,22 +162,22 @@ export const normalizeServerIconKey = (
 
 export const isDefaultServerIconForType = (
   icon: string | null | undefined,
-  type?: 'SSH' | 'RDP' | 'VNC',
+  type?: 'SSH' | 'RDP' | 'VNC' | 'TELNET',
 ) => normalizeServerIconKey(icon, type) === getDefaultServerIconKey(type);
 
 export const getServerIconOption = (
   icon?: string | null,
-  type?: 'SSH' | 'RDP' | 'VNC',
+  type?: 'SSH' | 'RDP' | 'VNC' | 'TELNET',
 ) => createIconOption(normalizeServerIconKey(icon, type), DEFAULT_SERVER_OUTLINE_PATH);
 
 export const getServerIconPath = (
   icon?: string | null,
-  type?: 'SSH' | 'RDP' | 'VNC',
+  type?: 'SSH' | 'RDP' | 'VNC' | 'TELNET',
 ) => getServerIconOption(icon, type).path;
 
 export const readServerIconOption = async (
   icon?: string | null,
-  type?: 'SSH' | 'RDP' | 'VNC',
+  type?: 'SSH' | 'RDP' | 'VNC' | 'TELNET',
 ) => {
   const normalized = normalizeServerIconKey(icon, type);
   const popularIconOptionMap = await loadPopularIconOptionMap();

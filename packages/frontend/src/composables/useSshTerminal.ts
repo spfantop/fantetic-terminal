@@ -21,6 +21,7 @@ type XtermWriteSyncTerminal = Terminal & {
 export interface SshTerminalDependencies {
     sendMessage: (message: WebSocketMessage) => void;
     sendSshInput?: (targetSessionId: string, data: string) => void;
+    sendTelnetInput?: (targetSessionId: string, data: string) => void;
     onMessage: (type: string, handler: (payload: any, fullMessage?: WebSocketMessage) => void) => () => void;
     onSshOutput?: (handler: SshOutputHandler) => () => void;
     isConnected: ComputedRef<boolean>;
@@ -33,9 +34,10 @@ export interface SshTerminalDependencies {
  * @param t i18n 翻译函数，从父组件传入
  * @returns SSH 终端管理器实例
  */
-export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalDependencies, t: ReturnType<typeof useI18n>['t']) { // +++ Update type of t +++
+export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalDependencies, t: ReturnType<typeof useI18n>['t'], options: { protocol?: 'ssh' | 'telnet' } = {}) { // +++ Update type of t +++
     // 使用依赖注入的 WebSocket 函数
-    const { sendMessage, sendSshInput, onMessage, onSshOutput, isConnected } = wsDeps;
+    const { sendMessage, sendSshInput, sendTelnetInput, onMessage, onSshOutput, isConnected } = wsDeps;
+    const protocol = options.protocol ?? 'ssh';
     const settingsStore = useSettingsStore();
     const { terminalHighlightEnabledBoolean, terminalHighlightRulesList } = storeToRefs(settingsStore);
 
@@ -79,6 +81,16 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         const translationKey = `workspace.terminal.${key}`;
         const translated = t(translationKey, params || {});
         return translated === translationKey ? key : translated;
+    };
+
+    const readTerminalMessageText = (payload: MessagePayload, fallback: string): string => {
+        if (typeof payload === 'string') return payload;
+        if (payload && typeof payload === 'object') {
+            const payloadRecord = payload as Record<string, unknown>;
+            const message = payloadRecord.message ?? payloadRecord.error ?? payloadRecord.reason;
+            if (typeof message === 'string' && message.length > 0) return message;
+        }
+        return fallback;
     };
 
     const isPoppedOut = () => poppedOutSessionIds.value.includes(sessionId);
@@ -342,6 +354,14 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
     };
 
     const sendSshInputData = (data: string) => {
+        if (protocol === 'telnet') {
+            if (sendTelnetInput) {
+                sendTelnetInput(sessionId, data);
+            } else {
+                sendMessage({ type: 'telnet:input', payload: { sessionId, data: btoa(data) } });
+            }
+            return;
+        }
         if (sendSshInput) {
             sendSshInput(sessionId, data);
             return;
@@ -536,7 +556,11 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         debugLog(`[SSH ${sessionId}] handleTerminalResize called with:`, dimensions);
         // 只有在连接状态下才发送 resize 命令给后端
         if (isConnected.value) {
-            sendMessage({ type: 'ssh:resize', sessionId, payload: dimensions });
+            sendMessage({
+                type: protocol === 'telnet' ? 'telnet:resize' : 'ssh:resize',
+                ...(protocol === 'ssh' ? { sessionId } : {}),
+                payload: protocol === 'telnet' ? { sessionId, ...dimensions } : dimensions,
+            });
         } else {
             debugLog(`[SSH ${sessionId}] WebSocket not connected, skipping ssh:resize.`);
         }
@@ -623,7 +647,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
             return; // 忽略不属于此会话的消息
         }
 
-        const reason = payload || t('workspace.terminal.unknownReason'); // 使用 i18n 获取未知原因文本
+        const reason = readTerminalMessageText(payload, t('workspace.terminal.unknownReason')); // 使用 i18n 获取未知原因文本
         debugLog(`[会话 ${sessionId}][SSH终端模块] SSH 会话已断开:`, reason);
         isSshConnected.value = false; // 更新状态
         if (terminalInstance.value) {
@@ -638,7 +662,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
             return; // 忽略不属于此会话的消息
         }
 
-        const errorMsg = payload || t('workspace.terminal.unknownSshError'); // 使用 i18n
+        const errorMsg = readTerminalMessageText(payload, t('workspace.terminal.unknownSshError')); // 使用 i18n
         console.error(`[会话 ${sessionId}][SSH终端模块] SSH 错误:`, errorMsg);
         isSshConnected.value = false; // 更新状态
         if (terminalInstance.value) {
@@ -680,7 +704,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         }
 
         // 通用错误也可能需要显示在终端
-        const errorMsg = payload || t('workspace.terminal.unknownGenericError'); // 使用 i18n
+        const errorMsg = readTerminalMessageText(payload, t('workspace.terminal.unknownGenericError')); // 使用 i18n
         console.error(`[会话 ${sessionId}][SSH终端模块] 收到后端通用错误:`, errorMsg);
         if (terminalInstance.value) {
             writelnTerminalOutput(terminalInstance.value, `\r\n\x1b[31m${getTerminalText('errorPrefix')} ${errorMsg}\x1b[0m`);
@@ -701,6 +725,10 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         unregisterHandlers.push(onMessage('ssh:disconnected', handleSshDisconnected));
         unregisterHandlers.push(onMessage('ssh:error', handleSshError));
         unregisterHandlers.push(onMessage('ssh:status', handleSshStatus));
+        unregisterHandlers.push(onMessage('telnet:output', handleSshOutput));
+        unregisterHandlers.push(onMessage('telnet:connected', handleSshConnected));
+        unregisterHandlers.push(onMessage('telnet:disconnected', handleSshDisconnected));
+        unregisterHandlers.push(onMessage('telnet:error', handleSshError));
         unregisterHandlers.push(onMessage('info', handleInfoMessage));
         unregisterHandlers.push(onMessage('error', handleErrorMessage)); // 也处理通用错误
         debugLog(`[会话 ${sessionId}][SSH终端模块] 已注册 SSH 相关消息处理器。`);

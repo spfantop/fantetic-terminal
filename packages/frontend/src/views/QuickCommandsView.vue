@@ -767,20 +767,20 @@ const closeQuickCommandContextMenu = () => {
 const handleQuickCommandMenuAction = (action: 'sendToAllSessions', command: QuickCommandFE) => {
   closeQuickCommandContextMenu();
   if (action === 'sendToAllSessions') {
-    const activeSshSessions = Array.from(sessionStore.sessions.values()).filter(
+    const activeShellSessions = Array.from(sessionStore.sessions.values()).filter(
       (s: SessionState) => {
         if (s.wsManager.connectionStatus.value !== 'connected') return false;
         const connInfo = connectionsStore.connections.find(c => c.id === Number(s.connectionId));
-        return connInfo?.type === 'SSH';
+        return connInfo?.type === 'SSH' || connInfo?.type === 'TELNET';
       }
     );
 
-    if (activeSshSessions.length > 0) {
-      activeSshSessions.forEach((session: SessionState) => {
+    if (activeShellSessions.length > 0) {
+      activeShellSessions.forEach((session: SessionState) => {
         emitWorkspaceEvent('terminal:sendCommand', { sessionId: session.sessionId, command: command.command });
       });
       uiNotificationsStore.addNotification({
-        message: t('quickCommands.notifications.sentToAllSessions', { count: activeSshSessions.length }),
+        message: t('quickCommands.notifications.sentToAllSessions', { count: activeShellSessions.length }),
         type: 'success',
       });
     } else {

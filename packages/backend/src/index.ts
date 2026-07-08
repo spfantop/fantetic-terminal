@@ -40,6 +40,7 @@ import sessionFileStore from 'session-file-store';
 import { getDbInstance } from './database/connection';
 import authRouter from './auth/auth.routes';
 import connectionsRouter from './connections/connections.routes';
+import versionRouter from './version/version.routes';
 import sftpRouter from './sftp/sftp.routes';
 import proxyRoutes from './proxies/proxies.routes';
 import tagsRouter from './tags/tags.routes';
@@ -248,6 +249,7 @@ const startServer = () => {
     // --- 应用 API 路由 ---
     app.use('/api/v1/auth', authRouter);
     app.use('/api/v1/connections', connectionsRouter);
+    app.use('/api/v1/version', versionRouter);
     app.use('/api/v1/sftp', sftpRouter);
     app.use('/api/v1/proxies', proxyRoutes);
     app.use('/api/v1/tags', tagsRouter);

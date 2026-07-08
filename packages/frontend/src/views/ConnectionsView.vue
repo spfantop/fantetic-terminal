@@ -1396,6 +1396,7 @@ interface ConnectionTestState {
 }
 const connectionTestStates = ref<Map<number, ConnectionTestState>>(new Map());
 const isTestingAll = ref(false);
+const isConnectionTestSupported = (type: ConnectionInfo['type']) => ['SSH', 'TELNET', 'RDP', 'VNC'].includes(type);
 
 const getLatencyColorString = (latencyMs?: number): string => {
   if (latencyMs === undefined) return 'inherit'; // Default or inherit
@@ -1406,7 +1407,7 @@ const getLatencyColorString = (latencyMs?: number): string => {
 };
 
 const handleTestSingleConnection = async (conn: ConnectionInfo) => {
-  if (!conn.id || conn.type !== 'SSH') return;
+  if (!conn.id || !isConnectionTestSupported(conn.type)) return;
 
   connectionTestStates.value.set(conn.id, {
     status: 'testing',
@@ -1454,16 +1455,13 @@ const handleTestSingleConnection = async (conn: ConnectionInfo) => {
 
 const handleTestAllFilteredConnections = async () => {
   if (isTestingAll.value || isLoadingConnections.value) return;
-  // Ensure conn.id exists for map function and error handling
-  const sshConnectionsToTest = filteredAndSortedConnections.value.filter(c => c.type === 'SSH' && c.id != null);
-  if (sshConnectionsToTest.length === 0) {
-    // Optionally notify user that there are no SSH connections to test
-    // Consider using uiNotificationsStore from your project for a user-friendly message
+  const connectionsToTest = filteredAndSortedConnections.value.filter(c => isConnectionTestSupported(c.type) && c.id != null);
+  if (connectionsToTest.length === 0) {
     return;
   }
 
   isTestingAll.value = true;
-  const testPromises = sshConnectionsToTest.map(conn => {
+  const testPromises = connectionsToTest.map(conn => {
     // conn.id is guaranteed to exist here due to the filter above.
     // We're calling handleTestSingleConnection for each.
     // Individual errors within handleTestSingleConnection will update that specific connection's state.
@@ -1847,7 +1845,7 @@ const handleOpenAllTargetConnections = async () => {
                         </span>
                       </div>
                       <div
-                        v-if="conn.type === 'SSH' && connectionTestStates.get(conn.id) && connectionTestStates.get(conn.id)?.status !== 'idle'"
+                        v-if="isConnectionTestSupported(conn.type) && connectionTestStates.get(conn.id) && connectionTestStates.get(conn.id)?.status !== 'idle'"
                         class="server-test-result"
                         :class="`server-test-result-${connectionTestStates.get(conn.id)?.status}`"
                         :style="connectionTestStates.get(conn.id)?.status === 'success' ? { color: connectionTestStates.get(conn.id)?.latencyColor || 'inherit' } : undefined"
@@ -1980,7 +1978,7 @@ const handleOpenAllTargetConnections = async () => {
                         </span>
                       </div>
                       <div
-                        v-if="conn.type === 'SSH' && connectionTestStates.get(conn.id) && connectionTestStates.get(conn.id)?.status !== 'idle'"
+                        v-if="isConnectionTestSupported(conn.type) && connectionTestStates.get(conn.id) && connectionTestStates.get(conn.id)?.status !== 'idle'"
                         class="server-test-result"
                         :class="`server-test-result-${connectionTestStates.get(conn.id)?.status}`"
                         :style="connectionTestStates.get(conn.id)?.status === 'success' ? { color: connectionTestStates.get(conn.id)?.latencyColor || 'inherit' } : undefined"
@@ -2161,7 +2159,7 @@ const handleOpenAllTargetConnections = async () => {
         <template v-if="serverContextMenu.targetType === 'connection'">
           <button
             type="button"
-            :disabled="contextTargetConnection?.type !== 'SSH'"
+            :disabled="!contextTargetConnection || !isConnectionTestSupported(contextTargetConnection.type)"
             @click="handleTestConnectionFromContext"
           >
             <i class="fas fa-plug"></i>

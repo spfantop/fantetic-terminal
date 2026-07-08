@@ -4,6 +4,7 @@ import { resolveTerminalBatchInputTargetIds } from '../src/utils/terminalBatchIn
 const sessions = new Map([
   ['ssh-1', { kind: 'ssh' }],
   ['ssh-2', { kind: 'ssh' }],
+  ['telnet-1', { kind: 'telnet' }],
   ['rdp-1', { kind: 'rdp' }],
   ['ssh-popout', { kind: 'ssh' }],
 ]);
@@ -13,10 +14,10 @@ assert.deepEqual(
     sourceSessionId: 'ssh-1',
     batchEnabled: true,
     workspaceSplitActive: true,
-    workspaceSplitSessionIds: ['ssh-1', 'rdp-1', 'ssh-2'],
+    workspaceSplitSessionIds: ['ssh-1', 'rdp-1', 'telnet-1', 'ssh-2'],
     sessions,
   }),
-  ['ssh-1', 'ssh-2'],
+  ['ssh-1', 'telnet-1', 'ssh-2'],
 );
 
 assert.deepEqual(

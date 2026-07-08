@@ -293,6 +293,8 @@
       "typeSsh": "SSH",
       "typeRdp": "RDP",
       "typeVnc": "VNC",
+      "typeTelnet": "Telnet",
+      "telnetAuthHint": "Telnet uses interactive login in the terminal, so a saved password is not required.",
       "sectionBasic": "Basic Information",
       "sectionAuth": "Authentication",
       "sectionAdvanced": "Advanced Options",
@@ -322,9 +324,10 @@
       "sectionScriptMode": "Script Mode",
       "scriptModeInputLabel": "Connection Script (one per line)",
       "scriptModePlaceholder": "Enter connection script, one connection configuration per line.",
-      "scriptModeFormatInfo": "Format: user@host:port [-type TYPE] [-name NAME] [-p PASSWORD] [-k KEY_NAME] [-proxy PROXY_NAME] [-tags TAG1 TAG2...] [-note NOTE_TEXT]\nParameter Explanation:\n  user@host:port  - Username@Hostname or IP:Port (required)\n  -type TYPE      - Connection type (SSH, RDP, VNC; defaults to SSH)\n  -name NAME      - Display name for the connection (optional; defaults to user@host)\n  -p PASSWORD     - Password (required for SSH password auth, RDP, VNC)\n  -k KEY_NAME     - SSH key name (required for SSH key auth, corresponds to an uploaded key)\n  -proxy PROXY_NAME - Proxy name (optional, corresponds to a configured proxy)\n  -tags TAG1 TAG2 - List of tags, space-separated (optional)\n  -note NOTE_TEXT - Connection notes (optional, supports text with spaces, use quotes if it includes special characters)",
+      "scriptModeFormatInfo": "Format: user@host:port [-type TYPE] [-name NAME] [-p PASSWORD] [-k KEY_NAME] [-proxy PROXY_NAME] [-tags TAG1 TAG2...] [-note NOTE_TEXT]\nParameter Explanation:\n  user@host:port  - Username@Hostname or IP:Port (required)\n  -type TYPE      - Connection type (SSH, RDP, VNC, TELNET; defaults to SSH)\n  -name NAME      - Display name for the connection (optional; defaults to user@host)\n  -p PASSWORD     - Password (required for SSH password auth, RDP, VNC; optional for Telnet)\n  -k KEY_NAME     - SSH key name (required for SSH key auth, corresponds to an uploaded key)\n  -proxy PROXY_NAME - Proxy name (optional, corresponds to a configured proxy)\n  -tags TAG1 TAG2 - List of tags, space-separated (optional)\n  -note NOTE_TEXT - Connection notes (optional, supports text with spaces, use quotes if it includes special characters)",
       "scriptErrorMissingHost": "Script line '{line}' is missing the 'user@host:port' part.",
-      "scriptErrorInvalidType": "Invalid type '{type}' in script line '{line}'. Valid types are SSH, RDP, VNC.",
+      "scriptErrorInvalidType": "Invalid type '{type}' in script line '{line}'. Valid types are SSH, RDP, VNC, TELNET.",
+      "scriptErrorKeyNotApplicableForTelnet": "Telnet does not support SSH keys.",
       "scriptErrorUnknownArg": "Unknown argument '{arg}' in script line '{line}'.",
       "scriptErrorUnexpectedToken": "Unexpected token '{token}' in script line '{line}'.",
       "scriptErrorInvalidUserHostPort": "Invalid format for '{part}' in script line '{line}'. Expected 'user@host' or 'user@host:port'.",
@@ -461,7 +464,14 @@
   },
   "workspace": {
     "terminal": {
-      "reconnectingMsg": "Attempting to reconnect..."
+      "reconnectingMsg": "Attempting to reconnect...",
+      "disconnectMsg": "Connection disconnected: {reason}",
+      "genericErrorMsg": "Connection error: {message}",
+      "unknownReason": "Unknown reason",
+      "unknownSshError": "Unknown terminal error",
+      "unknownGenericError": "Unknown error",
+      "infoPrefix": "Info:",
+      "errorPrefix": "Error:"
     },
     "sessionPopout": {
       "title": "Popped-out session",
@@ -1209,6 +1219,7 @@
     },
     "about": {
       "version": "Version",
+      "unknownVersion": "Unknown version",
       "checkingUpdate": "Checking for update...",
       "latestVersion": "Up to date",
       "updateAvailable": "Update available: {version}!",
@@ -1560,7 +1571,7 @@
     },
     "notifications": {
       "sentToAllSessions": "Command sent to {count} sessions.",
-      "noActiveSshSessions": "No active SSH sessions to send command to."
+      "noActiveSshSessions": "No active SSH/Telnet sessions to send command to."
     }
   },
   "quickCommands": {
@@ -1590,7 +1601,7 @@
       "addVariable": "+ Add Variable",
       "execute": "Execute",
       "warningUndefinedVariables": "Warning: Undefined variables in command template: {variables}",
-      "errorNoActiveSession": "No active SSH session to execute the command."
+      "errorNoActiveSession": "No active SSH/Telnet session to execute the command."
     },
     "untagged": "Untagged",
     "tags": {
@@ -1601,7 +1612,7 @@
     },
     "notifications": {
       "sentToAllSessions": "Command sent to {count} sessions.",
-      "noActiveSshSessions": "No active SSH sessions to send command to."
+      "noActiveSshSessions": "No active SSH/Telnet sessions to send command to."
     }
   },
   "setup": {

@@ -26,7 +26,7 @@ export type DockerManagerInstance = OriginalDockerManagerInstance;
 // 重新导出 FileTab 类型，使其可用于其他模块
 export type FileTab = OriginalFileTab;
 
-export type SessionKind = 'ssh' | 'rdp' | 'vnc';
+export type SessionKind = 'ssh' | 'telnet' | 'rdp' | 'vnc';
 
 export interface SessionState {
   sessionId: string;
@@ -54,7 +54,7 @@ export interface SessionState {
   rdpStatusMessage?: string;
 }
 
-export type SshSessionState = SessionState & { kind: 'ssh' };
+export type SshSessionState = SessionState & { kind: 'ssh' | 'telnet' };
 
 // 为标签栏定义包含状态的类型
 export interface SessionTabInfoWithStatus {

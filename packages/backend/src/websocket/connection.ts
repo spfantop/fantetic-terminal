@@ -75,6 +75,12 @@ import {
     handleSftpUploadChunk,
     handleSftpUploadCancel
 } from './handlers/sftp.handler';
+import {
+    handleTelnetConnect,
+    handleTelnetInput,
+    handleTelnetResize,
+    handleTelnetDisconnect
+} from '../telnet/telnet.handler';
 
 export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendService: SshSuspendService, sftpService: SftpService): void { // +++ Add sftpService parameter +++
     wss.on('connection', (ws: AuthenticatedWebSocket, request: Request) => {
@@ -167,6 +173,19 @@ export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendServ
                                 break;
                             case 'ssh:resize':
                                 handleSshResize(ws, payload);
+                                break;
+
+                            case 'telnet:connect':
+                                await handleTelnetConnect(ws, payload, request as any);
+                                break;
+                            case 'telnet:input':
+                                handleTelnetInput(ws, payload);
+                                break;
+                            case 'telnet:resize':
+                                handleTelnetResize(ws, payload);
+                                break;
+                            case 'telnet:disconnect':
+                                handleTelnetDisconnect(ws, payload);
                                 break;
 
                             // Docker Cases

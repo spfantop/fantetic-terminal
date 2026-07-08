@@ -69,18 +69,20 @@ const {
   generateCommand: generateNL2CMD,
 } = nl2cmd;
 
+const isTerminalShellSessionKind = (kind?: string) => kind === 'ssh' || kind === 'telnet';
+
 // +++ 计算属性，用于获取和设置当前活动会话的命令输入 +++
 const currentSessionCommandInput = computed({
   get: () => {
     const sessionId = props.targetSessionId || activeSessionId.value;
     if (!sessionId) return '';
     const session = sessionStore.sessions.get(sessionId);
-    return session?.kind === 'ssh' ? session.commandInputContent.value : '';
+    return isTerminalShellSessionKind(session?.kind) ? session.commandInputContent.value : '';
   },
   set: (newValue) => {
     const sessionId = props.targetSessionId || activeSessionId.value;
     const session = sessionId ? sessionStore.sessions.get(sessionId) : null;
-    if (sessionId && session?.kind === 'ssh') {
+    if (sessionId && isTerminalShellSessionKind(session?.kind)) {
       updateSessionCommandInput(sessionId, newValue);
     }
   }
@@ -110,7 +112,7 @@ const sendCommand = () => {
 
   // 清空 store 中的值
   const targetSession = currentTargetSessionId.value ? sessionStore.sessions.get(currentTargetSessionId.value) : null;
-  if (currentTargetSessionId.value && targetSession?.kind === 'ssh') {
+  if (currentTargetSessionId.value && isTerminalShellSessionKind(targetSession?.kind)) {
     updateSessionCommandInput(currentTargetSessionId.value, '');
   }
 };
@@ -376,7 +378,7 @@ const submitNL2CMD = async () => {
   const command = await generateNL2CMD();
   const targetId = aiCommandInputTargetId.value;
   const targetSession = targetId ? sessionStore.sessions.get(targetId) : null;
-  if (command && targetId && targetSession?.kind === 'ssh') {
+  if (command && targetId && isTerminalShellSessionKind(targetSession?.kind)) {
     updateSessionCommandInput(targetId, command);
     isAIActive.value = false;
     nextTick(() => commandInputRef.value?.focus());

@@ -1,5 +1,6 @@
 import WebSocket from 'ws';
 import { Client, ClientChannel, SFTPWrapper } from 'ssh2';
+import type { TelnetService } from '../telnet/telnet.service';
 
 // 扩展 WebSocket 类型以包含会话 ID
 export interface AuthenticatedWebSocket extends WebSocket {
@@ -35,6 +36,9 @@ export interface ClientState { // 导出以便 Service 可以导入
     supportsSshBinaryOutput?: boolean; // 前端支持 SSH 输出二进制帧，避免 base64/JSON 热路径开销
     supportsSshBinaryInput?: boolean; // 前端支持 SSH 输入二进制帧，避免 JSON 字符串热路径开销
     lastSshInputOverflowWarnAt?: number; // 输入缓冲溢出日志节流时间
+    telnetService?: TelnetService;
+    telnetSessionId?: string;
+    connectedAt?: number;
     // suspendLogWritableStream?: NodeJS.WritableStream; // 移除，将直接使用 temporaryLogStorageService.writeToLog
 }
 

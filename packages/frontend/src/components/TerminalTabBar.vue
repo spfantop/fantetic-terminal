@@ -424,6 +424,8 @@ const activeSessionState = computed(() => (
   props.activeSessionId ? sessionStore.sessions.get(props.activeSessionId) ?? null : null
 ));
 
+const isTerminalShellSessionKind = (kind?: string) => kind === 'ssh' || kind === 'telnet';
+
 const releaseButtonFocus = (event?: Event) => {
   const target = event?.currentTarget;
   if (target instanceof HTMLElement) {
@@ -432,12 +434,12 @@ const releaseButtonFocus = (event?: Event) => {
 };
 
 const shouldShowBatchTerminalInputToggle = computed(() => (
-  activeSessionState.value?.kind === 'ssh' && !props.isMobile
+  isTerminalShellSessionKind(activeSessionState.value?.kind) && !props.isMobile
 ));
 
 const batchTerminalInputToggleTitle = computed(() => {
   if (!props.batchTerminalInputAvailable) {
-    return t('terminalTabBar.batchInputUnavailableTooltip', '分屏中至少需要两个 SSH 终端才能批量执行命令');
+    return t('terminalTabBar.batchInputUnavailableTooltip', '分屏中至少需要两个 SSH/Telnet 终端才能批量执行命令');
   }
   return props.batchTerminalInputActive
     ? t('terminalTabBar.batchInputDisableTooltip', '关闭批量执行命令')

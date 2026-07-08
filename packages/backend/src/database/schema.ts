@@ -84,7 +84,7 @@ export const createConnectionsTableSQL = `
 CREATE TABLE IF NOT EXISTS connections (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NULL, -- 允许 name 为空
-    type TEXT NOT NULL CHECK(type IN ('SSH', 'RDP', 'VNC')) DEFAULT 'SSH',
+    type TEXT NOT NULL CHECK(type IN ('SSH', 'RDP', 'VNC', 'TELNET')) DEFAULT 'SSH',
     host TEXT NOT NULL,
     port INTEGER NOT NULL,
     username TEXT NOT NULL,

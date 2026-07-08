@@ -14,7 +14,7 @@ import {
 const props = defineProps<{
   formData: {
     name: string;
-    type: 'SSH' | 'RDP' | 'VNC';
+    type: 'SSH' | 'RDP' | 'VNC' | 'TELNET';
     folder_id: number | null;
     icon: string;
     host: string;
@@ -266,6 +266,12 @@ const handleHostIconMouseLeave = () => {
                          props.formData.type === 'SSH' ? 'bg-primary text-white' : 'bg-background text-foreground hover:bg-border',
                          'rounded-l-md']">
           {{ t('connections.form.typeSsh', 'SSH') }}
+        </button>
+        <button type="button"
+                @click="props.formData.type = 'TELNET'"
+                :class="['flex-1 px-3 py-2 border border-border text-sm font-medium focus:outline-none -ml-px',
+                         props.formData.type === 'TELNET' ? 'bg-primary text-white' : 'bg-background text-foreground hover:bg-border']">
+          {{ t('connections.form.typeTelnet', 'Telnet') }}
         </button>
         <button type="button"
                 @click="props.formData.type = 'RDP'"

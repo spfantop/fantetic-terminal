@@ -104,6 +104,7 @@ const visibleActiveSession = computed(() => (
   visibleActiveSessionId.value ? sessionStore.sessions.get(visibleActiveSessionId.value) ?? null : null
 ));
 const isRemoteDesktopSessionKind = (kind?: string) => kind === 'rdp' || kind === 'vnc';
+const isTerminalShellSessionKind = (kind?: string) => kind === 'ssh' || kind === 'telnet';
 const isVisibleActiveSessionRemoteDesktop = computed(() => isRemoteDesktopSessionKind(visibleActiveSession.value?.kind));
 const fullscreenSessionId = ref<string | null>(null);
 const isSessionFullscreenActive = computed(() => fullscreenSessionId.value !== null);
@@ -126,7 +127,7 @@ let cachedTerminalInputManager: SshTerminalInstance | null = null;
 
 const refreshTerminalInputCache = (sessionId: string) => {
   const session = sessionStore.sessions.get(sessionId) ?? null;
-  const manager = session?.kind === 'ssh'
+  const manager = isTerminalShellSessionKind(session?.kind)
     ? (session.terminalManager as SshTerminalInstance | undefined) ?? null
     : null;
   if (
@@ -152,7 +153,7 @@ const readTerminalInputSession = (sessionId: string) => {
 
 const getSshSessionForAction = (sessionId?: string) => {
   const session = sessionId ? sessionStore.sessions.get(sessionId) ?? null : activeSession.value ?? null;
-  return session?.kind === 'ssh' ? session : null;
+  return isTerminalShellSessionKind(session?.kind) ? session : null;
 };
 
 const workspaceSplitAvailable = computed(() => !isMobile.value && visibleSessionTabsWithStatus.value.length > 1);
@@ -185,11 +186,11 @@ const orderedVisibleSessionTabs = computed(() => {
 });
 
 const workspaceSplitSessionIds = computed(() => orderedVisibleSessionTabs.value.map(tab => tab.sessionId));
-const workspaceSplitSshSessionIds = computed(() => (
-  workspaceSplitSessionIds.value.filter(sessionId => sessionStore.sessions.get(sessionId)?.kind === 'ssh')
+const workspaceSplitShellSessionIds = computed(() => (
+  workspaceSplitSessionIds.value.filter(sessionId => isTerminalShellSessionKind(sessionStore.sessions.get(sessionId)?.kind))
 ));
 const isBatchTerminalInputAvailable = computed(() => (
-  isWorkspaceSplitActive.value && workspaceSplitSshSessionIds.value.length > 1
+  isWorkspaceSplitActive.value && workspaceSplitShellSessionIds.value.length > 1
 ));
 
 watch(isBatchTerminalInputAvailable, (available) => {
@@ -461,7 +462,7 @@ const restorePoppedOutTerminalElement = (sessionId: string) => {
   if (state.placeholder.parentNode) {
     state.placeholder.parentNode.replaceChild(state.sessionElement, state.placeholder);
   }
-  if (sessionStore.sessions.get(state.sessionId)?.kind === 'ssh') {
+  if (isTerminalShellSessionKind(sessionStore.sessions.get(state.sessionId)?.kind)) {
     rebindXtermRenderWindow(state.sessionId, window);
   }
   if (!state.windowRef.closed) {
@@ -525,7 +526,7 @@ const focusPoppedOutTerminal = (sessionId: string, options: { force?: boolean; r
 };
 
 const focusPoppedOutSession = (sessionId: string, options: { force?: boolean; resize?: boolean } = {}) => {
-  if (sessionStore.sessions.get(sessionId)?.kind === 'ssh') {
+  if (isTerminalShellSessionKind(sessionStore.sessions.get(sessionId)?.kind)) {
     focusPoppedOutTerminal(sessionId, options);
     return;
   }
@@ -548,7 +549,7 @@ const focusPoppedOutSession = (sessionId: string, options: { force?: boolean; re
 
 const requestSessionResize = (sessionId: string) => {
   const session = sessionStore.sessions.get(sessionId);
-  if (session?.kind === 'ssh' || poppedOutTerminalMap.value.has(sessionId)) {
+  if (isTerminalShellSessionKind(session?.kind) || poppedOutTerminalMap.value.has(sessionId)) {
     focusPoppedOutSession(sessionId, { force: true, resize: true });
     return;
   }
@@ -746,7 +747,7 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
   const existingPoppedOutTerminal = poppedOutTerminalMap.value.get(sessionId);
   if (existingPoppedOutTerminal) {
     windowRef?.close();
-    if (sessionStore.sessions.get(sessionId)?.kind === 'ssh') {
+    if (isTerminalShellSessionKind(sessionStore.sessions.get(sessionId)?.kind)) {
       rebindXtermRenderWindow(sessionId, existingPoppedOutTerminal.windowRef);
     }
     focusPoppedOutSession(sessionId, { force: true, resize: true });
@@ -888,7 +889,7 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
   sessionElement.parentNode.replaceChild(placeholder, sessionElement);
   externalTerminalHost.appendChild(sessionElement);
   sessionStore.popOutSession(sessionId);
-  if (sessionStore.sessions.get(sessionId)?.kind === 'ssh') {
+  if (isTerminalShellSessionKind(sessionStore.sessions.get(sessionId)?.kind)) {
     rebindXtermRenderWindow(sessionId, popup);
   }
 

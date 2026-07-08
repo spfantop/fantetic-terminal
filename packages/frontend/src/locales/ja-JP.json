@@ -64,7 +64,7 @@
         },
         "notifications": {
           "sentToAllSessions": "コマンドは {count} 個のセッションに送信されました。",
-          "noActiveSshSessions": "コマンドを送信するアクティブな SSH セッションはありません。"
+          "noActiveSshSessions": "コマンドを送信するアクティブな SSH/Telnet セッションはありません。"
         }
   },
   "commandInputBar": {
@@ -244,6 +244,8 @@
             "titleEdit": "接続の編集",
             "typeRdp": "RDP",
             "typeSsh": "SSH",
+            "typeTelnet": "Telnet",
+            "telnetAuthHint": "Telnet はターミナル内で対話的にログインするため、保存時にパスワードは不要です。",
             "username": "ユーザー名:",
             "sshKey": "SSH キー",
             "privateKeyDirect": "秘密鍵の内容",
@@ -272,9 +274,10 @@
             "sectionScriptMode": "スクリプトモード",
             "scriptModeInputLabel": "接続スクリプト (1行に1つ)",
             "scriptModePlaceholder": "接続スクリプトを入力してください。1行に1つの接続設定。",
-            "scriptModeFormatInfo": "書式: ユーザー名@ホスト名またはIP:ポート [-type タイプ] [-name 名前] [-p パスワード] [-k キー名] [-proxy PROXY_NAME] [-tags タグ1 タグ2...] [-note 注意書き]\nパラメータ説明:\n  ユーザー名@ホスト名またはIP:ポート  - ユーザー名@ホスト名またはIPアドレス:ポート番号 (必須)\n  -type タイプ      - 接続タイプ (SSH, RDP, VNC; デフォルトは SSH)\n  -name 名前      - 接続の表示名 (任意; デフォルトは ユーザー名@ホスト名)\n  -p パスワード     - パスワード (SSHパスワード認証, RDP, VNC の場合に必要)\n  -k キー名     - SSHキー名 (SSHキー認証の場合に必要, アップロード済みのキーに対応)\n  -proxy PROXY_NAME - プロキシ名 (任意, 設定済みのプロキシに対応)\n  -tags タグ1 タグ2 - タグのリスト, スペース区切り (任意)\n  -note 注意書き - 接続に関する注意書き (任意, スペースを含むテキストをサポート, 特殊文字を含む場合は引用符を使用)",
+            "scriptModeFormatInfo": "書式: ユーザー名@ホスト名またはIP:ポート [-type タイプ] [-name 名前] [-p パスワード] [-k キー名] [-proxy PROXY_NAME] [-tags タグ1 タグ2...] [-note 注意書き]\nパラメータ説明:\n  ユーザー名@ホスト名またはIP:ポート  - ユーザー名@ホスト名またはIPアドレス:ポート番号 (必須)\n  -type タイプ      - 接続タイプ (SSH, RDP, VNC, TELNET; デフォルトは SSH)\n  -name 名前      - 接続の表示名 (任意; デフォルトは ユーザー名@ホスト名)\n  -p パスワード     - パスワード (SSHパスワード認証, RDP, VNC の場合に必要; Telnet は任意)\n  -k キー名     - SSHキー名 (SSHキー認証の場合に必要, アップロード済みのキーに対応)\n  -proxy PROXY_NAME - プロキシ名 (任意, 設定済みのプロキシに対応)\n  -tags タグ1 タグ2 - タグのリスト, スペース区切り (任意)\n  -note 注意書き - 接続に関する注意書き (任意, スペースを含むテキストをサポート, 特殊文字を含む場合は引用符を使用)",
             "scriptErrorMissingHost": "スクリプト行 '{line}' には 'user@host:port' 部分がありません。",
-            "scriptErrorInvalidType": "スクリプト行 '{line}' のタイプ '{type}' は無効です。有効なタイプは SSH, RDP, VNC です。",
+            "scriptErrorInvalidType": "スクリプト行 '{line}' のタイプ '{type}' は無効です。有効なタイプは SSH, RDP, VNC, TELNET です。",
+            "scriptErrorKeyNotApplicableForTelnet": "Telnet は SSH キーをサポートしていません。",
             "scriptErrorUnknownArg": "スクリプト行 '{line}' に不明な引数 '{arg}' があります。",
             "scriptErrorUnexpectedToken": "スクリプト行 '{line}' に予期しないトークン '{token}' があります。",
             "scriptErrorInvalidUserHostPort": "スクリプト行 '{line}' の '{part}' 部分の形式が無効です。期待される形式は 'user@host' または 'user@host:port' です。",
@@ -863,7 +866,7 @@
         },
         "notifications": {
           "sentToAllSessions": "コマンドは {count} 個のセッションに送信されました。",
-          "noActiveSshSessions": "コマンドを送信するアクティブな SSH セッションはありません。"
+          "noActiveSshSessions": "コマンドを送信するアクティブな SSH/Telnet セッションはありません。"
         }
   },
   "remoteDesktopModal": {
@@ -1356,6 +1359,7 @@
         },
         "about": {
             "version": "バージョン",
+            "unknownVersion": "不明なバージョン",
             "checkingUpdate": "更新を確認中...",
             "latestVersion": "最新バージョンです",
             "updateAvailable": "新しいバージョン {version} が利用可能です！",
@@ -1734,7 +1738,14 @@
       },
       "workspace": {
         "terminal": {
-            "reconnectingMsg": "再接続を試行中..."
+            "reconnectingMsg": "再接続を試行中...",
+            "disconnectMsg": "接続が切断されました: {reason}",
+            "genericErrorMsg": "接続エラー: {message}",
+            "unknownReason": "不明な理由",
+            "unknownSshError": "不明なターミナルエラー",
+            "unknownGenericError": "不明なエラー",
+            "infoPrefix": "情報:",
+            "errorPrefix": "エラー:"
         },
         "sessionPopout": {
             "title": "ポップアウトセッション",

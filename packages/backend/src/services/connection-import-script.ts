@@ -1,6 +1,6 @@
 export type ParsedConnectionImportItem = {
   lineNumber: number;
-  type: 'SSH' | 'RDP' | 'VNC';
+  type: 'SSH' | 'RDP' | 'VNC' | 'TELNET';
   name: string;
   host: string;
   port: number;
@@ -18,10 +18,11 @@ type ScriptLineParseResult = ParsedConnectionImportItem | {
   error: string;
 };
 
-const DEFAULT_PORT_BY_TYPE: Record<'SSH' | 'RDP' | 'VNC', number> = {
+const DEFAULT_PORT_BY_TYPE: Record<'SSH' | 'RDP' | 'VNC' | 'TELNET', number> = {
   SSH: 22,
   RDP: 3389,
   VNC: 5900,
+  TELNET: 23,
 };
 
 const tokenizeScriptLine = (line: string): string[] => {
@@ -100,7 +101,7 @@ const parseLine = (line: string, lineNumber: number): ScriptLineParseResult => {
     const username = userHostPort.slice(0, atIndex);
     const host = userHostPort.slice(atIndex + 1, portSeparatorIndex);
     const rawPort = userHostPort.slice(portSeparatorIndex + 1);
-    let type: 'SSH' | 'RDP' | 'VNC' = 'SSH';
+    let type: 'SSH' | 'RDP' | 'VNC' | 'TELNET' = 'SSH';
     let name = '';
     let password: string | undefined;
     let sshKeyName: string | undefined;
@@ -117,10 +118,10 @@ const parseLine = (line: string, lineNumber: number): ScriptLineParseResult => {
       switch (token) {
       case '-type': {
         const value = readOptionValue(tokens, index, token).toUpperCase();
-        if (!['SSH', 'RDP', 'VNC'].includes(value)) {
+        if (!['SSH', 'RDP', 'VNC', 'TELNET'].includes(value)) {
           return { lineNumber, error: `无效的连接类型：${value}` };
         }
-        type = value as 'SSH' | 'RDP' | 'VNC';
+        type = value as 'SSH' | 'RDP' | 'VNC' | 'TELNET';
         index += 1;
         break;
       }
@@ -171,7 +172,7 @@ const parseLine = (line: string, lineNumber: number): ScriptLineParseResult => {
     if ((type === 'RDP' || type === 'VNC') && !password) {
       return { lineNumber, error: `${type} 连接必须包含密码。` };
     }
-    if ((type === 'RDP' || type === 'VNC') && sshKeyName) {
+    if ((type === 'RDP' || type === 'VNC' || type === 'TELNET') && sshKeyName) {
       return { lineNumber, error: `${type} 连接不支持 SSH 密钥。` };
     }
 

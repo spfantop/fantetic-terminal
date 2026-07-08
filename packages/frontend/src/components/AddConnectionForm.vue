@@ -190,7 +190,7 @@ onMounted(() => {
        <!-- Form Actions -->
       <div class="flex justify-between items-center pt-5 mt-6 flex-shrink-0">
          <!-- Test Area (Only show for SSH and when script mode is NOT active) -->
-         <div v-if="formData.type === 'SSH' && !isScriptModeActive" class="flex flex-col items-start gap-1">
+          <div v-if="['SSH', 'TELNET', 'RDP', 'VNC'].includes(formData.type) && !isScriptModeActive" class="flex flex-col items-start gap-1">
              <div class="flex items-center gap-2"> <!-- Button and Icon -->
                  <button type="button" @click="handleTestConnection" :disabled="isLoading || testStatus === 'testing'"
                          class="px-3 py-1.5 border border-border rounded-md text-sm font-medium text-text-secondary bg-background hover:bg-border focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center transition-colors duration-150">
@@ -226,15 +226,15 @@ onMounted(() => {
          <div v-else-if="!isScriptModeActive" class="flex-1"></div>
          <div v-else class="flex-1"></div> <!-- Also take up space if script mode is active, pushing buttons right -->
          <div class="flex space-x-3"> <!-- Main Actions -->
-             <button v-if="isEditMode && !isScriptModeActive" type="button" @click="handleDeleteConnection" :disabled="isLoading || (formData.type === 'SSH' && testStatus === 'testing')"
+              <button v-if="isEditMode && !isScriptModeActive" type="button" @click="handleDeleteConnection" :disabled="isLoading || testStatus === 'testing'"
                      class="px-4 py-2 bg-transparent text-red-600 border border-red-500 rounded-md shadow-sm hover:bg-red-500/10 hover:text-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 ease-in-out">
                {{ t('connections.actions.delete') }}
              </button>
-             <button type="submit" @click="handleSubmit" :disabled="isLoading || (formData.type === 'SSH' && testStatus === 'testing')"
+              <button type="submit" @click="handleSubmit" :disabled="isLoading || testStatus === 'testing'"
                      class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 ease-in-out">
                {{ submitButtonText }}
              </button>
-             <button type="button" @click="emit('close')" :disabled="isLoading || (formData.type === 'SSH' && testStatus === 'testing')"
+              <button type="button" @click="emit('close')" :disabled="isLoading || testStatus === 'testing'"
                      class="px-4 py-2 bg-transparent text-text-secondary border border-border rounded-md shadow-sm hover:bg-border hover:text-foreground focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 ease-in-out">
                {{ t('connections.form.cancel') }}
              </button>
