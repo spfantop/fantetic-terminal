@@ -34,4 +34,17 @@ assert.deepEqual(
   'package-lock.json should not retain removed workspace packages because Docker npm install reads only package metadata',
 );
 
+const missingVersionPackagePaths = Object.entries(rootLockfile.packages ?? {})
+  .filter(([packagePath, packageInfo]) => {
+    const info = packageInfo as { link?: boolean; version?: string };
+    return packagePath !== '' && !info.link && !Object.prototype.hasOwnProperty.call(info, 'version');
+  })
+  .map(([packagePath]) => packagePath);
+
+assert.deepEqual(
+  missingVersionPackagePaths,
+  [],
+  'package-lock.json non-link package entries should include version because npm 10 Docker installs compare package versions during dedupe',
+);
+
 console.log('docker package lock workspaces behavior ok');
