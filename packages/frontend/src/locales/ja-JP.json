@@ -535,6 +535,7 @@
             "deleteFailed": "削除に失敗しました",
             "downloadDirectoryFailed": "フォルダのダウンロードに失敗しました",
             "downloadDirectoryNotImplemented": "サーバーはフォルダダウンロード機能をまだ実装していません。",
+            "unknownSymlinkTargetType": "シンボリックリンク先の種類を確認できないため、自動では開きませんでした: {path}",
             "fileDecodeError": "ファイルのデコードに失敗しました (UTF-8 エンコーディングではない可能性があります)",
             "fileExists": "ファイル \"{name}\" はすでに存在します。",
             "generic": "エラー",

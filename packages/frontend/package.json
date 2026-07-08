@@ -18,7 +18,9 @@
       "test:ai-assistant-history": "esbuild test/aiAssistantHistory.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/aiAssistantHistory.behavior-test.mjs && node ../../.vite-codex-cache/aiAssistantHistory.behavior-test.mjs",
       "test:navigation-relocation": "esbuild test/navigationRelocation.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/navigationRelocation.behavior-test.mjs && node ../../.vite-codex-cache/navigationRelocation.behavior-test.mjs",
       "test:about-version-github": "esbuild test/aboutVersionGithub.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/aboutVersionGithub.behavior-test.mjs && node ../../.vite-codex-cache/aboutVersionGithub.behavior-test.mjs",
-      "test:telnet-connection-ui": "esbuild test/telnetConnectionUi.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/telnetConnectionUi.behavior-test.mjs && node ../../.vite-codex-cache/telnetConnectionUi.behavior-test.mjs"
+      "test:telnet-connection-ui": "esbuild test/telnetConnectionUi.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/telnetConnectionUi.behavior-test.mjs && node ../../.vite-codex-cache/telnetConnectionUi.behavior-test.mjs",
+      "test:sftp-upload-backpressure": "esbuild test/sftpUploadBackpressure.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/sftpUploadBackpressure.behavior-test.mjs && node ../../.vite-codex-cache/sftpUploadBackpressure.behavior-test.mjs",
+      "test:file-manager-open-interaction": "esbuild test/fileManagerOpenInteraction.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/fileManagerOpenInteraction.behavior-test.mjs && node ../../.vite-codex-cache/fileManagerOpenInteraction.behavior-test.mjs"
    },
    "dependencies": {
       "@codemirror/commands": "^6.8.1",

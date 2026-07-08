@@ -567,6 +567,7 @@
       "sendCommandFailed": "Failed to send command",
       "downloadDirectoryFailed": "Failed to download directory",
       "downloadDirectoryNotImplemented": "Directory download feature is not yet implemented on the server.",
+      "unknownSymlinkTargetType": "Cannot determine the symlink target type, so it was not opened automatically: {path}",
       "compressFailed": "Compression failed",
       "compressTimeout": "Compression timed out",
       "compressErrorDetailed": "Compression failed: {error}",

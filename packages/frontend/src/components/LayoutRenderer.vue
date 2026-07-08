@@ -764,12 +764,13 @@ const componentProps = computed(() => {
          instanceId: instanceId, // 使用计算出的 instanceId (包含备用值)
          dbConnectionId: scopedActiveSshSession.value.connectionId,
          // sftpManager: currentActiveSession.sftpManager, // 移除 sftpManager，因为它现在由 FileManager 内部管理
-         wsDeps: { // 恢复 wsDeps
-           sendMessage: scopedActiveSshSession.value.wsManager.sendMessage,
-           onMessage: scopedActiveSshSession.value.wsManager.onMessage,
-           isConnected: scopedActiveSshSession.value.wsManager.isConnected, // 恢复 isConnected
-           isSftpReady: scopedActiveSshSession.value.wsManager.isSftpReady // 恢复 isSftpReady
-         },
+          wsDeps: { // 恢复 wsDeps
+            sendMessage: scopedActiveSshSession.value.wsManager.sendMessage,
+            onMessage: scopedActiveSshSession.value.wsManager.onMessage,
+            getBufferedAmount: scopedActiveSshSession.value.wsManager.getBufferedAmount,
+            isConnected: scopedActiveSshSession.value.wsManager.isConnected, // 恢复 isConnected
+            isSftpReady: scopedActiveSshSession.value.wsManager.isSftpReady // 恢复 isSftpReady
+          },
          class: 'pane-content', // class 可以保留，或者在模板中处理
          // FileManager 可能也需要转发事件，例如文件操作相关的，暂时省略
       };
@@ -857,12 +858,13 @@ const sidebarProps = computed(() => (paneName: PaneName | null, side: 'left' | '
          instanceId: instanceId, // 使用 'sidebar-left' 或 'sidebar-right'
          dbConnectionId: scopedActiveSshSession.value.connectionId,
          // sftpManager: activeSession.value.sftpManager, // 移除 sftpManager
-         wsDeps: { // 恢复 wsDeps
-           sendMessage: scopedActiveSshSession.value.wsManager.sendMessage,
-           onMessage: scopedActiveSshSession.value.wsManager.onMessage,
-           isConnected: scopedActiveSshSession.value.wsManager.isConnected, // 直接传递 ref
-           isSftpReady: scopedActiveSshSession.value.wsManager.isSftpReady  // 直接传递 ref
-         },
+          wsDeps: { // 恢复 wsDeps
+            sendMessage: scopedActiveSshSession.value.wsManager.sendMessage,
+            onMessage: scopedActiveSshSession.value.wsManager.onMessage,
+            getBufferedAmount: scopedActiveSshSession.value.wsManager.getBufferedAmount,
+            isConnected: scopedActiveSshSession.value.wsManager.isConnected, // 直接传递 ref
+            isSftpReady: scopedActiveSshSession.value.wsManager.isSftpReady  // 直接传递 ref
+          },
        };
      } else {
        return baseProps; // Return only base props if no active session

@@ -31,6 +31,7 @@ export const getOrCreateSftpManager = (
         const wsDeps: WebSocketDependencies = {
             sendMessage: session.wsManager.sendMessage,
             onMessage: session.wsManager.onMessage,
+            getBufferedAmount: session.wsManager.getBufferedAmount,
             isConnected: session.wsManager.isConnected,
             isSftpReady: session.wsManager.isSftpReady,
         };

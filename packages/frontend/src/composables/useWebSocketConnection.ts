@@ -603,6 +603,8 @@ export function createWebSocketConnectionManager(
         }
     };
 
+    const getBufferedAmount = () => ws.value?.bufferedAmount ?? 0;
+
     const sendSshInput = (targetSessionId: string, data: string) => {
         const currentWs = ws.value;
         if (!currentWs || currentWs.readyState !== WebSocket.OPEN) {
@@ -697,6 +699,7 @@ export function createWebSocketConnectionManager(
         connect,
         disconnect,
         sendMessage,
+        getBufferedAmount,
         sendSshInput,
         sendTelnetInput,
         onSshOutput,

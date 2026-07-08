@@ -440,18 +440,10 @@ const handleItemAction = (item: FileListItem) => {
           sessionStore.openFileInSession(props.sessionId, fileInfo);
         }
       } else { // targetType is 'unknown' or not provided as expected
-        console.warn(`[FileManager ${props.sessionId}-${props.instanceId}] Symlink target '${realPath}' has an unknown type from server ('${targetType}'). Defaulting to open as file.`);
-        // Fallback: attempt to open as file, or display an error
-        const targetFilename = realPath.substring(realPath.lastIndexOf('/') + 1) || originalLinkItem.filename;
-        const fileInfo: FileInfo = { name: targetFilename, fullPath: realPath };
-        if (settingsStore.showPopupFileEditorBoolean) {
-          fileEditorStore.triggerPopup(realPath, props.sessionId);
-        }
-        if (shareFileEditorTabsBoolean.value) {
-          fileEditorStore.openFile(realPath, props.sessionId, props.instanceId);
-        } else {
-          sessionStore.openFileInSession(props.sessionId, fileInfo);
-        }
+        console.warn(`[FileManager ${props.sessionId}-${props.instanceId}] Symlink target '${realPath}' has an unknown type from server ('${targetType}').`);
+        uiNotificationsStore.showWarning(
+          t('fileManager.errors.unknownSymlinkTargetType', { path: realPath }, '无法确认符号链接目标类型，未自动打开。')
+        );
       }
     };
 
@@ -553,6 +545,7 @@ const {
   selectedItems, // 使用 Composable 返回的 selectedItems
   lastClickedIndex, // 获取 lastClickedIndex 以传递给 ContextMenu
   handleItemClick: originalHandleItemClick, // 使用 Composable 返回的 handleItemClick
+  handleItemDoubleClick: originalHandleItemDoubleClick,
   clearSelection, // 获取清空选择的方法
 } = useFileManagerSelection({
   // 传递当前显示的列表 (已排序和过滤)
@@ -571,6 +564,15 @@ const handleItemClick = (event: MouseEvent, item: FileListItem, forceMultiSelect
     return;
   }
   originalHandleItemClick(event, item);
+};
+
+const handleItemDoubleClick = (event: MouseEvent, item: FileListItem) => {
+  if (props.isMobile && isMultiSelectMode.value) return;
+  originalHandleItemDoubleClick(event, item);
+};
+
+const handleOpenContextMenuClick = (item: FileListItem) => {
+  handleItemAction(item);
 };
 
 // +++ 计算属性：获取选中的完整文件对象列表 +++
@@ -959,6 +961,7 @@ const {
           currentSftpManager.value.loadDirectory(currentSftpManager.value.currentPath.value, true);
       }
   },
+  onOpen: handleOpenContextMenuClick,
   onUpload: triggerFileUpload,
   onDownload: triggerDownload,
   onDelete: handleDeleteSelectedClick,
@@ -1036,8 +1039,8 @@ const {
   // 修改：传递 manager 的 currentPath ref
   currentPath: computed(() => currentSftpManager.value?.currentPath.value ?? '/'),
   fileListContainerRef: fileListContainerRef,
-  // 当 Enter 键按下时，模拟鼠标单击
-  onEnterPress: (item) => handleItemClick(new MouseEvent('click'), item),
+  // 键盘 Enter 保留打开/进入目录行为，避免受单击只选中影响。
+  onEnterPress: (item) => handleItemAction(item),
 });
 
 
@@ -1996,6 +1999,7 @@ const handleOpenEditorClick = () => {
                     'hover:bg-header/50': dragOverTarget !== '..'
                 }"
                 @click="handleItemClick($event, { filename: '..', longname: '..', attrs: { isDirectory: true, isFile: false, isSymbolicLink: false, size: 0, uid: 0, gid: 0, mode: 0, atime: 0, mtime: 0 } })"
+                @dblclick="handleItemDoubleClick($event, { filename: '..', longname: '..', attrs: { isDirectory: true, isFile: false, isSymbolicLink: false, size: 0, uid: 0, gid: 0, mode: 0, atime: 0, mtime: 0 } })"
                 @contextmenu.prevent.stop="showContextMenu($event, { filename: '..', longname: '..', attrs: { isDirectory: true, isFile: false, isSymbolicLink: false, size: 0, uid: 0, gid: 0, mode: 0, atime: 0, mtime: 0 } })"
                 @dragover.prevent="handleDragOverRow({ filename: '..', longname: '..', attrs: { isDirectory: true, isFile: false, isSymbolicLink: false, size: 0, uid: 0, gid: 0, mode: 0, atime: 0, mtime: 0 } }, $event)"
                 @dragleave="handleDragLeaveRow({ filename: '..', longname: '..', attrs: { isDirectory: true, isFile: false, isSymbolicLink: false, size: 0, uid: 0, gid: 0, mode: 0, atime: 0, mtime: 0 } })"
@@ -2015,6 +2019,7 @@ const handleOpenEditorClick = () => {
                 :key="item.filename"
                 :draggable="item.filename !== '..'" @dragstart="handleDragStart(item)" @dragend="handleDragEnd"
                 @click="handleItemClick($event, item, props.isMobile && isMultiSelectMode)"
+                @dblclick="handleItemDoubleClick($event, item)"
                 class="transition-colors duration-150 select-none"
                 :class="[
                     { 'cursor-pointer': item.attrs.isDirectory || item.attrs.isFile },
