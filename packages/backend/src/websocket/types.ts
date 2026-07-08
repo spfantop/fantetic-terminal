@@ -26,7 +26,6 @@ export interface ClientState { // 导出以便 Service 可以导入
     suspendLogPath?: string;      // 如果标记挂起，则存储日志路径 (基于原始 sessionId)
     pendingSshOutputBuffer?: Buffer[]; // SSH 输出短窗口聚合缓冲
     pendingSshOutputBytes?: number; // SSH 输出聚合缓冲字节数
-    sshOutputFlushImmediate?: NodeJS.Immediate; // SSH 输出同 tick 聚合任务
     sshOutputFlushTimer?: NodeJS.Timeout; // WebSocket 背压下的延迟输出任务
     isSshOutputPaused?: boolean; // WebSocket 输出背压时暂停 SSH 读取
     pendingSshInputBuffer?: (string | Buffer)[]; // SSH 输入背压缓冲

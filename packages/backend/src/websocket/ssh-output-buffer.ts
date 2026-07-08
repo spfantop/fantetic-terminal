@@ -5,6 +5,7 @@ const MAX_SSH_OUTPUT_FRAME_BYTES = 32 * 1024;
 const MAX_PENDING_SSH_OUTPUT_BYTES = 8 * 1024 * 1024;
 const SSH_OUTPUT_BUFFERED_AMOUNT_LIMIT = 2 * 1024 * 1024;
 const SSH_OUTPUT_BACKPRESSURE_RETRY_MS = 16;
+const SSH_OUTPUT_BATCH_WINDOW_MS = 16;
 const SSH_OUTPUT_BINARY_HEADER = Buffer.from([0x53, 0x53, 0x48, 0x4f]); // SSHO
 
 const serializeSshOutput = (output: Buffer) => `{"type":"ssh:output","payload":"${output.toString('base64')}","encoding":"base64"}`;
@@ -22,10 +23,6 @@ function resumeSshOutput(state: ClientState): void {
 }
 
 function clearScheduledSshOutputFlush(state: ClientState): void {
-    if (state.sshOutputFlushImmediate) {
-        clearImmediate(state.sshOutputFlushImmediate);
-        state.sshOutputFlushImmediate = undefined;
-    }
     if (state.sshOutputFlushTimer) {
         clearTimeout(state.sshOutputFlushTimer);
         state.sshOutputFlushTimer = undefined;
@@ -117,8 +114,8 @@ export function scheduleSshOutput(state: ClientState, data: Buffer): void {
         pauseSshOutput(state);
     }
 
-    if (state.sshOutputFlushImmediate || state.sshOutputFlushTimer) return;
-    state.sshOutputFlushImmediate = setImmediate(() => flushSshOutput(state));
+    if (state.sshOutputFlushTimer) return;
+    state.sshOutputFlushTimer = setTimeout(() => flushSshOutput(state), SSH_OUTPUT_BATCH_WINDOW_MS);
 }
 
 export function clearSshOutputQueue(state: ClientState): void {

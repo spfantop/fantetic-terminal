@@ -1,4 +1,3 @@
-# Use a lightweight Node.js image
 FROM node:20-alpine AS builder
 
 # Set the working directory
@@ -21,15 +20,18 @@ RUN npm run build
 # Remove development dependencies after build
 RUN npm prune --production
 
-# --- Production Stage ---
-FROM node:20-alpine
+# --- Production Stage: guacd + Node.js ---
+FROM guacamole/guacd:latest
+
+USER root
+RUN apk add --no-cache nodejs npm curl ca-certificates bash netcat-openbsd
 
 WORKDIR /app
 
 # Copy built code and node_modules from builder stage
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
-COPY packages/remote-gateway/package.json ./package.json
+COPY --from=builder /app/package.json ./package.json
 
 # --- Add patch application steps ---
 # Copy the patches directory from the build context (relative to project root)
@@ -44,13 +46,17 @@ RUN npm install patch-package --no-save
 RUN npx patch-package --error-on-fail
 
 # Uninstall patch-package after applying to keep the image clean
-RUN npm uninstall patch-package
+RUN npm uninstall patch-package && rm -rf patches /root/.npm /tmp/*
 # --- End patch application steps ---
 
-# Expose the API and WebSocket ports
-# These will be configurable via environment variables, but good to have defaults
-EXPOSE 9090
-EXPOSE 8081
+COPY packages/remote-gateway/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh && chown -R guacd:guacd /app
 
-# Command to run the application
-CMD ["node", "dist/server.js"]
+USER guacd
+
+EXPOSE 9090 8081
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD curl -sf http://localhost:9090/health > /dev/null 2>&1 || exit 1
+
+ENTRYPOINT ["/entrypoint.sh"]
