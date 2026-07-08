@@ -33,6 +33,20 @@ export function createWebSocketConnectionManager(
     const connectionStatus = ref<WsConnectionStatus>('disconnected'); // 连接状态 (使用导出的类型)
     const statusMessage = ref<string>(''); // 状态描述文本
     const isSftpReady = ref<boolean>(false); // SFTP 是否就绪
+    const connectionDiagnostics = ref({
+        openedAt: 0,
+        lastMessageAt: 0,
+        lastCloseCode: 0,
+        reconnectAttempts: 0,
+        sentSshInputFrames: 0,
+        queuedSshInputFrames: 0,
+        sendFailureCount: 0,
+        lastBufferedAmount: 0,
+        lastLatencyMs: 0,
+        maxLatencyMs: 0,
+        missedLatencyProbeCount: 0,
+        latencySamples: [] as number[],
+    });
     const messageHandlers = new Map<string, Set<MessageHandler>>(); // 此实例的消息处理器注册表
     const sshOutputHandlers = new Set<SshOutputHandler>();
     const instanceSessionId = sessionId; // 保存会话 ID 用于日志
@@ -51,6 +65,13 @@ export function createWebSocketConnectionManager(
     const SSH_INPUT_PENDING_CHAR_LIMIT = 256 * 1024;
     const SSH_INPUT_FLUSH_DELAY = 4;
     const SSH_INPUT_BACKPRESSURE_FLUSH_DELAY = 16;
+    const APP_LATENCY_PROBE_INTERVAL_MS = 15000;
+    const APP_LATENCY_PROBE_TIMEOUT_MS = 10000;
+    const APP_LATENCY_SAMPLE_LIMIT = 20;
+    let appLatencyProbeTimer: ReturnType<typeof setInterval> | null = null;
+    let appLatencyProbeTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
+    let activeLatencyProbeId = '';
+    let activeLatencyProbeSentAt = 0;
 
 
     /**
@@ -76,6 +97,7 @@ export function createWebSocketConnectionManager(
      * @param {WebSocketMessage} fullMessage - 完整的消息对象
      */
     const dispatchSshOutputMessage = (message: SshOutputFastMessage) => {
+        connectionDiagnostics.value.lastMessageAt = Date.now();
         if (sshOutputHandlers.size > 0) {
             sshOutputHandlers.forEach(handler => {
                 try {
@@ -178,6 +200,89 @@ export function createWebSocketConnectionManager(
 
     const parseIncomingMessage = (rawData: unknown): WebSocketMessage => JSON.parse(rawData?.toString?.() ?? String(rawData));
 
+    const clearActiveLatencyProbe = () => {
+        activeLatencyProbeId = '';
+        activeLatencyProbeSentAt = 0;
+        if (appLatencyProbeTimeoutTimer !== null) {
+            clearTimeout(appLatencyProbeTimeoutTimer);
+            appLatencyProbeTimeoutTimer = null;
+        }
+    };
+
+    const stopAppLatencyProbe = () => {
+        if (appLatencyProbeTimer !== null) {
+            clearInterval(appLatencyProbeTimer);
+            appLatencyProbeTimer = null;
+        }
+        clearActiveLatencyProbe();
+    };
+
+    const recordLatencySample = (latencyMs: number) => {
+        const normalizedLatency = Math.max(0, Math.round(latencyMs));
+        connectionDiagnostics.value.lastLatencyMs = normalizedLatency;
+        connectionDiagnostics.value.maxLatencyMs = Math.max(connectionDiagnostics.value.maxLatencyMs, normalizedLatency);
+        connectionDiagnostics.value.latencySamples.push(normalizedLatency);
+        if (connectionDiagnostics.value.latencySamples.length > APP_LATENCY_SAMPLE_LIMIT) {
+            connectionDiagnostics.value.latencySamples.splice(0, connectionDiagnostics.value.latencySamples.length - APP_LATENCY_SAMPLE_LIMIT);
+        }
+    };
+
+    const sendAppLatencyProbe = () => {
+        const currentWs = ws.value;
+        if (!currentWs || currentWs.readyState !== WebSocket.OPEN) return;
+
+        if (activeLatencyProbeId) {
+            connectionDiagnostics.value.missedLatencyProbeCount += 1;
+        }
+
+        activeLatencyProbeId = `${instanceSessionId}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+        activeLatencyProbeSentAt = Date.now();
+        connectionDiagnostics.value.lastBufferedAmount = currentWs.bufferedAmount;
+
+        try {
+            currentWs.send(JSON.stringify({
+                type: 'client:ping',
+                payload: {
+                    id: activeLatencyProbeId,
+                    sentAt: activeLatencyProbeSentAt,
+                    sessionId: instanceSessionId,
+                },
+            }));
+        } catch (error) {
+            connectionDiagnostics.value.sendFailureCount += 1;
+            console.error(`[WebSocket ${instanceSessionId}] 发送应用层延迟探针失败:`, error);
+            clearActiveLatencyProbe();
+            return;
+        }
+
+        if (appLatencyProbeTimeoutTimer !== null) clearTimeout(appLatencyProbeTimeoutTimer);
+        appLatencyProbeTimeoutTimer = setTimeout(() => {
+            if (!activeLatencyProbeId) return;
+            connectionDiagnostics.value.missedLatencyProbeCount += 1;
+            clearActiveLatencyProbe();
+        }, APP_LATENCY_PROBE_TIMEOUT_MS);
+    };
+
+    const startAppLatencyProbe = () => {
+        stopAppLatencyProbe();
+        sendAppLatencyProbe();
+        appLatencyProbeTimer = setInterval(sendAppLatencyProbe, APP_LATENCY_PROBE_INTERVAL_MS);
+    };
+
+    const handleAppLatencyPong = (payload: MessagePayload) => {
+        if (!payload || typeof payload !== 'object') return;
+
+        const payloadRecord = payload as Record<string, unknown>;
+        const pongId = typeof payloadRecord.id === 'string' ? payloadRecord.id : '';
+        if (activeLatencyProbeId && pongId && pongId !== activeLatencyProbeId) return;
+
+        const sentAt = Number(payloadRecord.sentAt ?? activeLatencyProbeSentAt);
+        if (!Number.isFinite(sentAt) || sentAt <= 0) return;
+
+        recordLatencySample(Date.now() - sentAt);
+        clearActiveLatencyProbe();
+    };
+
     /**
      * 安排 WebSocket 重连尝试
      */
@@ -200,6 +305,7 @@ export function createWebSocketConnectionManager(
         }
 
         reconnectAttempts++;
+        connectionDiagnostics.value.reconnectAttempts = reconnectAttempts;
         // 指数退避延迟 (例如: 2s, 4s, 8s, 16s, 32s)
         const delay = Math.pow(2, reconnectAttempts) * 1000;
         statusMessage.value = getStatusText('reconnecting', { attempt: reconnectAttempts, delay: delay / 1000 });
@@ -256,12 +362,14 @@ export function createWebSocketConnectionManager(
                  oldWs.close(1000, '状态不一致，强制重连');
              }
              clearPendingSshInput();
+             stopAppLatencyProbe();
              ws.value = null; // 清理 shallowRef 中的引用
              intentionalDisconnect = previousIntentionalDisconnect; // 恢复标记
              debugLog(`[WebSocket ${instanceSessionId}] 旧连接处理完毕。`);
         } else if (ws.value && ws.value.readyState === WebSocket.CLOSING) {
              debugLog(`[WebSocket ${instanceSessionId}] 检测到旧连接正在关闭 (readyState: ${ws.value.readyState})。清理引用并继续创建新连接...`);
              clearPendingSshInput();
+             stopAppLatencyProbe();
              ws.value = null; // 清理引用，让后续逻辑创建新的
         }
         // 如果 ws.value 存在且 readyState 是 CLOSED，它应该已经在 onclose 中被设为 null
@@ -285,7 +393,14 @@ export function createWebSocketConnectionManager(
 
             ws.value.onopen = () => {
                 reconnectAttempts = 0; // 连接成功，重置尝试次数
+                connectionDiagnostics.value.openedAt = Date.now();
+                connectionDiagnostics.value.reconnectAttempts = 0;
+                connectionDiagnostics.value.lastLatencyMs = 0;
+                connectionDiagnostics.value.maxLatencyMs = 0;
+                connectionDiagnostics.value.missedLatencyProbeCount = 0;
+                connectionDiagnostics.value.latencySamples = [];
                 statusMessage.value = getStatusText('wsConnected');
+                startAppLatencyProbe();
                 // 状态保持 'connecting' 直到收到 ssh:connected
                 if (!isResumeFlow) {
                     // 对于普通连接，发送 ssh:connect 并等待 ssh:connected 来更新状态
@@ -307,6 +422,7 @@ export function createWebSocketConnectionManager(
 
             ws.value.onmessage = (event: MessageEvent) => {
                 try {
+                    connectionDiagnostics.value.lastMessageAt = Date.now();
                     const rawData = event.data;
                     const sshOutputMessage = parseSshOutputFastMessage(rawData);
                     if (sshOutputMessage) {
@@ -315,6 +431,9 @@ export function createWebSocketConnectionManager(
                     }
 
                     const message = parseIncomingMessage(rawData);
+                    if (message.type === 'client:pong') {
+                        handleAppLatencyPong(message.payload);
+                    }
 
                     // --- 更新此实例的连接状态 ---
                     if (message.type === 'ssh:connected' || message.type === 'telnet:connected') {
@@ -361,6 +480,7 @@ export function createWebSocketConnectionManager(
                 dispatchMessage('internal:error', event, { type: 'internal:error' });
                 isSftpReady.value = false;
                 clearPendingSshInput();
+                stopAppLatencyProbe();
                 ws.value = null; // 清理实例
                 // 如果不是主动断开，尝试重连
                 if (!intentionalDisconnect) {
@@ -369,6 +489,7 @@ export function createWebSocketConnectionManager(
             };
 
             ws.value.onclose = (event) => {
+                connectionDiagnostics.value.lastCloseCode = event.code;
                 // 只有在非错误状态下才更新为 disconnected
                 if (connectionStatus.value !== 'error' && connectionStatus.value !== 'disconnected') { // Avoid redundant sets or overriding 'error'
                     connectionStatus.value = 'disconnected';
@@ -382,6 +503,7 @@ export function createWebSocketConnectionManager(
                 dispatchMessage('internal:closed', { code: event.code, reason: event.reason }, { type: 'internal:closed' });
                 isSftpReady.value = false;
                 clearPendingSshInput();
+                stopAppLatencyProbe();
                 ws.value = null; // 清理实例引用
 
                 // 如果不是主动断开 (code 1000)，尝试重连
@@ -394,6 +516,7 @@ export function createWebSocketConnectionManager(
              statusMessage.value = getStatusText('wsError');
              isSftpReady.value = false;
              clearPendingSshInput();
+             stopAppLatencyProbe();
              ws.value = null;
         }
     };
@@ -407,6 +530,7 @@ export function createWebSocketConnectionManager(
             clearTimeout(reconnectTimeoutId); // 清除重连定时器
             reconnectTimeoutId = null;
         }
+        stopAppLatencyProbe();
         if (ws.value) {
             if (connectionStatus.value !== 'disconnected') {
                  connectionStatus.value = 'disconnected';
@@ -537,8 +661,10 @@ export function createWebSocketConnectionManager(
         pendingSshInputCharCount = 0;
 
         try {
+            connectionDiagnostics.value.sentSshInputFrames += 1;
             sendSshInputFrame(currentWs, targetSessionId, data);
         } catch (error) {
+            connectionDiagnostics.value.sendFailureCount += 1;
             console.error(`[WebSocket ${instanceSessionId}] 刷新 SSH 输入队列失败:`, error, { sessionId: targetSessionId, length: data.length });
         }
     }
@@ -551,6 +677,7 @@ export function createWebSocketConnectionManager(
 
         pendingSshInputSessionId = targetSessionId;
         pendingSshInputBuffer.push(data);
+        connectionDiagnostics.value.queuedSshInputFrames += 1;
         pendingSshInputCharCount += data.length;
         if (pendingSshInputCharCount > SSH_INPUT_PENDING_CHAR_LIMIT) {
             const merged = pendingSshInputBuffer.join('');
@@ -582,8 +709,10 @@ export function createWebSocketConnectionManager(
     const sendSerializedMessage = (messageString: string, errorContext: unknown) => {
         if (ws.value && ws.value.readyState === WebSocket.OPEN) {
             try {
+                connectionDiagnostics.value.sentSshInputFrames += 1;
                 ws.value.send(messageString);
             } catch (e) {
+                connectionDiagnostics.value.sendFailureCount += 1;
                 console.error(`[WebSocket ${instanceSessionId}] 发送消息失败:`, e, errorContext);
             }
         } else {
@@ -603,7 +732,11 @@ export function createWebSocketConnectionManager(
         }
     };
 
-    const getBufferedAmount = () => ws.value?.bufferedAmount ?? 0;
+    const getBufferedAmount = () => {
+        const bufferedAmount = ws.value?.bufferedAmount ?? 0;
+        connectionDiagnostics.value.lastBufferedAmount = bufferedAmount;
+        return bufferedAmount;
+    };
 
     const sendSshInput = (targetSessionId: string, data: string) => {
         const currentWs = ws.value;
@@ -618,11 +751,14 @@ export function createWebSocketConnectionManager(
         }
 
         try {
+            connectionDiagnostics.value.sentSshInputFrames += 1;
             sendSshInputFrame(currentWs, targetSessionId, data);
         } catch (binaryError) {
             try {
+                connectionDiagnostics.value.sentSshInputFrames += 1;
                 currentWs.send(serializeSshInputMessage(targetSessionId, data));
             } catch (jsonError) {
+                connectionDiagnostics.value.sendFailureCount += 1;
                 console.error(`[WebSocket ${instanceSessionId}] 发送 SSH 输入失败:`, jsonError, { binaryError, sessionId: targetSessionId, length: data.length });
             }
         }
@@ -694,6 +830,7 @@ export function createWebSocketConnectionManager(
         isSftpReady: readonly(isSftpReady),
         connectionStatus: readonly(connectionStatus),
         statusMessage: readonly(statusMessage),
+        connectionDiagnostics: readonly(connectionDiagnostics),
 
         // 方法
         connect,

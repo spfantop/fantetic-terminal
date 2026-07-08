@@ -99,9 +99,16 @@ export function useFileManagerContextMenu(options: UseFileManagerContextMenuOpti
   const contextTargetItem = ref<FileListItem | null>(null);
   // 修正 Ref 类型为组件实例类型
   const contextMenuRef = ref<FileManagerContextMenuInstance | null>(null);
+  let activeMenuDocument: Document | null = null;
+
+  const readEventDocument = (event: Event) => {
+    const eventTarget = event.target as (Node & { ownerDocument?: Document }) | null;
+    return eventTarget?.ownerDocument ?? document;
+  };
 
   const showContextMenu = (event: MouseEvent, item?: FileListItem) => {
     event.preventDefault();
+    activeMenuDocument = readEventDocument(event);
     const targetItem = item || null;
 
     // Adjust selection based on right-click target (逻辑保持不变)
@@ -276,18 +283,19 @@ export function useFileManagerContextMenu(options: UseFileManagerContextMenuOpti
             const menuRect = menuElement.getBoundingClientRect(); // Now should work
             const menuWidth = menuRect.width;
             const menuHeight = menuRect.height;
+            const menuWindow = menuElement.ownerDocument.defaultView ?? activeMenuDocument?.defaultView ?? window;
 
             let finalX = contextMenuPosition.value.x;
             let finalY = contextMenuPosition.value.y;
 
             // Adjust horizontally if needed
-            if (finalX + menuWidth > window.innerWidth) {
-                finalX = window.innerWidth - menuWidth - 5;
+            if (finalX + menuWidth > menuWindow.innerWidth) {
+                finalX = menuWindow.innerWidth - menuWidth - 5;
             }
 
             // Adjust vertically if needed
-            if (finalY + menuHeight > window.innerHeight) {
-                finalY = window.innerHeight - menuHeight - 5;
+            if (finalY + menuHeight > menuWindow.innerHeight) {
+                finalY = menuWindow.innerHeight - menuHeight - 5;
             }
 
             // Ensure menu doesn't go off-screen top or left
@@ -301,12 +309,15 @@ export function useFileManagerContextMenu(options: UseFileManagerContextMenuOpti
             }
 
             // Add global listener to hide menu *after* positioning
-            document.removeEventListener('click', hideContextMenu, { capture: true });
-            document.addEventListener('click', hideContextMenu, { capture: true, once: true });
+            activeMenuDocument?.removeEventListener('click', hideContextMenu, true);
+            activeMenuDocument = menuElement.ownerDocument;
+            activeMenuDocument.addEventListener('click', hideContextMenu, { capture: true, once: true });
         } else {
              // Fallback listener if measurement fails
-             document.removeEventListener('click', hideContextMenu, { capture: true });
-             document.addEventListener('click', hideContextMenu, { capture: true, once: true });
+             const fallbackDocument = activeMenuDocument ?? document;
+             fallbackDocument.removeEventListener('click', hideContextMenu, true);
+             activeMenuDocument = fallbackDocument;
+             activeMenuDocument.addEventListener('click', hideContextMenu, { capture: true, once: true });
         }
     });
   };
@@ -316,7 +327,8 @@ export function useFileManagerContextMenu(options: UseFileManagerContextMenuOpti
     contextMenuVisible.value = false;
     contextMenuItems.value = [];
     contextTargetItem.value = null; // 清理目标项
-    document.removeEventListener('click', hideContextMenu, { capture: true });
+    activeMenuDocument?.removeEventListener('click', hideContextMenu, true);
+    activeMenuDocument = null;
   };
 
   // 返回需要暴露的状态和方法

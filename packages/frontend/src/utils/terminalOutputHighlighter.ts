@@ -36,6 +36,12 @@ export interface TerminalOutputHighlightStream {
   reset(): void;
 }
 
+export interface TerminalHighlightThroughputGuard {
+  shouldHighlight(inputLength: number): boolean;
+  setNow(now: () => number): void;
+  reset(): void;
+}
+
 interface CompiledTerminalHighlightRule {
   rule: TerminalHighlightRule;
   regex: RegExp;
@@ -302,6 +308,37 @@ function splitTerminalControlTailForStreaming(input: string): { stablePrefix: st
   return {
     stablePrefix: input,
     activeTail: '',
+  };
+}
+
+export function createTerminalHighlightThroughputGuard(options: {
+  suspendByteThreshold?: number;
+  resumeAfterMs?: number;
+  now?: () => number;
+} = {}): TerminalHighlightThroughputGuard {
+  const suspendByteThreshold = options.suspendByteThreshold ?? 96 * 1024;
+  const resumeAfterMs = options.resumeAfterMs ?? 250;
+  let now = options.now ?? (() => Date.now());
+  let suspendedUntil = 0;
+
+  return {
+    shouldHighlight(inputLength: number): boolean {
+      const currentTime = now();
+      if (currentTime < suspendedUntil) return false;
+      if (inputLength > suspendByteThreshold) {
+        suspendedUntil = currentTime + resumeAfterMs;
+        return false;
+      }
+      return true;
+    },
+
+    setNow(nextNow: () => number): void {
+      now = nextNow;
+    },
+
+    reset(): void {
+      suspendedUntil = 0;
+    },
   };
 }
 

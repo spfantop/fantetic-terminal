@@ -14,12 +14,10 @@ interface SequenceDisplayItem extends FocusableInput {}
 
 
 // --- Props ---
-const props = defineProps({
-  isVisible: {
-    type: Boolean,
-    required: true,
-  },
-});
+const props = defineProps<{
+  isVisible: boolean;
+  teleportTarget?: string | HTMLElement;
+}>();
 
 // --- Emits ---
 const emit = defineEmits(['close']);
@@ -32,6 +30,8 @@ const { showConfirmDialog } = useConfirmDialog();
 // --- State ---
 const dialogRootRef = ref<HTMLElement | null>(null);
 const dialogRef = ref<HTMLElement | null>(null);
+const resolvedTeleportTarget = computed(() => props.teleportTarget ?? 'body');
+const readDialogWindow = () => dialogRef.value?.ownerDocument.defaultView ?? window;
 const { startDialogDrag } = useDraggableDialog({
   rootRef: dialogRootRef,
   dialogRef,
@@ -40,8 +40,8 @@ const { startDialogDrag } = useDraggableDialog({
 const { width: resizableDialogWidth, height: resizableDialogHeight } = useResizable(dialogRef, {
   minWidth: 720,
   minHeight: 460,
-  maxWidth: window.innerWidth - 24,
-  maxHeight: window.innerHeight - 24,
+  maxWidth: () => readDialogWindow().innerWidth - 24,
+  maxHeight: () => readDialogWindow().innerHeight - 24,
 });
 const initialDialogState = { width: 900, height: 600 }; // *** 增加初始尺寸 ***
 const dialogStyle = reactive({
@@ -120,12 +120,13 @@ watch(() => props.isVisible, async (newValue) => { // ++ Make async for potentia
     // 重置/计算初始位置和大小
     requestAnimationFrame(() => {
       if (dialogRef.value) {
+        const dialogWindow = readDialogWindow();
         const initialWidth = initialDialogState.width;
         const initialHeight = initialDialogState.height;
         dialogStyle.width = `${initialWidth}px`;
         dialogStyle.height = `${initialHeight}px`;
-        dialogStyle.left = `${(window.innerWidth - initialWidth) / 2}px`;
-        dialogStyle.top = `${(window.innerHeight - initialHeight) / 2}px`;
+        dialogStyle.left = `${(dialogWindow.innerWidth - initialWidth) / 2}px`;
+        dialogStyle.top = `${(dialogWindow.innerHeight - initialHeight) / 2}px`;
         dialogStyle.transform = 'none';
         dialogStyle.position = 'absolute';
       }
@@ -220,8 +221,9 @@ const localAvailableInputs = computed(() => {
 </script>
 
 <template>
-  <div ref="dialogRootRef" v-if="isVisible" class="fixed inset-0 bg-overlay flex justify-center items-start z-[1000] pointer-events-none" @click.self="closeDialog">
-    <div ref="dialogRef" class="bg-dialog text-dialog-text rounded-lg shadow-xl flex flex-col overflow-hidden absolute pointer-events-auto cursor-default" :style="dialogStyle">
+  <teleport :to="resolvedTeleportTarget">
+    <div ref="dialogRootRef" v-if="isVisible" class="fixed inset-0 bg-overlay flex justify-center items-start z-[1000] pointer-events-none" @click.self="closeDialog">
+      <div ref="dialogRef" class="bg-dialog text-dialog-text rounded-lg shadow-xl flex flex-col overflow-hidden absolute pointer-events-auto cursor-default" :style="dialogStyle">
       <span class="focus-switcher-resize-hint" aria-hidden="true"></span>
       <header class="flex justify-between items-center p-4 border-b border-border bg-header cursor-move select-none" @pointerdown="startDialogDrag">
         <h2 class="text-lg font-semibold">{{ t('focusSwitcher.configTitle', '配置 Alt 焦点切换') }}</h2>
@@ -322,8 +324,9 @@ const localAvailableInputs = computed(() => {
           {{ t('common.save', '保存') }} {{ hasChanges ? '*' : '' }}
         </button>
       </footer>
+      </div>
     </div>
-  </div>
+  </teleport>
 </template>
 
 <script lang="ts">

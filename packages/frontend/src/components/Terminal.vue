@@ -45,6 +45,7 @@ const singleLineContentWidth = ref<string | null>(null);
 let terminal: Terminal | null = null;
 let fitAddon: FitAddon | null = null;
 let searchAddon: SearchAddon | null = null; // *** 添加 searchAddon 变量 ***
+let webLinksAddonDisposable: IDisposable | null = null;
 let resizeObserver: ResizeObserver | null = null;
 let observedElement: HTMLElement | null = null; // +++ Store the observed element +++
 let selectionListenerDisposable: IDisposable | null = null; // +++ 提升声明并添加类型 +++
@@ -156,6 +157,7 @@ const {
   autoCopyOnSelectBoolean,
   terminalScrollbackLimitNumber, 
   terminalEnableRightClickPasteBoolean, 
+  terminalPerformanceModeBoolean,
 } = storeToRefs(settingsStore); 
 
 // 防抖函数
@@ -386,6 +388,31 @@ const fitAndEmitResizeNow = (term: Terminal) => {
   fitTerminalToContainer({ forceFit: true, forceResizeEmit: true, emitStabilizedNow: true });
 };
 
+const ensureSearchAddonLoaded = (): SearchAddon | null => {
+  if (!terminal) return null;
+  if (!searchAddon) {
+    const addon = new SearchAddon();
+    terminal.loadAddon(addon);
+    searchAddon = addon;
+  }
+  return searchAddon;
+};
+
+const loadWebLinksAddonIfEnabled = () => {
+  if (!terminal || terminalPerformanceModeBoolean.value || webLinksAddonDisposable) return;
+
+  const addon = new WebLinksAddon();
+  terminal.loadAddon(addon);
+  webLinksAddonDisposable = addon;
+};
+
+const unloadWebLinksAddon = () => {
+  if (!webLinksAddonDisposable) return;
+
+  webLinksAddonDisposable.dispose();
+  webLinksAddonDisposable = null;
+};
+
 const handleResizeTransaction = (payload: WorkspaceEventPayloads['ui:resizeTransaction']) => {
   if (payload.phase === 'start') {
     if (resizeTransactionSettleTimer !== null) {
@@ -431,6 +458,7 @@ const emitTerminalInput = (data: string) => {
 //  Helper function to convert setting value to xterm scrollback value
 const getScrollbackValue = (limit: number): number => {
   if (limit === 0) {
+    if (terminalPerformanceModeBoolean.value) return 5000;
     return Infinity; // 0 means unlimited for xterm
   }
   return Math.max(0, limit); // Ensure non-negative, return the number otherwise
@@ -597,7 +625,7 @@ onMounted(() => {
       theme: effectiveTerminalTheme.value, // 使用 store 中的当前 xterm 主题 (now effectiveTerminalTheme)
       rows: 24, // 初始行数
       cols: 80, // 初始列数
-      allowTransparency: true,
+      allowTransparency: !terminalPerformanceModeBoolean.value,
       disableStdin: false,
       convertEol: true,
       scrollback: getScrollbackValue(terminalScrollbackLimitNumber.value), //  Use setting from store
@@ -612,10 +640,8 @@ onMounted(() => {
 
     // 加载插件
     fitAddon = new FitAddon();
-    searchAddon = new SearchAddon(); // *** 创建 SearchAddon 实例 ***
     terminal.loadAddon(fitAddon);
-    terminal.loadAddon(new WebLinksAddon());
-    terminal.loadAddon(searchAddon); // *** 加载 SearchAddon ***
+    loadWebLinksAddonIfEnabled();
 
     // 将终端附加到 DOM
     terminal.open(terminalRef.value);
@@ -728,9 +754,9 @@ onMounted(() => {
       }
     }, { immediate: true }); // 立即执行一次 watch
 
-    // 触发 ready 事件，传递 sessionId, terminal 和 searchAddon 实例
+    // 触发 ready 事件，搜索插件延迟到首次搜索时加载，降低终端初始化成本。
     if (terminal) {
-        emitWorkspaceEvent('terminal:ready', { sessionId: props.sessionId, terminal: terminal, searchAddon: searchAddon });
+        emitWorkspaceEvent('terminal:ready', { sessionId: props.sessionId, terminal: terminal, ensureSearchAddonLoaded });
     }
 
     // --- 监听并处理选中即复制 ---
@@ -812,6 +838,22 @@ onMounted(() => {
             invalidateTerminalFitMetrics();
             scheduleTerminalFit({ forceFit: true, forceResizeEmit: true });
         }
+    });
+
+    watch(terminalPerformanceModeBoolean, (enabled) => {
+      if (!terminal) return;
+      terminal.options.allowTransparency = !enabled;
+      terminal.options.scrollback = getScrollbackValue(terminalScrollbackLimitNumber.value);
+      if (enabled) {
+        unloadWebLinksAddon();
+      } else {
+        loadWebLinksAddonIfEnabled();
+      }
+      invalidateTerminalFitMetrics();
+      scheduleTerminalFit({ forceFit: true, forceResizeEmit: true });
+      nextTick(() => {
+        applyTerminalTextStyles();
+      });
     });
 
     // 聚焦终端 (添加 null check)
@@ -925,6 +967,7 @@ onBeforeUnmount(() => {
 
   if (terminal) {
     debugLog(`[Terminal ${props.sessionId}] Disposing terminal instance.`);
+    unloadWebLinksAddon();
     terminal.dispose();
     terminal = null;
   }
@@ -961,17 +1004,11 @@ const write = (data: string | Uint8Array) => {
 
 // *** 暴露搜索方法 ***
 const findNext = (term: string, options?: ISearchOptions): boolean => {
-  if (searchAddon) {
-    return searchAddon.findNext(term, options);
-  }
-  return false;
+  return ensureSearchAddonLoaded()?.findNext(term, options) ?? false;
 };
 
 const findPrevious = (term: string, options?: ISearchOptions): boolean => {
-  if (searchAddon) {
-    return searchAddon.findPrevious(term, options);
-  }
-  return false;
+  return ensureSearchAddonLoaded()?.findPrevious(term, options) ?? false;
 };
 
 const clearSearch = () => {
@@ -995,7 +1032,7 @@ const applyTerminalTextStyles = () => {
     hostElement.classList.remove('has-text-stroke', 'has-text-shadow');
 
     // 文字描边
-    if (terminalTextStrokeEnabled.value) {
+    if (!terminalPerformanceModeBoolean.value && terminalTextStrokeEnabled.value) {
       hostElement.classList.add('has-text-stroke');
       hostElement.style.setProperty('--terminal-stroke-width', `${terminalTextStrokeWidth.value}px`);
       hostElement.style.setProperty('--terminal-stroke-color', terminalTextStrokeColor.value);
@@ -1005,7 +1042,7 @@ const applyTerminalTextStyles = () => {
     }
 
     // 文字阴影
-    if (terminalTextShadowEnabled.value) {
+    if (!terminalPerformanceModeBoolean.value && terminalTextShadowEnabled.value) {
       hostElement.classList.add('has-text-shadow');
       const shadowValue = `${terminalTextShadowOffsetX.value}px ${terminalTextShadowOffsetY.value}px ${terminalTextShadowBlur.value}px ${terminalTextShadowColor.value}`;
       hostElement.style.setProperty('--terminal-shadow', shadowValue);

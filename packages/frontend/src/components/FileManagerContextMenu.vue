@@ -32,6 +32,10 @@ const props = defineProps({
   currentDirectoryPath: { // Current path of the file manager
     type: String,
     required: true,
+  },
+  teleportTarget: {
+    type: [String, Object] as PropType<string | HTMLElement>,
+    default: 'body',
   }
 });
 
@@ -53,6 +57,13 @@ const sourceConnectionId = computed(() => { // +++ 获取并转换源服务器 I
 
 const contextMenuRef = ref<HTMLDivElement | null>(null);
 const computedRenderPosition = ref({ x: props.position.x, y: props.position.y });
+let activeClickOutsideDocument: Document | null = null;
+
+const resolveMenuDocument = () => {
+  if (contextMenuRef.value?.ownerDocument) return contextMenuRef.value.ownerDocument;
+  if (typeof props.teleportTarget !== 'string') return props.teleportTarget.ownerDocument;
+  return document;
+};
 
 defineExpose({
   menuElement: contextMenuRef,
@@ -73,6 +84,7 @@ watch(
           if (contextMenuRef.value) {
             const menuElement = contextMenuRef.value;
             const menuRect = menuElement.getBoundingClientRect();
+            const menuWindow = menuElement.ownerDocument.defaultView ?? resolveMenuDocument().defaultView ?? window;
 
             // 如果菜单没有实际尺寸 (例如，内容为空或未渲染)，则不进行调整
             if (menuRect.width === 0 && menuRect.height === 0) {
@@ -89,13 +101,13 @@ watch(
             // console.debug(`[FileManagerContextMenu] Initial pos: (${finalX}, ${finalY}), Menu size: (${menuWidth}x${menuHeight}), Window: (${window.innerWidth}x${window.innerHeight})`);
 
             // 调整水平位置，防止溢出右侧
-            if (finalX + menuWidth > window.innerWidth) {
-              finalX = window.innerWidth - menuWidth - margin;
+            if (finalX + menuWidth > menuWindow.innerWidth) {
+              finalX = menuWindow.innerWidth - menuWidth - margin;
             }
 
             // 调整垂直位置，防止溢出底部
-            if (finalY + menuHeight > window.innerHeight) {
-              finalY = window.innerHeight - menuHeight - margin;
+            if (finalY + menuHeight > menuWindow.innerHeight) {
+              finalY = menuWindow.innerHeight - menuHeight - margin;
             }
 
             // 确保菜单不超出屏幕左上角
@@ -123,15 +135,18 @@ const handleClickOutside = (event: MouseEvent) => {
 };
 
 watch(() => props.isVisible, (newValue) => {
+  activeClickOutsideDocument?.removeEventListener('click', handleClickOutside, true);
+  activeClickOutsideDocument = null;
+  const menuDocument = resolveMenuDocument();
   if (newValue) {
-    document.addEventListener('click', handleClickOutside, { capture: true });
-  } else {
-    document.removeEventListener('click', handleClickOutside, { capture: true });
+    menuDocument.addEventListener('click', handleClickOutside, { capture: true });
+    activeClickOutsideDocument = menuDocument;
   }
 }, { immediate: true });
 
 onUnmounted(() => {
-  document.removeEventListener('click', handleClickOutside, { capture: true });
+  activeClickOutsideDocument?.removeEventListener('click', handleClickOutside, true);
+  activeClickOutsideDocument = null;
 });
 
 // 隐藏菜单的逻辑由 useFileManagerContextMenu 中的全局点击监听器处理
@@ -224,7 +239,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <Teleport to="body">
+  <Teleport :to="teleportTarget">
     <div
       ref="contextMenuRef"
       v-if="isVisible"

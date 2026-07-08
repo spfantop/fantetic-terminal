@@ -343,6 +343,8 @@ export async function startDockerStatusPolling(sessionId: string): Promise<void>
         return;
     }
 
+    const DOCKER_STATUS_BUFFERED_AMOUNT_LIMIT = 512 * 1024;
+
     console.log(`WebSocket: 会话 ${sessionId} 正在启动 Docker 状态轮询...`);
     let dockerPollIntervalMs = DEFAULT_DOCKER_STATUS_INTERVAL_SECONDS * 1000;
     try {
@@ -376,6 +378,9 @@ export async function startDockerStatusPolling(sessionId: string): Promise<void>
             if (currentState && currentState.dockerStatusIntervalId === dockerIntervalId) { // Ensure we only delete our own interval ID
                 delete currentState.dockerStatusIntervalId;
             }
+            return;
+        }
+        if (currentState.ws.bufferedAmount > DOCKER_STATUS_BUFFERED_AMOUNT_LIMIT) {
             return;
         }
         try {

@@ -9,6 +9,23 @@ import * as SshKeyService from '../ssh_keys/ssh_key.service';
 
 const CONNECT_TIMEOUT = 20000; // 连接超时时间 (毫秒)
 const TEST_TIMEOUT = 15000; // 测试连接超时时间 (毫秒)
+const DEFAULT_SSH_KEEPALIVE_INTERVAL_MS = 5000;
+const DEFAULT_SSH_KEEPALIVE_COUNT_MAX = 10;
+
+const readClampedIntegerEnv = (name: string, fallback: number, min: number, max: number): number => {
+    const rawValue = process.env[name];
+    if (!rawValue) return fallback;
+
+    const parsedValue = Number.parseInt(rawValue, 10);
+    if (!Number.isFinite(parsedValue)) return fallback;
+
+    return Math.min(max, Math.max(min, parsedValue));
+};
+
+const resolveSshKeepaliveConfig = (): Pick<ConnectConfig, 'keepaliveInterval' | 'keepaliveCountMax'> => ({
+    keepaliveInterval: readClampedIntegerEnv('SSH_KEEPALIVE_INTERVAL_MS', DEFAULT_SSH_KEEPALIVE_INTERVAL_MS, 1000, 60000),
+    keepaliveCountMax: readClampedIntegerEnv('SSH_KEEPALIVE_COUNT_MAX', DEFAULT_SSH_KEEPALIVE_COUNT_MAX, 2, 30),
+});
 
 
 interface JumpHostRawConfig {
@@ -252,8 +269,7 @@ const _establishDirectSshConnection = (
         privateKey: connDetails.privateKey,
         passphrase: connDetails.passphrase,
         readyTimeout: timeout,
-        keepaliveInterval: 5000,
-        keepaliveCountMax: 10,
+        ...resolveSshKeepaliveConfig(),
     };
 
     return _setupSshClientListenersAndConnect(
@@ -363,8 +379,7 @@ const _establishProxyConnection = async (
         privateKey: connDetails.privateKey,
         passphrase: connDetails.passphrase,
         readyTimeout: timeout,
-        keepaliveInterval: 5000,
-        keepaliveCountMax: 10,
+        ...resolveSshKeepaliveConfig(),
     };
 
     try {
@@ -409,8 +424,7 @@ function _prepareConnectConfigForHop(
     const config: ConnectConfig = {
         username: hopDetail.username,
         readyTimeout: timeout,
-        keepaliveInterval: 5000,
-        keepaliveCountMax: 10,
+        ...resolveSshKeepaliveConfig(),
     };
     if (hopDetail.auth_method === 'password') {
         config.password = hopDetail.password;
@@ -474,8 +488,7 @@ async function _establishConnectionViaJumpChainRecursive(
                 privateKey: finalTargetDetails.privateKey,
                 passphrase: finalTargetDetails.passphrase,
                 readyTimeout: timeoutPerHop,
-                keepaliveInterval: 5000,
-                keepaliveCountMax: 10,
+                ...resolveSshKeepaliveConfig(),
             };
             
             _setupSshClientListenersAndConnect(

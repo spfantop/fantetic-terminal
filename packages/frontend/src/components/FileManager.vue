@@ -131,6 +131,9 @@ const pathInputRef = ref<HTMLInputElement | null>(null);
 const editablePath = ref('');
 const fileListContainerRef = ref<HTMLDivElement | null>(null); // 文件列表容器引用
 const dropOverlayRef = ref<HTMLDivElement | null>(null); // +++ 拖拽蒙版引用 +++
+const contextMenuTeleportTarget = computed(() => fileListContainerRef.value?.ownerDocument.body ?? 'body');
+const readFileManagerDocument = () => fileListContainerRef.value?.ownerDocument ?? document;
+const readFileManagerWindow = () => readFileManagerDocument().defaultView ?? window;
 
 // +++ Favorite Paths Modal State +++
 const showFavoritePathsModal = ref(false);
@@ -798,18 +801,19 @@ const triggerDownload = (items: FileListItem[]) => { // 修改：接受 FileList
         debugLog(`[FileManager ${props.sessionId}-${props.instanceId}] Triggering download for ${item.filename}: ${downloadUrl}`);
 
         // 为每个文件创建一个链接并点击
-        const link = document.createElement('a');
+        const fileManagerDocument = readFileManagerDocument();
+        const link = fileManagerDocument.createElement('a');
         link.href = downloadUrl;
         // --- 修正：移除文件名中的双引号以兼容 Chrome ---
         const safeFilename = item.filename.replace(/"/g, ''); // 移除所有双引号
         link.setAttribute('download', safeFilename);
         // --- 结束修正 ---
-        document.body.appendChild(link);
+        fileManagerDocument.body.appendChild(link);
         link.click();
 
         // 稍微延迟移除链接，以确保下载开始
         setTimeout(() => {
-            document.body.removeChild(link);
+            link.remove();
         }, 100);
     });
 };
@@ -858,16 +862,18 @@ const triggerDownloadDirectory = (item: FileListItem) => {
                     }
                 }
 
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(blob);
+                const fileManagerDocument = readFileManagerDocument();
+                const fileManagerWindow = readFileManagerWindow();
+                const link = fileManagerDocument.createElement('a');
+                link.href = fileManagerWindow.URL.createObjectURL(blob);
                 // --- 修正：移除 ZIP 文件名中的双引号以兼容 Chrome ---
                 const safeZipFilename = filename.replace(/"/g, '');
                 link.setAttribute('download', safeZipFilename);
                 // --- 结束修正 ---
-                document.body.appendChild(link);
+                fileManagerDocument.body.appendChild(link);
                 link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(link.href); // 释放对象 URL
+                link.remove();
+                fileManagerWindow.URL.revokeObjectURL(link.href); // 释放对象 URL
                 debugLog(`[FileManager ${props.sessionId}-${props.instanceId}] Directory download triggered for: ${filename}`);
             } else {
                 // 处理错误，例如 404 Not Found
@@ -1253,7 +1259,7 @@ onMounted(() => {
       return undefined;
     }
   };
-  unregisterSearchFocusAction = focusSwitcherStore.registerFocusAction('fileManagerSearch', focusSearchActionWrapper);
+  unregisterSearchFocusAction = focusSwitcherStore.registerFocusAction('fileManagerSearch', focusSearchActionWrapper, { ownerDocument: readFileManagerDocument() });
 
   // 注册路径编辑框聚焦动作
   const focusPathActionWrapper = async (): Promise<boolean | undefined> => {
@@ -1267,7 +1273,7 @@ onMounted(() => {
        return undefined;
      }
   };
-  unregisterPathFocusAction = focusSwitcherStore.registerFocusAction('fileManagerPathInput', focusPathActionWrapper);
+  unregisterPathFocusAction = focusSwitcherStore.registerFocusAction('fileManagerPathInput', focusPathActionWrapper, { ownerDocument: readFileManagerDocument() });
   document.addEventListener('click', handleClickOutsidePathInput);
 });
 
@@ -2073,6 +2079,7 @@ const handleOpenEditorClick = () => {
       :active-context-item="contextTargetItem"
       :selected-file-items="computedSelectedFullItems"
       :current-directory-path="currentSftpManager?.currentPath?.value ?? '/'"
+      :teleport-target="contextMenuTeleportTarget"
      @close-request="hideContextMenu"
    />
 

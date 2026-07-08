@@ -114,6 +114,7 @@ let unregisterFocus: (() => void) | null = null; // +++ 保存注销函数 +++
 const commandHistoryContextMenuVisible = ref(false);
 const commandHistoryContextMenuPosition = ref({ x: 0, y: 0 });
 const commandHistoryContextTargetEntry = ref<CommandHistoryEntryFE | null>(null);
+let activeCommandHistoryMenuDocument: Document | null = null;
 
 // --- 从 Store 获取状态和 Getter ---
 const searchTerm = computed(() => commandHistoryStore.searchTerm);
@@ -143,7 +144,7 @@ onMounted(() => {
 // +++ 注册/注销自定义聚焦动作 +++
 onMounted(() => {
   // +++ 保存返回的注销函数 +++
-  unregisterFocus = focusSwitcherStore.registerFocusAction('commandHistorySearch', focusSearchInput);
+  unregisterFocus = focusSwitcherStore.registerFocusAction('commandHistorySearch', focusSearchInput, { ownerDocument: historyListRef.value?.ownerDocument ?? document });
 });
 onBeforeUnmount(() => {
   // +++ 调用保存的注销函数 +++
@@ -257,29 +258,33 @@ defineExpose({ focusSearchInput });
 // +++ 右键菜单方法 +++
 const showCommandHistoryContextMenu = (event: MouseEvent, entry: CommandHistoryEntryFE) => {
 event.preventDefault();
+const eventDocument = (event.target as Node | null)?.ownerDocument ?? historyListRef.value?.ownerDocument ?? document;
 commandHistoryContextTargetEntry.value = entry;
 commandHistoryContextMenuPosition.value = { x: event.clientX, y: event.clientY };
 commandHistoryContextMenuVisible.value = true;
-document.addEventListener('click', closeCommandHistoryContextMenu, { once: true });
+activeCommandHistoryMenuDocument?.removeEventListener('click', closeCommandHistoryContextMenu);
+activeCommandHistoryMenuDocument = eventDocument;
+activeCommandHistoryMenuDocument.addEventListener('click', closeCommandHistoryContextMenu, { once: true });
 
 // 使用 nextTick 获取菜单尺寸并调整位置以防止超出屏幕
 nextTick(() => {
-  const menuElement = document.querySelector('.command-history-context-menu') as HTMLElement;
+  const menuElement = eventDocument.querySelector('.command-history-context-menu') as HTMLElement;
   if (menuElement) {
     const menuRect = menuElement.getBoundingClientRect();
+    const menuWindow = menuElement.ownerDocument.defaultView ?? eventDocument.defaultView ?? window;
     let finalX = commandHistoryContextMenuPosition.value.x;
     let finalY = commandHistoryContextMenuPosition.value.y;
     const menuWidth = menuRect.width;
     const menuHeight = menuRect.height;
 
     // 调整水平位置
-    if (finalX + menuWidth > window.innerWidth) {
-      finalX = window.innerWidth - menuWidth - 5;
+    if (finalX + menuWidth > menuWindow.innerWidth) {
+      finalX = menuWindow.innerWidth - menuWidth - 5;
     }
 
     // 调整垂直位置
-    if (finalY + menuHeight > window.innerHeight) {
-      finalY = window.innerHeight - menuHeight - 5;
+    if (finalY + menuHeight > menuWindow.innerHeight) {
+      finalY = menuWindow.innerHeight - menuHeight - 5;
     }
 
     // 确保菜单不超出屏幕左上角
@@ -298,7 +303,8 @@ nextTick(() => {
 const closeCommandHistoryContextMenu = () => {
   commandHistoryContextMenuVisible.value = false;
   commandHistoryContextTargetEntry.value = null;
-  document.removeEventListener('click', closeCommandHistoryContextMenu);
+  activeCommandHistoryMenuDocument?.removeEventListener('click', closeCommandHistoryContextMenu);
+  activeCommandHistoryMenuDocument = null;
 };
 
 const handleCommandHistoryMenuAction = (action: 'sendToAllSessions', entry: CommandHistoryEntryFE) => {

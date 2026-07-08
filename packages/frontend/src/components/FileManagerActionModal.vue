@@ -37,22 +37,24 @@ const inputValue = ref('');
 const inputRef = ref<HTMLInputElement | null>(null);
 const modalRootRef = ref<HTMLElement | null>(null);
 const modalContentRef = ref<HTMLElement | null>(null);
+let activeModalDocument: Document | null = null;
 const { centerDialog, startDialogDrag } = useDraggableDialog({
   rootRef: modalRootRef,
   dialogRef: modalContentRef,
 });
 
 watch(() => props.isVisible, (newValue) => {
+  activeModalDocument?.removeEventListener('keydown', handleGlobalKeydown);
+  activeModalDocument = null;
   if (newValue) {
     centerDialog();
     inputValue.value = props.initialValue || '';
     nextTick(() => {
+      activeModalDocument = modalRootRef.value?.ownerDocument ?? document;
       inputRef.value?.focus();
       inputRef.value?.select();
+      activeModalDocument.addEventListener('keydown', handleGlobalKeydown);
     });
-    document.addEventListener('keydown', handleGlobalKeydown);
-  } else {
-    document.removeEventListener('keydown', handleGlobalKeydown);
   }
 });
 
@@ -190,7 +192,8 @@ const handleGlobalKeydown = (event: KeyboardEvent) => {
 
 import { onUnmounted } from 'vue';
 onUnmounted(() => {
-  document.removeEventListener('keydown', handleGlobalKeydown);
+  activeModalDocument?.removeEventListener('keydown', handleGlobalKeydown);
+  activeModalDocument = null;
 });
 
 </script>

@@ -163,6 +163,18 @@ export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendServ
                 void (async () => {
                     try {
                         switch (type) {
+                            case 'client:ping':
+                                if (ws.readyState === WebSocket.OPEN) {
+                                    ws.send(JSON.stringify({
+                                        type: 'client:pong',
+                                        payload: {
+                                            ...(payload && typeof payload === 'object' ? payload : {}),
+                                            serverAt: Date.now(),
+                                        },
+                                    }));
+                                }
+                                break;
+
                             // SSH Cases
                             case 'ssh:connect':
                                 // Pass the original Express request object for IP and session

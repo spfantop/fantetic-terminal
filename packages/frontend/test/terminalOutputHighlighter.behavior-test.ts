@@ -2,6 +2,7 @@ import { strict as assert } from 'node:assert';
 import {
   DEFAULT_TERMINAL_HIGHLIGHT_RULES,
   DEFAULT_TERMINAL_HIGHLIGHT_RULES_JSON,
+  createTerminalHighlightThroughputGuard,
   highlightTerminalOutput,
   parseTerminalHighlightRules,
   parseTerminalHighlightRulesDocument,
@@ -199,3 +200,14 @@ assert.equal(
   splitControlSequenceStreamHighlighter.write('?2004hhyf@debian:~$ ', { enabled: true, rules: commandRule }),
   '\x1b[?2004hhyf@debian:~$ ',
 );
+
+const throughputGuard = createTerminalHighlightThroughputGuard({
+  suspendByteThreshold: 16,
+  resumeAfterMs: 100,
+  now: () => 0,
+});
+assert.equal(throughputGuard.shouldHighlight(8), true);
+assert.equal(throughputGuard.shouldHighlight(20), false);
+assert.equal(throughputGuard.shouldHighlight(1), false);
+throughputGuard.setNow(() => 101);
+assert.equal(throughputGuard.shouldHighlight(1), true);

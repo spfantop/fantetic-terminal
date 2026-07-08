@@ -33,7 +33,10 @@ const { state: dialogState } = storeToRefs(dialogStore);
 const favoritePathsStore = useFavoritePathsStore(); // +++ 实例化 favoritePathsStore +++
 const { isAuthenticated } = storeToRefs(authStore);
 const { showPopupFileEditorBoolean } = storeToRefs(settingsStore);
-const { isConfiguratorVisible: isFocusSwitcherVisible } = storeToRefs(focusSwitcherStore);
+const {
+  isConfiguratorVisible: isFocusSwitcherVisible,
+  configuratorSourceDocument: focusSwitcherConfiguratorSourceDocument,
+} = storeToRefs(focusSwitcherStore);
 const { isRdpModalOpen, rdpConnectionInfo, isVncModalOpen, vncConnectionInfo } = storeToRefs(sessionStore); // +++ 获取 RDP/VNC 状态 +++
 const { isMobile } = useDeviceDetection();
 
@@ -90,6 +93,10 @@ const normalizedRoutePath = computed(() => {
 
 const isFocusSwitcherHotkeyRoute = computed(() => shouldEnableFocusSwitcherHotkeys(normalizedRoutePath.value));
 const isSettingsOverlayVisible = computed(() => route.name === 'Connections' && route.query.settings === '1');
+const shouldShowMainFocusSwitcherConfigurator = computed(() => (
+  isFocusSwitcherVisible.value
+  && (focusSwitcherConfiguratorSourceDocument.value === null || focusSwitcherConfiguratorSourceDocument.value === document)
+));
 
 const closeSettingsOverlay = () => {
   void router.push({ name: 'Connections' });
@@ -258,8 +265,8 @@ const handleGlobalKeyUp = async (event: KeyboardEvent) => {
 
     <!-- +++ 条件渲染焦点切换配置器 (使用 v-show 保持实例) +++ -->
     <FocusSwitcherConfigurator
-      v-show="isFocusSwitcherVisible"
-      :isVisible="isFocusSwitcherVisible"
+      v-show="shouldShowMainFocusSwitcherConfigurator"
+      :isVisible="shouldShowMainFocusSwitcherConfigurator"
       @close="focusSwitcherStore.toggleConfigurator(false)"
     />
 

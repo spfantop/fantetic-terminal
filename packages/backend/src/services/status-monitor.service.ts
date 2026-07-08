@@ -120,6 +120,7 @@ const BATCH_STAT_COMMAND = [
 
 const COMMAND_TIMEOUT_MS = 5000;
 const BATCH_COMMAND_TIMEOUT_MS = 9000;
+const STATUS_UPDATE_BUFFERED_AMOUNT_LIMIT = 512 * 1024;
 const MONTH_MAP: Record<string, string> = {
   Jan: '01',
   Feb: '02',
@@ -824,6 +825,9 @@ export class StatusMonitorService {
     const state = this.clientStates.get(sessionId);
     if (!state || !state.sshClient || state.ws.readyState !== WebSocket.OPEN) {
       this.stopStatusPolling(sessionId);
+      return;
+    }
+    if (state.ws.bufferedAmount > STATUS_UPDATE_BUFFERED_AMOUNT_LIMIT) {
       return;
     }
 

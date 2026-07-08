@@ -162,6 +162,9 @@ watch(currentSessionCommandInput, (newValue) => { // 监听计算属性
 // 可以在这里添加一个 ref 用于聚焦搜索框
 const searchInputRef = ref<HTMLInputElement | null>(null);
 const commandInputRef = ref<HTMLInputElement | null>(null); // Ref for command input
+const commandBarRootRef = ref<HTMLElement | null>(null);
+const readCommandBarDocument = () => commandBarRootRef.value?.ownerDocument ?? document;
+const commandBarTeleportTarget = computed(() => readCommandBarDocument().body);
 
 // Removed debug computed property
 
@@ -301,8 +304,8 @@ let unregisterCommandInputFocus: (() => void) | null = null;
 let unregisterTerminalSearchFocus: (() => void) | null = null;
 
 onMounted(() => {
-  unregisterCommandInputFocus = focusSwitcherStore.registerFocusAction('commandInput', focusCommandInput);
-  unregisterTerminalSearchFocus = focusSwitcherStore.registerFocusAction('terminalSearch', focusSearchInput);
+  unregisterCommandInputFocus = focusSwitcherStore.registerFocusAction('commandInput', focusCommandInput, { ownerDocument: readCommandBarDocument() });
+  unregisterTerminalSearchFocus = focusSwitcherStore.registerFocusAction('terminalSearch', focusSearchInput, { ownerDocument: readCommandBarDocument() });
 });
 
 onBeforeUnmount(() => {
@@ -336,7 +339,10 @@ const closeSuspendedSshSessionsModal = () => {
 const openFileManagerModal = () => {
   if (currentTargetSessionId.value) {
     debugLog(`[CommandInputBar] Emitting fileManager:openModalRequest for session: ${currentTargetSessionId.value}`);
-    emitWorkspaceEvent('fileManager:openModalRequest', { sessionId: currentTargetSessionId.value });
+    emitWorkspaceEvent('fileManager:openModalRequest', {
+      sessionId: currentTargetSessionId.value,
+      sourceDocument: readCommandBarDocument(),
+    });
   } else {
     console.warn('[CommandInputBar] Cannot open file manager modal: No active session ID.');
     // Optionally, show a notification to the user
@@ -398,7 +404,7 @@ const handleNL2CMDKeydown = async (event: KeyboardEvent) => {
 </script>
 
 <template>
-  <div :class="$attrs.class" class="flex items-center py-1.5 bg-background"> <!-- Bind $attrs.class, removed px-2 and gap-1 -->
+  <div ref="commandBarRootRef" :class="$attrs.class" class="flex items-center py-1.5 bg-background"> <!-- Bind $attrs.class, removed px-2 and gap-1 -->
     <div class="flex-grow flex items-center bg-transparent relative gap-1 px-2 w-full"> <!-- Added px-2 here, ensure full width -->
       <!-- Clear Terminal Button -->
       <button
@@ -420,7 +426,7 @@ const handleNL2CMDKeydown = async (event: KeyboardEvent) => {
       <!-- Focus Switcher Config Button (Hide on mobile) -->
       <button
         v-if="!props.isMobile"
-        @click="focusSwitcherStore.toggleConfigurator(true)"
+        @click="focusSwitcherStore.toggleConfigurator(true, readCommandBarDocument())"
         class="flex-shrink-0 flex items-center justify-center w-8 h-8 border border-border/50 rounded-lg text-text-secondary transition-colors duration-200 hover:bg-border hover:text-foreground"
         :title="t('commandInputBar.configureFocusSwitch', '配置焦点切换')"
       >
@@ -579,12 +585,14 @@ const handleNL2CMDKeydown = async (event: KeyboardEvent) => {
   <!-- +++ Quick Commands Modal Instance +++ -->
   <QuickCommandsModal
     :is-visible="showQuickCommands"
+    :teleport-target="commandBarTeleportTarget"
     @close="closeQuickCommandsModal"
     @execute-command="handleQuickCommandExecute"
   />
   <!-- +++ Suspended SSH Sessions Modal Instance +++ -->
   <SuspendedSshSessionsModal
     :is-visible="showSuspendedSshSessionsModal"
+    :teleport-target="commandBarTeleportTarget"
     @close="closeSuspendedSshSessionsModal"
   />
   <!-- File Manager Modal is now handled by a listener for 'fileManager:openModalRequest' event -->

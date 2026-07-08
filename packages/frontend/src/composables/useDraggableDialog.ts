@@ -28,6 +28,8 @@ export function useDraggableDialog(options: DraggableDialogOptions) {
     : null;
   let dragState: DragState | null = null;
   let previousUserSelect = '';
+  let activeDragDocument: Document | null = null;
+  let activeDragWindow: Window | null = null;
 
   const isDisabled = () => {
     const disabled = options.disabled;
@@ -106,10 +108,14 @@ export function useDraggableDialog(options: DraggableDialogOptions) {
       }
     }
 
-    window.removeEventListener('pointermove', handlePointerMove);
-    window.removeEventListener('pointerup', stopDialogDrag);
-    window.removeEventListener('pointercancel', stopDialogDrag);
-    document.body.style.userSelect = previousUserSelect;
+    activeDragWindow?.removeEventListener('pointermove', handlePointerMove);
+    activeDragWindow?.removeEventListener('pointerup', stopDialogDrag);
+    activeDragWindow?.removeEventListener('pointercancel', stopDialogDrag);
+    if (activeDragDocument) {
+      activeDragDocument.body.style.userSelect = previousUserSelect;
+    }
+    activeDragDocument = null;
+    activeDragWindow = null;
     dragState = null;
   };
 
@@ -156,11 +162,13 @@ export function useDraggableDialog(options: DraggableDialogOptions) {
       }
     }
 
-    previousUserSelect = document.body.style.userSelect;
-    document.body.style.userSelect = 'none';
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', stopDialogDrag);
-    window.addEventListener('pointercancel', stopDialogDrag);
+    activeDragDocument = dialog.ownerDocument;
+    activeDragWindow = activeDragDocument.defaultView ?? window;
+    previousUserSelect = activeDragDocument.body.style.userSelect;
+    activeDragDocument.body.style.userSelect = 'none';
+    activeDragWindow.addEventListener('pointermove', handlePointerMove);
+    activeDragWindow.addEventListener('pointerup', stopDialogDrag);
+    activeDragWindow.addEventListener('pointercancel', stopDialogDrag);
     event.preventDefault();
   };
 

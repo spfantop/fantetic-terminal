@@ -34,7 +34,7 @@ export const initializeWebSocket = async (server: http.Server, sessionParser: Re
             zlibInflateOptions: {
                 chunkSize: 10 * 1024,
             },
-            threshold: 256,
+            threshold: 64 * 1024,
             serverNoContextTakeover: true,
             clientNoContextTakeover: true,
         },

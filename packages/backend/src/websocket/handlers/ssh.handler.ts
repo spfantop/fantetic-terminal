@@ -4,11 +4,11 @@ import { AuthenticatedWebSocket, ClientState } from '../types';
 import { clientStates, sftpService, statusMonitorService, auditLogService, notificationService } from '../state';
 import * as SshService from '../../services/ssh.service';
 import { cleanupClientConnection } from '../utils';
-import { temporaryLogStorageService } from '../../ssh-suspend/temporary-log-storage.service';
 import { startDockerStatusPolling } from './docker.handler';
 import WebSocket from 'ws';
 import { flushSshOutput, scheduleSshOutput } from '../ssh-output-buffer';
 import { writeSshInput } from '../ssh-input-writer';
+import { appendSuspendLogBatch, createSuspendLogBatcher, flushSuspendLogBatcher } from '../suspend-log-batcher';
 
 export async function handleSshConnect(
     ws: AuthenticatedWebSocket,
@@ -108,9 +108,8 @@ export async function handleSshConnect(
                     // 如果会话被标记为待挂起，则将输出写入日志
                     const currentState = clientStates.get(newSessionId); // 获取最新的状态
                     if (currentState?.isMarkedForSuspend && currentState.suspendLogPath) {
-                        temporaryLogStorageService.writeToLog(currentState.suspendLogPath, data.toString('utf-8')).catch(err => {
-                            console.error(`[SSH Handler] 写入标记会话 ${newSessionId} 的日志失败 (路径: ${currentState.suspendLogPath}):`, err);
-                        });
+                        createSuspendLogBatcher(currentState.suspendLogPath);
+                        appendSuspendLogBatch(currentState.suspendLogPath, data.toString('utf-8'));
                     }
                 });
                 stream.stderr.on('data', (data: Buffer) => {
@@ -121,13 +120,17 @@ export async function handleSshConnect(
                     // 同样，如果会话被标记为待挂起，则将 stderr 输出写入日志
                     const currentState = clientStates.get(newSessionId);
                     if (currentState?.isMarkedForSuspend && currentState.suspendLogPath) {
-                        temporaryLogStorageService.writeToLog(currentState.suspendLogPath, `[STDERR] ${data.toString('utf-8')}`).catch(err => {
-                            console.error(`[SSH Handler] 写入标记会话 ${newSessionId} 的 STDERR 日志失败 (路径: ${currentState.suspendLogPath}):`, err);
-                        });
+                        createSuspendLogBatcher(currentState.suspendLogPath);
+                        appendSuspendLogBatch(currentState.suspendLogPath, `[STDERR] ${data.toString('utf-8')}`);
                     }
                 });
                 stream.on('close', () => {
                     flushSshOutput(newState, { force: true });
+                    if (newState.suspendLogPath) {
+                        flushSuspendLogBatcher(newState.suspendLogPath).catch(err => {
+                            console.error(`[SSH Handler] 刷新标记会话 ${newSessionId} 的日志失败 (路径: ${newState.suspendLogPath}):`, err);
+                        });
+                    }
                     console.log(`SSH: 会话 ${newSessionId} 的 Shell 通道已关闭。`);
                     if (ws.readyState === WebSocket.OPEN) {
                         ws.send(JSON.stringify({ type: 'ssh:disconnected', payload: 'Shell 通道已关闭。' }));
@@ -178,11 +181,21 @@ export async function handleSshConnect(
 
         sshClient.on('close', () => {
             flushSshOutput(newState, { force: true });
+            if (newState.suspendLogPath) {
+                flushSuspendLogBatcher(newState.suspendLogPath).catch(err => {
+                    console.error(`[SSH Handler] 刷新标记会话 ${newSessionId} 的日志失败 (路径: ${newState.suspendLogPath}):`, err);
+                });
+            }
             console.log(`SSH: 会话 ${newSessionId} 的客户端连接已关闭。`);
             cleanupClientConnection(newSessionId);
         });
         sshClient.on('error', (err: Error) => {
             flushSshOutput(newState, { force: true });
+            if (newState.suspendLogPath) {
+                flushSuspendLogBatcher(newState.suspendLogPath).catch(flushError => {
+                    console.error(`[SSH Handler] 刷新标记会话 ${newSessionId} 的日志失败 (路径: ${newState.suspendLogPath}):`, flushError);
+                });
+            }
             console.error(`SSH: 会话 ${newSessionId} 的客户端连接错误:`, err);
             if (ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'ssh:error', payload: `SSH 连接错误: ${err.message}` }));

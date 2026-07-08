@@ -38,29 +38,32 @@ function scheduleDelayedFlush(state: ClientState): void {
     }, SSH_OUTPUT_BACKPRESSURE_RETRY_MS);
 }
 
-function sendSshOutputFrame(state: ClientState, output: Buffer): void {
+function sendSshOutputFrame(state: ClientState, output: Buffer, options: { compress?: boolean } = {}): void {
     if (state.ws.readyState !== WebSocket.OPEN || output.byteLength === 0) return;
 
     if (state.supportsSshBinaryOutput) {
-        state.ws.send(Buffer.concat([SSH_OUTPUT_BINARY_HEADER, output], SSH_OUTPUT_BINARY_HEADER.byteLength + output.byteLength));
+        state.ws.send(
+            Buffer.concat([SSH_OUTPUT_BINARY_HEADER, output], SSH_OUTPUT_BINARY_HEADER.byteLength + output.byteLength),
+            options
+        );
         return;
     }
 
-    state.ws.send(serializeSshOutput(output));
+    state.ws.send(serializeSshOutput(output), options);
 }
 
 function sendSshOutputChunks(state: ClientState, chunkList: Buffer[], outputBytes: number): void {
     if (chunkList.length === 1) {
         const chunk = chunkList[0];
         if (chunk.byteLength <= MAX_SSH_OUTPUT_FRAME_BYTES) {
-            sendSshOutputFrame(state, chunk);
+            sendSshOutputFrame(state, chunk, { compress: false });
             return;
         }
     }
 
     const output = chunkList.length === 1 ? chunkList[0] : Buffer.concat(chunkList, outputBytes);
     for (let offset = 0; offset < output.byteLength; offset += MAX_SSH_OUTPUT_FRAME_BYTES) {
-        sendSshOutputFrame(state, output.subarray(offset, offset + MAX_SSH_OUTPUT_FRAME_BYTES));
+        sendSshOutputFrame(state, output.subarray(offset, offset + MAX_SSH_OUTPUT_FRAME_BYTES), { compress: false });
     }
 }
 

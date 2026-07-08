@@ -75,8 +75,14 @@ assert.doesNotMatch(
 
 assert.match(
   contextMenuComponent,
-  /<Teleport\s+to="body">[\s\S]*ref="contextMenuRef"/,
-  'file manager context menu should teleport to body so layout panes cannot clip or hide it',
+  /<Teleport\s+:to="teleportTarget">[\s\S]*ref="contextMenuRef"/,
+  'file manager context menu should teleport to the active document body so layout panes cannot clip or hide it',
+);
+
+assert.match(
+  fileManager,
+  /contextMenuTeleportTarget[\s\S]*ownerDocument\.body/,
+  'FileManager should pass the current document body so pop-out windows render their own context menu',
 );
 
 console.log('file manager open interaction behavior ok');

@@ -40,6 +40,7 @@ export function useWorkspaceSettings() {
     terminalScrollbackLimitNumber,
     fileManagerShowDeleteConfirmationBoolean,
     terminalEnableRightClickPasteBoolean,
+    terminalPerformanceModeBoolean,
     showPopupFileManagerBoolean, 
     statusMonitorShowIpBoolean,
   } = storeToRefs(settingsStore);
@@ -285,6 +286,29 @@ export function useWorkspaceSettings() {
     }
   };
 
+  // --- Terminal Performance Mode ---
+  const terminalPerformanceModeLocal = ref(false);
+  const terminalPerformanceModeLoading = ref(false);
+  const terminalPerformanceModeMessage = ref('');
+  const terminalPerformanceModeSuccess = ref(false);
+
+  const handleUpdateTerminalPerformanceMode = async () => {
+    terminalPerformanceModeLoading.value = true;
+    terminalPerformanceModeMessage.value = '';
+    terminalPerformanceModeSuccess.value = false;
+    try {
+      await settingsStore.updateSetting('terminalPerformanceMode', terminalPerformanceModeLocal.value ? 'true' : 'false');
+      terminalPerformanceModeMessage.value = t('settings.workspace.terminalPerformanceModeSuccess', '终端性能模式设置已保存。');
+      terminalPerformanceModeSuccess.value = true;
+    } catch (error: any) {
+      console.error('更新终端性能模式设置失败:', error);
+      terminalPerformanceModeMessage.value = error.message || t('settings.workspace.terminalPerformanceModeError', '保存终端性能模式设置失败。');
+      terminalPerformanceModeSuccess.value = false;
+    } finally {
+      terminalPerformanceModeLoading.value = false;
+    }
+  };
+
   // --- Popup File Manager ---
   const showPopupFileManagerLocal = ref(false);
   const showPopupFileManagerLoading = ref(false);
@@ -405,6 +429,7 @@ export function useWorkspaceSettings() {
   watch(terminalScrollbackLimitNumber, (newValue) => { terminalScrollbackLimitLocal.value = newValue; }, { immediate: true });
   watch(fileManagerShowDeleteConfirmationBoolean, (newValue) => { fileManagerShowDeleteConfirmationLocal.value = newValue; }, { immediate: true });
   watch(terminalEnableRightClickPasteBoolean, (newValue) => { terminalEnableRightClickPasteLocal.value = newValue; }, { immediate: true });
+  watch(terminalPerformanceModeBoolean, (newValue) => { terminalPerformanceModeLocal.value = newValue; }, { immediate: true });
   watch(showPopupFileManagerBoolean, (newValue) => { showPopupFileManagerLocal.value = newValue; }, { immediate: true }); // +++ Watch for popup file manager +++
   watch(statusMonitorShowIpBoolean, (newValue) => { statusMonitorShowIpEnabled.value = newValue; }, { immediate: true });
   watch(settings, syncRemoteDesktopDefaultsFromStore, { immediate: true, deep: true });
@@ -470,6 +495,12 @@ export function useWorkspaceSettings() {
     terminalEnableRightClickPasteMessage, 
     terminalEnableRightClickPasteSuccess, 
     handleUpdateTerminalRightClickPasteSetting, 
+
+    terminalPerformanceModeLocal,
+    terminalPerformanceModeLoading,
+    terminalPerformanceModeMessage,
+    terminalPerformanceModeSuccess,
+    handleUpdateTerminalPerformanceMode,
 
     // Popup File Manager
     showPopupFileManagerLocal,

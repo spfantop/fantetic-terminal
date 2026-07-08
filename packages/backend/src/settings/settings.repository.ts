@@ -244,6 +244,7 @@ export const ensureDefaultSettingsExist = async (db: sqlite3.Database): Promise<
         timezone: 'UTC', // 时区默认值
         terminalScrollbackLimit: '5000', // 终端回滚行数默认值
         terminalEnableRightClickPaste: 'true', // 终端右键粘贴默认值
+        terminalPerformanceMode: 'false',
         terminalHighlightEnabled: 'true',
         terminalHighlightRules: DEFAULT_TERMINAL_HIGHLIGHT_RULES_JSON,
         rdpDefaultFixedResolution: 'false',
