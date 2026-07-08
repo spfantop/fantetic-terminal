@@ -2121,6 +2121,14 @@ const handleOpenAllTargetConnections = async () => {
         ></button>
       </section>
 
+      <button
+        v-if="!isServerPanelCollapsed"
+        type="button"
+        class="server-panel-mobile-dismiss-overlay"
+        :aria-label="t('connections.folders.collapsePanel', '收起侧边栏')"
+        @click="collapseServerPanel"
+      ></button>
+
       <teleport to="body">
         <div
           v-if="isTagFilterOpen"
@@ -3188,6 +3196,10 @@ const handleOpenAllTargetConnections = async () => {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--link-active-color) 16%, transparent);
 }
 
+.server-panel-mobile-dismiss-overlay {
+  display: none;
+}
+
 .server-context-menu {
   position: fixed;
   z-index: 9999;
@@ -3237,6 +3249,16 @@ const handleOpenAllTargetConnections = async () => {
 }
 
 @media (max-width: 900px) {
+  .server-panel-mobile-dismiss-overlay {
+    position: absolute;
+    inset: 0;
+    display: block;
+    z-index: 11;
+    border: 0;
+    background: transparent;
+    cursor: default;
+  }
+
   .server-list-panel:not(.is-collapsed) {
     position: absolute;
     left: 0;
@@ -3249,8 +3271,9 @@ const handleOpenAllTargetConnections = async () => {
   }
 
   .server-list-panel.is-collapsed {
-    width: 6px !important;
-    min-width: 6px !important;
+    width: 0 !important;
+    min-width: 0 !important;
+    border-right-width: 0;
   }
 }
 

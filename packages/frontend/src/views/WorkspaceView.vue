@@ -1760,15 +1760,15 @@ const closeFileManagerModal = () => {
     <!-- VNC Modal is now rendered in App.vue -->
 
     <!-- FileManager Modal Container -->
-    <div ref="fileManagerModalRootRef" v-show="showFileManagerModal && currentFileManagerSessionId && fileManagerPropsMap.get(currentFileManagerSessionId)" class="fixed inset-0 flex items-center justify-center z-50 p-4" :style="{ backgroundColor: 'var(--overlay-bg-color)' }" @click.self="closeFileManagerModal">
-      <div ref="fileManagerModalContentRef" class="bg-background rounded-lg shadow-xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden border border-border">
+    <div ref="fileManagerModalRootRef" v-show="showFileManagerModal && currentFileManagerSessionId && fileManagerPropsMap.get(currentFileManagerSessionId)" class="file-manager-modal-root fixed inset-0 flex items-center justify-center z-50 p-4" :style="{ backgroundColor: 'var(--overlay-bg-color)' }" @click.self="closeFileManagerModal">
+      <div ref="fileManagerModalContentRef" class="file-manager-modal-content bg-background rounded-lg shadow-xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden border border-border">
         <div class="flex justify-between items-center p-3 border-b border-border flex-shrink-0 bg-header cursor-move select-none" @pointerdown="startFileManagerModalDrag">
           <h2 class="text-lg font-semibold text-foreground">{{ t('fileManager.modalTitle', '文件管理器') }} ({{ currentFileManagerSessionId ? (sessionStore.sessions.get(currentFileManagerSessionId)?.connectionName || currentFileManagerSessionId) : '未知会话' }})</h2>
           <button @pointerdown.stop @click="closeFileManagerModal" class="text-text-secondary hover:text-foreground transition-colors">
             <i class="fas fa-times text-xl"></i>
           </button>
         </div>
-        <div class="flex-grow overflow-hidden">
+        <div class="file-manager-modal-body flex-grow overflow-hidden">
           <template v-for="propsData in fileManagerPropsMap.values()" :key="`${propsData.sessionId}-${isMobile}`">
             <div v-show="propsData.sessionId === currentFileManagerSessionId" class="h-full">
               <FileManager
@@ -1808,6 +1808,14 @@ const closeFileManagerModal = () => {
   flex: 1;
   flex-direction: column;
   overflow: hidden;
+}
+
+.file-manager-modal-content {
+  max-width: min(56rem, calc(100vw - 2rem));
+}
+
+.file-manager-modal-body {
+  min-width: 0;
 }
 
 .main-content-area {
@@ -1895,6 +1903,23 @@ const closeFileManagerModal = () => {
   width: 100%; /* 确保宽度为 100% */
   box-sizing: border-box; /* 边框和内边距包含在宽度内 */
   /* 可以添加更多样式，例如背景色、边框等 */
+}
+
+@media (max-width: 768px) {
+  .file-manager-modal-root {
+    padding: 0.5rem;
+  }
+
+  .file-manager-modal-content {
+    width: min(100%, calc(100vw - 1rem));
+    max-width: calc(100vw - 1rem);
+    height: min(85dvh, calc(100dvh - 1rem));
+    max-height: calc(100dvh - 1rem);
+  }
+
+  .file-manager-modal-body {
+    overflow-x: auto;
+  }
 }
 
 

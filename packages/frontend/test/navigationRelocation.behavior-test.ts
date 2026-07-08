@@ -11,6 +11,7 @@ const dataManagementSection = readFileSync(resolve('src/components/settings/Data
 const dataManagementComposable = readFileSync(resolve('src/composables/settings/useDataManagement.ts'), 'utf8');
 const terminalVue = readFileSync(resolve('src/components/Terminal.vue'), 'utf8');
 const terminalTabBar = readFileSync(resolve('src/components/TerminalTabBar.vue'), 'utf8');
+const workspaceView = readFileSync(resolve('src/views/WorkspaceView.vue'), 'utf8');
 const quickCommandsView = readFileSync(resolve('src/views/QuickCommandsView.vue'), 'utf8');
 const addEditQuickCommandForm = readFileSync(resolve('src/components/AddEditQuickCommandForm.vue'), 'utf8');
 const quickCommandsModal = readFileSync(resolve('src/components/QuickCommandsModal.vue'), 'utf8');
@@ -114,6 +115,37 @@ assert.match(
   'the server list panel should not show a horizontal scrollbar at the bottom',
 );
 
+assert.equal(
+  connectionsView.includes('server-panel-mobile-collapse-button'),
+  false,
+  'the mobile server panel should not add a dedicated collapse button',
+);
+
+assert.match(
+  connectionsView,
+  /@media \(max-width: 900px\)\s*\{[\s\S]*\.server-list-panel\.is-collapsed\s*\{[\s\S]*width:\s*0\s*!important;[\s\S]*min-width:\s*0\s*!important;[\s\S]*border-right-width:\s*0;/,
+  'the collapsed mobile server panel should be fully hidden without reserving edge space',
+);
+
+assert.ok(
+  connectionsView.includes('class="server-panel-mobile-dismiss-overlay"')
+    && connectionsView.includes('@click="collapseServerPanel"')
+    && connectionsView.includes('v-if="!isServerPanelCollapsed"'),
+  'the expanded mobile server panel should provide a right-side overlay that collapses it when clicked',
+);
+
+assert.match(
+  connectionsView,
+  /\.server-panel-mobile-dismiss-overlay\s*\{[\s\S]*display:\s*none;/,
+  'the server panel dismiss overlay should be hidden outside mobile layouts',
+);
+
+assert.match(
+  connectionsView,
+  /@media \(max-width: 900px\)\s*\{[\s\S]*\.server-panel-mobile-dismiss-overlay\s*\{[\s\S]*display:\s*block;[\s\S]*z-index:\s*11;/,
+  'the mobile server panel dismiss overlay should sit below the expanded panel and above workspace content',
+);
+
 assert.ok(
   connectionsView.includes('<teleport to="body">') && connectionsView.includes(':style="tagFilterMenuStyle"'),
   'the tag filter popup should be rendered outside the clipped server panel',
@@ -141,6 +173,18 @@ assert.match(
   terminalTabBar,
   /const\s+isConnectionsPagePath\s*=\s*\(path:\s*string\)\s*=>\s*\(\s*path\s*===\s*'\/'\s*\|\|\s*path\s*===\s*'\/connections'\s*\)/,
   'the terminal tab bar should treat the home route as the server page',
+);
+
+assert.ok(
+  workspaceView.includes('class="file-manager-modal-root')
+    && workspaceView.includes('class="file-manager-modal-content'),
+  'the file manager modal should use dedicated shell classes for responsive sizing',
+);
+
+assert.match(
+  workspaceView,
+  /@media \(max-width:\s*768px\)\s*\{[\s\S]*\.file-manager-modal-root\s*\{[\s\S]*padding:\s*0\.5rem;[\s\S]*\.file-manager-modal-content\s*\{[\s\S]*width:\s*min\(100%,\s*calc\(100vw - 1rem\)\);[\s\S]*max-width:\s*calc\(100vw - 1rem\);[\s\S]*\.file-manager-modal-body\s*\{[\s\S]*overflow-x:\s*auto;/,
+  'the mobile file manager modal should stay within the viewport and scroll wide content internally',
 );
 
 assert.match(
