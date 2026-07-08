@@ -147,35 +147,55 @@ const commandRule: TerminalHighlightRule[] = [
 
 assert.equal(
   streamHighlighter.write('root@BBT:~# gre', { enabled: true, rules: commandRule }),
-  'root@BBT:~# ',
+  'root@BBT:~# gre',
 );
 assert.equal(
   streamHighlighter.write('p -n --color=always\r\n', { enabled: true, rules: commandRule }),
-  '\x1b[1;38;2;220;220;170mgrep\x1b[0m -n --color=always\r\n',
+  'p -n --color=always\r\n',
 );
 assert.equal(streamHighlighter.flush({ enabled: true, rules: commandRule }), '');
 
 assert.equal(
   streamHighlighter.write('root@BBT:~# gre', { enabled: true, rules: commandRule }),
-  'root@BBT:~# ',
+  'root@BBT:~# gre',
 );
 assert.equal(
   streamHighlighter.flush({ enabled: true, rules: commandRule }),
-  'gre',
+  '',
 );
 
 const promptStreamHighlighter = createTerminalOutputHighlightStream();
 assert.equal(
   promptStreamHighlighter.write('\r\n', { enabled: true, rules: commandRule }),
-  '',
+  '\r\n',
 );
 assert.equal(
   promptStreamHighlighter.write('root@BBT:~# ', { enabled: true, rules: commandRule }),
-  '\r\nroot@BBT:~# ',
+  'root@BBT:~# ',
 );
 
 const completeLineStreamHighlighter = createTerminalOutputHighlightStream();
 assert.equal(
   completeLineStreamHighlighter.write('DONE\r\n', { enabled: true, rules: commandRule }),
   'DONE\r\n',
+);
+
+const bracketedPasteStreamHighlighter = createTerminalOutputHighlightStream();
+assert.equal(
+  bracketedPasteStreamHighlighter.write('\x1b[?2004h', { enabled: true, rules: commandRule }),
+  '\x1b[?2004h',
+);
+assert.equal(
+  bracketedPasteStreamHighlighter.write('hyf@debian:~$ ', { enabled: true, rules: commandRule }),
+  'hyf@debian:~$ ',
+);
+
+const splitControlSequenceStreamHighlighter = createTerminalOutputHighlightStream();
+assert.equal(
+  splitControlSequenceStreamHighlighter.write('\x1b[', { enabled: true, rules: commandRule }),
+  '',
+);
+assert.equal(
+  splitControlSequenceStreamHighlighter.write('?2004hhyf@debian:~$ ', { enabled: true, rules: commandRule }),
+  '\x1b[?2004hhyf@debian:~$ ',
 );

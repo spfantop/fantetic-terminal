@@ -1217,15 +1217,15 @@ const unsubscribeFromWorkspaceEvents = useWorkspaceEventOff();
    }
  };
 
- const handleSingleTerminalInputData = (sessionId: string, data: string, batched?: boolean) => {
+  const handleSingleTerminalInputData = (sessionId: string, data: string, batched?: boolean, localEcho = true) => {
    const manager = readTerminalInputManager(sessionId);
    if (!manager) {
      console.warn(`[WorkspaceView] handleTerminalInput: 未找到会话 ${sessionId} 或其 terminalManager`);
      return;
    }
 
-   if (data !== '\r' || !manager.isSshConnected || manager.isSshConnected.value) {
-     manager.handleTerminalData(data, { batched });
+    if (data !== '\r' || !manager.isSshConnected || manager.isSshConnected.value) {
+      manager.handleTerminalData(data, { batched, localEcho });
      return;
    }
 
@@ -1265,9 +1265,9 @@ const unsubscribeFromWorkspaceEvents = useWorkspaceEventOff();
      return;
    }
 
-   targetSessionIds.forEach(targetSessionId => {
-     handleSingleTerminalInputData(targetSessionId, data, true);
-   });
+    targetSessionIds.forEach(targetSessionId => {
+      handleSingleTerminalInputData(targetSessionId, data, true, targetSessionId === sessionId);
+    });
  };
 
  const handleTerminalInput = (payload: WorkspaceEventPayloads['terminal:input']) => {
@@ -1825,7 +1825,7 @@ const closeFileManagerModal = () => {
     min-height: 0;
     min-width: 0;
     overflow: hidden; /* Keep overflow hidden */
-    border: 1px solid var(--border-color, #ccc); /* Use variable for border */
+    border: 0px solid var(--border-color, #ccc); /* Use variable for border */
     border-top: none; /* Remove top border as it's handled by the tab bar */
     border-radius: 0 0 5px 5px; /* Top-left, Top-right, Bottom-right, Bottom-left */
     margin: var(--base-margin, 0.5rem); /* Add some margin around the content area */

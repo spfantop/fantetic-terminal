@@ -10,6 +10,15 @@ import type { SshOutputHandler } from './useWebSocketConnection';
 import { debugLog } from './useDebugLog';
 import { useSettingsStore } from '../stores/settings.store';
 import { createTerminalOutputHighlightStream } from '../utils/terminalOutputHighlighter';
+import {
+    consumeLocalEchoFromOutput,
+    createTerminalLocalEchoState,
+    hasPendingLocalEcho,
+    recordLocalEcho,
+    rememberTerminalOutputText,
+    resetTerminalLocalEcho,
+    resolveLocalEchoText,
+} from '../utils/terminalLocalEcho';
 
 type XtermWriteSyncTerminal = Terminal & {
     _core?: {
@@ -66,6 +75,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
     let outputDecodeMicrotaskScheduled = false;
     const terminalHighlightTextDecoder = new TextDecoder();
     const terminalOutputHighlightStream = createTerminalOutputHighlightStream();
+    const terminalLocalEchoState = createTerminalLocalEchoState();
     const INPUT_FLUSH_DELAY = 8;
     const OUTPUT_FLUSH_FALLBACK_DELAY = 32;
     const OUTPUT_IDLE_FLUSH_DELAY = 48;
@@ -136,6 +146,13 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
     const writeTerminalOutputAsync = (term: Terminal, data: string | Uint8Array) => new Promise<void>(resolve => {
         writeTerminalOutput(term, data, resolve);
     });
+
+    const writeLocalEcho = (data: string) => {
+        const term = terminalInstance.value;
+        if (!term || !data) return;
+
+        writeTerminalOutput(term, data);
+    };
 
     const mergeBinaryOutputChunks = (chunkList: Uint8Array[]) => {
         if (chunkList.length === 1) return chunkList[0];
@@ -397,6 +414,16 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         inputFlushTimer = setTimeout(flushPendingInput, INPUT_FLUSH_DELAY);
     };
 
+    const echoLocalInputIfNeeded = (data: string) => {
+        if (protocol !== 'ssh') return;
+
+        const localEchoText = resolveLocalEchoText(data, terminalLocalEchoState);
+        if (!localEchoText) return;
+
+        writeLocalEcho(localEchoText);
+        recordLocalEcho(localEchoText, terminalLocalEchoState);
+    };
+
     const decodeBase64Output = (base64String: string): Uint8Array => {
         const binaryString = atob(base64String);
         const bytes = new Uint8Array(binaryString.length);
@@ -411,12 +438,13 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
     );
 
     const scheduleTerminalByteOutput = (bytes: Uint8Array) => {
-        if (!shouldDecodeOutputForHighlight()) {
+        if (!shouldDecodeOutputForHighlight() && !hasPendingLocalEcho(terminalLocalEchoState)) {
             scheduleTerminalOutput(bytes);
             return;
         }
 
-        const text = terminalHighlightTextDecoder.decode(bytes, { stream: true });
+        const decodedText = terminalHighlightTextDecoder.decode(bytes, { stream: true });
+        const text = consumeLocalEchoFromOutput(decodedText, terminalLocalEchoState);
         if (text.length > 0) {
             scheduleTerminalOutput(text);
         }
@@ -541,8 +569,11 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         // term.focus(); // 也许在 ssh:connected 时聚焦更好
     };
 
-    const handleTerminalData = (data: string, options: { batched?: boolean } = {}) => {
+    const handleTerminalData = (data: string, options: { batched?: boolean; localEcho?: boolean } = {}) => {
         // console.debug(`[会话 ${sessionId}][SSH终端模块] 接收到终端输入:`, data);
+        if (options.localEcho !== false) {
+            echoLocalInputIfNeeded(data);
+        }
         if (options.batched) {
             flushPendingInput();
             sendSshInputData(data);
@@ -592,6 +623,9 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
                  outputData = String(outputData);
              }
         }
+
+        outputData = consumeLocalEchoFromOutput(outputData, terminalLocalEchoState);
+        if (!outputData) return;
 
         if (terminalInstance.value) {
             scheduleTerminalOutput(outputData);
@@ -680,6 +714,9 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         // 这里可以保留日志或用于其他特定于终端的 UI 更新（如果需要）
         const statusKey = payload?.key || 'unknown';
         const statusParams = payload?.params || {};
+        if (typeof payload === 'string') {
+            rememberTerminalOutputText(payload, terminalLocalEchoState);
+        }
         debugLog(`[会话 ${sessionId}][SSH终端模块] 收到 SSH 状态更新:`, statusKey, statusParams);
         // 可以在终端打印一些状态信息吗？
         // terminalInstance.value?.writeln(`\r\n\x1b[34m[状态: ${statusKey}]\x1b[0m`);
@@ -765,6 +802,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         pendingOutputHeadIndex = 0;
         pendingOutputBytes = 0;
         terminalOutputHighlightStream.reset();
+        resetTerminalLocalEcho(terminalLocalEchoState);
         if (inputFlushTimer !== null) {
             clearTimeout(inputFlushTimer);
             inputFlushTimer = null;
@@ -851,7 +889,7 @@ export function useSshTerminal(t: (key: string) => string) {
         terminalInstance.value = term;
     };
     
-    const handleTerminalData = (data: string, options: { batched?: boolean } = {}) => {
+    const handleTerminalData = (data: string, options: { batched?: boolean; localEcho?: boolean } = {}) => {
         console.warn('[SSH终端模块][旧] 收到终端数据，但使用了已弃用的单例模式，无法发送。');
     };
     

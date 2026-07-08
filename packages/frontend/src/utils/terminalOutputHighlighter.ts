@@ -208,7 +208,7 @@ export function createTerminalOutputHighlightStream(): TerminalOutputHighlightSt
       const completeEnd = findLastCompleteLineBreakEnd(combinedInput);
 
       if (completeEnd === 0) {
-        const { stablePrefix, activeTail } = splitIncompleteLineForStreaming(combinedInput);
+        const { stablePrefix, activeTail } = splitTerminalControlTailForStreaming(combinedInput);
         if (activeTail.length > maxLineLength) {
           pendingLineFragment = '';
           return highlightTerminalOutput(stablePrefix + activeTail, options);
@@ -221,12 +221,7 @@ export function createTerminalOutputHighlightStream(): TerminalOutputHighlightSt
       const completeText = combinedInput.slice(0, completeEnd);
       const incompleteLine = combinedInput.slice(completeEnd);
 
-      if (!incompleteLine && isOnlyLineBreaks(completeText)) {
-        pendingLineFragment = completeText;
-        return '';
-      }
-
-      const { stablePrefix, activeTail } = splitIncompleteLineForStreaming(incompleteLine);
+      const { stablePrefix, activeTail } = splitTerminalControlTailForStreaming(incompleteLine);
       pendingLineFragment = activeTail;
       let output = highlightTerminalOutput(completeText, options);
       if (stablePrefix) {
@@ -291,47 +286,30 @@ function shouldStreamHighlight(options: TerminalHighlightOptions): boolean {
   return options.enabled && options.rules.length > 0;
 }
 
-function splitIncompleteLineForStreaming(input: string): { stablePrefix: string; activeTail: string } {
+function splitTerminalControlTailForStreaming(input: string): { stablePrefix: string; activeTail: string } {
   if (!input) {
     return { stablePrefix: '', activeTail: '' };
   }
 
-  const stableEnd = findStableIncompleteLinePrefixEnd(input);
+  const incompleteEscapeStart = findIncompleteTerminalEscapeStart(input);
+  if (incompleteEscapeStart >= 0) {
+    return {
+      stablePrefix: input.slice(0, incompleteEscapeStart),
+      activeTail: input.slice(incompleteEscapeStart),
+    };
+  }
+
   return {
-    stablePrefix: input.slice(0, stableEnd),
-    activeTail: input.slice(stableEnd),
+    stablePrefix: input,
+    activeTail: '',
   };
 }
 
-function findStableIncompleteLinePrefixEnd(input: string): number {
-  const lastChar = input[input.length - 1];
-  if (!lastChar) {
-    return 0;
-  }
+function findIncompleteTerminalEscapeStart(input: string): number {
+  const escapeStart = input.lastIndexOf('\x1b');
+  if (escapeStart < 0) return -1;
 
-  if (/\s/.test(lastChar) || isShellPromptTerminator(lastChar)) {
-    return input.length;
-  }
-
-  for (let offset = input.length - 1; offset >= 0; offset -= 1) {
-    if (isStreamingTokenBoundary(input[offset])) {
-      return offset + 1;
-    }
-  }
-
-  return 0;
-}
-
-function isStreamingTokenBoundary(char: string): boolean {
-  return /\s/.test(char) || /["'`|;&<>(){}\[\],]/.test(char);
-}
-
-function isShellPromptTerminator(char: string): boolean {
-  return char === '$' || char === '#' || char === '%' || char === '>' || char === '❯' || char === '➜';
-}
-
-function isOnlyLineBreaks(input: string): boolean {
-  return /^(?:\r\n|\r|\n)+$/.test(input);
+  return readTerminalEscapeSequence(input, escapeStart) ? -1 : escapeStart;
 }
 
 function findLastCompleteLineBreakEnd(input: string): number {

@@ -8,6 +8,7 @@ export interface AuthenticatedWebSocket extends WebSocket {
     userId?: number;
     username?: string;
     sessionId?: string; 
+    missedHeartbeatCount?: number;
 }
 
 // 中心化的客户端状态接口 (统一版本)
@@ -28,6 +29,7 @@ export interface ClientState { // 导出以便 Service 可以导入
     pendingSshOutputBuffer?: Buffer[]; // SSH 输出短窗口聚合缓冲
     pendingSshOutputBytes?: number; // SSH 输出聚合缓冲字节数
     sshOutputFlushTimer?: NodeJS.Timeout; // WebSocket 背压下的延迟输出任务
+    isSshOutputMicrotaskScheduled?: boolean; // 小输出低延迟刷新任务是否已排队
     isSshOutputPaused?: boolean; // WebSocket 输出背压时暂停 SSH 读取
     pendingSshInputBuffer?: (string | Buffer)[]; // SSH 输入背压缓冲
     pendingSshInputByteCount?: number; // SSH 输入背压缓冲字节数

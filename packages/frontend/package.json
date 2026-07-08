@@ -8,6 +8,7 @@
       "build": "vue-tsc --noEmit && vite build",
       "preview": "vite preview",
       "test:highlighter": "esbuild test/terminalOutputHighlighter.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/terminalOutputHighlighter.behavior-test.mjs && node ../../.vite-codex-cache/terminalOutputHighlighter.behavior-test.mjs",
+      "test:terminal-local-echo": "esbuild test/terminalLocalEcho.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/terminalLocalEcho.behavior-test.mjs && node ../../.vite-codex-cache/terminalLocalEcho.behavior-test.mjs",
       "test:add-connection-tags": "esbuild test/addConnectionFormTagSelection.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/addConnectionFormTagSelection.behavior-test.mjs && node ../../.vite-codex-cache/addConnectionFormTagSelection.behavior-test.mjs",
       "test:terminal-batch-input": "esbuild test/terminalBatchInput.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/terminalBatchInput.behavior-test.mjs && node ../../.vite-codex-cache/terminalBatchInput.behavior-test.mjs",
       "test:layout-panes": "esbuild test/layoutPanes.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/layoutPanes.behavior-test.mjs && node ../../.vite-codex-cache/layoutPanes.behavior-test.mjs",
