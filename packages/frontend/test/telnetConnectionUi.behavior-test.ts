@@ -86,3 +86,8 @@ assert.match(addForm, /username:\s*normalizeConnectionUsername\(formData\.userna
 assert.match(connectionsView, /const isConnectionTestSupported = \(type: ConnectionInfo\['type'\]\) => \['SSH', 'TELNET', 'RDP', 'VNC'\]\.includes\(type\)/);
 assert.match(connectionsView, /const connectionsToTest = filteredAndSortedConnections\.value\.filter\(c => isConnectionTestSupported\(c\.type\) && c\.id != null\)/);
 assert.doesNotMatch(connectionsView, /conn\.type === 'SSH' && connectionTestStates\.get\(conn\.id\)/);
+assert.match(connectionsView, /CONNECTION_TEST_RESULT_VISIBLE_MS\s*=\s*5000/);
+assert.match(connectionsView, /connectionTestHideTimers = new Map<number, ReturnType<typeof setTimeout>>/);
+assert.match(connectionsView, /scheduleConnectionTestStateAutoHide\(conn\.id\)/);
+assert.match(connectionsView, /connectionTestHideTimers\.forEach\(timer => clearTimeout\(timer\)\)/);
+assert.match(connectionsView, /connectionTestHideTimers\.clear\(\)/);

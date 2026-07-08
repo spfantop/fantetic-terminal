@@ -770,6 +770,8 @@ onUnmounted(() => {
   document.removeEventListener('click', handleDocumentClick);
   document.removeEventListener('keydown', handleServerContextMenuKeydown);
   clearServerActionMenuCloseTimer();
+  connectionTestHideTimers.forEach(timer => clearTimeout(timer));
+  connectionTestHideTimers.clear();
   window.removeEventListener('resize', handleServerPanelViewportResize);
   window.removeEventListener(SERVER_PANEL_TOGGLE_EVENT, handleServerPanelToggleRequest);
   stopServerPanelResize();
@@ -1397,6 +1399,26 @@ interface ConnectionTestState {
 const connectionTestStates = ref<Map<number, ConnectionTestState>>(new Map());
 const isTestingAll = ref(false);
 const isConnectionTestSupported = (type: ConnectionInfo['type']) => ['SSH', 'TELNET', 'RDP', 'VNC'].includes(type);
+const CONNECTION_TEST_RESULT_VISIBLE_MS = 8000;
+const connectionTestHideTimers = new Map<number, ReturnType<typeof setTimeout>>();
+
+const clearConnectionTestHideTimer = (connectionId: number) => {
+  const timer = connectionTestHideTimers.get(connectionId);
+  if (!timer) return;
+
+  clearTimeout(timer);
+  connectionTestHideTimers.delete(connectionId);
+};
+
+const scheduleConnectionTestStateAutoHide = (connectionId: number) => {
+  clearConnectionTestHideTimer(connectionId);
+  const timer = setTimeout(() => {
+    connectionTestHideTimers.delete(connectionId);
+    connectionTestStates.value.delete(connectionId);
+    connectionTestStates.value = new Map(connectionTestStates.value);
+  }, CONNECTION_TEST_RESULT_VISIBLE_MS);
+  connectionTestHideTimers.set(connectionId, timer);
+};
 
 const getLatencyColorString = (latencyMs?: number): string => {
   if (latencyMs === undefined) return 'inherit'; // Default or inherit
@@ -1409,6 +1431,7 @@ const getLatencyColorString = (latencyMs?: number): string => {
 const handleTestSingleConnection = async (conn: ConnectionInfo) => {
   if (!conn.id || !isConnectionTestSupported(conn.type)) return;
 
+  clearConnectionTestHideTimer(conn.id);
   connectionTestStates.value.set(conn.id, {
     status: 'testing',
     resultText: t('connections.test.testingInProgress', '测试中...'),
@@ -1439,17 +1462,20 @@ const handleTestSingleConnection = async (conn: ConnectionInfo) => {
         latency: latencyMs,
         latencyColor: determinedColor,
       });
+      scheduleConnectionTestStateAutoHide(conn.id);
     } else {
       connectionTestStates.value.set(conn.id, {
         status: 'error',
         resultText: result.message || t('connections.test.unknownError', '未知错误'),
       });
+      scheduleConnectionTestStateAutoHide(conn.id);
     }
   } catch (error: any) {
     connectionTestStates.value.set(conn.id, {
       status: 'error',
       resultText: error.message || t('connections.test.unknownError', '未知错误'),
     });
+    scheduleConnectionTestStateAutoHide(conn.id);
   }
 };
 
