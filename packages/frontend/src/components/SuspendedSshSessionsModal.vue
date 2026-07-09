@@ -9,6 +9,7 @@ import { debugLog } from '../composables/useDebugLog';
 const props = defineProps<{
   isVisible: boolean;
   teleportTarget?: string | HTMLElement;
+  isMobile?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -29,6 +30,18 @@ const { centerDialog, startDialogDrag } = useDraggableDialog({
   rootRef: modalRootRef,
   dialogRef: modalContentRef,
 });
+const isMobileViewport = computed(() => (
+  props.isMobile || ((modalRootRef.value?.ownerDocument.defaultView ?? window).innerWidth <= 768)
+));
+const mobileModalContentStyle = {
+  width: 'min(100%, calc(100dvw - 2rem))',
+  maxWidth: 'calc(100dvw - 2rem)',
+  height: 'min(86dvh, calc(100dvh - 2rem))',
+  maxHeight: 'calc(100dvh - 2rem)',
+};
+const modalContentStyle = computed(() => (
+  isMobileViewport.value ? mobileModalContentStyle : undefined
+));
 
 const closeModal = () => {
   emit('close');
@@ -79,7 +92,7 @@ onUnmounted(() => {
 <template>
   <teleport :to="resolvedTeleportTarget">
     <div ref="modalRootRef" v-if="isVisible" class="fixed inset-0 bg-overlay flex justify-center items-center z-50 p-4" @click.self="closeModal">
-      <div ref="modalContentRef" class="bg-background text-foreground p-4 rounded-lg shadow-xl border border-border w-full max-w-2xl max-h-[85vh] flex flex-col relative">
+      <div ref="modalContentRef" class="bg-background text-foreground p-4 rounded-lg shadow-xl border border-border w-full max-w-2xl max-h-[85vh] flex flex-col relative min-w-0 overflow-hidden" :style="modalContentStyle">
         <!-- Close Button -->
         <button class="absolute top-2 right-2 p-1 text-text-secondary hover:text-foreground z-10" @pointerdown.stop @click="closeModal" :title="t('close', '关闭')">
            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">

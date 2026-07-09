@@ -206,6 +206,8 @@ const readRouteTab = (): SettingsTabKey | null => {
 const activeTab = ref<SettingsTabKey>(props.isDialog ? tabs.value[0].key : (readRouteTab() || tabs.value[0].key));
 const activeTabInfo = computed(() => tabs.value.find(tab => tab.key === activeTab.value) || tabs.value[0]);
 const dialogShellRef = ref<HTMLElement | null>(null);
+const readSettingsWindow = () => dialogShellRef.value?.ownerDocument.defaultView ?? window;
+const isMobileViewport = computed(() => readSettingsWindow().innerWidth <= 768);
 const { width: dialogWidth, height: dialogHeight } = useResizable(dialogShellRef, {
   minWidth: 640,
   minHeight: 420,
@@ -221,6 +223,15 @@ const dialogDragState = ref<{
   initialTop: number;
 } | null>(null);
 const dialogStyle = computed(() => {
+  if (isMobileViewport.value) {
+    return {
+      width: 'min(100%, calc(100dvw - 2rem))',
+      maxWidth: 'calc(100dvw - 2rem)',
+      height: 'min(90dvh, calc(100dvh - 2rem))',
+      maxHeight: 'calc(100dvh - 2rem)',
+    };
+  }
+
   const style: Record<string, string | undefined> = {
     width: dialogWidth.value ? `${dialogWidth.value}px` : undefined,
     height: dialogHeight.value ? `${dialogHeight.value}px` : undefined,
@@ -597,17 +608,19 @@ onUnmounted(() => {
   }
 
   .settings-dialog-layer {
-    padding: 0.75rem;
+    padding: 1rem;
   }
 
   .settings-dialog-shell {
     left: 50%;
     top: 50%;
-    height: min(90dvh, 44rem);
+    width: min(100%, calc(100dvw - 2rem));
+    height: min(90dvh, calc(100dvh - 2rem));
     min-height: min(20rem, 90dvh);
-    max-height: calc(100dvh - 1.5rem);
+    max-height: calc(100dvh - 2rem);
     border: 1px solid var(--border-color);
     border-radius: 0.75rem;
+    overflow: hidden;
   }
 
   .settings-sidebar {

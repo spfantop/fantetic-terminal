@@ -586,6 +586,7 @@ const handleNL2CMDKeydown = async (event: KeyboardEvent) => {
   <QuickCommandsModal
     :is-visible="showQuickCommands"
     :teleport-target="commandBarTeleportTarget"
+    :is-mobile="props.isMobile"
     @close="closeQuickCommandsModal"
     @execute-command="handleQuickCommandExecute"
   />
@@ -593,6 +594,7 @@ const handleNL2CMDKeydown = async (event: KeyboardEvent) => {
   <SuspendedSshSessionsModal
     :is-visible="showSuspendedSshSessionsModal"
     :teleport-target="commandBarTeleportTarget"
+    :is-mobile="props.isMobile"
     @close="closeSuspendedSshSessionsModal"
   />
   <!-- File Manager Modal is now handled by a listener for 'fileManager:openModalRequest' event -->

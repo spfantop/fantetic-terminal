@@ -9,6 +9,7 @@ import { debugLog } from '../composables/useDebugLog';
 const props = defineProps<{
   isVisible: boolean;
   teleportTarget?: string | HTMLElement;
+  isMobile?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -39,9 +40,20 @@ const { width: modalWidth, height: modalHeight } = useResizable(modalContentRef,
   maxWidth: () => (modalContentRef.value?.ownerDocument.defaultView ?? window).innerWidth - 24,
   maxHeight: () => (modalContentRef.value?.ownerDocument.defaultView ?? window).innerHeight - 24,
 });
+const isMobileViewport = computed(() => (
+  props.isMobile || ((modalRootRef.value?.ownerDocument.defaultView ?? window).innerWidth <= 768)
+));
+const mobileModalContentStyle = {
+  width: 'min(100%, calc(100dvw - 2rem))',
+  maxWidth: 'calc(100dvw - 2rem)',
+  height: 'min(86dvh, calc(100dvh - 2rem))',
+  maxHeight: 'calc(100dvh - 2rem)',
+};
 const modalResizeStyle = computed(() => ({
-  width: modalWidth.value ? `${modalWidth.value}px` : 'min(36rem, calc(100vw - 2rem))',
-  height: modalHeight.value ? `${modalHeight.value}px` : 'min(42rem, 85vh)',
+  ...(isMobileViewport.value ? mobileModalContentStyle : {
+    width: modalWidth.value ? `${modalWidth.value}px` : 'min(36rem, calc(100vw - 2rem))',
+    height: modalHeight.value ? `${modalHeight.value}px` : 'min(42rem, 85vh)',
+  }),
 }));
 
 // 处理从 QuickCommandsView 传来的事件
@@ -91,7 +103,7 @@ onMounted(() => {
 <template>
   <teleport :to="resolvedTeleportTarget">
     <div ref="modalRootRef" v-if="isVisible" class="fixed inset-0 bg-overlay flex justify-center items-center z-50 p-4" @click.self="closeModal">
-      <div ref="modalContentRef" class="bg-background text-foreground p-4 rounded-lg shadow-xl border border-border flex flex-col relative" :style="modalResizeStyle">
+      <div ref="modalContentRef" class="bg-background text-foreground p-4 rounded-lg shadow-xl border border-border flex flex-col relative min-w-0 overflow-hidden" :style="modalResizeStyle">
         <span class="quick-command-modal-resize-hint" aria-hidden="true"></span>
         <!-- Close Button -->
         <button class="absolute top-2 right-2 p-1 text-text-secondary hover:text-foreground z-10" @pointerdown.stop @click="closeModal" title="关闭">

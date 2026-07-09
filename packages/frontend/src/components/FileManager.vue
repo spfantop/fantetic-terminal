@@ -24,9 +24,30 @@ import FavoritePathsModal from './FavoritePathsModal.vue';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
 import { formatDateTimeWithSettings } from '../utils/dateTimeFormat';
 import { debugLog, debugLogLazy } from '../composables/useDebugLog';
+import {
+  createLongPressContextMenuEvent,
+  createMobileLongPressHandlers,
+  type MobileLongPressHandlers,
+} from '../composables/useMobileLongPress';
 
 
 type SftpManagerInstance = ReturnType<typeof createSftpActionsManager>;
+
+const parentDirectoryItem: FileListItem = {
+  filename: '..',
+  longname: '..',
+  attrs: {
+    isDirectory: true,
+    isFile: false,
+    isSymbolicLink: false,
+    size: 0,
+    uid: 0,
+    gid: 0,
+    mode: 0,
+    atime: 0,
+    mtime: 0,
+  },
+};
 
 
 // --- Props ---
@@ -581,6 +602,28 @@ const handleItemDoubleClick = (event: MouseEvent, item: FileListItem) => {
 const handleOpenContextMenuClick = (item: FileListItem) => {
   handleItemAction(item);
 };
+
+const fileItemLongPressHandlers = new Map<string, MobileLongPressHandlers>();
+const getFileItemLongPressHandlers = (item: FileListItem) => {
+  const cachedHandlers = fileItemLongPressHandlers.get(item.filename);
+  if (cachedHandlers) return cachedHandlers;
+
+  const handlers = createMobileLongPressHandlers({
+    isMobile: () => props.isMobile,
+    onLongPress: (event, point) => {
+      showContextMenu(createLongPressContextMenuEvent(event, point), item);
+    },
+  });
+  fileItemLongPressHandlers.set(item.filename, handlers);
+  return handlers;
+};
+
+const fileListLongPressHandlers = createMobileLongPressHandlers({
+  isMobile: () => props.isMobile,
+  onLongPress: (event, point) => {
+    showContextMenu(createLongPressContextMenuEvent(event, point));
+  },
+});
 
 // +++ 计算属性：获取选中的完整文件对象列表 +++
 const computedSelectedFullItems = computed((): FileListItem[] => {
@@ -1920,6 +1963,11 @@ const handleOpenEditorClick = () => {
       @keydown="handleKeydown"
       @wheel="handleWheel"
       @contextmenu.prevent="showContextMenu($event)"
+      @touchstart="fileListLongPressHandlers.onTouchstart"
+      @touchmove="fileListLongPressHandlers.onTouchmove"
+      @touchend="fileListLongPressHandlers.onTouchend"
+      @touchcancel="fileListLongPressHandlers.onTouchcancel"
+      @click.capture="fileListLongPressHandlers.onClickCapture"
       tabindex="0"
       :style="{ '--row-size-multiplier': rowSizeMultiplier }"
     >
@@ -2020,12 +2068,17 @@ const handleOpenEditorClick = () => {
                     'outline-dashed outline-2 outline-offset-[-1px] outline-primary': dragOverTarget === '..',
                     'hover:bg-header/50': dragOverTarget !== '..'
                 }"
-                @click="handleItemClick($event, { filename: '..', longname: '..', attrs: { isDirectory: true, isFile: false, isSymbolicLink: false, size: 0, uid: 0, gid: 0, mode: 0, atime: 0, mtime: 0 } })"
-                @dblclick="handleItemDoubleClick($event, { filename: '..', longname: '..', attrs: { isDirectory: true, isFile: false, isSymbolicLink: false, size: 0, uid: 0, gid: 0, mode: 0, atime: 0, mtime: 0 } })"
-                @contextmenu.prevent.stop="showContextMenu($event, { filename: '..', longname: '..', attrs: { isDirectory: true, isFile: false, isSymbolicLink: false, size: 0, uid: 0, gid: 0, mode: 0, atime: 0, mtime: 0 } })"
-                @dragover.prevent="handleDragOverRow({ filename: '..', longname: '..', attrs: { isDirectory: true, isFile: false, isSymbolicLink: false, size: 0, uid: 0, gid: 0, mode: 0, atime: 0, mtime: 0 } }, $event)"
-                @dragleave="handleDragLeaveRow({ filename: '..', longname: '..', attrs: { isDirectory: true, isFile: false, isSymbolicLink: false, size: 0, uid: 0, gid: 0, mode: 0, atime: 0, mtime: 0 } })"
-                @drop.prevent="handleDropOnRow({ filename: '..', longname: '..', attrs: { isDirectory: true, isFile: false, isSymbolicLink: false, size: 0, uid: 0, gid: 0, mode: 0, atime: 0, mtime: 0 } }, $event)"
+                @click="handleItemClick($event, parentDirectoryItem)"
+                @dblclick="handleItemDoubleClick($event, parentDirectoryItem)"
+                @contextmenu.prevent.stop="showContextMenu($event, parentDirectoryItem)"
+                @touchstart.stop="getFileItemLongPressHandlers(parentDirectoryItem).onTouchstart"
+                @touchmove.stop="getFileItemLongPressHandlers(parentDirectoryItem).onTouchmove"
+                @touchend.stop="getFileItemLongPressHandlers(parentDirectoryItem).onTouchend"
+                @touchcancel.stop="getFileItemLongPressHandlers(parentDirectoryItem).onTouchcancel"
+                @click.capture="getFileItemLongPressHandlers(parentDirectoryItem).onClickCapture"
+                @dragover.prevent="handleDragOverRow(parentDirectoryItem, $event)"
+                @dragleave="handleDragLeaveRow(parentDirectoryItem)"
+                @drop.prevent="handleDropOnRow(parentDirectoryItem, $event)"
                 :data-filename="'..'"
                 >
               <td class="text-center border-b border-border align-middle" :style="{ paddingLeft: `calc(1rem * var(--row-size-multiplier))`, paddingRight: `calc(0.5rem * var(--row-size-multiplier))` }">
@@ -2051,6 +2104,11 @@ const handleOpenEditorClick = () => {
                 ]"
                :data-filename="item.filename"
                @contextmenu.prevent.stop="showContextMenu($event, item)"
+               @touchstart.stop="getFileItemLongPressHandlers(item).onTouchstart"
+               @touchmove.stop="getFileItemLongPressHandlers(item).onTouchmove"
+               @touchend.stop="getFileItemLongPressHandlers(item).onTouchend"
+               @touchcancel.stop="getFileItemLongPressHandlers(item).onTouchcancel"
+               @click.capture="getFileItemLongPressHandlers(item).onClickCapture"
                @dragover.prevent="handleDragOverRow(item, $event)"
                @dragleave="handleDragLeaveRow(item)"
                @drop.prevent="handleDropOnRow(item, $event)">

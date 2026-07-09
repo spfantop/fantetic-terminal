@@ -16,6 +16,7 @@ import { debugLog } from '../composables/useDebugLog';
 import { storeToRefs } from 'pinia';
 import TransferProgressModal from './TransferProgressModal.vue';
 import { isActionLayoutPane } from '../utils/layoutPanes';
+import { useDeviceDetection } from '../composables/useDeviceDetection';
 
 
 // --- Props ---
@@ -103,6 +104,7 @@ const { t } = useI18n();
 const subscribeToWorkspaceEvent = useWorkspaceEventSubscriber();
 const unsubscribeFromWorkspaceEvent = useWorkspaceEventOff();
 const emitWorkspaceEvent = useWorkspaceEventEmitter();
+const { isMobile } = useDeviceDetection();
 
 // +++ Appearance Store Refs +++
 const appearanceStore = useAppearanceStore();
@@ -771,7 +773,8 @@ const componentProps = computed(() => {
             isConnected: scopedActiveSshSession.value.wsManager.isConnected, // 恢复 isConnected
             isSftpReady: scopedActiveSshSession.value.wsManager.isSftpReady // 恢复 isSftpReady
           },
-         class: 'pane-content', // class 可以保留，或者在模板中处理
+          class: 'pane-content', // class 可以保留，或者在模板中处理
+          isMobile: isMobile.value,
          // FileManager 可能也需要转发事件，例如文件操作相关的，暂时省略
       };
     case 'statusMonitor':
@@ -793,11 +796,13 @@ const componentProps = computed(() => {
        return {
          class: 'pane-content',
          targetSessionId: props.activeSessionId,
+         isMobile: isMobile.value,
          // --- 移除事件转发 ---
        };
     case 'connections':
        return {
          class: 'pane-content',
+         isMobile: isMobile.value,
          // --- 移除事件转发 ---
        };
      case 'commandHistory':
@@ -830,7 +835,7 @@ const componentProps = computed(() => {
 const sidebarProps = computed(() => (paneName: PaneName | null, side: 'left' | 'right') => {
  if (!paneName) return {};
 
- const baseProps = { class: 'sidebar-pane-content' }; // Base props for all sidebar components
+ const baseProps = { class: 'sidebar-pane-content', isMobile: isMobile.value }; // Base props for all sidebar components
 
  switch (paneName) {
    case 'editor':
@@ -865,6 +870,7 @@ const sidebarProps = computed(() => (paneName: PaneName | null, side: 'left' | '
             isConnected: scopedActiveSshSession.value.wsManager.isConnected, // 直接传递 ref
             isSftpReady: scopedActiveSshSession.value.wsManager.isSftpReady  // 直接传递 ref
           },
+          isMobile: isMobile.value,
        };
      } else {
        return baseProps; // Return only base props if no active session

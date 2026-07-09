@@ -704,6 +704,7 @@ onBeforeUnmount(() => {
               @request-edit-connection="handleRequestEditFromPopup"
               class="popup-connection-list"
               folder-mode
+              :is-mobile="props.isMobile"
             />
         </div>
       </div>
@@ -721,6 +722,7 @@ onBeforeUnmount(() => {
     <TransferProgressModal v-model:visible="showTransferProgressModal" />
     <SuspendedSshSessionsModal
       :is-visible="showSuspendedSshSessionsModal"
+      :is-mobile="props.isMobile"
       @close="closeSuspendedSshSessionsModal"
     />
   </div>

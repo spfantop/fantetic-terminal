@@ -15,6 +15,11 @@ import { scheduleScrollIntoView } from '../composables/useRafScrollIntoView';
 import { debugLog } from '../composables/useDebugLog';
 import ManageTagConnectionsModal from './ManageTagConnectionsModal.vue'; 
 import { useConfirmDialog } from '../composables/useConfirmDialog';
+import {
+  createLongPressContextMenuEvent,
+  createMobileLongPressHandlers,
+  type MobileLongPressHandlers,
+} from '../composables/useMobileLongPress';
 
 
 // 定义事件
@@ -31,7 +36,10 @@ const uiNotificationsStore = useUiNotificationsStore(); // +++ 修正实例化�
 const settingsStore = useSettingsStore(); // 实例化设置 store
 const { showConfirmDialog } = useConfirmDialog();
 
-const props = withDefaults(defineProps<{ folderMode?: boolean }>(), { folderMode: false });
+const props = withDefaults(defineProps<{ folderMode?: boolean; isMobile?: boolean }>(), {
+  folderMode: false,
+  isMobile: false,
+});
 const { connections, folders, isLoading: connectionsLoading, error: connectionsError, isFoldersLoading } = storeToRefs(connectionsStore);
 const { tags, isLoading: tagsLoading, error: tagsError } = storeToRefs(tagsStore);
 const { showConnectionTagsBoolean } = storeToRefs(settingsStore); // 获取设置项
@@ -466,6 +474,21 @@ nextTick(() => {
 return false; // 彻底停止事件处理
 };
 
+const connectionLongPressHandlers = new Map<number, MobileLongPressHandlers>();
+const createConnectionLongPressHandlers = (connection: ConnectionInfo) => {
+  const cachedHandlers = connectionLongPressHandlers.get(connection.id);
+  if (cachedHandlers) return cachedHandlers;
+
+  const handlers = createMobileLongPressHandlers({
+    isMobile: () => props.isMobile,
+    onLongPress: (event, point) => {
+      showContextMenu(createLongPressContextMenuEvent(event, point), connection);
+    },
+  });
+  connectionLongPressHandlers.set(connection.id, handlers);
+  return handlers;
+};
+
 // 关闭右键菜单
 const closeContextMenu = () => {
   contextMenuVisible.value = false;
@@ -568,6 +591,22 @@ nextTick(() => {
     }
   }
 });
+};
+
+const tagLongPressHandlers = new Map<string, MobileLongPressHandlers>();
+const createTagLongPressHandlers = (groupData: (typeof filteredAndGroupedConnections.value)[0]) => {
+  const handlerKey = String(groupData.tagId ?? groupData.groupName);
+  const cachedHandlers = tagLongPressHandlers.get(handlerKey);
+  if (cachedHandlers) return cachedHandlers;
+
+  const handlers = createMobileLongPressHandlers({
+    isMobile: () => props.isMobile,
+    onLongPress: (event, point) => {
+      showTagContextMenu(createLongPressContextMenuEvent(event, point), groupData);
+    },
+  });
+  tagLongPressHandlers.set(handlerKey, handlers);
+  return handlers;
 };
 
 // 关闭标签右键菜单
@@ -951,6 +990,11 @@ const cancelEditingTag = () => {
                   @click.left="handleConnect(conn.id)"
                   @click.right.prevent
                   @contextmenu.prevent="showContextMenu($event, conn)"
+                  @touchstart="createConnectionLongPressHandlers(conn).onTouchstart"
+                  @touchmove="createConnectionLongPressHandlers(conn).onTouchmove"
+                  @touchend="createConnectionLongPressHandlers(conn).onTouchend"
+                  @touchcancel="createConnectionLongPressHandlers(conn).onTouchcancel"
+                  @click.capture="createConnectionLongPressHandlers(conn).onClickCapture"
                 >
                   <i :class="['fas', conn.type === 'RDP' ? 'fa-desktop' : (conn.type === 'VNC' ? 'fa-chalkboard' : 'fa-server'), 'w-4 text-center text-text-secondary group-hover:text-primary flex-shrink-0', { 'text-white': conn.id === highlightedConnectionId }]"></i>
                   <span class="overflow-hidden text-ellipsis whitespace-nowrap flex-grow text-sm" :title="conn.name || conn.host">
@@ -977,6 +1021,11 @@ const cancelEditingTag = () => {
               :class="{ 'cursor-pointer': editingTagId !== (groupData.tagId === null ? 'untagged' : groupData.tagId) }"
               @click="editingTagId !== (groupData.tagId === null ? 'untagged' : groupData.tagId) ? toggleGroup(groupData.groupName) : null"
               @contextmenu.prevent="showTagContextMenu($event, groupData)"
+              @touchstart="createTagLongPressHandlers(groupData).onTouchstart"
+              @touchmove="createTagLongPressHandlers(groupData).onTouchmove"
+              @touchend="createTagLongPressHandlers(groupData).onTouchend"
+              @touchcancel="createTagLongPressHandlers(groupData).onTouchcancel"
+              @click.capture="createTagLongPressHandlers(groupData).onClickCapture"
             >
               <i
                 :class="['fas', expandedGroups[groupData.groupName] ? 'fa-chevron-down' : 'fa-chevron-right', 'mr-2 w-4 text-center text-text-secondary group-hover:text-foreground transition-transform duration-200 ease-in-out', {'transform rotate-0': !expandedGroups[groupData.groupName]}]"
@@ -1030,6 +1079,11 @@ const cancelEditingTag = () => {
                  @click.left="handleConnect(conn.id)"
                  @click.right.prevent
                  @contextmenu.prevent="showContextMenu($event, conn)"
+                 @touchstart="createConnectionLongPressHandlers(conn).onTouchstart"
+                 @touchmove="createConnectionLongPressHandlers(conn).onTouchmove"
+                 @touchend="createConnectionLongPressHandlers(conn).onTouchend"
+                 @touchcancel="createConnectionLongPressHandlers(conn).onTouchcancel"
+                 @click.capture="createConnectionLongPressHandlers(conn).onClickCapture"
                >
                  <i :class="['fas', conn.type === 'RDP' ? 'fa-desktop' : (conn.type === 'VNC' ? 'fa-plug' : 'fa-server'), 'mr-2.5 w-4 text-center text-text-secondary group-hover:text-primary', { 'text-white': conn.id === highlightedConnectionId }]"></i>
                  <span class="overflow-hidden text-ellipsis whitespace-nowrap flex-grow text-sm" :title="conn.name || conn.host">
@@ -1050,6 +1104,11 @@ const cancelEditingTag = () => {
                 @click.left="handleConnect(conn.id)"
                 @click.right.prevent
                 @contextmenu.prevent="showContextMenu($event, conn)"
+                @touchstart="createConnectionLongPressHandlers(conn).onTouchstart"
+                @touchmove="createConnectionLongPressHandlers(conn).onTouchmove"
+                @touchend="createConnectionLongPressHandlers(conn).onTouchend"
+                @touchcancel="createConnectionLongPressHandlers(conn).onTouchcancel"
+                @click.capture="createConnectionLongPressHandlers(conn).onClickCapture"
               >
                 <i :class="['fas', conn.type === 'RDP' ? 'fa-desktop' : (conn.type === 'VNC' ? 'fa-chalkboard' : 'fa-server'), 'mr-2.5 w-4 text-center text-text-secondary group-hover:text-primary', { 'text-white': conn.id === highlightedConnectionId }]"></i>
                 <span class="overflow-hidden text-ellipsis whitespace-nowrap flex-grow text-sm" :title="conn.name || conn.host">

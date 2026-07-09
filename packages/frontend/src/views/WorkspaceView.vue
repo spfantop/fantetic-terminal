@@ -2131,6 +2131,7 @@ const closeFileManagerModal = () => {
   /* Ensure flex column layout */
   display: flex; /* Uncommented */
   flex-direction: column; /* Uncommented */
+  --mobile-virtual-keyboard-height: min(42dvh, 19.5rem);
   /* Height is already handled by .workspace-view and .with-header */
 }
 
@@ -2166,6 +2167,8 @@ const closeFileManagerModal = () => {
 .mobile-virtual-keyboard {
   flex-shrink: 0; /* 防止虚拟键盘缩小 */
   width: 100%; /* 确保宽度为 100% */
+  height: var(--mobile-virtual-keyboard-height);
+  max-height: var(--mobile-virtual-keyboard-height);
   box-sizing: border-box; /* 边框和内边距包含在宽度内 */
   /* 可以添加更多样式，例如背景色、边框等 */
 }
@@ -2176,10 +2179,10 @@ const closeFileManagerModal = () => {
   }
 
   .file-manager-modal-content {
-    width: min(100%, calc(100vw - 1rem));
-    max-width: calc(100vw - 1rem);
-    height: min(85dvh, calc(100dvh - 1rem));
-    max-height: calc(100dvh - 1rem);
+    width: min(100%, calc(100dvw - 2rem));
+    max-width: calc(100dvw - 2rem);
+    height: min(85dvh, calc(100dvh - 2rem));
+    max-height: calc(100dvh - 2rem);
   }
 
   .file-manager-modal-body {

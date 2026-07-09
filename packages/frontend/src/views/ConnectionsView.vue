@@ -21,6 +21,12 @@ import type { ConnectionFolderInfo } from '../stores/connections.store';
 import { beginGlobalDragSelectionGuard } from '../composables/useGlobalDragSelectionGuard';
 import { useWorkspaceEventEmitter } from '../composables/workspaceEvents';
 import { useThemeToggle } from '../composables/useThemeToggle';
+import { useDeviceDetection } from '../composables/useDeviceDetection';
+import {
+  createLongPressContextMenuEvent,
+  createMobileLongPressHandlers,
+  type MobileLongPressHandlers,
+} from '../composables/useMobileLongPress';
 
 const { t } = useI18n();
 const { showConfirmDialog } = useConfirmDialog();
@@ -30,6 +36,7 @@ const sessionStore = useSessionStore();
 const tagsStore = useTagsStore();
 const authStore = useAuthStore();
 const emitWorkspaceEvent = useWorkspaceEventEmitter();
+const { isMobile } = useDeviceDetection();
 const {
   isDarkUiThemeActive,
   isSwitchingTheme,
@@ -1105,6 +1112,40 @@ const showServerContextMenu = (
   };
 };
 
+const serverConnectionLongPressHandlers = new Map<string, MobileLongPressHandlers>();
+const getServerConnectionLongPressHandlers = (
+  folderId: number | null,
+  connectionId: number,
+) => {
+  const handlerKey = `${folderId ?? 'root'}:${connectionId}`;
+  const cachedHandlers = serverConnectionLongPressHandlers.get(handlerKey);
+  if (cachedHandlers) return cachedHandlers;
+
+  const handlers = createMobileLongPressHandlers({
+    isMobile,
+    onLongPress: (event, point) => {
+      showServerContextMenu(createLongPressContextMenuEvent(event, point), folderId, 'connection', connectionId);
+    },
+  });
+  serverConnectionLongPressHandlers.set(handlerKey, handlers);
+  return handlers;
+};
+
+const serverFolderLongPressHandlers = new Map<number, MobileLongPressHandlers>();
+const getServerFolderLongPressHandlers = (folderId: number) => {
+  const cachedHandlers = serverFolderLongPressHandlers.get(folderId);
+  if (cachedHandlers) return cachedHandlers;
+
+  const handlers = createMobileLongPressHandlers({
+    isMobile,
+    onLongPress: (event, point) => {
+      showServerContextMenu(createLongPressContextMenuEvent(event, point), folderId, 'folder');
+    },
+  });
+  serverFolderLongPressHandlers.set(folderId, handlers);
+  return handlers;
+};
+
 const contextTargetConnection = computed(() => {
   const targetConnectionId = serverContextMenu.value.targetConnectionId;
   if (targetConnectionId === null) return null;
@@ -1842,6 +1883,11 @@ const handleOpenAllTargetConnections = async () => {
                     @click="handleConnectionClick(conn.id)"
                     @dblclick="!isBatchEditMode && connectTo(conn)"
                     @contextmenu.prevent.stop="showServerContextMenu($event, null, 'connection', conn.id)"
+                    @touchstart="getServerConnectionLongPressHandlers(null, conn.id).onTouchstart"
+                    @touchmove="getServerConnectionLongPressHandlers(null, conn.id).onTouchmove"
+                    @touchend="getServerConnectionLongPressHandlers(null, conn.id).onTouchend"
+                    @touchcancel="getServerConnectionLongPressHandlers(null, conn.id).onTouchcancel"
+                    @click.capture="getServerConnectionLongPressHandlers(null, conn.id).onClickCapture"
                   >
                     <div class="server-entry-icon">
                       <ServerIcon :icon="conn.icon" :type="conn.type" />
@@ -1929,6 +1975,11 @@ const handleOpenAllTargetConnections = async () => {
                   @dragend="handleFolderDragEnd"
                   @dragenter="handleFolderDragEnter(folder.folderId)"
                   @contextmenu.prevent.stop="showServerContextMenu($event, folder.folderId, 'folder')"
+                  @touchstart="getServerFolderLongPressHandlers(folder.folderId).onTouchstart"
+                  @touchmove="getServerFolderLongPressHandlers(folder.folderId).onTouchmove"
+                  @touchend="getServerFolderLongPressHandlers(folder.folderId).onTouchend"
+                  @touchcancel="getServerFolderLongPressHandlers(folder.folderId).onTouchcancel"
+                  @click.capture="getServerFolderLongPressHandlers(folder.folderId).onClickCapture"
                 >
                   <i :class="['fas', isFolderExpanded(folder.folderId) ? 'fa-chevron-down' : 'fa-chevron-right']"></i>
                   <input
@@ -1975,6 +2026,11 @@ const handleOpenAllTargetConnections = async () => {
                     @click="handleConnectionClick(conn.id)"
                     @dblclick="!isBatchEditMode && connectTo(conn)"
                     @contextmenu.prevent.stop="showServerContextMenu($event, folder.folderId, 'connection', conn.id)"
+                    @touchstart="getServerConnectionLongPressHandlers(folder.folderId, conn.id).onTouchstart"
+                    @touchmove="getServerConnectionLongPressHandlers(folder.folderId, conn.id).onTouchmove"
+                    @touchend="getServerConnectionLongPressHandlers(folder.folderId, conn.id).onTouchend"
+                    @touchcancel="getServerConnectionLongPressHandlers(folder.folderId, conn.id).onTouchcancel"
+                    @click.capture="getServerConnectionLongPressHandlers(folder.folderId, conn.id).onClickCapture"
                   >
                     <div class="server-entry-icon">
                       <ServerIcon :icon="conn.icon" :type="conn.type" />
