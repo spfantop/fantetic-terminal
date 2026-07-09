@@ -103,6 +103,7 @@ interface SettingsState {
   terminalScrollbackLimit?: string; //  终端回滚行数上限 (e.g., '5000', '0' for unlimited)
   fileManagerShowDeleteConfirmation?: string; //  'true' or 'false' - 文件管理器删除确认提示
   terminalEnableRightClickPaste?: string; //  'true' or 'false' - 终端右键粘贴
+  terminalPerformanceMode?: string; // 'true' or 'false' - 终端性能模式
   terminalHighlightEnabled?: string; // 'true' or 'false' - 终端日志高亮开关
   terminalHighlightRules?: string; // 终端日志高亮规则 JSON
   showStatusMonitorIpAddress?: string; // 'true' or 'false' - 状态监视器显示IP地址
@@ -379,6 +380,9 @@ export const useSettingsStore = defineStore('settings', () => {
         settings.value.terminalEnableRightClickPaste = 'true'; // 默认启用右键粘贴
         debugLog(`[SettingsStore] terminalEnableRightClickPaste not found, set to default: ${settings.value.terminalEnableRightClickPaste}`);
       }
+      if (settings.value.terminalPerformanceMode === undefined) {
+        settings.value.terminalPerformanceMode = 'false';
+      }
       if (settings.value.terminalHighlightEnabled === undefined) {
         settings.value.terminalHighlightEnabled = 'true';
       }
@@ -492,6 +496,7 @@ export const useSettingsStore = defineStore('settings', () => {
         'terminalScrollbackLimit',
         'fileManagerShowDeleteConfirmation',
         'terminalEnableRightClickPaste',
+        'terminalPerformanceMode',
         'terminalHighlightEnabled',
         'terminalHighlightRules',
         'showStatusMonitorIpAddress',
@@ -970,6 +975,10 @@ export const useSettingsStore = defineStore('settings', () => {
       return settings.value.terminalEnableRightClickPaste !== 'false'; // Default to true
   });
 
+  const terminalPerformanceModeBoolean = computed(() => {
+      return settings.value.terminalPerformanceMode === 'true';
+  });
+
   const terminalHighlightEnabledBoolean = computed(() => {
       return settings.value.terminalHighlightEnabled === 'true';
   });
@@ -1046,6 +1055,7 @@ export const useSettingsStore = defineStore('settings', () => {
     terminalScrollbackLimitNumber, //  Expose terminal scrollback limit getter
     fileManagerShowDeleteConfirmationBoolean, //  Expose file manager delete confirmation getter
     terminalEnableRightClickPasteBoolean, //  Expose terminal right click paste getter
+    terminalPerformanceModeBoolean,
     terminalHighlightEnabledBoolean,
     terminalHighlightRulesList,
     statusMonitorShowIpBoolean, // 暴露状态监视器显示IP getter

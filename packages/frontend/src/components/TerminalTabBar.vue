@@ -115,9 +115,22 @@ const sessionStore = useSessionStore(); // Session store 保持不变
 const showConnectionListPopup = ref(false); // 连接列表弹出状态
 const connectionListPopupRootRef = ref<HTMLElement | null>(null);
 const connectionListPopupContentRef = ref<HTMLElement | null>(null);
+const isConnectionListPopupMobileViewport = computed(() => (
+  props.isMobile || ((connectionListPopupRootRef.value?.ownerDocument.defaultView ?? window).innerWidth <= 768)
+));
+const connectionListPopupMobileContentStyle = {
+  width: 'min(100%, calc(100dvw - 2rem))',
+  maxWidth: 'calc(100dvw - 2rem)',
+  height: 'min(86dvh, calc(100dvh - 2rem))',
+  maxHeight: 'calc(100dvh - 2rem)',
+};
+const connectionListPopupContentStyle = computed(() => (
+  isConnectionListPopupMobileViewport.value ? connectionListPopupMobileContentStyle : undefined
+));
 const { centerDialog: centerConnectionListPopup, startDialogDrag: startConnectionListPopupDrag } = useDraggableDialog({
   rootRef: connectionListPopupRootRef,
   dialogRef: connectionListPopupContentRef,
+  disabled: isConnectionListPopupMobileViewport,
 });
 const draggableSessions = ref<SessionTabInfoWithStatus[]>([]); // + Local state for draggable
 const showTransferProgressModal = ref(false); // 控制传输进度模态框的显示状态
@@ -144,7 +157,9 @@ const menuTargetId = ref<string | null>(null); // + Ref specifically for passing
 
 const togglePopup = () => {
   showConnectionListPopup.value = !showConnectionListPopup.value;
-  if (showConnectionListPopup.value) {
+  if (!showConnectionListPopup.value) return;
+
+  if (!isConnectionListPopupMobileViewport.value) {
     centerConnectionListPopup();
   }
 };
@@ -424,6 +439,8 @@ const activeSessionState = computed(() => (
   props.activeSessionId ? sessionStore.sessions.get(props.activeSessionId) ?? null : null
 ));
 
+const isTerminalShellSessionKind = (kind?: string) => kind === 'ssh' || kind === 'telnet';
+
 const releaseButtonFocus = (event?: Event) => {
   const target = event?.currentTarget;
   if (target instanceof HTMLElement) {
@@ -432,12 +449,12 @@ const releaseButtonFocus = (event?: Event) => {
 };
 
 const shouldShowBatchTerminalInputToggle = computed(() => (
-  activeSessionState.value?.kind === 'ssh' && !props.isMobile
+  isTerminalShellSessionKind(activeSessionState.value?.kind) && !props.isMobile
 ));
 
 const batchTerminalInputToggleTitle = computed(() => {
   if (!props.batchTerminalInputAvailable) {
-    return t('terminalTabBar.batchInputUnavailableTooltip', '分屏中至少需要两个 SSH 终端才能批量执行命令');
+    return t('terminalTabBar.batchInputUnavailableTooltip', '分屏中至少需要两个 SSH/Telnet 终端才能批量执行命令');
   }
   return props.batchTerminalInputActive
     ? t('terminalTabBar.batchInputDisableTooltip', '关闭批量执行命令')
@@ -687,7 +704,7 @@ onBeforeUnmount(() => {
     </div>
     <!-- Connection List Popup -->
     <div ref="connectionListPopupRootRef" v-if="showConnectionListPopup" class="fixed inset-0 bg-overlay flex justify-center items-center z-50 p-4" @click.self="togglePopup">
-      <div ref="connectionListPopupContentRef" class="bg-background text-foreground p-6 rounded-lg shadow-xl border border-border w-full max-w-2xl max-h-[80vh] flex flex-col relative">
+      <div ref="connectionListPopupContentRef" class="bg-background text-foreground p-6 rounded-lg shadow-xl border border-border w-full max-w-2xl max-h-[80vh] flex flex-col relative min-w-0 overflow-hidden" :style="connectionListPopupContentStyle">
         <button class="absolute top-2 right-2 p-1 text-text-secondary hover:text-foreground" @pointerdown.stop @click="togglePopup">
            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -702,6 +719,7 @@ onBeforeUnmount(() => {
               @request-edit-connection="handleRequestEditFromPopup"
               class="popup-connection-list"
               folder-mode
+              :is-mobile="props.isMobile"
             />
         </div>
       </div>
@@ -719,6 +737,7 @@ onBeforeUnmount(() => {
     <TransferProgressModal v-model:visible="showTransferProgressModal" />
     <SuspendedSshSessionsModal
       :is-visible="showSuspendedSshSessionsModal"
+      :is-mobile="props.isMobile"
       @close="closeSuspendedSshSessionsModal"
     />
   </div>

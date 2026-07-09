@@ -150,12 +150,12 @@ export async function handleSftpUploadChunk(ws: AuthenticatedWebSocket, payload:
     const state = sessionId ? clientStates.get(sessionId) : undefined;
     if (!sessionId || !state) return; // Silently ignore if session is gone
 
-     if (!payload?.uploadId || typeof payload?.chunkIndex !== 'number' || !payload?.data) {
+     if (!payload?.uploadId || typeof payload?.chunkIndex !== 'number' || typeof payload?.data !== 'string') {
         console.error(`WebSocket: 收到来自 ${ws.username} (会话: ${sessionId}) 的 sftp:upload:chunk 请求，但缺少 uploadId, chunkIndex 或 data。`);
         // Optionally send error to client, but be mindful of flooding for many chunks
         return;
     }
-    await sftpService.handleUploadChunk(sessionId, payload.uploadId, payload.chunkIndex, payload.data);
+    await sftpService.handleUploadChunk(sessionId, payload.uploadId, payload.chunkIndex, payload.data, payload.byteLength, payload.isLast);
 }
 
 export function handleSftpUploadCancel(ws: AuthenticatedWebSocket, payload: any): void {

@@ -1,12 +1,10 @@
 <template>
-  <div ref="modalRootRef" class="fixed inset-0 bg-overlay flex justify-center items-center z-[70]">
+  <div ref="modalRootRef" class="fixed inset-0 bg-overlay flex justify-center items-center z-[70] quick-command-form-root">
     <div
       ref="modalContentRef"
-      class="relative bg-background text-foreground p-6 rounded-xl border border-border/50 shadow-2xl flex flex-col"
-      :style="{
-        width: resizableWidth ? `${resizableWidth}px` : undefined,
-        height: resizableHeight ? `${resizableHeight}px` : undefined,
-      }"
+      class="relative bg-background text-foreground p-6 rounded-xl border border-border/50 shadow-2xl flex flex-col quick-command-form-panel"
+      :class="{ 'quick-command-form-mobile': isMobileViewport }"
+      :style="modalContentStyle"
     >
       <button
         type="button"
@@ -19,9 +17,9 @@
         <i class="fas fa-xmark"></i>
       </button>
       <h2 class="m-0 mb-6 text-center text-xl font-semibold cursor-move select-none" @pointerdown="startDialogDrag">{{ isEditing ? t('quickCommands.form.titleEdit', '编辑快捷指令') : t('quickCommands.form.titleAdd', '添加快捷指令') }}</h2>
-      <div class="flex-grow flex space-x-6 min-h-0">
+      <div class="quick-command-form-layout flex-grow flex space-x-6 min-h-0">
         <!-- 左侧：变量管理 -->
-        <div class="w-1/3 border-r border-border/30 pr-6 flex flex-col overflow-y-auto">
+        <div class="quick-command-form-variables w-1/3 border-r border-border/30 pr-6 flex flex-col overflow-y-auto">
           <h3 class="text-md font-medium mb-3 text-text-secondary">{{ t('quickCommands.form.variablesTitle', '变量管理') }}</h3>
           <div class="space-y-3 overflow-y-auto flex-grow pr-1 pb-2">
             <div v-if="localVariables.length === 0" class="text-sm text-text-tertiary p-2 border border-dashed border-border/30 rounded-md">
@@ -55,7 +53,7 @@
         </div>
 
         <!-- 右侧：现有表单 -->
-        <form @submit.prevent="handleSubmit" class="w-2/3 space-y-5 flex flex-col">
+        <form @submit.prevent="handleSubmit" class="quick-command-form-main w-2/3 space-y-5 flex flex-col">
           <div class="flex-grow space-y-5 pr-1 flex flex-col">
             <div>
               <label for="qc-name" class="block mb-1.5 text-sm font-medium text-text-secondary">{{ t('quickCommands.form.name', '名称:') }}</label>
@@ -96,7 +94,7 @@
          </div>
        </div>
           <!-- +++ 标签输入区结束 +++ -->
-          <div class="flex justify-end mt-auto pt-4 border-t border-border/50">
+          <div class="quick-command-form-actions flex justify-end mt-auto pt-4 border-t border-border/50">
             <!-- 次要/取消按钮 -->
             <button type="button" @click="closeForm" class="py-2 px-5 rounded-lg text-sm font-medium transition-colors duration-150 bg-background border border-border/50 text-text-secondary hover:bg-border hover:text-foreground mr-3">{{ t('common.cancel', '取消') }}</button>
             <!-- 执行按钮 -->
@@ -156,12 +154,29 @@ const { centerDialog, startDialogDrag } = useDraggableDialog({
 const R_MIN_WIDTH = 800; // 可调整大小的最小宽度 (像素)
 const R_MIN_HEIGHT = 700; // 可调整大小的最小高度 (像素)
 const placeholder = t('quickCommands.form.commandPlaceholder') + 'echo "Hello,\${USERNAME}"'
+const isMobileViewport = computed(() => (
+  (modalRootRef.value?.ownerDocument.defaultView ?? window).innerWidth <= 768
+));
 
 const { width: resizableWidth, height: resizableHeight } = useResizable(modalContentRef, {
   minWidth: R_MIN_WIDTH,
   minHeight: R_MIN_HEIGHT,
   // 如果需要，可以在此处添加最大宽度和最大高度，例如：window.innerWidth * 0.95
 });
+
+const modalContentStyle = computed(() => (
+  isMobileViewport.value
+    ? {
+        width: 'min(100%, calc(100dvw - 2rem))',
+        maxWidth: 'calc(100dvw - 2rem)',
+        height: 'min(88dvh, calc(100dvh - 2rem))',
+        maxHeight: 'calc(100dvh - 2rem)',
+      }
+    : {
+        width: resizableWidth.value ? `${resizableWidth.value}px` : undefined,
+        height: resizableHeight.value ? `${resizableHeight.value}px` : undefined,
+      }
+));
 
 const isEditing = computed(() => !!props.commandToEdit);
 
@@ -189,14 +204,19 @@ onMounted(() => {
   centerDialog();
 
   if (typeof window !== 'undefined') {
-    let initialW = Math.min(window.innerWidth * 0.9, 1152); // 目标 90vw，最大 1152px
-    let initialH = window.innerHeight * 0.85; // 目标 85vh
+    if (isMobileViewport.value) {
+      resizableWidth.value = null;
+      resizableHeight.value = null;
+    } else {
+      let initialW = Math.min(window.innerWidth * 0.9, 1152); // 目标 90vw，最大 1152px
+      let initialH = window.innerHeight * 0.85; // 目标 85vh
 
-    initialW = Math.max(R_MIN_WIDTH, initialW);
-    initialH = Math.max(R_MIN_HEIGHT, initialH);
+      initialW = Math.max(R_MIN_WIDTH, initialW);
+      initialH = Math.max(R_MIN_HEIGHT, initialH);
 
-    resizableWidth.value = initialW;
-    resizableHeight.value = initialH;
+      resizableWidth.value = initialW;
+      resizableHeight.value = initialH;
+    }
   }
 
   if (isEditing.value && props.commandToEdit) {
@@ -346,4 +366,58 @@ const handleExecute = () => {
 };
 </script>
 
+<style scoped>
+.quick-command-form-root {
+  padding: 1rem;
+}
+
+.quick-command-form-panel {
+  min-width: min(100%, 800px);
+  min-height: min(90dvh, 700px);
+  max-width: calc(100dvw - 2rem);
+  max-height: calc(100dvh - 2rem);
+  overflow: hidden;
+}
+
+.quick-command-form-mobile {
+  min-width: 0;
+  min-height: 0;
+  padding: 1rem;
+}
+
+.quick-command-form-mobile .quick-command-form-layout {
+  flex-direction: column;
+  gap: 1rem;
+  overflow-y: auto;
+}
+
+.quick-command-form-mobile .quick-command-form-variables,
+.quick-command-form-mobile .quick-command-form-main {
+  width: 100%;
+  min-height: auto;
+}
+
+.quick-command-form-mobile .quick-command-form-variables {
+  max-height: 32%;
+  padding-right: 0;
+  padding-bottom: 1rem;
+  border-right: 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.quick-command-form-mobile .quick-command-form-actions {
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: stretch;
+}
+
+.quick-command-form-mobile .quick-command-form-actions button {
+  flex: 1 1 calc(50% - 0.5rem);
+  margin-right: 0;
+}
+
+.quick-command-form-mobile #qc-command {
+  min-height: 8rem;
+}
+</style>
 

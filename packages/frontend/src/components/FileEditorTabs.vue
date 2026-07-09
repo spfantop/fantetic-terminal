@@ -32,6 +32,7 @@ const contextMenuVisible = ref(false);
 const contextMenuPosition = ref({ x: 0, y: 0 });
 const contextTargetTabId = ref<string | null>(null); // Keep for logic inside this component if needed elsewhere
 const menuTargetId = ref<string | null>(null); // + Ref specifically for passing to the menu prop
+let activeContextMenuDocument: Document | null = null;
 
 const handleActivate = (tabId: string) => {
   emit('activate-tab', tabId);
@@ -52,7 +53,9 @@ const showContextMenu = (event: MouseEvent, tabId: string) => {
   contextMenuPosition.value = { x: event.clientX, y: event.clientY };
   contextMenuVisible.value = true;
   // 添加全局监听器以关闭菜单
-  document.addEventListener('click', closeContextMenuOnClickOutside, { capture: true, once: true });
+  activeContextMenuDocument?.removeEventListener('click', closeContextMenuOnClickOutside, { capture: true });
+  activeContextMenuDocument = (event.target as Node | null)?.ownerDocument ?? document;
+  activeContextMenuDocument.addEventListener('click', closeContextMenuOnClickOutside, { capture: true, once: true });
 };
 
 const closeContextMenu = () => {
@@ -60,7 +63,8 @@ const closeContextMenu = () => {
   contextTargetTabId.value = null; // Clear original ref if needed
   // menuTargetId.value = null; // -- REMOVE THIS LINE -- Let the value persist until next show
   // 移除监听器（如果它仍然存在）
-  document.removeEventListener('click', closeContextMenuOnClickOutside, { capture: true });
+  activeContextMenuDocument?.removeEventListener('click', closeContextMenuOnClickOutside, { capture: true });
+  activeContextMenuDocument = null;
 };
 
 // 用于全局点击监听器的函数
@@ -126,7 +130,8 @@ const contextMenuItems = computed(() => {
 
 // +++ 组件卸载前移除全局监听器 +++
 onBeforeUnmount(() => {
-    document.removeEventListener('click', closeContextMenuOnClickOutside, { capture: true });
+    activeContextMenuDocument?.removeEventListener('click', closeContextMenuOnClickOutside, { capture: true });
+    activeContextMenuDocument = null;
 });
 
 </script>

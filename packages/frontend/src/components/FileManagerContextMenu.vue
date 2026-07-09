@@ -32,6 +32,10 @@ const props = defineProps({
   currentDirectoryPath: { // Current path of the file manager
     type: String,
     required: true,
+  },
+  teleportTarget: {
+    type: [String, Object] as PropType<string | HTMLElement>,
+    default: 'body',
   }
 });
 
@@ -53,6 +57,17 @@ const sourceConnectionId = computed(() => { // +++ 获取并转换源服务器 I
 
 const contextMenuRef = ref<HTMLDivElement | null>(null);
 const computedRenderPosition = ref({ x: props.position.x, y: props.position.y });
+let activeClickOutsideDocument: Document | null = null;
+
+const resolveMenuDocument = () => {
+  if (contextMenuRef.value?.ownerDocument) return contextMenuRef.value.ownerDocument;
+  if (typeof props.teleportTarget !== 'string') return props.teleportTarget.ownerDocument;
+  return document;
+};
+
+defineExpose({
+  menuElement: contextMenuRef,
+});
 
 watch(
   [() => props.isVisible, () => props.position],
@@ -69,6 +84,7 @@ watch(
           if (contextMenuRef.value) {
             const menuElement = contextMenuRef.value;
             const menuRect = menuElement.getBoundingClientRect();
+            const menuWindow = menuElement.ownerDocument.defaultView ?? resolveMenuDocument().defaultView ?? window;
 
             // 如果菜单没有实际尺寸 (例如，内容为空或未渲染)，则不进行调整
             if (menuRect.width === 0 && menuRect.height === 0) {
@@ -85,13 +101,13 @@ watch(
             // console.debug(`[FileManagerContextMenu] Initial pos: (${finalX}, ${finalY}), Menu size: (${menuWidth}x${menuHeight}), Window: (${window.innerWidth}x${window.innerHeight})`);
 
             // 调整水平位置，防止溢出右侧
-            if (finalX + menuWidth > window.innerWidth) {
-              finalX = window.innerWidth - menuWidth - margin;
+            if (finalX + menuWidth > menuWindow.innerWidth) {
+              finalX = menuWindow.innerWidth - menuWidth - margin;
             }
 
             // 调整垂直位置，防止溢出底部
-            if (finalY + menuHeight > window.innerHeight) {
-              finalY = window.innerHeight - menuHeight - margin;
+            if (finalY + menuHeight > menuWindow.innerHeight) {
+              finalY = menuWindow.innerHeight - menuHeight - margin;
             }
 
             // 确保菜单不超出屏幕左上角
@@ -119,15 +135,18 @@ const handleClickOutside = (event: MouseEvent) => {
 };
 
 watch(() => props.isVisible, (newValue) => {
+  activeClickOutsideDocument?.removeEventListener('click', handleClickOutside, true);
+  activeClickOutsideDocument = null;
+  const menuDocument = resolveMenuDocument();
   if (newValue) {
-    document.addEventListener('click', handleClickOutside, { capture: true });
-  } else {
-    document.removeEventListener('click', handleClickOutside, { capture: true });
+    menuDocument.addEventListener('click', handleClickOutside, { capture: true });
+    activeClickOutsideDocument = menuDocument;
   }
 }, { immediate: true });
 
 onUnmounted(() => {
-  document.removeEventListener('click', handleClickOutside, { capture: true });
+  activeClickOutsideDocument?.removeEventListener('click', handleClickOutside, true);
+  activeClickOutsideDocument = null;
 });
 
 // 隐藏菜单的逻辑由 useFileManagerContextMenu 中的全局点击监听器处理
@@ -220,31 +239,96 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div
-    ref="contextMenuRef"
-    v-if="isVisible"
-    class="fixed bg-background border border-border shadow-lg rounded-md z-[1002] min-w-[150px]"
-    :style="{ top: `${computedRenderPosition.y}px`, left: `${computedRenderPosition.x}px` }"
-    @click.stop
-  >
-    <ul class="list-none p-1 m-0">
-      <template v-for="(menuItem, index) in items" :key="index">
-        <li v-if="menuItem.separator" class="border-t border-border/50 my-1 mx-1"></li>
-        <!-- 如果是移动设备且有子菜单，则平铺子菜单 -->
-        <template v-else-if="isMobile && menuItem.submenu && menuItem.submenu.length > 0">
+  <Teleport :to="teleportTarget">
+    <div
+      ref="contextMenuRef"
+      v-if="isVisible"
+      class="fixed bg-background border border-border shadow-lg rounded-md z-[1002] min-w-[150px]"
+      :style="{ top: `${computedRenderPosition.y}px`, left: `${computedRenderPosition.x}px` }"
+      @click.stop
+      @contextmenu.prevent.stop
+    >
+      <ul class="list-none p-1 m-0">
+        <template v-for="(menuItem, index) in items" :key="index">
+          <li v-if="menuItem.separator" class="border-t border-border/50 my-1 mx-1"></li>
+          <!-- 如果是移动设备且有子菜单，则平铺子菜单 -->
+          <template v-else-if="isMobile && menuItem.submenu && menuItem.submenu.length > 0">
+            <li
+              v-for="(subItem, subIndex) in menuItem.submenu"
+              :key="`${index}-${subIndex}`"
+              @click.stop="handleItemClick(subItem)"
+              :class="[
+                'px-4 py-1.5 cursor-pointer text-foreground text-sm flex items-center transition-colors duration-150 rounded mx-1',
+                'hover:bg-primary/10 hover:text-primary'
+              ]"
+            >
+              {{ subItem.label }}
+            </li>
+            <!-- 如果 menuItem (作为移动端子菜单容器) 是 "压缩", 在其子项后添加 "发送到" -->
+            <template v-if="menuItem.label === t('fileManager.contextMenu.compress')">
+              <li
+                @click.stop="handleSendToClick"
+                :class="[
+                  'px-4 py-1.5 cursor-pointer text-foreground text-sm flex items-center transition-colors duration-150 rounded mx-1',
+                  'hover:bg-primary/10 hover:text-primary'
+                ]"
+              >
+                {{ t('fileManager.contextMenu.sendTo', 'Send to...') }}
+              </li>
+            </template>
+          </template>
+          <!-- 否则，按原有逻辑渲染一级菜单或带子菜单的一级菜单 -->
           <li
-            v-for="(subItem, subIndex) in menuItem.submenu"
-            :key="`${index}-${subIndex}`"
-            @click.stop="handleItemClick(subItem)"
+            v-else-if="!menuItem.submenu"
+            @click.stop="handleItemClick(menuItem)"
             :class="[
               'px-4 py-1.5 cursor-pointer text-foreground text-sm flex items-center transition-colors duration-150 rounded mx-1',
               'hover:bg-primary/10 hover:text-primary'
             ]"
           >
-            {{ subItem.label }}
+            {{ menuItem.label }}
           </li>
-          <!-- 如果 menuItem (作为移动端子菜单容器) 是 "压缩", 在其子项后添加 "发送到" -->
-          <template v-if="menuItem.label === t('fileManager.contextMenu.compress')">
+          <!-- 如果普通菜单项是 "压缩", 在其后添加 "发送到" -->
+          <template v-if="!menuItem.submenu && menuItem.label === t('fileManager.contextMenu.compress')">
+            <li
+              @click.stop="handleSendToClick"
+              :class="[
+                'px-4 py-1.5 cursor-pointer text-foreground text-sm flex items-center transition-colors duration-150 rounded mx-1',
+                'hover:bg-primary/10 hover:text-primary'
+              ]"
+            >
+              {{ t('fileManager.contextMenu.sendTo', 'Send to...') }}
+            </li>
+          </template>
+          <li
+            v-if="menuItem.submenu && !isMobile"
+            class="px-4 py-1.5 text-foreground text-sm flex items-center justify-between transition-colors duration-150 rounded mx-1 hover:bg-primary/10 hover:text-primary relative"
+            @mouseenter="showSubmenu(menuItem.label)"
+            @mouseleave="hideSubmenu()"
+          >
+            {{ menuItem.label }}
+            <span class="ml-2">›</span>
+            <ul
+              v-if="expandedSubmenu === menuItem.label"
+              class="absolute left-full top-0 mt-0 ml-1 bg-background border border-border shadow-lg rounded-md z-[1003] min-w-[150px] list-none p-1"
+              @mouseenter="showSubmenu(menuItem.label)"
+              @mouseleave="hideSubmenu()"
+            >
+              <li
+                v-for="(subItem, subIndex) in menuItem.submenu"
+                :key="subIndex"
+                @click.stop="handleItemClick(subItem)"
+                :class="[
+                  'px-4 py-1.5 cursor-pointer text-foreground text-sm flex items-center transition-colors duration-150 rounded mx-1',
+                  'hover:bg-primary/10 hover:text-primary'
+                ]"
+              >
+                {{ subItem.label }}
+              </li>
+            </ul>
+          </li>
+          <!-- 如果桌面端带子菜单的项是 "压缩", 在其后添加 "发送到" -->
+          <template v-if="menuItem.submenu && !isMobile && menuItem.label === t('fileManager.contextMenu.compress')">
             <li
               @click.stop="handleSendToClick"
               :class="[
@@ -256,71 +340,9 @@ onUnmounted(() => {
             </li>
           </template>
         </template>
-        <!-- 否则，按原有逻辑渲染一级菜单或带子菜单的一级菜单 -->
-        <li
-          v-else-if="!menuItem.submenu"
-          @click.stop="handleItemClick(menuItem)"
-          :class="[
-            'px-4 py-1.5 cursor-pointer text-foreground text-sm flex items-center transition-colors duration-150 rounded mx-1',
-            'hover:bg-primary/10 hover:text-primary'
-          ]"
-        >
-          {{ menuItem.label }}
-        </li>
-        <!-- 如果普通菜单项是 "压缩", 在其后添加 "发送到" -->
-        <template v-if="!menuItem.submenu && menuItem.label === t('fileManager.contextMenu.compress')">
-          <li
-            @click.stop="handleSendToClick"
-            :class="[
-              'px-4 py-1.5 cursor-pointer text-foreground text-sm flex items-center transition-colors duration-150 rounded mx-1',
-              'hover:bg-primary/10 hover:text-primary'
-            ]"
-          >
-            {{ t('fileManager.contextMenu.sendTo', 'Send to...') }}
-          </li>
-        </template>
-        <li
-          v-if="menuItem.submenu && !isMobile"
-          class="px-4 py-1.5 text-foreground text-sm flex items-center justify-between transition-colors duration-150 rounded mx-1 hover:bg-primary/10 hover:text-primary relative"
-          @mouseenter="showSubmenu(menuItem.label)"
-          @mouseleave="hideSubmenu()"
-        >
-          {{ menuItem.label }}
-          <span class="ml-2">›</span>
-          <ul
-            v-if="expandedSubmenu === menuItem.label"
-            class="absolute left-full top-0 mt-0 ml-1 bg-background border border-border shadow-lg rounded-md z-[1003] min-w-[150px] list-none p-1"
-            @mouseenter="showSubmenu(menuItem.label)"
-            @mouseleave="hideSubmenu()"
-          >
-            <li
-              v-for="(subItem, subIndex) in menuItem.submenu"
-              :key="subIndex"
-              @click.stop="handleItemClick(subItem)"
-              :class="[
-                'px-4 py-1.5 cursor-pointer text-foreground text-sm flex items-center transition-colors duration-150 rounded mx-1',
-                'hover:bg-primary/10 hover:text-primary'
-              ]"
-            >
-              {{ subItem.label }}
-            </li>
-          </ul>
-        </li>
-        <!-- 如果桌面端带子菜单的项是 "压缩", 在其后添加 "发送到" -->
-        <template v-if="menuItem.submenu && !isMobile && menuItem.label === t('fileManager.contextMenu.compress')">
-          <li
-            @click.stop="handleSendToClick"
-            :class="[
-              'px-4 py-1.5 cursor-pointer text-foreground text-sm flex items-center transition-colors duration-150 rounded mx-1',
-              'hover:bg-primary/10 hover:text-primary'
-            ]"
-          >
-            {{ t('fileManager.contextMenu.sendTo', 'Send to...') }}
-          </li>
-        </template>
-      </template>
-    </ul>
-  </div>
+      </ul>
+    </div>
+  </Teleport>
   <SendFilesModal
     v-model:visible="showSendFilesModal"
     :items-to-send="itemsToSendData"

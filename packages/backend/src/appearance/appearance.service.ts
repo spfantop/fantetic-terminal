@@ -11,6 +11,24 @@ const PRESET_HTML_THEMES_DIR = path.join(__dirname, '../../html-presets/');
 
 const USER_CUSTOM_HTML_THEMES_DIR = path.join(__dirname, '../../data/custom_html_theme/');
 
+const validateTerminalThemeId = async (themeId: number, fieldName: string): Promise<void> => {
+  if (typeof themeId !== 'number') {
+       console.error(`[AppearanceService] 收到的 ${fieldName} 不是有效的数字: ${themeId}`);
+       throw new Error(`无效的终端主题 ID 类型，应为数字。`);
+  }
+  try {
+      const themeExists = await terminalThemeRepository.findThemeById(themeId);
+      if (!themeExists) {
+          console.warn(`[AppearanceService] 尝试更新为不存在的终端主题数字 ID: ${themeId}`);
+          throw new Error(`指定的终端主题 ID 不存在: ${themeId}`);
+      }
+      console.log(`[AppearanceService] 终端主题数字 ID ${themeId} 验证通过。`);
+  } catch (e: any) {
+      console.error(`[AppearanceService] 验证终端主题数字 ID (${themeId}) 时出错:`, e.message);
+      throw new Error(`验证终端主题 ID 时出错: ${e.message || themeId}`);
+  }
+};
+
 
 // 确保预设 html-themes 目录存在
 const ensurePresetHtmlThemesDirExists = async () => { // Renamed
@@ -58,30 +76,30 @@ export const getSettings = async (): Promise<AppearanceSettings> => {
  * @returns Promise<boolean> 是否成功更新
  */
 export const updateSettings = async (settingsDto: UpdateAppearanceDto): Promise<boolean> => {
+  if (
+    settingsDto.uiThemeMode !== undefined
+    && settingsDto.uiThemeMode !== 'default'
+    && settingsDto.uiThemeMode !== 'dark'
+  ) {
+    throw new Error('无效的 UI 主题模式，应为 default 或 dark。');
+  }
+
   // 验证 activeTerminalThemeId (如果提供了)
   if (settingsDto.activeTerminalThemeId !== undefined && settingsDto.activeTerminalThemeId !== null) {
       const themeIdNum = settingsDto.activeTerminalThemeId; // ID is now number | null
-      // 验证 ID 是否为有效的数字
-      if (typeof themeIdNum !== 'number') {
-           console.error(`[AppearanceService] 收到的 activeTerminalThemeId 不是有效的数字: ${themeIdNum}`);
-           throw new Error(`无效的终端主题 ID 类型，应为数字。`);
-      }
-      try {
-          // 直接使用数字 ID 调用 findThemeById 进行验证
-          const themeExists = await terminalThemeRepository.findThemeById(themeIdNum);
-          if (!themeExists) {
-              console.warn(`[AppearanceService] 尝试更新为不存在的终端主题数字 ID: ${themeIdNum}`);
-              throw new Error(`指定的终端主题 ID 不存在: ${themeIdNum}`);
-          }
-          console.log(`[AppearanceService] 终端主题数字 ID ${themeIdNum} 验证通过。`);
-      } catch (e: any) {
-          console.error(`[AppearanceService] 验证终端主题数字 ID (${themeIdNum}) 时出错:`, e.message);
-          throw new Error(`验证终端主题 ID 时出错: ${e.message || themeIdNum}`);
-      }
+      await validateTerminalThemeId(themeIdNum, 'activeTerminalThemeId');
   } else if (settingsDto.hasOwnProperty('activeTerminalThemeId') && settingsDto.activeTerminalThemeId === null) {
       // 处理显式设置为 null (表示重置为默认/无用户主题)
       console.log(`[AppearanceService] 接收到将 activeTerminalThemeId 设置为 null 的请求。`);
       // 仓库层会处理 null
+  }
+
+  if (settingsDto.activeDefaultTerminalThemeId !== undefined && settingsDto.activeDefaultTerminalThemeId !== null) {
+      await validateTerminalThemeId(settingsDto.activeDefaultTerminalThemeId, 'activeDefaultTerminalThemeId');
+  }
+
+  if (settingsDto.activeDarkTerminalThemeId !== undefined && settingsDto.activeDarkTerminalThemeId !== null) {
+      await validateTerminalThemeId(settingsDto.activeDarkTerminalThemeId, 'activeDarkTerminalThemeId');
   }
 
   // 验证 terminalFontSize (如果提供了)

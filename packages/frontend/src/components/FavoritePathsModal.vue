@@ -33,6 +33,16 @@ const showAddEditModal = ref(false);
 const editingPathItem = ref<FavoritePathItem | null>(null);
 const modalContentRef = ref<HTMLElement | null>(null);
 const modalStyle = ref<Record<string, string>>({});
+let activeModalDocument: Document | null = null;
+let activeModalWindow: Window | null = null;
+
+const resolveModalDocument = () => (
+  modalContentRef.value?.ownerDocument
+  ?? props.triggerElement?.ownerDocument
+  ?? document
+);
+
+const resolveModalWindow = () => resolveModalDocument().defaultView ?? window;
 
 
 const filteredPaths = computed(() => {
@@ -132,8 +142,9 @@ const updatePosition = () => {
     return;
   }
   
-  const viewportWidth = window.innerWidth;
-  const viewportHeight = window.innerHeight;
+  const modalWindow = resolveModalWindow();
+  const viewportWidth = modalWindow.innerWidth;
+  const viewportHeight = modalWindow.innerHeight;
 
   let top = triggerRect.bottom + 2; // Default position below trigger, with a small 2px gap
   let left = triggerRect.left;
@@ -183,33 +194,44 @@ const handleClickOutside = (event: MouseEvent) => {
 };
 
 watch(() => props.isVisible, (newValue: boolean) => {
+  activeModalDocument?.removeEventListener('mousedown', handleClickOutside);
+  activeModalWindow?.removeEventListener('resize', updatePosition);
+  activeModalDocument = null;
+  activeModalWindow = null;
   if (newValue) {
     searchTerm.value = '';
-    document.addEventListener('mousedown', handleClickOutside);
+    activeModalDocument = resolveModalDocument();
+    activeModalWindow = activeModalDocument.defaultView ?? window;
+    activeModalDocument.addEventListener('mousedown', handleClickOutside);
     nextTick(() => { // Ensure DOM is ready for measurements
+      activeModalDocument = resolveModalDocument();
+      activeModalWindow = activeModalDocument.defaultView ?? window;
       updatePosition(); // Calculate initial position
-      window.addEventListener('resize', updatePosition); // Adjust position on window resize
+      activeModalWindow.addEventListener('resize', updatePosition); // Adjust position on window resize
     });
-  } else {
-    document.removeEventListener('mousedown', handleClickOutside);
-    window.removeEventListener('resize', updatePosition); // Clean up resize listener
   }
 });
 
 onMounted(() => {
   if (props.isVisible) {
     searchTerm.value = ''; 
-    document.addEventListener('mousedown', handleClickOutside);
+    activeModalDocument = resolveModalDocument();
+    activeModalWindow = activeModalDocument.defaultView ?? window;
+    activeModalDocument.addEventListener('mousedown', handleClickOutside);
     nextTick(() => { 
+      activeModalDocument = resolveModalDocument();
+      activeModalWindow = activeModalDocument.defaultView ?? window;
       updatePosition();
-      window.addEventListener('resize', updatePosition);
+      activeModalWindow.addEventListener('resize', updatePosition);
     });
   }
 });
 
 onBeforeUnmount(() => {
-  document.removeEventListener('mousedown', handleClickOutside);
-  window.removeEventListener('resize', updatePosition); // Ensure resize listener is cleaned up
+  activeModalDocument?.removeEventListener('mousedown', handleClickOutside);
+  activeModalWindow?.removeEventListener('resize', updatePosition);
+  activeModalDocument = null;
+  activeModalWindow = null;
 });
 
 </script>

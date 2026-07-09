@@ -302,6 +302,8 @@ const isCpuCoreModalVisible = ref(false);
 const isProcessModalVisible = ref(false);
 const statusMonitorRootRef = ref<HTMLElement | null>(null);
 const statusModalTeleportTarget = ref<string | HTMLElement>('body');
+const readStatusMonitorWindow = () => statusMonitorRootRef.value?.ownerDocument.defaultView ?? window;
+const readStatusMonitorClipboard = () => readStatusMonitorWindow().navigator.clipboard;
 
 const props = defineProps({
   activeSessionId: {
@@ -569,7 +571,7 @@ const networkFlowItems = computed(() => [
 const copyIpToClipboard = async (ipAddress: string | null) => {
   if (!ipAddress) return;
   try {
-    await navigator.clipboard.writeText(ipAddress);
+    await readStatusMonitorClipboard().writeText(ipAddress);
     uiNotificationsStore.showSuccess(t('common.copied', '已复制!'));
   } catch (error) {
     console.error('Failed to copy IP address: ', error);

@@ -3,8 +3,8 @@ import { ref, onMounted, onBeforeUnmount, type Ref, watch } from 'vue';
 export interface UseResizableOptions {
   minWidth?: number;
   minHeight?: number;
-  maxWidth?: number;
-  maxHeight?: number;
+  maxWidth?: number | (() => number);
+  maxHeight?: number | (() => number);
   edgeThreshold?: number; // How close to an edge to consider it a drag handle
   initialWidth?: number | string; // Allow string for % or vh/vw, or number for px
   initialHeight?: number | string; // Allow string for % or vh/vw, or number for px
@@ -35,6 +35,15 @@ export function useResizable(
   let startHeight = 0;
   let resizeFrameId: number | null = null;
   let pendingSize: { width: number; height: number } | null = null;
+  let activeResizeWindow: Window | null = null;
+
+  const resolveMaxWidth = () => (
+    typeof maxWidth === 'function' ? maxWidth() : maxWidth
+  );
+
+  const resolveMaxHeight = () => (
+    typeof maxHeight === 'function' ? maxHeight() : maxHeight
+  );
 
   const getEdge = (event: MouseEvent, el: HTMLElement): Edge => {
     const rect = el.getBoundingClientRect();
@@ -83,12 +92,14 @@ export function useResizable(
     pendingSize = { width: nextWidth, height: nextHeight };
     if (resizeFrameId !== null) return;
 
-    resizeFrameId = window.requestAnimationFrame(applyPendingSize);
+    const targetWindow = elementRef.value?.ownerDocument.defaultView ?? window;
+    resizeFrameId = targetWindow.requestAnimationFrame(applyPendingSize);
   };
 
   const flushPendingSize = () => {
     if (resizeFrameId !== null) {
-      window.cancelAnimationFrame(resizeFrameId);
+      const targetWindow = activeResizeWindow ?? elementRef.value?.ownerDocument.defaultView ?? window;
+      targetWindow.cancelAnimationFrame(resizeFrameId);
       resizeFrameId = null;
     }
     applyPendingSize();
@@ -115,8 +126,9 @@ export function useResizable(
     
     elementRef.value.style.userSelect = 'none'; // Prevent text selection
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    activeResizeWindow = elementRef.value.ownerDocument.defaultView ?? window;
+    activeResizeWindow.addEventListener('mousemove', handleMouseMove);
+    activeResizeWindow.addEventListener('mouseup', handleMouseUp);
   };
 
   const handleMouseMove = (event: MouseEvent) => {
@@ -144,8 +156,8 @@ export function useResizable(
 
     // Apply constraints
     scheduleSizeUpdate(
-      Math.max(minWidth, Math.min(maxWidth, newWidth)),
-      Math.max(minHeight, Math.min(maxHeight, newHeight)),
+      Math.max(minWidth, Math.min(resolveMaxWidth(), newWidth)),
+      Math.max(minHeight, Math.min(resolveMaxHeight(), newHeight)),
     );
   };
 
@@ -157,8 +169,9 @@ export function useResizable(
         elementRef.value.style.userSelect = '';
         updateCursorStyle(elementRef.value, null); // Reset to default or hover state
     }
-    window.removeEventListener('mousemove', handleMouseMove);
-    window.removeEventListener('mouseup', handleMouseUp);
+    activeResizeWindow?.removeEventListener('mousemove', handleMouseMove);
+    activeResizeWindow?.removeEventListener('mouseup', handleMouseUp);
+    activeResizeWindow = null;
   };
 
   const handleElementHover = (event: MouseEvent) => {
@@ -178,7 +191,8 @@ export function useResizable(
       const el = elementRef.value;
       // Initialize width and height from element's current computed size
       // This ensures that initial CSS (like %, vw, vh, or fixed values) is respected
-      const computedStyle = window.getComputedStyle(el);
+      const targetWindow = el.ownerDocument.defaultView ?? window;
+      const computedStyle = targetWindow.getComputedStyle(el);
       let parsedWidth = parseFloat(computedStyle.width);
       let parsedHeight = parseFloat(computedStyle.height);
 
@@ -195,7 +209,8 @@ export function useResizable(
 
   onBeforeUnmount(() => {
     if (resizeFrameId !== null) {
-      window.cancelAnimationFrame(resizeFrameId);
+      const targetWindow = activeResizeWindow ?? elementRef.value?.ownerDocument.defaultView ?? window;
+      targetWindow.cancelAnimationFrame(resizeFrameId);
       resizeFrameId = null;
     }
     pendingSize = null;
@@ -204,8 +219,9 @@ export function useResizable(
       elementRef.value.removeEventListener('mousemove', handleElementHover);
       elementRef.value.removeEventListener('mouseleave', handleMouseLeave);
     }
-    window.removeEventListener('mousemove', handleMouseMove); // Cleanup just in case
-    window.removeEventListener('mouseup', handleMouseUp);     // Cleanup just in case
+    activeResizeWindow?.removeEventListener('mousemove', handleMouseMove); // Cleanup just in case
+    activeResizeWindow?.removeEventListener('mouseup', handleMouseUp);     // Cleanup just in case
+    activeResizeWindow = null;
   });
   
   // Watch for external changes to elementRef if it can become null
@@ -216,7 +232,8 @@ export function useResizable(
       oldEl.removeEventListener('mouseleave', handleMouseLeave);
     }
     if (newEl) {
-      const computedStyle = window.getComputedStyle(newEl);
+      const targetWindow = newEl.ownerDocument.defaultView ?? window;
+      const computedStyle = targetWindow.getComputedStyle(newEl);
       let parsedWidth = parseFloat(computedStyle.width);
       let parsedHeight = parseFloat(computedStyle.height);
 

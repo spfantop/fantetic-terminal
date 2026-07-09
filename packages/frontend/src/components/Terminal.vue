@@ -45,10 +45,12 @@ const singleLineContentWidth = ref<string | null>(null);
 let terminal: Terminal | null = null;
 let fitAddon: FitAddon | null = null;
 let searchAddon: SearchAddon | null = null; // *** 添加 searchAddon 变量 ***
+let webLinksAddonDisposable: IDisposable | null = null;
 let resizeObserver: ResizeObserver | null = null;
 let observedElement: HTMLElement | null = null; // +++ Store the observed element +++
 let selectionListenerDisposable: IDisposable | null = null; // +++ 提升声明并添加类型 +++
 let resizeAnimationFrameId: number | null = null;
+let resizeAnimationFrameWindow: Window | null = null;
 let pendingFitOptions: { forceFit: boolean; forceResizeEmit: boolean; pixelSize?: TerminalPixelSize } = { forceFit: false, forceResizeEmit: false };
 let resizeEmitTimer: number | null = null;
 let pendingResizeDimensions: TerminalDimensions | null = null;
@@ -62,6 +64,7 @@ let resizeTransactionDepth = 0;
 let hasDeferredFitDuringResize = false;
 let resizeTransactionSettleTimer: number | null = null;
 let zoomPopupHideTimer: number | null = null;
+let terminalClipboardKeydownTargets: HTMLElement[] = [];
 const RESIZE_THRESHOLD = 0.5; // px
 const RESIZE_EMIT_DELAY = 150;
 const STABILIZED_RESIZE_DELAY = 150;
@@ -156,6 +159,7 @@ const {
   autoCopyOnSelectBoolean,
   terminalScrollbackLimitNumber, 
   terminalEnableRightClickPasteBoolean, 
+  terminalPerformanceModeBoolean,
 } = storeToRefs(settingsStore); 
 
 // 防抖函数
@@ -201,6 +205,10 @@ const readTerminalCore = (): XtermInternalCore | null => {
   return (terminal as unknown as { _core?: XtermInternalCore })._core ?? null;
 };
 
+const readTerminalDocument = () => terminalRef.value?.ownerDocument ?? document;
+const readTerminalWindow = () => readTerminalDocument().defaultView ?? window;
+const readTerminalClipboard = () => readTerminalWindow().navigator.clipboard;
+
 const invalidateTerminalFitMetrics = () => {
   cachedFitMetrics = null;
 };
@@ -214,7 +222,8 @@ const refreshTerminalFitMetrics = (): TerminalFitMetrics | null => {
   const cellHeight = Number(cell?.height ?? 0);
   if (cellWidth <= 0 || cellHeight <= 0) return null;
 
-  const elementStyle = window.getComputedStyle(terminal.element);
+  const terminalWindow = terminal.element.ownerDocument.defaultView ?? readTerminalWindow();
+  const elementStyle = terminalWindow.getComputedStyle(terminal.element);
   const paddingHorizontal = readCssPixelValue(elementStyle, 'padding-left') + readCssPixelValue(elementStyle, 'padding-right');
   const paddingVertical = readCssPixelValue(elementStyle, 'padding-top') + readCssPixelValue(elementStyle, 'padding-bottom');
   const scrollbarWidth = terminal.options.scrollback === 0 ? 0 : Math.max(0, core?.viewport?.scrollBarWidth ?? 0);
@@ -372,8 +381,10 @@ const scheduleTerminalFit = (options: { forceFit?: boolean; forceResizeEmit?: bo
 
   if (resizeAnimationFrameId !== null) return;
 
-  resizeAnimationFrameId = window.requestAnimationFrame(() => {
+  resizeAnimationFrameWindow = readTerminalWindow();
+  resizeAnimationFrameId = resizeAnimationFrameWindow.requestAnimationFrame(() => {
     resizeAnimationFrameId = null;
+    resizeAnimationFrameWindow = null;
     const nextOptions = { ...pendingFitOptions };
     pendingFitOptions = { forceFit: false, forceResizeEmit: false };
     fitTerminalToContainer(nextOptions);
@@ -384,6 +395,31 @@ const scheduleTerminalFit = (options: { forceFit?: boolean; forceResizeEmit?: bo
 const fitAndEmitResizeNow = (term: Terminal) => {
   if (!term || term !== terminal) return;
   fitTerminalToContainer({ forceFit: true, forceResizeEmit: true, emitStabilizedNow: true });
+};
+
+const ensureSearchAddonLoaded = (): SearchAddon | null => {
+  if (!terminal) return null;
+  if (!searchAddon) {
+    const addon = new SearchAddon();
+    terminal.loadAddon(addon);
+    searchAddon = addon;
+  }
+  return searchAddon;
+};
+
+const loadWebLinksAddonIfEnabled = () => {
+  if (!terminal || terminalPerformanceModeBoolean.value || webLinksAddonDisposable) return;
+
+  const addon = new WebLinksAddon();
+  terminal.loadAddon(addon);
+  webLinksAddonDisposable = addon;
+};
+
+const unloadWebLinksAddon = () => {
+  if (!webLinksAddonDisposable) return;
+
+  webLinksAddonDisposable.dispose();
+  webLinksAddonDisposable = null;
 };
 
 const handleResizeTransaction = (payload: WorkspaceEventPayloads['ui:resizeTransaction']) => {
@@ -431,6 +467,7 @@ const emitTerminalInput = (data: string) => {
 //  Helper function to convert setting value to xterm scrollback value
 const getScrollbackValue = (limit: number): number => {
   if (limit === 0) {
+    if (terminalPerformanceModeBoolean.value) return 5000;
     return Infinity; // 0 means unlimited for xterm
   }
   return Math.max(0, limit); // Ensure non-negative, return the number otherwise
@@ -513,8 +550,9 @@ const handleTerminalWheel = (event: WheelEvent) => {
 // --- 右键粘贴功能 ---
 const handleContextMenuPaste = async (event: MouseEvent) => {
   event.preventDefault(); // 阻止默认右键菜单
+  event.stopPropagation();
   try {
-    const text = await navigator.clipboard.readText();
+    const text = await readTerminalClipboard()?.readText();
     if (text && terminal) {
       const processedText = text.replace(/\r\n?/g, '\n');
       emitTerminalInput(processedText);
@@ -526,14 +564,72 @@ const handleContextMenuPaste = async (event: MouseEvent) => {
 
 const addContextMenuListener = () => {
   if (terminalRef.value) {
-    terminalRef.value.addEventListener('contextmenu', handleContextMenuPaste);
+    terminalRef.value.addEventListener('contextmenu', handleContextMenuPaste, { capture: true });
   }
 };
 
 const removeContextMenuListener = () => {
   if (terminalRef.value) {
-    terminalRef.value.removeEventListener('contextmenu', handleContextMenuPaste);
+    terminalRef.value.removeEventListener('contextmenu', handleContextMenuPaste, { capture: true });
   }
+};
+
+const terminalClipboardKeyDownHandler = async (event: KeyboardEvent) => {
+  if (!event.ctrlKey || !event.shiftKey) return;
+
+  // Ctrl+Shift+C copies the current xterm selection.
+  if (event.code === 'KeyC') {
+    event.preventDefault();
+    event.stopPropagation();
+    const selection = terminal?.getSelection();
+    if (!selection) return;
+
+    try {
+      await readTerminalClipboard()?.writeText(selection);
+      debugLog('[Terminal] Copied via Ctrl+Shift+C:', selection);
+    } catch (err) {
+      console.error('[Terminal] Failed to copy via Ctrl+Shift+C:', err);
+    }
+    return;
+  }
+
+  // Ctrl+Shift+V pastes clipboard text into the active terminal session.
+  if (event.code === 'KeyV') {
+    event.preventDefault();
+    event.stopPropagation();
+    try {
+      const text = await readTerminalClipboard()?.readText();
+      if (text) {
+        const processedText = text.replace(/\r\n?/g, '\n');
+        emitTerminalInput(processedText);
+      }
+    } catch (err) {
+      console.error('[Terminal] Failed to paste via Ctrl+Shift+V:', err);
+    }
+  }
+};
+
+const addTerminalClipboardKeydownListener = () => {
+  removeTerminalClipboardKeydownListener();
+  const nextTargets: HTMLElement[] = [];
+
+  if (terminal?.textarea) {
+    terminal.textarea.addEventListener('keydown', terminalClipboardKeyDownHandler, { capture: true });
+    nextTargets.push(terminal.textarea);
+  }
+  if (terminalRef.value && terminalRef.value !== terminal?.textarea) {
+    terminalRef.value.addEventListener('keydown', terminalClipboardKeyDownHandler, { capture: true });
+    nextTargets.push(terminalRef.value);
+  }
+
+  terminalClipboardKeydownTargets = nextTargets;
+};
+
+const removeTerminalClipboardKeydownListener = () => {
+  terminalClipboardKeydownTargets.forEach((target) => {
+    target.removeEventListener('keydown', terminalClipboardKeyDownHandler, { capture: true });
+  });
+  terminalClipboardKeydownTargets = [];
 };
 
 
@@ -597,7 +693,7 @@ onMounted(() => {
       theme: effectiveTerminalTheme.value, // 使用 store 中的当前 xterm 主题 (now effectiveTerminalTheme)
       rows: 24, // 初始行数
       cols: 80, // 初始列数
-      allowTransparency: true,
+      allowTransparency: !terminalPerformanceModeBoolean.value,
       disableStdin: false,
       convertEol: true,
       scrollback: getScrollbackValue(terminalScrollbackLimitNumber.value), //  Use setting from store
@@ -612,10 +708,8 @@ onMounted(() => {
 
     // 加载插件
     fitAddon = new FitAddon();
-    searchAddon = new SearchAddon(); // *** 创建 SearchAddon 实例 ***
     terminal.loadAddon(fitAddon);
-    terminal.loadAddon(new WebLinksAddon());
-    terminal.loadAddon(searchAddon); // *** 加载 SearchAddon ***
+    loadWebLinksAddonIfEnabled();
 
     // 将终端附加到 DOM
     terminal.open(terminalRef.value);
@@ -728,9 +822,9 @@ onMounted(() => {
       }
     }, { immediate: true }); // 立即执行一次 watch
 
-    // 触发 ready 事件，传递 sessionId, terminal 和 searchAddon 实例
+    // 触发 ready 事件，搜索插件延迟到首次搜索时加载，降低终端初始化成本。
     if (terminal) {
-        emitWorkspaceEvent('terminal:ready', { sessionId: props.sessionId, terminal: terminal, searchAddon: searchAddon });
+        emitWorkspaceEvent('terminal:ready', { sessionId: props.sessionId, terminal: terminal, ensureSearchAddonLoaded });
     }
 
     // --- 监听并处理选中即复制 ---
@@ -741,7 +835,9 @@ onMounted(() => {
             // 仅在选区内容发生变化且不为空时执行复制
             if (newSelection && newSelection !== currentSelection) {
                 currentSelection = newSelection;
-                navigator.clipboard.writeText(newSelection).then(() => {
+                const clipboard = readTerminalClipboard();
+                if (!clipboard) return;
+                clipboard.writeText(newSelection).then(() => {
                 }).catch(err => {
                     console.error('[Terminal] 自动复制到剪贴板失败:', err);
                     // 可以在这里向用户显示一个短暂的错误提示
@@ -814,47 +910,29 @@ onMounted(() => {
         }
     });
 
+    watch(terminalPerformanceModeBoolean, (enabled) => {
+      if (!terminal) return;
+      terminal.options.allowTransparency = !enabled;
+      terminal.options.scrollback = getScrollbackValue(terminalScrollbackLimitNumber.value);
+      if (enabled) {
+        unloadWebLinksAddon();
+      } else {
+        loadWebLinksAddonIfEnabled();
+      }
+      invalidateTerminalFitMetrics();
+      scheduleTerminalFit({ forceFit: true, forceResizeEmit: true });
+      nextTick(() => {
+        applyTerminalTextStyles();
+      });
+    });
+
     // 聚焦终端 (添加 null check)
     if (terminal) {
         terminal.focus();
     }
 
     // --- 添加 Ctrl+Shift+C/V 复制粘贴 ---
-    if (terminal && terminal.textarea) { // 确保 terminal 和 textarea 存在
-        terminal.textarea.addEventListener('keydown', async (event: KeyboardEvent) => {
-            // Ctrl+Shift+C for Copy
-            if (event.ctrlKey && event.shiftKey && event.code === 'KeyC') {
-                event.preventDefault(); // 阻止默认行为 (例如浏览器开发者工具)
-                event.stopPropagation(); // 阻止事件冒泡
-                const selection = terminal?.getSelection();
-                if (selection) {
-                    try {
-                        await navigator.clipboard.writeText(selection);
-                        debugLog('[Terminal] Copied via Ctrl+Shift+C:', selection);
-                    } catch (err) {
-                        console.error('[Terminal] Failed to copy via Ctrl+Shift+C:', err);
-                        // 可以考虑添加 UI 提示
-                    }
-                }
-            }
-            // Ctrl+Shift+V for Paste
-            else if (event.ctrlKey && event.shiftKey && event.code === 'KeyV') {
-                event.preventDefault();
-                event.stopPropagation();
-                try {
-                    const text = await navigator.clipboard.readText();
-                    if (text) {
-                        const processedText = text.replace(/\r\n?/g, '\n');
-                        emitTerminalInput(processedText);
-                    }
-                } catch (err) {
-                    console.error('[Terminal] Failed to paste via Ctrl+Shift+V:', err);
-                    // 检查权限问题，例如 navigator.clipboard.readText 需要用户授权或安全上下文
-                    // 可以考虑添加 UI 提示
-                }
-            }
-        });
-    }
+    addTerminalClipboardKeydownListener();
 
     // 根据初始设置添加监听器
     if (terminalEnableRightClickPasteBoolean.value) {
@@ -894,8 +972,9 @@ onBeforeUnmount(() => {
   unsubscribeFromWorkspaceEvent('ui:resizeTransaction', handleResizeTransaction);
 
   if (resizeAnimationFrameId !== null) {
-    window.cancelAnimationFrame(resizeAnimationFrameId);
+    (resizeAnimationFrameWindow ?? readTerminalWindow()).cancelAnimationFrame(resizeAnimationFrameId);
     resizeAnimationFrameId = null;
+    resizeAnimationFrameWindow = null;
   }
   clearPendingResizeEmit();
   if (stabilizedResizeTimer !== null) {
@@ -925,6 +1004,7 @@ onBeforeUnmount(() => {
 
   if (terminal) {
     debugLog(`[Terminal ${props.sessionId}] Disposing terminal instance.`);
+    unloadWebLinksAddon();
     terminal.dispose();
     terminal = null;
   }
@@ -937,6 +1017,7 @@ onBeforeUnmount(() => {
   
     // 确保在卸载时移除右键监听器
     removeContextMenuListener();
+    removeTerminalClipboardKeydownListener();
 
     if (terminalRef.value) {
       terminalRef.value.removeEventListener('wheel', handleTerminalWheel);
@@ -961,17 +1042,11 @@ const write = (data: string | Uint8Array) => {
 
 // *** 暴露搜索方法 ***
 const findNext = (term: string, options?: ISearchOptions): boolean => {
-  if (searchAddon) {
-    return searchAddon.findNext(term, options);
-  }
-  return false;
+  return ensureSearchAddonLoaded()?.findNext(term, options) ?? false;
 };
 
 const findPrevious = (term: string, options?: ISearchOptions): boolean => {
-  if (searchAddon) {
-    return searchAddon.findPrevious(term, options);
-  }
-  return false;
+  return ensureSearchAddonLoaded()?.findPrevious(term, options) ?? false;
 };
 
 const clearSearch = () => {
@@ -995,7 +1070,7 @@ const applyTerminalTextStyles = () => {
     hostElement.classList.remove('has-text-stroke', 'has-text-shadow');
 
     // 文字描边
-    if (terminalTextStrokeEnabled.value) {
+    if (!terminalPerformanceModeBoolean.value && terminalTextStrokeEnabled.value) {
       hostElement.classList.add('has-text-stroke');
       hostElement.style.setProperty('--terminal-stroke-width', `${terminalTextStrokeWidth.value}px`);
       hostElement.style.setProperty('--terminal-stroke-color', terminalTextStrokeColor.value);
@@ -1005,7 +1080,7 @@ const applyTerminalTextStyles = () => {
     }
 
     // 文字阴影
-    if (terminalTextShadowEnabled.value) {
+    if (!terminalPerformanceModeBoolean.value && terminalTextShadowEnabled.value) {
       hostElement.classList.add('has-text-shadow');
       const shadowValue = `${terminalTextShadowOffsetX.value}px ${terminalTextShadowOffsetY.value}px ${terminalTextShadowBlur.value}px ${terminalTextShadowColor.value}`;
       hostElement.style.setProperty('--terminal-shadow', shadowValue);

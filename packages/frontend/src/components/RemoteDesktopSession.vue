@@ -113,6 +113,7 @@ const updateStatus = (status: WsConnectionStatus, message: string) => {
 };
 
 const getDisplayWindow = () => rdpContainerRef.value?.ownerDocument?.defaultView ?? window;
+const getDisplayClipboard = () => getDisplayWindow().navigator.clipboard;
 
 const waitForAnimationFrame = () => new Promise<void>((resolve) => {
   getDisplayWindow().requestAnimationFrame(() => resolve());
@@ -272,12 +273,13 @@ type SendDisplaySizeOptions = {
 
 const clearResizeSendTimer = () => {
   if (resizeSendTimer === null) return;
-  window.clearTimeout(resizeSendTimer);
+  (resizeWindow ?? getDisplayWindow()).clearTimeout(resizeSendTimer);
   resizeSendTimer = null;
 };
 
 const clearConnectionResizeTimers = () => {
-  connectionResizeTimers.forEach(timerId => window.clearTimeout(timerId));
+  const displayWindow = getDisplayWindow();
+  connectionResizeTimers.forEach(timerId => displayWindow.clearTimeout(timerId));
   connectionResizeTimers = [];
 };
 
@@ -326,7 +328,8 @@ const sendDisplaySize = (size: RemoteDesktopSize, options: SendDisplaySizeOption
 
   pendingDisplaySize = normalizedSize;
   if (resizeSendTimer === null) {
-    resizeSendTimer = window.setTimeout(
+    resizeWindow = getDisplayWindow();
+    resizeSendTimer = resizeWindow.setTimeout(
       flushPendingDisplaySize,
       Math.max(RESIZE_SEND_MIN_INTERVAL_MS - elapsed, 0),
     );
@@ -445,7 +448,7 @@ const scheduleConnectionResizeConfirmation = () => {
   nextTick(() => {
     sendConnectionConfirmedSize();
     CONNECTION_RESIZE_CONFIRM_DELAYS_MS.forEach((delay) => {
-      const timerId = window.setTimeout(sendConnectionConfirmedSize, delay);
+      const timerId = getDisplayWindow().setTimeout(sendConnectionConfirmedSize, delay);
       connectionResizeTimers.push(timerId);
     });
   });
@@ -454,7 +457,7 @@ const scheduleConnectionResizeConfirmation = () => {
 const trySyncClipboardOnDisplayFocus = async () => {
   if (!guacClient.value) return;
   try {
-    const currentClipboardText = await navigator.clipboard.readText();
+    const currentClipboardText = await getDisplayClipboard().readText();
     if (!currentClipboardText || !guacClient.value) return;
 
     // @ts-ignore
@@ -542,9 +545,9 @@ const setupInputListeners = () => {
       reader.ontext = (chunk: string) => {
         text += chunk;
       };
-      reader.onend = async () => {
-        try {
-          await navigator.clipboard.writeText(text);
+    reader.onend = async () => {
+      try {
+          await getDisplayClipboard().writeText(text);
           debugLog('[RemoteDesktopSession] Received clipboard from RDP and wrote to host:', text.substring(0, 50) + (text.length > 50 ? '...' : ''));
         } catch (err) {
           console.warn('[RemoteDesktopSession] Could not write to host clipboard:', err);

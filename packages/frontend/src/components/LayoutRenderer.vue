@@ -16,6 +16,7 @@ import { debugLog } from '../composables/useDebugLog';
 import { storeToRefs } from 'pinia';
 import TransferProgressModal from './TransferProgressModal.vue';
 import { isActionLayoutPane } from '../utils/layoutPanes';
+import { useDeviceDetection } from '../composables/useDeviceDetection';
 
 
 // --- Props ---
@@ -103,6 +104,7 @@ const { t } = useI18n();
 const subscribeToWorkspaceEvent = useWorkspaceEventSubscriber();
 const unsubscribeFromWorkspaceEvent = useWorkspaceEventOff();
 const emitWorkspaceEvent = useWorkspaceEventEmitter();
+const { isMobile } = useDeviceDetection();
 
 // +++ Appearance Store Refs +++
 const appearanceStore = useAppearanceStore();
@@ -169,7 +171,7 @@ const scopedActiveSession = computed(() => (
 ));
 
 const scopedActiveSshSession = computed(() => (
-  scopedActiveSession.value?.kind === 'ssh' ? scopedActiveSession.value : null
+  scopedActiveSession.value?.kind === 'ssh' || scopedActiveSession.value?.kind === 'telnet' ? scopedActiveSession.value : null
 ));
 
 const terminalPaneSessionId = computed(() => (
@@ -689,7 +691,7 @@ const hasTerminalSessions = computed(() => {
  // Check if any terminal-like session can be rendered in this pane.
  for (const [sessionId, sessionState] of sessionStore.sessions) {
    if (!shouldRenderSession(sessionId)) continue;
-   if (sessionState.kind === 'ssh' || sessionState.kind === 'rdp' || sessionState.kind === 'vnc') {
+   if (sessionState.kind === 'ssh' || sessionState.kind === 'telnet' || sessionState.kind === 'rdp' || sessionState.kind === 'vnc') {
      return true;
    }
  }
@@ -718,7 +720,7 @@ const isActiveSessionSingleLineOutput = computed(() => (
 
 const terminalLineOutputToggleTitle = computed(() => {
   if (!scopedActiveSshSession.value) {
-    return t('terminalTabBar.singleLineOutputUnavailableTooltip', '仅 SSH 终端支持单/多行输出');
+    return t('terminalTabBar.singleLineOutputUnavailableTooltip', '仅终端会话支持单/多行输出');
   }
   return isActiveSessionSingleLineOutput.value
     ? t('terminalTabBar.multiLineOutputTooltip', '切换为多行输出')
@@ -764,13 +766,15 @@ const componentProps = computed(() => {
          instanceId: instanceId, // 使用计算出的 instanceId (包含备用值)
          dbConnectionId: scopedActiveSshSession.value.connectionId,
          // sftpManager: currentActiveSession.sftpManager, // 移除 sftpManager，因为它现在由 FileManager 内部管理
-         wsDeps: { // 恢复 wsDeps
-           sendMessage: scopedActiveSshSession.value.wsManager.sendMessage,
-           onMessage: scopedActiveSshSession.value.wsManager.onMessage,
-           isConnected: scopedActiveSshSession.value.wsManager.isConnected, // 恢复 isConnected
-           isSftpReady: scopedActiveSshSession.value.wsManager.isSftpReady // 恢复 isSftpReady
-         },
-         class: 'pane-content', // class 可以保留，或者在模板中处理
+          wsDeps: { // 恢复 wsDeps
+            sendMessage: scopedActiveSshSession.value.wsManager.sendMessage,
+            onMessage: scopedActiveSshSession.value.wsManager.onMessage,
+            getBufferedAmount: scopedActiveSshSession.value.wsManager.getBufferedAmount,
+            isConnected: scopedActiveSshSession.value.wsManager.isConnected, // 恢复 isConnected
+            isSftpReady: scopedActiveSshSession.value.wsManager.isSftpReady // 恢复 isSftpReady
+          },
+          class: 'pane-content', // class 可以保留，或者在模板中处理
+          isMobile: isMobile.value,
          // FileManager 可能也需要转发事件，例如文件操作相关的，暂时省略
       };
     case 'statusMonitor':
@@ -792,11 +796,13 @@ const componentProps = computed(() => {
        return {
          class: 'pane-content',
          targetSessionId: props.activeSessionId,
+         isMobile: isMobile.value,
          // --- 移除事件转发 ---
        };
     case 'connections':
        return {
          class: 'pane-content',
+         isMobile: isMobile.value,
          // --- 移除事件转发 ---
        };
      case 'commandHistory':
@@ -829,7 +835,7 @@ const componentProps = computed(() => {
 const sidebarProps = computed(() => (paneName: PaneName | null, side: 'left' | 'right') => {
  if (!paneName) return {};
 
- const baseProps = { class: 'sidebar-pane-content' }; // Base props for all sidebar components
+ const baseProps = { class: 'sidebar-pane-content', isMobile: isMobile.value }; // Base props for all sidebar components
 
  switch (paneName) {
    case 'editor':
@@ -857,12 +863,14 @@ const sidebarProps = computed(() => (paneName: PaneName | null, side: 'left' | '
          instanceId: instanceId, // 使用 'sidebar-left' 或 'sidebar-right'
          dbConnectionId: scopedActiveSshSession.value.connectionId,
          // sftpManager: activeSession.value.sftpManager, // 移除 sftpManager
-         wsDeps: { // 恢复 wsDeps
-           sendMessage: scopedActiveSshSession.value.wsManager.sendMessage,
-           onMessage: scopedActiveSshSession.value.wsManager.onMessage,
-           isConnected: scopedActiveSshSession.value.wsManager.isConnected, // 直接传递 ref
-           isSftpReady: scopedActiveSshSession.value.wsManager.isSftpReady  // 直接传递 ref
-         },
+          wsDeps: { // 恢复 wsDeps
+            sendMessage: scopedActiveSshSession.value.wsManager.sendMessage,
+            onMessage: scopedActiveSshSession.value.wsManager.onMessage,
+            getBufferedAmount: scopedActiveSshSession.value.wsManager.getBufferedAmount,
+            isConnected: scopedActiveSshSession.value.wsManager.isConnected, // 直接传递 ref
+            isSftpReady: scopedActiveSshSession.value.wsManager.isSftpReady  // 直接传递 ref
+          },
+          isMobile: isMobile.value,
        };
      } else {
        return baseProps; // Return only base props if no active session
@@ -1229,7 +1237,7 @@ onBeforeUnmount(() => {
 
             <!-- Pane Node -->
             <template v-else-if="layoutNode.type === 'pane'">
-                <!-- Terminal Pane: Render ALL SSH sessions, show only the active one -->
+                <!-- Terminal Pane: Render all shell sessions, show only the active one -->
                <template v-if="layoutNode.component === 'terminal'">
                    <div
                        ref="terminalGridRef"
@@ -1281,7 +1289,8 @@ onBeforeUnmount(() => {
                            <template v-if="shouldRenderSession(sessionId)">
                                <keep-alive v-if="sessionId !== externalTerminalSessionId">
                                     <component
-                                        v-if="sessionState.kind === 'ssh'"
+                                        v-if="sessionState.kind === 'ssh' || sessionState.kind === 'telnet'"
+                                        :key="sessionId"
                                         :is="componentMap.terminal"
                                         :session-id="sessionId"
                                         :is-active="isTerminalSessionActiveForLayout(sessionId)"
@@ -1324,8 +1333,8 @@ onBeforeUnmount(() => {
                              :style="{ zIndex: 4 }">
                             <div class="flex flex-col items-center justify-center p-8 w-full h-full">
                                 <i class="fas fa-plug text-4xl mb-3 text-text-secondary"></i>
-                                <span class="text-lg font-medium text-text-secondary mb-2">{{ terminalPaneSessionId ? t('layout.noSshSessionActive.title', '无活动的 SSH 会话') : t('layout.noActiveSession.title') }}</span>
-                                <div class="text-xs text-text-secondary mt-2">{{ terminalPaneSessionId ? t('layout.noSshSessionActive.message', '请激活一个 SSH 会话以使用此终端面板。') : t('layout.noActiveSession.message') }}</div>
+                                <span class="text-lg font-medium text-text-secondary mb-2">{{ terminalPaneSessionId ? t('layout.noSshSessionActive.title', '无活动的终端会话') : t('layout.noActiveSession.title') }}</span>
+                                <div class="text-xs text-text-secondary mt-2">{{ terminalPaneSessionId ? t('layout.noSshSessionActive.message', '请激活一个 SSH/Telnet 会话以使用此终端面板。') : t('layout.noActiveSession.message') }}</div>
                             </div>
                         </div>
                    </div>

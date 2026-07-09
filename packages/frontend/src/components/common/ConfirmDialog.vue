@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onBeforeUnmount } from 'vue';
+import { computed, ref, watch, onBeforeUnmount, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useDraggableDialog } from '../../composables/useDraggableDialog';
 
@@ -10,6 +10,7 @@ interface Props {
   confirmText?: string;
   cancelText?: string;
   isLoading?: boolean;
+  teleportTarget?: string | HTMLElement;
 }
 
 const props = defineProps<Props>();
@@ -20,11 +21,20 @@ const { t } = useI18n();
 const dialogVisible = ref(props.visible);
 const dialogRootRef = ref<HTMLElement | null>(null);
 const dialogContentRef = ref<HTMLElement | null>(null);
+let activeDialogDocument: Document | null = null;
 const { centerDialog, startDialogDrag } = useDraggableDialog({
   rootRef: dialogRootRef,
   dialogRef: dialogContentRef,
   disabled: () => props.isLoading === true,
 });
+
+const resolvedTeleportTarget = computed(() => props.teleportTarget ?? 'body');
+
+const resolveDialogDocument = () => {
+  if (dialogRootRef.value?.ownerDocument) return dialogRootRef.value.ownerDocument;
+  if (typeof props.teleportTarget !== 'string') return props.teleportTarget?.ownerDocument ?? document;
+  return document;
+};
 
 watch(() => props.visible, (newValue) => {
   dialogVisible.value = newValue;
@@ -55,22 +65,26 @@ const handleKeydown = (event: KeyboardEvent) => {
 };
 
 watch(dialogVisible, (isVisible) => {
+  activeDialogDocument?.removeEventListener('keydown', handleKeydown);
+  activeDialogDocument = null;
   if (isVisible) {
-    document.addEventListener('keydown', handleKeydown);
     centerDialog();
-  } else {
-    document.removeEventListener('keydown', handleKeydown);
+    nextTick(() => {
+      activeDialogDocument = resolveDialogDocument();
+      activeDialogDocument.addEventListener('keydown', handleKeydown);
+    });
   }
 });
 
 onBeforeUnmount(() => {
-  document.removeEventListener('keydown', handleKeydown);
+  activeDialogDocument?.removeEventListener('keydown', handleKeydown);
+  activeDialogDocument = null;
 });
 
 </script>
 
 <template>
-  <teleport to="body">
+  <teleport :to="resolvedTeleportTarget">
     <div
       ref="dialogRootRef"
       v-if="dialogVisible"

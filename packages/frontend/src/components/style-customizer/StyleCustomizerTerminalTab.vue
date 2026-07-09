@@ -26,6 +26,7 @@ const emit = defineEmits<{
 const {
   allTerminalThemes,
   activeTerminalThemeId,
+  currentUiThemeMode,
   currentTerminalFontFamily,
   currentTerminalFontSize,
   terminalTextStrokeEnabled,
@@ -206,6 +207,16 @@ const handleApplyTheme = async (theme: TerminalTheme) => {
   } catch (error: any) {
     console.error("应用终端主题失败:", error);
     notificationsStore.addNotification({ type: 'error', message: t('styleCustomizer.setActiveThemeFailed', { message: error.message }) });
+  }
+};
+
+const handleResetCurrentModeTerminalTheme = async () => {
+  try {
+    await appearanceStore.resetActiveTerminalThemeForCurrentUiMode();
+    notificationsStore.addNotification({ type: 'info', message: t('styleCustomizer.terminalThemeResetForMode') });
+  } catch (error: any) {
+    console.error("还原当前模式默认终端主题失败:", error);
+    notificationsStore.addNotification({ type: 'error', message: t('styleCustomizer.terminalThemeResetForModeFailed', { message: error.message }) });
   }
 };
 
@@ -612,6 +623,7 @@ watch(() => props.isEditingTheme, (isEditing) => {
 
     <div class="mt-4 mb-6 flex gap-2 flex-wrap items-center pb-4 border-b border-dashed border-border">
         <button @click="handleAddNewTheme" class="px-3 py-1.5 text-sm border border-border rounded bg-header hover:bg-border transition duration-200 ease-in-out whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed">{{ t('styleCustomizer.addNewTheme') }}</button>
+        <button @click="handleResetCurrentModeTerminalTheme" class="px-3 py-1.5 text-sm border border-border rounded bg-header hover:bg-border transition duration-200 ease-in-out whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed">{{ t('styleCustomizer.resetTerminalThemeForMode', { mode: currentUiThemeMode === 'dark' ? t('styleCustomizer.darkMode') : t('styleCustomizer.defaultMode') }) }}</button>
     </div>
      
      <div class="mb-4">
@@ -631,11 +643,11 @@ watch(() => props.isEditingTheme, (isEditing) => {
             :class="[
               'block md:grid md:grid-cols-[1fr_auto] items-center px-3 py-2.5 text-sm md:text-[0.95rem] transition-colors duration-200 ease-in-out gap-2',
               index < filteredAndSortedThemes.length - 1 ? 'border-b border-border' : '',
-              { 'bg-button text-button-text': theme._id === activeTerminalThemeId?.toString() },
+              { 'bg-nav-active-bg text-link-active': theme._id === activeTerminalThemeId?.toString() },
               { 'hover:bg-header': theme._id !== activeTerminalThemeId?.toString() }
             ]"
          >
-             <span class="block md:col-start-1 md:col-end-2 overflow-hidden text-ellipsis whitespace-nowrap mb-2 md:mb-0" :class="theme._id === activeTerminalThemeId?.toString() ? 'font-bold text-button-text' : 'text-foreground'" :title="theme.name">{{ theme.name }}</span>
+             <span class="block md:col-start-1 md:col-end-2 overflow-hidden text-ellipsis whitespace-nowrap mb-2 md:mb-0" :class="theme._id === activeTerminalThemeId?.toString() ? 'font-bold text-link-active' : 'text-foreground'" :title="theme.name">{{ theme.name }}</span>
              <div class="flex md:col-start-2 md:col-end-3 flex-shrink-0 gap-2 justify-start md:justify-end flex-wrap"> 
                   <button
                       @click="handleApplyTheme(theme)"
@@ -643,7 +655,7 @@ watch(() => props.isEditingTheme, (isEditing) => {
                       :title="t('styleCustomizer.applyThemeTooltip', 'Apply this theme')"
                       :class="[
                         'px-3 py-1.5 text-xs md:text-sm border rounded transition-colors duration-200 ease-in-out whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed',
-                        theme._id === activeTerminalThemeId?.toString() ? 'text-button-text border-white/30 bg-white/10 hover:bg-white/20 hover:border-white/50 disabled:opacity-50 disabled:cursor-default disabled:bg-transparent disabled:border-transparent' : 'border-border bg-header text-foreground hover:bg-border hover:border-text-secondary'
+                        theme._id === activeTerminalThemeId?.toString() ? 'text-link-active border-link-active/30 bg-background/35 hover:bg-background/55 hover:border-link-active/50 disabled:opacity-50 disabled:cursor-default disabled:bg-transparent disabled:border-transparent' : 'border-border bg-header text-foreground hover:bg-border hover:border-text-secondary'
                       ]"
                   >
                       {{ t('styleCustomizer.applyButton', 'Apply') }}
@@ -651,13 +663,13 @@ watch(() => props.isEditingTheme, (isEditing) => {
                 <button @click="handleEditTheme(theme)" :title="theme.isPreset ? t('styleCustomizer.editAsCopy', 'Edit as Copy') : t('common.edit')"
                    :class="[
                      'px-3 py-1.5 text-xs md:text-sm border rounded transition-colors duration-200 ease-in-out whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed',
-                     theme._id === activeTerminalThemeId?.toString() ? 'text-button-text border-white/30 bg-white/10 hover:bg-white/20 hover:border-white/50' : 'border-border bg-header text-foreground hover:bg-border hover:border-text-secondary'
+                     theme._id === activeTerminalThemeId?.toString() ? 'text-link-active border-link-active/30 bg-background/35 hover:bg-background/55 hover:border-link-active/50' : 'border-border bg-header text-foreground hover:bg-border hover:border-text-secondary'
                    ]"
                 >{{ t('common.edit') }}</button>
                 <button @click="handleDeleteTheme(theme)" :disabled="theme.isPreset" :title="theme.isPreset ? t('styleCustomizer.cannotDeletePreset', 'Cannot delete preset theme') : t('common.delete')"
                    :class="[
                      'px-3 py-1.5 text-xs md:text-sm border rounded transition-colors duration-200 ease-in-out whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed',
-                     theme._id === activeTerminalThemeId?.toString() ? 'text-button-text border-white/30 bg-white/10 hover:bg-white/20 hover:border-white/50' : 'bg-error/10 text-error border-error/30 hover:bg-error/20'
+                     theme._id === activeTerminalThemeId?.toString() ? 'text-link-active border-link-active/30 bg-background/35 hover:bg-background/55 hover:border-link-active/50' : 'bg-error/10 text-error border-error/30 hover:bg-error/20'
                    ]"
                 >{{ t('common.delete') }}</button>
              </div>

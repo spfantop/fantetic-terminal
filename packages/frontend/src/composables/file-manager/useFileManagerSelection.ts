@@ -17,7 +17,6 @@ export function useFileManagerSelection(options: UseFileManagerSelectionOptions)
   const lastClickedIndex = ref(-1); // 索引相对于 displayedFileList
 
   const handleItemClick = (event: MouseEvent, item: FileListItem) => {
-    let shouldPerformAction = false; // 初始化标志
     const ctrlOrMeta = event.ctrlKey || event.metaKey;
     const shift = event.shiftKey;
 
@@ -28,34 +27,16 @@ export function useFileManagerSelection(options: UseFileManagerSelectionOptions)
     // (注意: '..' 通常是单独处理或在列表开头，这里假设它不在 displayedFileList 中，或者其点击事件由外部单独处理)
     // 我们主要处理 displayedFileList 中的项的选择逻辑
     if (itemIndex === -1) {
-        // 如果点击的是 '..'
-        // 如果点击的是 '..'
         if (item.filename === '..') {
-            // 只有在没有修饰键时才执行 '..' 的动作
             if (!ctrlOrMeta && !shift) {
                 selectedItems.value.clear();
                 lastClickedIndex.value = -1;
-                shouldPerformAction = true; // 标记执行动作
-            } else {
-                 // 如果有修饰键，则不执行动作
             }
-            // 如果有修饰键，则不执行动作，直接返回 (修改：移到下面统一处理)
-            // (不需要修改 selectedItems 或 lastClickedIndex)
-            // 注意：这里没有 else，因为如果 shouldPerformAction 仍为 false，后面的 if 会阻止调用 onItemAction
         } else {
              // 如果不是 '..' 且找不到索引，则忽略无效点击
              return;
         }
-        // 如果是 '..' 且没有修饰键，会继续到函数末尾的 action 调用检查
-        // 如果是 '..' 且有修饰键，则在此处返回 (因为上面没有 return) -> 不对，应该在上面 if block 里 return
-        // 统一处理 '..' 的返回逻辑：如果有修饰键，则不继续执行后续的选择/动作逻辑
-        if (item.filename === '..' && (ctrlOrMeta || shift)) {
-             return;
-        }
-        // 如果不是 '..' 且找不到索引，也返回
-        if (item.filename !== '..' && itemIndex === -1) {
-             return;
-        }
+        return;
 
     }
 
@@ -95,26 +76,32 @@ export function useFileManagerSelection(options: UseFileManagerSelectionOptions)
       // Shift-click 也更新 lastClickedIndex 为当前点击项
       lastClickedIndex.value = itemIndex;
     } else { // 3. 处理普通单击 (没有修饰键)
-      // Single Click: Select only the clicked item and perform action
+      // 普通单击仅选中，打开/进入目录交给双击或键盘 Enter。
       selectedItems.value.clear();
-       // '..' 不应被加入 selectedItems (已在前面处理 shouldPerformAction)
+      // '..' 不应被加入 selectedItems。
       if (item.filename !== '..') {
-          selectedItems.value.add(item.filename);
-          lastClickedIndex.value = itemIndex; // 更新最后点击的索引
+        selectedItems.value.add(item.filename);
+        lastClickedIndex.value = itemIndex; // 更新最后点击的索引
       } else {
-           // 点击 '..' 的 lastClickedIndex 已在前面处理
-          // lastClickedIndex.value = -1;
+        // 点击 '..' 的 lastClickedIndex 已在前面处理
+        // lastClickedIndex.value = -1;
       }
-      // --- 调用外部传入的动作回调 ---
-      // 只有单击时才执行导航或打开文件
-      // 标记执行动作 (只在普通单击时)
-      shouldPerformAction = true;
     }
+  };
 
-    // 在函数末尾根据标志决定是否执行动作
-    if (shouldPerformAction) {
-        onItemAction(item);
+  const handleItemDoubleClick = (event: MouseEvent, item: FileListItem) => {
+    if (event.ctrlKey || event.metaKey || event.shiftKey) return;
+    event.preventDefault();
+    if (item.filename !== '..') {
+      selectedItems.value.clear();
+      selectedItems.value.add(item.filename);
+      const itemIndex = displayedFileList.value.findIndex((f) => f.filename === item.filename);
+      lastClickedIndex.value = itemIndex;
+    } else {
+      selectedItems.value.clear();
+      lastClickedIndex.value = -1;
     }
+    onItemAction(item);
   };
 
   // 清空选择的辅助函数，可能在其他地方（如路径改变时）需要
@@ -127,6 +114,7 @@ export function useFileManagerSelection(options: UseFileManagerSelectionOptions)
     selectedItems,
     lastClickedIndex, // 只读暴露，主要由内部管理
     handleItemClick,
+    handleItemDoubleClick,
     clearSelection, // 暴露清空选择的方法
   };
 }

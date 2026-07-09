@@ -24,9 +24,30 @@ import FavoritePathsModal from './FavoritePathsModal.vue';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
 import { formatDateTimeWithSettings } from '../utils/dateTimeFormat';
 import { debugLog, debugLogLazy } from '../composables/useDebugLog';
+import {
+  createLongPressContextMenuEvent,
+  createMobileLongPressHandlers,
+  type MobileLongPressHandlers,
+} from '../composables/useMobileLongPress';
 
 
 type SftpManagerInstance = ReturnType<typeof createSftpActionsManager>;
+
+const parentDirectoryItem: FileListItem = {
+  filename: '..',
+  longname: '..',
+  attrs: {
+    isDirectory: true,
+    isFile: false,
+    isSymbolicLink: false,
+    size: 0,
+    uid: 0,
+    gid: 0,
+    mode: 0,
+    atime: 0,
+    mtime: 0,
+  },
+};
 
 
 // --- Props ---
@@ -131,6 +152,13 @@ const pathInputRef = ref<HTMLInputElement | null>(null);
 const editablePath = ref('');
 const fileListContainerRef = ref<HTMLDivElement | null>(null); // 文件列表容器引用
 const dropOverlayRef = ref<HTMLDivElement | null>(null); // +++ 拖拽蒙版引用 +++
+let activePathInputDocument: Document | null = null;
+let activeResizeDocument: Document | null = null;
+const contextMenuTeleportTarget = computed(() => fileListContainerRef.value?.ownerDocument.body ?? 'body');
+const readFileManagerDocument = () => fileListContainerRef.value?.ownerDocument ?? document;
+const readFileManagerWindow = () => readFileManagerDocument().defaultView ?? window;
+const readFileManagerClipboard = () => readFileManagerWindow().navigator.clipboard;
+const readColumnResizeWindow = () => activeResizeDocument?.defaultView ?? readFileManagerWindow();
 
 // +++ Favorite Paths Modal State +++
 const showFavoritePathsModal = ref(false);
@@ -440,18 +468,10 @@ const handleItemAction = (item: FileListItem) => {
           sessionStore.openFileInSession(props.sessionId, fileInfo);
         }
       } else { // targetType is 'unknown' or not provided as expected
-        console.warn(`[FileManager ${props.sessionId}-${props.instanceId}] Symlink target '${realPath}' has an unknown type from server ('${targetType}'). Defaulting to open as file.`);
-        // Fallback: attempt to open as file, or display an error
-        const targetFilename = realPath.substring(realPath.lastIndexOf('/') + 1) || originalLinkItem.filename;
-        const fileInfo: FileInfo = { name: targetFilename, fullPath: realPath };
-        if (settingsStore.showPopupFileEditorBoolean) {
-          fileEditorStore.triggerPopup(realPath, props.sessionId);
-        }
-        if (shareFileEditorTabsBoolean.value) {
-          fileEditorStore.openFile(realPath, props.sessionId, props.instanceId);
-        } else {
-          sessionStore.openFileInSession(props.sessionId, fileInfo);
-        }
+        console.warn(`[FileManager ${props.sessionId}-${props.instanceId}] Symlink target '${realPath}' has an unknown type from server ('${targetType}').`);
+        uiNotificationsStore.showWarning(
+          t('fileManager.errors.unknownSymlinkTargetType', { path: realPath }, '无法确认符号链接目标类型，未自动打开。')
+        );
       }
     };
 
@@ -553,6 +573,7 @@ const {
   selectedItems, // 使用 Composable 返回的 selectedItems
   lastClickedIndex, // 获取 lastClickedIndex 以传递给 ContextMenu
   handleItemClick: originalHandleItemClick, // 使用 Composable 返回的 handleItemClick
+  handleItemDoubleClick: originalHandleItemDoubleClick,
   clearSelection, // 获取清空选择的方法
 } = useFileManagerSelection({
   // 传递当前显示的列表 (已排序和过滤)
@@ -572,6 +593,37 @@ const handleItemClick = (event: MouseEvent, item: FileListItem, forceMultiSelect
   }
   originalHandleItemClick(event, item);
 };
+
+const handleItemDoubleClick = (event: MouseEvent, item: FileListItem) => {
+  if (props.isMobile && isMultiSelectMode.value) return;
+  originalHandleItemDoubleClick(event, item);
+};
+
+const handleOpenContextMenuClick = (item: FileListItem) => {
+  handleItemAction(item);
+};
+
+const fileItemLongPressHandlers = new Map<string, MobileLongPressHandlers>();
+const getFileItemLongPressHandlers = (item: FileListItem) => {
+  const cachedHandlers = fileItemLongPressHandlers.get(item.filename);
+  if (cachedHandlers) return cachedHandlers;
+
+  const handlers = createMobileLongPressHandlers({
+    isMobile: () => props.isMobile,
+    onLongPress: (event, point) => {
+      showContextMenu(createLongPressContextMenuEvent(event, point), item);
+    },
+  });
+  fileItemLongPressHandlers.set(item.filename, handlers);
+  return handlers;
+};
+
+const fileListLongPressHandlers = createMobileLongPressHandlers({
+  isMobile: () => props.isMobile,
+  onLongPress: (event, point) => {
+    showContextMenu(createLongPressContextMenuEvent(event, point));
+  },
+});
 
 // +++ 计算属性：获取选中的完整文件对象列表 +++
 const computedSelectedFullItems = computed((): FileListItem[] => {
@@ -796,18 +848,19 @@ const triggerDownload = (items: FileListItem[]) => { // 修改：接受 FileList
         debugLog(`[FileManager ${props.sessionId}-${props.instanceId}] Triggering download for ${item.filename}: ${downloadUrl}`);
 
         // 为每个文件创建一个链接并点击
-        const link = document.createElement('a');
+        const fileManagerDocument = readFileManagerDocument();
+        const link = fileManagerDocument.createElement('a');
         link.href = downloadUrl;
         // --- 修正：移除文件名中的双引号以兼容 Chrome ---
         const safeFilename = item.filename.replace(/"/g, ''); // 移除所有双引号
         link.setAttribute('download', safeFilename);
         // --- 结束修正 ---
-        document.body.appendChild(link);
+        fileManagerDocument.body.appendChild(link);
         link.click();
 
         // 稍微延迟移除链接，以确保下载开始
         setTimeout(() => {
-            document.body.removeChild(link);
+            link.remove();
         }, 100);
     });
 };
@@ -856,16 +909,18 @@ const triggerDownloadDirectory = (item: FileListItem) => {
                     }
                 }
 
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(blob);
+                const fileManagerDocument = readFileManagerDocument();
+                const fileManagerWindow = readFileManagerWindow();
+                const link = fileManagerDocument.createElement('a');
+                link.href = fileManagerWindow.URL.createObjectURL(blob);
                 // --- 修正：移除 ZIP 文件名中的双引号以兼容 Chrome ---
                 const safeZipFilename = filename.replace(/"/g, '');
                 link.setAttribute('download', safeZipFilename);
                 // --- 结束修正 ---
-                document.body.appendChild(link);
+                fileManagerDocument.body.appendChild(link);
                 link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(link.href); // 释放对象 URL
+                link.remove();
+                fileManagerWindow.URL.revokeObjectURL(link.href); // 释放对象 URL
                 debugLog(`[FileManager ${props.sessionId}-${props.instanceId}] Directory download triggered for: ${filename}`);
             } else {
                 // 处理错误，例如 404 Not Found
@@ -922,7 +977,7 @@ const handleCopyPath = async (item: FileListItem) => {
   if (!currentSftpManager.value) return;
   const fullPath = currentSftpManager.value.joinPath(currentSftpManager.value.currentPath.value, item.filename);
   try {
-    await navigator.clipboard.writeText(fullPath);
+    await readFileManagerClipboard().writeText(fullPath);
     // 可选：显示成功通知
     debugLog(`[FileManager ${props.sessionId}-${props.instanceId}] Copied path to clipboard: ${fullPath}`);
     uiNotificationsStore.showSuccess(t('fileManager.notifications.pathCopied', 'Path copied to clipboard'));
@@ -959,6 +1014,7 @@ const {
           currentSftpManager.value.loadDirectory(currentSftpManager.value.currentPath.value, true);
       }
   },
+  onOpen: handleOpenContextMenuClick,
   onUpload: triggerFileUpload,
   onDownload: triggerDownload,
   onDelete: handleDeleteSelectedClick,
@@ -1036,8 +1092,8 @@ const {
   // 修改：传递 manager 的 currentPath ref
   currentPath: computed(() => currentSftpManager.value?.currentPath.value ?? '/'),
   fileListContainerRef: fileListContainerRef,
-  // 当 Enter 键按下时，模拟鼠标单击
-  onEnterPress: (item) => handleItemClick(new MouseEvent('click'), item),
+  // 键盘 Enter 保留打开/进入目录行为，避免受单击只选中影响。
+  onEnterPress: (item) => handleItemAction(item),
 });
 
 
@@ -1250,7 +1306,7 @@ onMounted(() => {
       return undefined;
     }
   };
-  unregisterSearchFocusAction = focusSwitcherStore.registerFocusAction('fileManagerSearch', focusSearchActionWrapper);
+  unregisterSearchFocusAction = focusSwitcherStore.registerFocusAction('fileManagerSearch', focusSearchActionWrapper, { ownerDocument: readFileManagerDocument() });
 
   // 注册路径编辑框聚焦动作
   const focusPathActionWrapper = async (): Promise<boolean | undefined> => {
@@ -1264,8 +1320,9 @@ onMounted(() => {
        return undefined;
      }
   };
-  unregisterPathFocusAction = focusSwitcherStore.registerFocusAction('fileManagerPathInput', focusPathActionWrapper);
-  document.addEventListener('click', handleClickOutsidePathInput);
+  unregisterPathFocusAction = focusSwitcherStore.registerFocusAction('fileManagerPathInput', focusPathActionWrapper, { ownerDocument: readFileManagerDocument() });
+  activePathInputDocument = readFileManagerDocument();
+  activePathInputDocument.addEventListener('click', handleClickOutsidePathInput);
 });
 
 onBeforeUnmount(() => {
@@ -1282,11 +1339,16 @@ onBeforeUnmount(() => {
    debugLog(`[FileManager ${props.sessionId}-${props.instanceId}] Unregistered path edit focus action on unmount.`);
   }
   unregisterPathFocusAction = null;
-  document.removeEventListener('click', handleClickOutsidePathInput);
-  document.removeEventListener('mousemove', handleResize);
-  document.removeEventListener('mouseup', stopResize);
+  activePathInputDocument?.removeEventListener('click', handleClickOutsidePathInput);
+  activePathInputDocument = null;
+  activeResizeDocument?.removeEventListener('mousemove', handleResize);
+  activeResizeDocument?.removeEventListener('mouseup', stopResize);
+  if (activeResizeDocument) {
+      activeResizeDocument.body.style.cursor = '';
+      activeResizeDocument.body.style.userSelect = '';
+  }
   if (columnResizeFrameId !== null) {
-      window.cancelAnimationFrame(columnResizeFrameId);
+      readColumnResizeWindow().cancelAnimationFrame(columnResizeFrameId);
       columnResizeFrameId = null;
   }
   pendingColumnResize = null;
@@ -1330,12 +1392,12 @@ const scheduleColumnResize = (key: keyof typeof colWidths.value, width: number) 
     pendingColumnResize = { key, width };
     if (columnResizeFrameId !== null) return;
 
-    columnResizeFrameId = window.requestAnimationFrame(applyPendingColumnResize);
+    columnResizeFrameId = readColumnResizeWindow().requestAnimationFrame(applyPendingColumnResize);
 };
 
 const flushPendingColumnResize = () => {
     if (columnResizeFrameId !== null) {
-        window.cancelAnimationFrame(columnResizeFrameId);
+        readColumnResizeWindow().cancelAnimationFrame(columnResizeFrameId);
         columnResizeFrameId = null;
     }
     applyPendingColumnResize();
@@ -1354,10 +1416,13 @@ const startResize = (event: MouseEvent, index: number) => {
         const thElement = (event.target as HTMLElement).closest('th');
         startWidth.value = thElement?.offsetWidth ?? 100;
     }
-    document.addEventListener('mousemove', handleResize);
-    document.addEventListener('mouseup', stopResize);
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
+    activeResizeDocument?.removeEventListener('mousemove', handleResize);
+    activeResizeDocument?.removeEventListener('mouseup', stopResize);
+    activeResizeDocument = (event.target as Node | null)?.ownerDocument ?? readFileManagerDocument();
+    activeResizeDocument.addEventListener('mousemove', handleResize);
+    activeResizeDocument.addEventListener('mouseup', stopResize);
+    activeResizeDocument.body.style.cursor = 'col-resize';
+    activeResizeDocument.body.style.userSelect = 'none';
 };
 
 const handleResize = (event: MouseEvent) => {
@@ -1376,10 +1441,13 @@ const stopResize = () => {
         flushPendingColumnResize();
         isResizing.value = false;
         resizingColumnIndex.value = -1;
-        document.removeEventListener('mousemove', handleResize);
-        document.removeEventListener('mouseup', stopResize);
-        document.body.style.cursor = '';
-        document.body.style.userSelect = '';
+        activeResizeDocument?.removeEventListener('mousemove', handleResize);
+        activeResizeDocument?.removeEventListener('mouseup', stopResize);
+        if (activeResizeDocument) {
+            activeResizeDocument.body.style.cursor = '';
+            activeResizeDocument.body.style.userSelect = '';
+        }
+        activeResizeDocument = null;
         // +++ 在调整结束后保存列宽 +++
         // +++ 日志：记录触发保存 +++
         debugLog(`[FileManager ${props.sessionId}-${props.instanceId}] stopResize triggered saveLayoutSettings.`);
@@ -1508,8 +1576,8 @@ const handlePathInput = async (event?: Event | FocusEvent) => {
     }
 
     if (event && event.type === 'blur') {
-      setTimeout(() => {
-        const activeEl = document.activeElement;
+      readFileManagerWindow().setTimeout(() => {
+        const activeEl = readFileManagerDocument().activeElement;
         const dropdownEl = pathHistoryDropdownRef.value?.$el;
         if (dropdownEl && dropdownEl.contains(activeEl)) {
           // Focus is within the dropdown, do nothing yet
@@ -1895,6 +1963,11 @@ const handleOpenEditorClick = () => {
       @keydown="handleKeydown"
       @wheel="handleWheel"
       @contextmenu.prevent="showContextMenu($event)"
+      @touchstart="fileListLongPressHandlers.onTouchstart"
+      @touchmove="fileListLongPressHandlers.onTouchmove"
+      @touchend="fileListLongPressHandlers.onTouchend"
+      @touchcancel="fileListLongPressHandlers.onTouchcancel"
+      @click.capture="fileListLongPressHandlers.onClickCapture"
       tabindex="0"
       :style="{ '--row-size-multiplier': rowSizeMultiplier }"
     >
@@ -1995,11 +2068,17 @@ const handleOpenEditorClick = () => {
                     'outline-dashed outline-2 outline-offset-[-1px] outline-primary': dragOverTarget === '..',
                     'hover:bg-header/50': dragOverTarget !== '..'
                 }"
-                @click="handleItemClick($event, { filename: '..', longname: '..', attrs: { isDirectory: true, isFile: false, isSymbolicLink: false, size: 0, uid: 0, gid: 0, mode: 0, atime: 0, mtime: 0 } })"
-                @contextmenu.prevent.stop="showContextMenu($event, { filename: '..', longname: '..', attrs: { isDirectory: true, isFile: false, isSymbolicLink: false, size: 0, uid: 0, gid: 0, mode: 0, atime: 0, mtime: 0 } })"
-                @dragover.prevent="handleDragOverRow({ filename: '..', longname: '..', attrs: { isDirectory: true, isFile: false, isSymbolicLink: false, size: 0, uid: 0, gid: 0, mode: 0, atime: 0, mtime: 0 } }, $event)"
-                @dragleave="handleDragLeaveRow({ filename: '..', longname: '..', attrs: { isDirectory: true, isFile: false, isSymbolicLink: false, size: 0, uid: 0, gid: 0, mode: 0, atime: 0, mtime: 0 } })"
-                @drop.prevent="handleDropOnRow({ filename: '..', longname: '..', attrs: { isDirectory: true, isFile: false, isSymbolicLink: false, size: 0, uid: 0, gid: 0, mode: 0, atime: 0, mtime: 0 } }, $event)"
+                @click="handleItemClick($event, parentDirectoryItem)"
+                @dblclick="handleItemDoubleClick($event, parentDirectoryItem)"
+                @contextmenu.prevent.stop="showContextMenu($event, parentDirectoryItem)"
+                @touchstart.stop="getFileItemLongPressHandlers(parentDirectoryItem).onTouchstart"
+                @touchmove.stop="getFileItemLongPressHandlers(parentDirectoryItem).onTouchmove"
+                @touchend.stop="getFileItemLongPressHandlers(parentDirectoryItem).onTouchend"
+                @touchcancel.stop="getFileItemLongPressHandlers(parentDirectoryItem).onTouchcancel"
+                @click.capture="getFileItemLongPressHandlers(parentDirectoryItem).onClickCapture"
+                @dragover.prevent="handleDragOverRow(parentDirectoryItem, $event)"
+                @dragleave="handleDragLeaveRow(parentDirectoryItem)"
+                @drop.prevent="handleDropOnRow(parentDirectoryItem, $event)"
                 :data-filename="'..'"
                 >
               <td class="text-center border-b border-border align-middle" :style="{ paddingLeft: `calc(1rem * var(--row-size-multiplier))`, paddingRight: `calc(0.5rem * var(--row-size-multiplier))` }">
@@ -2015,6 +2094,7 @@ const handleOpenEditorClick = () => {
                 :key="item.filename"
                 :draggable="item.filename !== '..'" @dragstart="handleDragStart(item)" @dragend="handleDragEnd"
                 @click="handleItemClick($event, item, props.isMobile && isMultiSelectMode)"
+                @dblclick="handleItemDoubleClick($event, item)"
                 class="transition-colors duration-150 select-none"
                 :class="[
                     { 'cursor-pointer': item.attrs.isDirectory || item.attrs.isFile },
@@ -2024,6 +2104,11 @@ const handleOpenEditorClick = () => {
                 ]"
                :data-filename="item.filename"
                @contextmenu.prevent.stop="showContextMenu($event, item)"
+               @touchstart.stop="getFileItemLongPressHandlers(item).onTouchstart"
+               @touchmove.stop="getFileItemLongPressHandlers(item).onTouchmove"
+               @touchend.stop="getFileItemLongPressHandlers(item).onTouchend"
+               @touchcancel.stop="getFileItemLongPressHandlers(item).onTouchcancel"
+               @click.capture="getFileItemLongPressHandlers(item).onClickCapture"
                @dragover.prevent="handleDragOverRow(item, $event)"
                @dragleave="handleDragLeaveRow(item)"
                @drop.prevent="handleDropOnRow(item, $event)">
@@ -2068,6 +2153,7 @@ const handleOpenEditorClick = () => {
       :active-context-item="contextTargetItem"
       :selected-file-items="computedSelectedFullItems"
       :current-directory-path="currentSftpManager?.currentPath?.value ?? '/'"
+      :teleport-target="contextMenuTeleportTarget"
      @close-request="hideContextMenu"
    />
 

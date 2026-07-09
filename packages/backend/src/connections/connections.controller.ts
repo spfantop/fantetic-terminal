@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import * as ConnectionService from './connection.service';
-import * as SshService from '../services/ssh.service';
+import * as ProtocolTestService from '../services/protocol-test.service';
 import * as GuacamoleService from '../services/guacamole.service'; 
 import * as ImportExportService from '../services/import-export.service';
 import * as ConnectionRepository from './connection.repository';
@@ -219,8 +219,7 @@ export const testConnection = async (req: Request, res: Response): Promise<void>
             return;
         }
 
-        // 调用 SshService 进行连接测试，现在它会返回延迟
-        const { latency } = await SshService.testConnection(connectionId);
+        const { latency } = await ProtocolTestService.testConnection(connectionId);
 
         res.status(200).json({ success: true, message: '连接测试成功。', latency }); // 返回延迟
 
@@ -237,20 +236,25 @@ export const testConnection = async (req: Request, res: Response): Promise<void>
 export const testUnsavedConnection = async (req: Request, res: Response): Promise<void> => {
     try {
         // 从请求体中提取连接信息 (添加 ssh_key_id)
-        const { host, port, username, auth_method, password, private_key, passphrase, proxy_id, ssh_key_id } = req.body;
+        const { type = 'SSH', host, port, username, auth_method, password, private_key, passphrase, proxy_id, ssh_key_id } = req.body;
+        const connectionType = String(type).toUpperCase();
 
         // 基本验证
-        if (!host || !port || !username || !auth_method) {
-            res.status(400).json({ success: false, message: '缺少必要的连接信息 (host, port, username, auth_method)。' });
+        if (!host || !port || !['SSH', 'TELNET', 'RDP', 'VNC'].includes(connectionType)) {
+            res.status(400).json({ success: false, message: '缺少必要的连接信息 (type, host, port)。' });
+            return;
+        }
+        if (connectionType === 'SSH' && (!username || !auth_method)) {
+            res.status(400).json({ success: false, message: 'SSH 测试需要提供 username 和 auth_method。' });
             return;
         }
         // 密码认证时，password 字段必须存在，但可以为空字符串
-        if (auth_method === 'password' && password === undefined) {
+        if (connectionType === 'SSH' && auth_method === 'password' && password === undefined) {
             res.status(400).json({ success: false, message: '密码认证方式需要提供 password 字段 (可以为空字符串)。' });
             return;
         }
         // 密钥认证时，必须提供 ssh_key_id 或 private_key
-        if (auth_method === 'key' && !ssh_key_id && !private_key) {
+        if (connectionType === 'SSH' && auth_method === 'key' && !ssh_key_id && !private_key) {
             res.status(400).json({ success: false, message: '密钥认证方式需要提供 ssh_key_id 或 private_key。' });
             return;
         }
@@ -263,9 +267,10 @@ export const testUnsavedConnection = async (req: Request, res: Response): Promis
         // 构建传递给服务层的连接配置对象
         // 注意：这里传递的是未经验证和加密处理的原始数据
         const connectionConfig = {
+            type: connectionType as 'SSH' | 'TELNET' | 'RDP' | 'VNC',
             host,
             port: parseInt(port, 10), // 确保 port 是数字
-            username,
+            username: username ?? '',
             auth_method,
             password, // 传递原始密码
             private_key: ssh_key_id ? undefined : private_key, // 如果有 ssh_key_id，则不传递 private_key
@@ -290,9 +295,7 @@ export const testUnsavedConnection = async (req: Request, res: Response): Promis
         }
 
 
-        // 调用 SshService 进行连接测试，现在它会返回延迟
-        // 注意：SshService.testUnsavedConnection 需要处理原始凭证
-        const { latency } = await SshService.testUnsavedConnection(connectionConfig);
+        const { latency } = await ProtocolTestService.testUnsavedConnection(connectionConfig);
 
         // 如果 SshService.testUnsavedConnection 没有抛出错误，则表示成功
         res.status(200).json({ success: true, message: '连接测试成功。', latency });

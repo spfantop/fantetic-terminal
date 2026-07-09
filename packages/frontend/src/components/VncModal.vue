@@ -37,6 +37,8 @@ const initialModalWidthForResize = ref(0);
 const initialModalHeightForResize = ref(0);
 const statusMessage = ref('');
 const vncPasteInputText = ref('');
+const readVncDisplayWindow = () => vncContainerRef.value?.ownerDocument.defaultView ?? window;
+const readVncDisplayClipboard = () => readVncDisplayWindow().navigator.clipboard;
 
 const sendInputTextToVnc = async () => {
   if (!guacClient.value || connectionStatus.value !== 'connected') {
@@ -207,7 +209,7 @@ const trySyncClipboardOnDisplayFocus = async () => {
     return;
   }
   try {
-    const currentClipboardText = await navigator.clipboard.readText();
+    const currentClipboardText = await readVncDisplayClipboard().readText();
     if (currentClipboardText && guacClient.value) {
       // @ts-ignore
       const stream = guacClient.value.createClipboardStream('text/plain');
@@ -235,7 +237,7 @@ const setupInputListeners = () => {
         displayEl.tabIndex = 0;
 
         const handleVncDisplayClick = () => {
-          const activeElement = document.activeElement as HTMLElement;
+          const activeElement = displayEl.ownerDocument.activeElement as HTMLElement;
           if (activeElement && (activeElement.id === 'modal-width' || activeElement.id === 'modal-height')) {
             activeElement.blur();
           }

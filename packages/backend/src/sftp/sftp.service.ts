@@ -65,7 +65,12 @@ interface ActiveUpload {
     sessionId: string; // Link back to the session for cleanup
     relativePath?: string;
     drainPromise?: Promise<void> | null; // +++ For managing drain event listeners +++
+    chunkQueue: Promise<void>;
+    expectedChunkIndex: number;
+    lastProgressSentAt: number;
 }
+
+const UPLOAD_PROGRESS_THROTTLE_MS = 150;
 
 export class SftpService {
     private clientStates: Map<string, ClientState>; // 使用导入的 ClientState
@@ -1540,7 +1545,10 @@ export class SftpService {
                 stream,
                 sessionId,
                 relativePath, // +++ 存储 relativePath +++
-                drainPromise: null // +++ Initialize drainPromise +++
+                drainPromise: null, // +++ Initialize drainPromise +++
+                chunkQueue: Promise.resolve(),
+                expectedChunkIndex: 0,
+                lastProgressSentAt: 0,
             };
             this.activeUploads.set(uploadId, uploadState);
 
@@ -1580,6 +1588,7 @@ export class SftpService {
                             this.activeUploads.delete(uploadId);
                         });
                     } else {
+                         state.ws.send(JSON.stringify({ type: 'sftp:upload:error', payload: { uploadId, message: `上传未完成: 已写入 ${finalState.bytesWritten}, 预期 ${finalState.totalSize}` } }));
                          this.activeUploads.delete(uploadId);
                     }
                 }
@@ -1598,13 +1607,11 @@ export class SftpService {
     }
 
     /** Handle an incoming file chunk */
-    // --- FIX: Make async to handle await for drain ---
-    async handleUploadChunk(sessionId: string, uploadId: string, chunkIndex: number, dataBase64: string): Promise<void> {
+    async handleUploadChunk(sessionId: string, uploadId: string, chunkIndex: number, dataBase64: string, byteLength?: number, isLast?: boolean): Promise<void> {
         const state = this.clientStates.get(sessionId);
         const uploadState = this.activeUploads.get(uploadId);
 
         if (!state || !state.sftp) {
-            // Session or SFTP gone, can't process chunk. Upload might be cleaned up elsewhere.
             console.warn(`[SFTP Upload ${uploadId}] Received chunk ${chunkIndex}, but session ${sessionId} or SFTP is invalid.`);
             this.cancelUploadInternal(uploadId, 'Session or SFTP invalid');
             return;
@@ -1614,86 +1621,142 @@ export class SftpService {
             return;
         }
 
+        // 同一上传的块必须严格串行写入，避免 WebSocket 消息并发处理时打乱 SFTP 写流背压。
+        uploadState.chunkQueue = uploadState.chunkQueue.then(() => this.processUploadChunk(sessionId, uploadId, chunkIndex, dataBase64, byteLength, isLast));
         try {
-            const chunkBuffer = Buffer.from(dataBase64, 'base64');
-            const writeSuccess = uploadState.stream.write(chunkBuffer, (err) => {
-                 if (err) {
-                     
-                     console.error(`[SFTP Upload ${uploadId}] Error writing chunk ${chunkIndex} to ${uploadState.remotePath}:`, err);
-                     state.ws.send(JSON.stringify({ type: 'sftp:upload:error', payload: { uploadId, message: `写入块 ${chunkIndex} 失败: ${err.message}` } }));
-                     
-                     this.cancelUploadInternal(uploadId, `Write error on chunk ${chunkIndex}`);
-                 } else {
-                    
-                    uploadState.bytesWritten += chunkBuffer.length;
+            await uploadState.chunkQueue;
+        } catch (error: any) {
+            console.error(`[SFTP Upload ${uploadId}] Error handling chunk ${chunkIndex}:`, error);
+            this.sendUploadError(state, uploadId, `处理块 ${chunkIndex} 时出错: ${error.message}`);
+            this.cancelUploadInternal(uploadId, `Error handling chunk ${chunkIndex}`, error);
+        }
+    }
 
-                    if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-                        const progressPercent = Math.round((uploadState.bytesWritten / uploadState.totalSize) * 100);
-                        state.ws.send(JSON.stringify({
-                            type: 'sftp:upload:progress',
-                            uploadId: uploadId,
-                            payload: {
-                                bytesWritten: uploadState.bytesWritten,
-                                totalSize: uploadState.totalSize,
-                                progress: Math.min(100, progressPercent)
-                            }
-                        }));
-                    }
-                    
+    private async processUploadChunk(sessionId: string, uploadId: string, chunkIndex: number, dataBase64: string, byteLength?: number, isLast?: boolean): Promise<void> {
+        const state = this.clientStates.get(sessionId);
+        const uploadState = this.activeUploads.get(uploadId);
 
-                    
-                    if (uploadState.bytesWritten >= uploadState.totalSize) {
-                         if (!uploadState.stream.writableEnded) {
-                             uploadState.stream.end((endErr: Error & { code?: string } | undefined) => {
-                                 
-                                 const streamStateInEndCallback = uploadState?.stream;
-                                 if (endErr) {
-                                     if (endErr.code === 'ERR_STREAM_DESTROYED' && uploadState && uploadState.bytesWritten >= uploadState.totalSize) {
-                                         console.warn(`[SFTP Upload ${uploadId}] stream.end() CALLBACK reported ERR_STREAM_DESTROYED, but all bytes written. UploadId: ${uploadId}. Error:`, endErr);
-                                         console.log(`[SFTP Upload ${uploadId}] Treating ERR_STREAM_DESTROYED as non-fatal for this upload. Expecting 'close' event to finalize success for ${uploadState.remotePath}.`);
-                                     } else {
-                                         console.error(`[SFTP Upload ${uploadId}] Error from stream.end() CALLBACK for ${uploadState?.remotePath || 'unknown path'}:`, endErr);
-                                         if (state && state.ws) {
-                                             state.ws.send(JSON.stringify({ type: 'sftp:upload:error', payload: { uploadId, message: `结束写入流时出错: ${endErr.message}` } }));
-                                         }
-                                         this.cancelUploadInternal(uploadId, `Stream end error: ${endErr.message}`, endErr);
-                                     }
-                                 }
-                             });
-                         }
-                    }
-                 }
-            });
+        if (!state || !state.sftp) {
+            console.warn(`[SFTP Upload ${uploadId}] Skipping chunk ${chunkIndex}; session ${sessionId} or SFTP is invalid.`);
+            this.cancelUploadInternal(uploadId, 'Session or SFTP invalid');
+            return;
+        }
+        if (!uploadState) {
+            console.warn(`[SFTP Upload ${uploadId}] Skipping chunk ${chunkIndex}; no active upload found.`);
+            return;
+        }
+        if (chunkIndex !== uploadState.expectedChunkIndex) {
+            this.sendUploadError(state, uploadId, `上传块顺序错误: 期望 ${uploadState.expectedChunkIndex}, 实际 ${chunkIndex}`);
+            this.cancelUploadInternal(uploadId, `Unexpected chunk index ${chunkIndex}`);
+            return;
+        }
 
-            if (!writeSuccess) {
-                if (!uploadState.drainPromise) {
-                    uploadState.drainPromise = new Promise<void>(resolve => {
-                        uploadState.stream.once('drain', () => {
-                            
-                            uploadState.drainPromise = null; 
-                            resolve();
-                        });
-                    });
-                }
-                try {
-                    await uploadState.drainPromise;
-                    
-                } catch (drainError) {
-                    console.error(`[SFTP Upload ${uploadId}] Error awaiting drain promise for chunk ${chunkIndex}:`, drainError);
-                    this.cancelUploadInternal(uploadId, 'Error waiting for drain promise');
-                    throw drainError;
-                }
+        const chunkBuffer = Buffer.from(dataBase64, 'base64');
+        if (typeof byteLength === 'number' && chunkBuffer.length !== byteLength) {
+            this.sendUploadError(state, uploadId, `上传块大小不匹配: 期望 ${byteLength}, 实际 ${chunkBuffer.length}`);
+            this.cancelUploadInternal(uploadId, `Chunk ${chunkIndex} byte length mismatch`);
+            return;
+        }
+
+        try {
+            if (chunkBuffer.length > 0) {
+                await this.writeUploadChunk(uploadId, uploadState, chunkIndex, chunkBuffer);
             }
 
-            
-            
+            uploadState.bytesWritten += chunkBuffer.length;
+            uploadState.expectedChunkIndex += 1;
 
-            
-     } catch (error: any) {
-            console.error(`[SFTP Upload ${uploadId}] Error handling chunk ${chunkIndex} for ${uploadState?.remotePath}:`, error);
-            state.ws.send(JSON.stringify({ type: 'sftp:upload:error', payload: { uploadId, message: `处理块 ${chunkIndex} 时出错: ${error.message}` } }));
-            this.cancelUploadInternal(uploadId, `Error handling chunk ${chunkIndex}`);
+            const finalChunk = isLast === true || uploadState.bytesWritten >= uploadState.totalSize;
+            this.sendUploadProgress(state, uploadId, uploadState, finalChunk);
+            this.sendUploadChunkAck(state, uploadId, chunkIndex, chunkBuffer.length, uploadState, finalChunk);
+
+            if (finalChunk && !uploadState.stream.writableEnded) {
+                uploadState.stream.end((endErr: Error & { code?: string } | undefined) => {
+                    if (!endErr) return;
+                    if (endErr.code === 'ERR_STREAM_DESTROYED' && uploadState.bytesWritten >= uploadState.totalSize) {
+                        console.warn(`[SFTP Upload ${uploadId}] stream.end() reported ERR_STREAM_DESTROYED after all bytes were written.`);
+                        return;
+                    }
+                    this.sendUploadError(state, uploadId, `结束写入流时出错: ${endErr.message}`);
+                    this.cancelUploadInternal(uploadId, `Stream end error: ${endErr.message}`, endErr);
+                });
+            }
+        } catch (error: any) {
+            console.error(`[SFTP Upload ${uploadId}] Error writing chunk ${chunkIndex} to ${uploadState.remotePath}:`, error);
+            this.sendUploadError(state, uploadId, `写入块 ${chunkIndex} 失败: ${error.message}`);
+            this.cancelUploadInternal(uploadId, `Write error on chunk ${chunkIndex}`, error);
         }
+    }
+
+    private async writeUploadChunk(uploadId: string, uploadState: ActiveUpload, chunkIndex: number, chunkBuffer: Buffer): Promise<void> {
+        await new Promise<void>((resolve, reject) => {
+            const writeSuccess = uploadState.stream.write(chunkBuffer, (err) => {
+                if (err) reject(err);
+                else resolve();
+            });
+
+            if (!writeSuccess && !uploadState.drainPromise) {
+                uploadState.drainPromise = new Promise<void>(drainResolve => {
+                    uploadState.stream.once('drain', () => {
+                        uploadState.drainPromise = null;
+                        drainResolve();
+                    });
+                });
+            }
+        });
+
+        if (uploadState.drainPromise) {
+            try {
+                await uploadState.drainPromise;
+            } catch (drainError) {
+                console.error(`[SFTP Upload ${uploadId}] Error awaiting drain promise for chunk ${chunkIndex}:`, drainError);
+                throw drainError;
+            }
+        }
+    }
+
+    private sendUploadMessage(state: ClientState, message: unknown): void {
+        if (state.ws?.readyState === WebSocket.OPEN) {
+            state.ws.send(JSON.stringify(message));
+        }
+    }
+
+    private sendUploadError(state: ClientState, uploadId: string, message: string): void {
+        this.sendUploadMessage(state, { type: 'sftp:upload:error', payload: { uploadId, message } });
+    }
+
+    private sendUploadProgress(state: ClientState, uploadId: string, uploadState: ActiveUpload, force = false): void {
+        const now = Date.now();
+        if (!force && now - uploadState.lastProgressSentAt < UPLOAD_PROGRESS_THROTTLE_MS) return;
+        uploadState.lastProgressSentAt = now;
+
+        const progressPercent = uploadState.totalSize > 0
+            ? Math.round((uploadState.bytesWritten / uploadState.totalSize) * 100)
+            : 100;
+        this.sendUploadMessage(state, {
+            type: 'sftp:upload:progress',
+            uploadId,
+            payload: {
+                bytesWritten: uploadState.bytesWritten,
+                totalSize: uploadState.totalSize,
+                progress: Math.min(100, progressPercent),
+            },
+        });
+    }
+
+    private sendUploadChunkAck(state: ClientState, uploadId: string, chunkIndex: number, byteLength: number, uploadState: ActiveUpload, isLast: boolean): void {
+        this.sendUploadMessage(state, {
+            type: 'sftp:upload:chunk:ack',
+            uploadId,
+            payload: {
+                uploadId,
+                chunkIndex,
+                byteLength,
+                bytesWritten: uploadState.bytesWritten,
+                totalSize: uploadState.totalSize,
+                isLast,
+            },
+        });
     }
 
     /** Cancel an ongoing upload */

@@ -1,10 +1,16 @@
 import { getDbInstance, runDb, getDb, allDb } from '../database/connection';
 import { AppearanceSettings, UpdateAppearanceDto } from '../types/appearance.types';
-import { defaultUiTheme } from '../config/default-themes';
+import { darkUiTheme, defaultUiTheme } from '../config/default-themes';
 import { findThemeById as findTerminalThemeById } from '../terminal-themes/terminal-theme.repository';
 import * as sqlite3 from 'sqlite3'; 
 
 const TABLE_NAME = 'appearance_settings';
+
+const isTerminalThemeSettingKey = (key: keyof Omit<AppearanceSettings, '_id' | 'updatedAt'>): boolean => (
+    key === 'activeTerminalThemeId'
+    || key === 'activeDefaultTerminalThemeId'
+    || key === 'activeDarkTerminalThemeId'
+);
 
 
 interface DbAppearanceSettingsRow {
@@ -36,12 +42,26 @@ let terminalTextStrokeEnabledFound = false;
         }
 
         switch (row.key) {
+            case 'uiThemeMode':
+                settings.uiThemeMode = row.value === 'dark' ? 'dark' : 'default';
+                break;
             case 'customUiTheme':
                 settings.customUiTheme = row.value;
+                break;
+            case 'customDarkUiTheme':
+                settings.customDarkUiTheme = row.value;
                 break;
             case 'activeTerminalThemeId':
                 const parsedId = parseInt(row.value, 10);
                 settings.activeTerminalThemeId = isNaN(parsedId) ? null : parsedId;
+                break;
+            case 'activeDefaultTerminalThemeId':
+                const parsedDefaultThemeId = parseInt(row.value, 10);
+                settings.activeDefaultTerminalThemeId = isNaN(parsedDefaultThemeId) ? null : parsedDefaultThemeId;
+                break;
+            case 'activeDarkTerminalThemeId':
+                const parsedDarkThemeId = parseInt(row.value, 10);
+                settings.activeDarkTerminalThemeId = isNaN(parsedDarkThemeId) ? null : parsedDarkThemeId;
                 break;
             case 'terminalFontFamily':
                 settings.terminalFontFamily = row.value;
@@ -117,10 +137,20 @@ case 'terminalTextStrokeEnabled':
     }
  
     const defaults = getDefaultAppearanceSettings();
+    const uiThemeMode = settings.uiThemeMode ?? defaults.uiThemeMode;
+    const activeDefaultTerminalThemeId = settings.activeDefaultTerminalThemeId ?? defaults.activeDefaultTerminalThemeId;
+    const activeDarkTerminalThemeId = settings.activeDarkTerminalThemeId ?? defaults.activeDarkTerminalThemeId;
+    const activeTerminalThemeId = uiThemeMode === 'dark'
+        ? activeDarkTerminalThemeId
+        : activeDefaultTerminalThemeId;
     return {
         _id: 'global_appearance', // 全局外观设置的固定 ID
+        uiThemeMode,
         customUiTheme: settings.customUiTheme ?? defaults.customUiTheme,
-        activeTerminalThemeId: settings.activeTerminalThemeId ?? defaults.activeTerminalThemeId,
+        customDarkUiTheme: settings.customDarkUiTheme ?? defaults.customDarkUiTheme,
+        activeTerminalThemeId,
+        activeDefaultTerminalThemeId,
+        activeDarkTerminalThemeId,
         terminalFontFamily: settings.terminalFontFamily ?? defaults.terminalFontFamily,
         terminalFontSize: settings.terminalFontSize ?? defaults.terminalFontSize,
         terminalFontSizeMobile: settings.terminalFontSizeMobile ?? defaults.terminalFontSizeMobile,
@@ -170,8 +200,12 @@ case 'terminalTextStrokeEnabled':
 // 获取默认外观设置 (已简化, _id 在此不再相关)
 const getDefaultAppearanceSettings = (): Omit<AppearanceSettings, '_id'> => {
     return {
+        uiThemeMode: 'default',
         customUiTheme: JSON.stringify(defaultUiTheme),
+        customDarkUiTheme: JSON.stringify(darkUiTheme),
         activeTerminalThemeId: null, // 初始默认应为 null
+        activeDefaultTerminalThemeId: null,
+        activeDarkTerminalThemeId: null,
         terminalFontFamily: 'Consolas, "Courier New", monospace, "Microsoft YaHei", "微软雅黑"',
         terminalFontSize: 14,
         terminalFontSizeMobile: 14, // 移动端默认字体大小
@@ -211,9 +245,15 @@ export const ensureDefaultSettingsExist = async (db: sqlite3.Database): Promise<
     const sqlInsertOrIgnore = `INSERT OR IGNORE INTO ${TABLE_NAME} (key, value, created_at, updated_at) VALUES (?, ?, ?, ?)`;
 
     // 定义默认键值对以确保存在
+    const builtinDefaultThemeId = await findPresetThemeIdByName(db, 'Builtin Light');
+    const builtinDarkThemeId = await findPresetThemeIdByName(db, 'Builtin Dark');
     const defaultEntries: Array<{ key: keyof Omit<AppearanceSettings, '_id' | 'updatedAt'>, value: any }> = [
+        { key: 'uiThemeMode', value: defaults.uiThemeMode },
         { key: 'customUiTheme', value: defaults.customUiTheme },
-        { key: 'activeTerminalThemeId', value: null }, // 以 null 开始
+        { key: 'customDarkUiTheme', value: defaults.customDarkUiTheme },
+        { key: 'activeTerminalThemeId', value: builtinDefaultThemeId }, // 以明亮模式默认主题开始
+        { key: 'activeDefaultTerminalThemeId', value: builtinDefaultThemeId },
+        { key: 'activeDarkTerminalThemeId', value: builtinDarkThemeId },
         { key: 'terminalFontFamily', value: defaults.terminalFontFamily },
         { key: 'terminalFontSize', value: defaults.terminalFontSize },
         { key: 'terminalFontSizeMobile', value: defaults.terminalFontSizeMobile },
@@ -241,7 +281,7 @@ export const ensureDefaultSettingsExist = async (db: sqlite3.Database): Promise<
             // 将值转换为字符串以存储到数据库，处理 null/undefined
             let dbValue: string;
             if (entry.value === null || entry.value === undefined) {
-                dbValue = entry.key === 'activeTerminalThemeId' ? 'null' : ''; // 主题 ID 特殊存储为 'null'，其他情况为空字符串
+                dbValue = isTerminalThemeSettingKey(entry.key) ? 'null' : ''; // 主题 ID 特殊存储为 'null'，其他情况为空字符串
             } else if (typeof entry.value === 'object') {
                 dbValue = JSON.stringify(entry.value);
             } else {
@@ -249,9 +289,9 @@ export const ensureDefaultSettingsExist = async (db: sqlite3.Database): Promise<
             }
 
             // 对 activeTerminalThemeId 的特殊处理：将 null 存储为 'null' 字符串，或将数字存储为字符串
-             if (entry.key === 'activeTerminalThemeId') {
-                 dbValue = entry.value === null ? 'null' : String(entry.value);
-             }
+             if (isTerminalThemeSettingKey(entry.key)) {
+                  dbValue = entry.value === null ? 'null' : String(entry.value);
+              }
 
 
             await runDb(db, sqlInsertOrIgnore, [entry.key, dbValue, nowSeconds, nowSeconds]);
@@ -260,6 +300,7 @@ export const ensureDefaultSettingsExist = async (db: sqlite3.Database): Promise<
 
         // 确保键存在后，如果当前为 null，则尝试设置默认主题 ID
         await findAndSetDefaultThemeIdIfNull(db);
+        await findAndSetModeTerminalThemeDefaultsIfNull(db);
 
     } catch (err: any) {
          console.error(`[AppearanceRepo] 检查或插入默认外观设置键值对时出错:`, err.message);
@@ -296,6 +337,42 @@ const findAndSetDefaultThemeIdIfNull = async (db: sqlite3.Database): Promise<voi
     } catch (error: any) {
         console.error("[AppearanceRepo] 设置默认终端主题 ID 时出错:", error.message);
         // 这里不抛出错误，只记录日志
+    }
+};
+
+const findPresetThemeIdByName = async (db: sqlite3.Database, themeName: string): Promise<number | null> => {
+    const themeRow = await getDb<{ id: number }>(
+        db,
+        `SELECT id FROM terminal_themes WHERE name = ? AND theme_type = 'preset' LIMIT 1`,
+        [themeName],
+    );
+    return themeRow?.id ?? null;
+};
+
+const setSettingIfMissingOrNull = async (
+    db: sqlite3.Database,
+    key: 'activeTerminalThemeId' | 'activeDefaultTerminalThemeId' | 'activeDarkTerminalThemeId',
+    value: number | null,
+): Promise<void> => {
+    if (value === null) return;
+
+    const currentSetting = await getDb<{ value: string }>(db, `SELECT value FROM ${TABLE_NAME} WHERE key = ?`, [key]);
+    if (!currentSetting || currentSetting.value === 'null' || currentSetting.value === '') {
+        const sqlReplace = `INSERT OR REPLACE INTO ${TABLE_NAME} (key, value, updated_at) VALUES (?, ?, ?)`;
+        await runDb(db, sqlReplace, [key, String(value), Math.floor(Date.now() / 1000)]);
+    }
+};
+
+const findAndSetModeTerminalThemeDefaultsIfNull = async (db: sqlite3.Database): Promise<void> => {
+    try {
+        const builtinDefaultThemeId = await findPresetThemeIdByName(db, 'Builtin Light');
+        const builtinDarkThemeId = await findPresetThemeIdByName(db, 'Builtin Dark');
+
+        await setSettingIfMissingOrNull(db, 'activeDefaultTerminalThemeId', builtinDefaultThemeId);
+        await setSettingIfMissingOrNull(db, 'activeDarkTerminalThemeId', builtinDarkThemeId);
+        await setSettingIfMissingOrNull(db, 'activeTerminalThemeId', builtinDefaultThemeId);
+    } catch (error: any) {
+        console.error("[AppearanceRepo] 设置模式默认终端主题 ID 时出错:", error.message);
     }
 };
 
@@ -376,7 +453,7 @@ const updateAppearanceSettingsInternal = async (db: sqlite3.Database, settingsDt
 
           // 将值转换为字符串以存储到数据库，处理 null/undefined
           if (value === null || value === undefined) {
-               dbValue = dtoKey === 'activeTerminalThemeId' ? 'null' : ''; // 主题 ID 特殊存储为 'null'
+               dbValue = isTerminalThemeSettingKey(dtoKey as keyof Omit<AppearanceSettings, '_id' | 'updatedAt'>) ? 'null' : ''; // 主题 ID 特殊存储为 'null'
           } else if (typeof value === 'object') {
                dbValue = JSON.stringify(value);
           } else if (typeof value === 'boolean') { // 处理布尔值
@@ -386,14 +463,18 @@ const updateAppearanceSettingsInternal = async (db: sqlite3.Database, settingsDt
           }
 
           // 对 activeTerminalThemeId 的特殊处理：存储 'null' 字符串或数字字符串 (基于 dtoKey 判断)
-          if (dtoKey === 'activeTerminalThemeId') {
-              dbValue = value === null ? 'null' : String(value);
+          if (isTerminalThemeSettingKey(dtoKey as keyof Omit<AppearanceSettings, '_id' | 'updatedAt'>)) {
+              dbValue = value == null ? 'null' : String(value);
           }
 
 
           // 保存前验证 active_terminal_theme_id 类型 (基于 dtoKey 判断)
-          if (dtoKey === 'activeTerminalThemeId' && value !== null && typeof value !== 'number') {
-               console.error(`[AppearanceRepo] 更新 activeTerminalThemeId 时收到无效类型值: ${value} (类型: ${typeof value})，应为数字或 null。跳过此字段。`);
+          if (
+              isTerminalThemeSettingKey(dtoKey as keyof Omit<AppearanceSettings, '_id' | 'updatedAt'>)
+              && value !== null
+              && typeof value !== 'number'
+          ) {
+               console.error(`[AppearanceRepo] 更新 ${String(dtoKey)} 时收到无效类型值: ${value} (类型: ${typeof value})，应为数字或 null。跳过此字段。`);
                continue; // 跳过此键
           }
 

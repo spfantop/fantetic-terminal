@@ -1,5 +1,6 @@
 import WebSocket from 'ws';
 import { Client, ClientChannel, SFTPWrapper } from 'ssh2';
+import type { TelnetService } from '../telnet/telnet.service';
 
 // 扩展 WebSocket 类型以包含会话 ID
 export interface AuthenticatedWebSocket extends WebSocket {
@@ -7,6 +8,7 @@ export interface AuthenticatedWebSocket extends WebSocket {
     userId?: number;
     username?: string;
     sessionId?: string; 
+    missedHeartbeatCount?: number;
 }
 
 // 中心化的客户端状态接口 (统一版本)
@@ -26,8 +28,8 @@ export interface ClientState { // 导出以便 Service 可以导入
     suspendLogPath?: string;      // 如果标记挂起，则存储日志路径 (基于原始 sessionId)
     pendingSshOutputBuffer?: Buffer[]; // SSH 输出短窗口聚合缓冲
     pendingSshOutputBytes?: number; // SSH 输出聚合缓冲字节数
-    sshOutputFlushImmediate?: NodeJS.Immediate; // SSH 输出同 tick 聚合任务
     sshOutputFlushTimer?: NodeJS.Timeout; // WebSocket 背压下的延迟输出任务
+    isSshOutputMicrotaskScheduled?: boolean; // 小输出低延迟刷新任务是否已排队
     isSshOutputPaused?: boolean; // WebSocket 输出背压时暂停 SSH 读取
     pendingSshInputBuffer?: (string | Buffer)[]; // SSH 输入背压缓冲
     pendingSshInputByteCount?: number; // SSH 输入背压缓冲字节数
@@ -36,6 +38,9 @@ export interface ClientState { // 导出以便 Service 可以导入
     supportsSshBinaryOutput?: boolean; // 前端支持 SSH 输出二进制帧，避免 base64/JSON 热路径开销
     supportsSshBinaryInput?: boolean; // 前端支持 SSH 输入二进制帧，避免 JSON 字符串热路径开销
     lastSshInputOverflowWarnAt?: number; // 输入缓冲溢出日志节流时间
+    telnetService?: TelnetService;
+    telnetSessionId?: string;
+    connectedAt?: number;
     // suspendLogWritableStream?: NodeJS.WritableStream; // 移除，将直接使用 temporaryLogStorageService.writeToLog
 }
 

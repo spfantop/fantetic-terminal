@@ -5,6 +5,8 @@ const MAX_SSH_OUTPUT_FRAME_BYTES = 32 * 1024;
 const MAX_PENDING_SSH_OUTPUT_BYTES = 8 * 1024 * 1024;
 const SSH_OUTPUT_BUFFERED_AMOUNT_LIMIT = 2 * 1024 * 1024;
 const SSH_OUTPUT_BACKPRESSURE_RETRY_MS = 16;
+const SSH_OUTPUT_BATCH_WINDOW_MS = 16;
+const INTERACTIVE_SSH_OUTPUT_FLUSH_BYTES = 1024;
 const SSH_OUTPUT_BINARY_HEADER = Buffer.from([0x53, 0x53, 0x48, 0x4f]); // SSHO
 
 const serializeSshOutput = (output: Buffer) => `{"type":"ssh:output","payload":"${output.toString('base64')}","encoding":"base64"}`;
@@ -22,10 +24,6 @@ function resumeSshOutput(state: ClientState): void {
 }
 
 function clearScheduledSshOutputFlush(state: ClientState): void {
-    if (state.sshOutputFlushImmediate) {
-        clearImmediate(state.sshOutputFlushImmediate);
-        state.sshOutputFlushImmediate = undefined;
-    }
     if (state.sshOutputFlushTimer) {
         clearTimeout(state.sshOutputFlushTimer);
         state.sshOutputFlushTimer = undefined;
@@ -40,33 +38,37 @@ function scheduleDelayedFlush(state: ClientState): void {
     }, SSH_OUTPUT_BACKPRESSURE_RETRY_MS);
 }
 
-function sendSshOutputFrame(state: ClientState, output: Buffer): void {
+function sendSshOutputFrame(state: ClientState, output: Buffer, options: { compress?: boolean } = {}): void {
     if (state.ws.readyState !== WebSocket.OPEN || output.byteLength === 0) return;
 
     if (state.supportsSshBinaryOutput) {
-        state.ws.send(Buffer.concat([SSH_OUTPUT_BINARY_HEADER, output], SSH_OUTPUT_BINARY_HEADER.byteLength + output.byteLength));
+        state.ws.send(
+            Buffer.concat([SSH_OUTPUT_BINARY_HEADER, output], SSH_OUTPUT_BINARY_HEADER.byteLength + output.byteLength),
+            options
+        );
         return;
     }
 
-    state.ws.send(serializeSshOutput(output));
+    state.ws.send(serializeSshOutput(output), options);
 }
 
 function sendSshOutputChunks(state: ClientState, chunkList: Buffer[], outputBytes: number): void {
     if (chunkList.length === 1) {
         const chunk = chunkList[0];
         if (chunk.byteLength <= MAX_SSH_OUTPUT_FRAME_BYTES) {
-            sendSshOutputFrame(state, chunk);
+            sendSshOutputFrame(state, chunk, { compress: false });
             return;
         }
     }
 
     const output = chunkList.length === 1 ? chunkList[0] : Buffer.concat(chunkList, outputBytes);
     for (let offset = 0; offset < output.byteLength; offset += MAX_SSH_OUTPUT_FRAME_BYTES) {
-        sendSshOutputFrame(state, output.subarray(offset, offset + MAX_SSH_OUTPUT_FRAME_BYTES));
+        sendSshOutputFrame(state, output.subarray(offset, offset + MAX_SSH_OUTPUT_FRAME_BYTES), { compress: false });
     }
 }
 
 export function flushSshOutput(state: ClientState, options: { force?: boolean } = {}): void {
+    state.isSshOutputMicrotaskScheduled = false;
     clearScheduledSshOutputFlush(state);
 
     if (state.ws.readyState !== WebSocket.OPEN) {
@@ -117,12 +119,20 @@ export function scheduleSshOutput(state: ClientState, data: Buffer): void {
         pauseSshOutput(state);
     }
 
-    if (state.sshOutputFlushImmediate || state.sshOutputFlushTimer) return;
-    state.sshOutputFlushImmediate = setImmediate(() => flushSshOutput(state));
+    if (state.sshOutputFlushTimer) return;
+    if ((state.pendingSshOutputBytes ?? 0) <= INTERACTIVE_SSH_OUTPUT_FLUSH_BYTES) {
+        if (state.isSshOutputMicrotaskScheduled) return;
+        state.isSshOutputMicrotaskScheduled = true;
+        queueMicrotask(() => flushSshOutput(state));
+        return;
+    }
+
+    state.sshOutputFlushTimer = setTimeout(() => flushSshOutput(state), SSH_OUTPUT_BATCH_WINDOW_MS);
 }
 
 export function clearSshOutputQueue(state: ClientState): void {
     clearScheduledSshOutputFlush(state);
+    state.isSshOutputMicrotaskScheduled = false;
     state.pendingSshOutputBuffer = undefined;
     state.pendingSshOutputBytes = 0;
     resumeSshOutput(state);

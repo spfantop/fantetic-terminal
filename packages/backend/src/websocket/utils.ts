@@ -86,6 +86,10 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
         // 2. 清理 SFTP 会话 (如果存在)
         if (sftpService) sftpService.cleanupSftpSession(sessionId);
 
+        if (state.telnetService) {
+            state.telnetService.disconnect();
+        }
+
         // 3. 处理 SSH 连接 (核心修改点)
         if (state.isMarkedForSuspend && state.sshClient && state.sshShellStream && state.suspendLogPath && state.ws.userId !== undefined) {
             console.log(`WebSocket: 会话 ${sessionId} 已被标记为待挂起，尝试移交给 SshSuspendService...`);

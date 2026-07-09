@@ -36,6 +36,12 @@ export interface TerminalOutputHighlightStream {
   reset(): void;
 }
 
+export interface TerminalHighlightThroughputGuard {
+  shouldHighlight(inputLength: number): boolean;
+  setNow(now: () => number): void;
+  reset(): void;
+}
+
 interface CompiledTerminalHighlightRule {
   rule: TerminalHighlightRule;
   regex: RegExp;
@@ -208,7 +214,7 @@ export function createTerminalOutputHighlightStream(): TerminalOutputHighlightSt
       const completeEnd = findLastCompleteLineBreakEnd(combinedInput);
 
       if (completeEnd === 0) {
-        const { stablePrefix, activeTail } = splitIncompleteLineForStreaming(combinedInput);
+        const { stablePrefix, activeTail } = splitTerminalControlTailForStreaming(combinedInput);
         if (activeTail.length > maxLineLength) {
           pendingLineFragment = '';
           return highlightTerminalOutput(stablePrefix + activeTail, options);
@@ -221,12 +227,7 @@ export function createTerminalOutputHighlightStream(): TerminalOutputHighlightSt
       const completeText = combinedInput.slice(0, completeEnd);
       const incompleteLine = combinedInput.slice(completeEnd);
 
-      if (!incompleteLine && isOnlyLineBreaks(completeText)) {
-        pendingLineFragment = completeText;
-        return '';
-      }
-
-      const { stablePrefix, activeTail } = splitIncompleteLineForStreaming(incompleteLine);
+      const { stablePrefix, activeTail } = splitTerminalControlTailForStreaming(incompleteLine);
       pendingLineFragment = activeTail;
       let output = highlightTerminalOutput(completeText, options);
       if (stablePrefix) {
@@ -291,47 +292,61 @@ function shouldStreamHighlight(options: TerminalHighlightOptions): boolean {
   return options.enabled && options.rules.length > 0;
 }
 
-function splitIncompleteLineForStreaming(input: string): { stablePrefix: string; activeTail: string } {
+function splitTerminalControlTailForStreaming(input: string): { stablePrefix: string; activeTail: string } {
   if (!input) {
     return { stablePrefix: '', activeTail: '' };
   }
 
-  const stableEnd = findStableIncompleteLinePrefixEnd(input);
+  const incompleteEscapeStart = findIncompleteTerminalEscapeStart(input);
+  if (incompleteEscapeStart >= 0) {
+    return {
+      stablePrefix: input.slice(0, incompleteEscapeStart),
+      activeTail: input.slice(incompleteEscapeStart),
+    };
+  }
+
   return {
-    stablePrefix: input.slice(0, stableEnd),
-    activeTail: input.slice(stableEnd),
+    stablePrefix: input,
+    activeTail: '',
   };
 }
 
-function findStableIncompleteLinePrefixEnd(input: string): number {
-  const lastChar = input[input.length - 1];
-  if (!lastChar) {
-    return 0;
-  }
+export function createTerminalHighlightThroughputGuard(options: {
+  suspendByteThreshold?: number;
+  resumeAfterMs?: number;
+  now?: () => number;
+} = {}): TerminalHighlightThroughputGuard {
+  const suspendByteThreshold = options.suspendByteThreshold ?? 96 * 1024;
+  const resumeAfterMs = options.resumeAfterMs ?? 250;
+  let now = options.now ?? (() => Date.now());
+  let suspendedUntil = 0;
 
-  if (/\s/.test(lastChar) || isShellPromptTerminator(lastChar)) {
-    return input.length;
-  }
+  return {
+    shouldHighlight(inputLength: number): boolean {
+      const currentTime = now();
+      if (currentTime < suspendedUntil) return false;
+      if (inputLength > suspendByteThreshold) {
+        suspendedUntil = currentTime + resumeAfterMs;
+        return false;
+      }
+      return true;
+    },
 
-  for (let offset = input.length - 1; offset >= 0; offset -= 1) {
-    if (isStreamingTokenBoundary(input[offset])) {
-      return offset + 1;
-    }
-  }
+    setNow(nextNow: () => number): void {
+      now = nextNow;
+    },
 
-  return 0;
+    reset(): void {
+      suspendedUntil = 0;
+    },
+  };
 }
 
-function isStreamingTokenBoundary(char: string): boolean {
-  return /\s/.test(char) || /["'`|;&<>(){}\[\],]/.test(char);
-}
+function findIncompleteTerminalEscapeStart(input: string): number {
+  const escapeStart = input.lastIndexOf('\x1b');
+  if (escapeStart < 0) return -1;
 
-function isShellPromptTerminator(char: string): boolean {
-  return char === '$' || char === '#' || char === '%' || char === '>' || char === '❯' || char === '➜';
-}
-
-function isOnlyLineBreaks(input: string): boolean {
-  return /^(?:\r\n|\r|\n)+$/.test(input);
+  return readTerminalEscapeSequence(input, escapeStart) ? -1 : escapeStart;
 }
 
 function findLastCompleteLineBreakEnd(input: string): number {

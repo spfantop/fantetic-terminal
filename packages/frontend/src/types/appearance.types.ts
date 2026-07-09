@@ -4,8 +4,12 @@
 export interface AppearanceSettings {
   // 注意：前端可能不需要 _id, userId, updatedAt 等数据库相关的字段
   // 但为了与后端导入保持一致，暂时保留，后续可根据 API 精简
+  uiThemeMode?: 'default' | 'dark'; // 当前 UI 主题模式
   customUiTheme?: string; // CSS 变量 JSON 字符串
+  customDarkUiTheme?: string; // 暗黑模式 CSS 变量 JSON 字符串
   activeTerminalThemeId?: number | null; // 终端主题 ID
+  activeDefaultTerminalThemeId?: number | null; // 默认模式终端主题 ID
+  activeDarkTerminalThemeId?: number | null; // 暗黑模式终端主题 ID
   terminalFontFamily?: string;
   terminalFontSize?: number;
   terminalFontSizeMobile?: number; // 移动端字体大小

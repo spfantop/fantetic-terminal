@@ -18,7 +18,7 @@ archiver.registerFormat('zip-encrypted', require("archiver-zip-encrypted"));
 
 interface ImportedConnectionData {
     name: string;
-    type: 'SSH' | 'RDP' | 'VNC'; 
+    type: 'SSH' | 'RDP' | 'VNC' | 'TELNET'; 
     host: string;
     port: number;
     username: string;
@@ -56,7 +56,7 @@ interface ImportedConnectionData {
 // containing plaintext sensitive info.
 interface PlaintextExportConnectionData {
     name: string;
-    type: 'SSH' | 'RDP' | 'VNC';
+    type: 'SSH' | 'RDP' | 'VNC' | 'TELNET';
     host: string;
     port: number;
     username: string;

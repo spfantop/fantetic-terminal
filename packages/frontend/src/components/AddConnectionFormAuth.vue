@@ -5,7 +5,7 @@ import SshKeySelector from './SshKeySelector.vue'; // Assuming SshKeySelector is
 // Define Props. formData is expected to be a reactive object from the parent composable.
 const props = defineProps<{
   formData: {
-    type: 'SSH' | 'RDP' | 'VNC';
+    type: 'SSH' | 'RDP' | 'VNC' | 'TELNET';
     username: string;
     auth_method: 'password' | 'key'; // SSH specific
     password?: string; // Optional because it might not be set or sent
@@ -23,8 +23,10 @@ const { t } = useI18n();
   <div class="space-y-4 p-4 border border-border rounded-md bg-header/30">
     <h4 class="text-base font-semibold mb-3 pb-2 border-b border-border/50">{{ t('connections.form.sectionAuth', '认证信息') }}</h4>
     <div>
-      <label for="conn-username" class="block text-sm font-medium text-text-secondary mb-1">{{ t('connections.form.username') }}</label>
-      <input type="text" id="conn-username" v-model="props.formData.username" required
+      <label for="conn-username" class="block text-sm font-medium text-text-secondary mb-1">
+        {{ props.formData.type === 'TELNET' ? t('connections.form.usernameOptional', '用户名（可选）') : t('connections.form.username') }}
+      </label>
+      <input type="text" id="conn-username" v-model="props.formData.username" :required="props.formData.type !== 'TELNET'"
              class="w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary" />
     </div>
 
@@ -81,5 +83,8 @@ const { t } = useI18n();
                class="w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary" />
       </div>
     </template>
+    <p v-if="props.formData.type === 'TELNET'" class="text-xs text-text-secondary">
+      {{ t('connections.form.telnetAuthHint', 'Telnet 会在终端中交互式登录，保存连接时用户名和密码都可以留空。') }}
+    </p>
   </div>
 </template>

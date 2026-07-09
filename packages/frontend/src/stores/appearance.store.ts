@@ -6,7 +6,14 @@ import { useDeviceDetection } from '../composables/useDeviceDetection';
 import type { ITheme } from 'xterm';
 import type { TerminalTheme } from '../types/terminal-theme.types';
 import type { AppearanceSettings, UpdateAppearanceDto } from '../types/appearance.types';
-import { defaultXtermTheme, defaultUiTheme } from '../features/appearance/config/default-themes';
+import { darkUiTheme, defaultXtermTheme, defaultUiTheme } from '../features/appearance/config/default-themes';
+import {
+    createUiThemeModeUpdate,
+    readUiThemeMode,
+    resolveActiveTerminalThemeId,
+    resolveActiveUiTheme,
+    type UiThemeMode,
+} from '../utils/uiThemeState';
 
 // Helper function to safely parse JSON
 export const safeJsonParse = <T>(jsonString: string | undefined | null, defaultValue: T): T => {
@@ -49,11 +56,21 @@ export const useAppearanceStore = defineStore('appearance', () => {
     // 移除 availableTerminalThemes 计算属性，直接使用 allTerminalThemes
     // 当前应用的 UI 主题 (CSS 变量对象)
     const currentUiTheme = computed<Record<string, string>>(() => {
-        return safeJsonParse(appearanceSettings.value.customUiTheme, defaultUiTheme);
+        return resolveActiveUiTheme(appearanceSettings.value);
     });
 
+    const currentUiThemeMode = computed<UiThemeMode>(() => readUiThemeMode(appearanceSettings.value));
+
     // 当前激活的终端主题 ID
-    const activeTerminalThemeId = computed(() => appearanceSettings.value.activeTerminalThemeId);
+    const activeTerminalThemeId = computed(() => resolveActiveTerminalThemeId(appearanceSettings.value) ?? null);
+
+    const defaultTerminalThemeId = computed(() => (
+        allTerminalThemes.value.find((theme) => theme.name === 'Builtin Light')?._id ?? null
+    ));
+
+    const darkTerminalThemeId = computed(() => (
+        allTerminalThemes.value.find((theme) => theme.name === 'Builtin Dark')?._id ?? null
+    ));
 
     // 当前应用的终端主题对象 (ITheme)
     const currentTerminalTheme = computed<ITheme>(() => {
@@ -254,7 +271,11 @@ export const useAppearanceStore = defineStore('appearance', () => {
             debugLog('[AppearanceStore] 外观设置已更新:', appearanceSettings.value);
 
             // 如果 UI 主题或背景更新，重新应用
-            if (updates.customUiTheme !== undefined) applyUiTheme(currentUiTheme.value);
+            if (
+                updates.customUiTheme !== undefined
+                || updates.customDarkUiTheme !== undefined
+                || updates.uiThemeMode !== undefined
+            ) applyUiTheme(currentUiTheme.value);
             if (updates.pageBackgroundImage !== undefined) applyPageBackground(); // 移除 pageBackgroundOpacity 检查
             // 终端相关设置由 Terminal 组件监听应用
             // 注意：terminalBackgroundEnabled 的应用逻辑在 Terminal 组件中处理
@@ -273,11 +294,33 @@ export const useAppearanceStore = defineStore('appearance', () => {
         await updateAppearanceSettings({ customUiTheme: JSON.stringify(uiTheme) });
     }
 
+    async function saveCustomDarkUiTheme(uiTheme: Record<string, string>) {
+        await updateAppearanceSettings({ customDarkUiTheme: JSON.stringify(uiTheme) });
+    }
+
     /**
      * 重置为默认 UI 主题并保存。
      */
     async function resetCustomUiTheme() {
         await saveCustomUiTheme(defaultUiTheme);
+    }
+
+    async function resetCustomDarkUiTheme() {
+        await saveCustomDarkUiTheme(darkUiTheme);
+    }
+
+    async function setUiThemeMode(uiThemeMode: UiThemeMode) {
+        const defaultThemeId = defaultTerminalThemeId.value ? parseInt(defaultTerminalThemeId.value, 10) : undefined;
+        const darkThemeId = darkTerminalThemeId.value ? parseInt(darkTerminalThemeId.value, 10) : undefined;
+        const settingsForModeSwitch: Partial<AppearanceSettings> = { ...appearanceSettings.value };
+        if (settingsForModeSwitch.activeDefaultTerminalThemeId == null && defaultThemeId !== undefined) {
+            settingsForModeSwitch.activeDefaultTerminalThemeId = defaultThemeId;
+        }
+        if (settingsForModeSwitch.activeDarkTerminalThemeId == null && darkThemeId !== undefined) {
+            settingsForModeSwitch.activeDarkTerminalThemeId = darkThemeId;
+        }
+
+        await updateAppearanceSettings(createUiThemeModeUpdate(uiThemeMode, settingsForModeSwitch));
     }
 
      /**
@@ -286,6 +329,8 @@ export const useAppearanceStore = defineStore('appearance', () => {
      */
     async function setActiveTerminalTheme(themeId: string) { // 参数改为 string，不允许 null
         const previousActiveId = appearanceSettings.value.activeTerminalThemeId; // 记录之前的数字 ID 或 null
+        const previousDefaultActiveId = appearanceSettings.value.activeDefaultTerminalThemeId;
+        const previousDarkActiveId = appearanceSettings.value.activeDarkTerminalThemeId;
 
         // 1. 将传入的字符串 ID 转换为数字
         const idNum = parseInt(themeId, 10);
@@ -296,18 +341,37 @@ export const useAppearanceStore = defineStore('appearance', () => {
 
         // 2. 立即更新前端本地状态 (使用数字 ID)
         appearanceSettings.value.activeTerminalThemeId = idNum;
+        if (currentUiThemeMode.value === 'dark') {
+            appearanceSettings.value.activeDarkTerminalThemeId = idNum;
+        } else {
+            appearanceSettings.value.activeDefaultTerminalThemeId = idNum;
+        }
         debugLog(`[AppearanceStore] Applied theme locally (ID): ${idNum}`);
 
         // 3. 更新后端 (发送数字 ID)
         try {
-            await updateAppearanceSettings({ activeTerminalThemeId: idNum });
+            await updateAppearanceSettings(currentUiThemeMode.value === 'dark'
+                ? { activeTerminalThemeId: idNum, activeDarkTerminalThemeId: idNum }
+                : { activeTerminalThemeId: idNum, activeDefaultTerminalThemeId: idNum });
             debugLog(`[AppearanceStore] Notified backend. Sent activeTerminalThemeId: ${idNum}`);
         } catch (error) {
             // 如果更新后端失败，回滚前端状态
             console.error('[AppearanceStore] Failed to update backend activeTerminalThemeId:', error);
             appearanceSettings.value.activeTerminalThemeId = previousActiveId; // 回滚到之前的数字 ID 或 null
+            appearanceSettings.value.activeDefaultTerminalThemeId = previousDefaultActiveId;
+            appearanceSettings.value.activeDarkTerminalThemeId = previousDarkActiveId;
             throw new Error(`应用主题失败: ${error instanceof Error ? error.message : String(error)}`);
         }
+    }
+
+    async function resetActiveTerminalThemeForCurrentUiMode() {
+        const fallbackThemeId = currentUiThemeMode.value === 'dark'
+            ? darkTerminalThemeId.value
+            : defaultTerminalThemeId.value;
+        if (!fallbackThemeId) {
+            throw new Error('未找到当前模式的默认终端主题');
+        }
+        await setActiveTerminalTheme(fallbackThemeId);
     }
 
     /**
@@ -462,16 +526,43 @@ export const useAppearanceStore = defineStore('appearance', () => {
      */
     async function deleteTerminalTheme(id: string) {
          try {
-            await apiClient.delete(`/terminal-themes/${id}`); // 使用 apiClient
-            // 如果删除的是当前激活的主题，则切换回默认主题 ID
-            // 需要将字符串 id 转换为数字进行比较
             const idNum = parseInt(id, 10);
-            if (!isNaN(idNum) && activeTerminalThemeId.value === idNum) {
-                 // 查找默认主题的数字 ID (这里假设默认主题 ID 为 1，实际应从配置或查询获取)
-                 // TODO: 需要一种可靠的方式获取默认主题的数字 ID
-                 const defaultThemeIdNum = 1; // 临时硬编码，需要改进
-                 debugLog(`[AppearanceStore] 删除的主题是当前激活主题，尝试切换到默认主题 ID: ${defaultThemeIdNum}`);
-                 await setActiveTerminalTheme(defaultThemeIdNum.toString()); // setActiveTerminalTheme 需要字符串 ID
+            const shouldResetDefaultTheme = !isNaN(idNum) && appearanceSettings.value.activeDefaultTerminalThemeId === idNum;
+            const shouldResetDarkTheme = !isNaN(idNum) && appearanceSettings.value.activeDarkTerminalThemeId === idNum;
+            const fallbackDefaultThemeId = defaultTerminalThemeId.value ? parseInt(defaultTerminalThemeId.value, 10) : null;
+            const fallbackDarkThemeId = darkTerminalThemeId.value ? parseInt(darkTerminalThemeId.value, 10) : null;
+
+            if (shouldResetDefaultTheme && (fallbackDefaultThemeId === null || isNaN(fallbackDefaultThemeId))) {
+                throw new Error('未找到明亮模式默认终端主题');
+            }
+            if (shouldResetDarkTheme && (fallbackDarkThemeId === null || isNaN(fallbackDarkThemeId))) {
+                throw new Error('未找到暗黑模式默认终端主题');
+            }
+
+            await apiClient.delete(`/terminal-themes/${id}`); // 使用 apiClient
+            // 删除的主题可能只属于另一个 UI 模式，两个槽位都要按各自默认值修复。
+            if (shouldResetDefaultTheme || shouldResetDarkTheme) {
+                 const updates: UpdateAppearanceDto = {};
+                 const nextDefaultThemeId = shouldResetDefaultTheme
+                     ? fallbackDefaultThemeId
+                     : appearanceSettings.value.activeDefaultTerminalThemeId;
+                 const nextDarkThemeId = shouldResetDarkTheme
+                     ? fallbackDarkThemeId
+                     : appearanceSettings.value.activeDarkTerminalThemeId;
+                 if (typeof nextDefaultThemeId === 'number') {
+                     updates.activeDefaultTerminalThemeId = nextDefaultThemeId;
+                 }
+                 if (typeof nextDarkThemeId === 'number') {
+                     updates.activeDarkTerminalThemeId = nextDarkThemeId;
+                 }
+                 const nextActiveThemeId = currentUiThemeMode.value === 'dark'
+                     ? nextDarkThemeId
+                     : nextDefaultThemeId;
+                 if (typeof nextActiveThemeId === 'number') {
+                     updates.activeTerminalThemeId = nextActiveThemeId;
+                 }
+                 debugLog('[AppearanceStore] 删除的主题仍被模式槽位使用，已切回对应默认终端主题:', updates);
+                 await updateAppearanceSettings(updates);
             }
             await loadInitialAppearanceData(); // 重新加载所有数据以更新列表
         } catch (err: any) {
@@ -897,7 +988,10 @@ export const useAppearanceStore = defineStore('appearance', () => {
         isPreviewingTerminalTheme,
         previewTerminalThemeData,
         currentUiTheme,
+        currentUiThemeMode,
         activeTerminalThemeId,
+        defaultTerminalThemeId,
+        darkTerminalThemeId,
         currentTerminalTheme,
         effectiveTerminalTheme,
         currentTerminalFontFamily,
@@ -914,8 +1008,12 @@ export const useAppearanceStore = defineStore('appearance', () => {
         loadInitialAppearanceData,
         updateAppearanceSettings,
         saveCustomUiTheme,
+        saveCustomDarkUiTheme,
         resetCustomUiTheme,
+        resetCustomDarkUiTheme,
+        setUiThemeMode,
         setActiveTerminalTheme,
+        resetActiveTerminalThemeForCurrentUiMode,
         setTerminalFontFamily,
         setTerminalFontSize, // 设置桌面端字体大小
         setTerminalFontSizeMobile, // + 设置移动端字体大小

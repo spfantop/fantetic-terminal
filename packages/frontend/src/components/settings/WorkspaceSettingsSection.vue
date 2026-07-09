@@ -340,6 +340,27 @@
         </form>
       </div>
       <hr class="border-border/50">
+      <!-- Terminal Performance Mode -->
+      <div class="settings-section-content">
+        <h3 class="text-base font-semibold text-foreground mb-3">{{ $t('settings.workspace.terminalPerformanceModeTitle', '终端性能模式') }}</h3>
+        <form @submit.prevent="handleUpdateTerminalPerformanceMode" class="space-y-4">
+          <div class="flex items-center">
+            <input type="checkbox" id="terminalPerformanceMode" v-model="terminalPerformanceModeLocal"
+                   class="h-4 w-4 rounded border-border text-primary focus:ring-primary mr-2 cursor-pointer">
+            <label for="terminalPerformanceMode" class="text-sm text-foreground cursor-pointer select-none">{{ $t('settings.workspace.terminalPerformanceModeLabel', '降低终端视觉效果以提升输出流畅度') }}</label>
+          </div>
+          <p class="text-xs text-text-secondary mt-1">{{ $t('settings.workspace.terminalPerformanceModeDescription', '启用后将关闭透明背景、文字描边和阴影，并对无限回滚做保护。') }}</p>
+          <div class="flex items-center justify-between pt-2">
+            <button type="submit"
+                    :disabled="terminalPerformanceModeLoading"
+                    class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60">
+              {{ $t('common.save') }}
+            </button>
+            <p v-if="terminalPerformanceModeMessage" :class="['text-sm', terminalPerformanceModeSuccess ? 'text-success' : 'text-error']">{{ terminalPerformanceModeMessage }}</p>
+          </div>
+        </form>
+      </div>
+      <hr class="border-border/50">
       <!-- Status Monitor Show IP -->
       <div class="settings-section-content">
         <h3 class="text-base font-semibold text-foreground mb-3">{{ $t('settings.statusMonitorShowIp.title', '状态监视器 IP 显示') }}</h3>
@@ -538,6 +559,11 @@ const {
   terminalEnableRightClickPasteMessage,
   terminalEnableRightClickPasteSuccess,
   handleUpdateTerminalRightClickPasteSetting,
+  terminalPerformanceModeLocal,
+  terminalPerformanceModeLoading,
+  terminalPerformanceModeMessage,
+  terminalPerformanceModeSuccess,
+  handleUpdateTerminalPerformanceMode,
   showPopupFileManagerLocal,
   showPopupFileManagerMessage,
   showPopupFileManagerSuccess,

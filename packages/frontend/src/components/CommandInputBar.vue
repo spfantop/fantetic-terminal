@@ -69,18 +69,20 @@ const {
   generateCommand: generateNL2CMD,
 } = nl2cmd;
 
+const isTerminalShellSessionKind = (kind?: string) => kind === 'ssh' || kind === 'telnet';
+
 // +++ 计算属性，用于获取和设置当前活动会话的命令输入 +++
 const currentSessionCommandInput = computed({
   get: () => {
     const sessionId = props.targetSessionId || activeSessionId.value;
     if (!sessionId) return '';
     const session = sessionStore.sessions.get(sessionId);
-    return session?.kind === 'ssh' ? session.commandInputContent.value : '';
+    return isTerminalShellSessionKind(session?.kind) ? session.commandInputContent.value : '';
   },
   set: (newValue) => {
     const sessionId = props.targetSessionId || activeSessionId.value;
     const session = sessionId ? sessionStore.sessions.get(sessionId) : null;
-    if (sessionId && session?.kind === 'ssh') {
+    if (sessionId && isTerminalShellSessionKind(session?.kind)) {
       updateSessionCommandInput(sessionId, newValue);
     }
   }
@@ -110,7 +112,7 @@ const sendCommand = () => {
 
   // 清空 store 中的值
   const targetSession = currentTargetSessionId.value ? sessionStore.sessions.get(currentTargetSessionId.value) : null;
-  if (currentTargetSessionId.value && targetSession?.kind === 'ssh') {
+  if (currentTargetSessionId.value && isTerminalShellSessionKind(targetSession?.kind)) {
     updateSessionCommandInput(currentTargetSessionId.value, '');
   }
 };
@@ -160,6 +162,9 @@ watch(currentSessionCommandInput, (newValue) => { // 监听计算属性
 // 可以在这里添加一个 ref 用于聚焦搜索框
 const searchInputRef = ref<HTMLInputElement | null>(null);
 const commandInputRef = ref<HTMLInputElement | null>(null); // Ref for command input
+const commandBarRootRef = ref<HTMLElement | null>(null);
+const readCommandBarDocument = () => commandBarRootRef.value?.ownerDocument ?? document;
+const commandBarTeleportTarget = computed(() => readCommandBarDocument().body);
 
 // Removed debug computed property
 
@@ -299,8 +304,8 @@ let unregisterCommandInputFocus: (() => void) | null = null;
 let unregisterTerminalSearchFocus: (() => void) | null = null;
 
 onMounted(() => {
-  unregisterCommandInputFocus = focusSwitcherStore.registerFocusAction('commandInput', focusCommandInput);
-  unregisterTerminalSearchFocus = focusSwitcherStore.registerFocusAction('terminalSearch', focusSearchInput);
+  unregisterCommandInputFocus = focusSwitcherStore.registerFocusAction('commandInput', focusCommandInput, { ownerDocument: readCommandBarDocument() });
+  unregisterTerminalSearchFocus = focusSwitcherStore.registerFocusAction('terminalSearch', focusSearchInput, { ownerDocument: readCommandBarDocument() });
 });
 
 onBeforeUnmount(() => {
@@ -334,7 +339,10 @@ const closeSuspendedSshSessionsModal = () => {
 const openFileManagerModal = () => {
   if (currentTargetSessionId.value) {
     debugLog(`[CommandInputBar] Emitting fileManager:openModalRequest for session: ${currentTargetSessionId.value}`);
-    emitWorkspaceEvent('fileManager:openModalRequest', { sessionId: currentTargetSessionId.value });
+    emitWorkspaceEvent('fileManager:openModalRequest', {
+      sessionId: currentTargetSessionId.value,
+      sourceDocument: readCommandBarDocument(),
+    });
   } else {
     console.warn('[CommandInputBar] Cannot open file manager modal: No active session ID.');
     // Optionally, show a notification to the user
@@ -376,7 +384,7 @@ const submitNL2CMD = async () => {
   const command = await generateNL2CMD();
   const targetId = aiCommandInputTargetId.value;
   const targetSession = targetId ? sessionStore.sessions.get(targetId) : null;
-  if (command && targetId && targetSession?.kind === 'ssh') {
+  if (command && targetId && isTerminalShellSessionKind(targetSession?.kind)) {
     updateSessionCommandInput(targetId, command);
     isAIActive.value = false;
     nextTick(() => commandInputRef.value?.focus());
@@ -396,7 +404,7 @@ const handleNL2CMDKeydown = async (event: KeyboardEvent) => {
 </script>
 
 <template>
-  <div :class="$attrs.class" class="flex items-center py-1.5 bg-background"> <!-- Bind $attrs.class, removed px-2 and gap-1 -->
+  <div ref="commandBarRootRef" :class="$attrs.class" class="flex items-center py-1.5 bg-background"> <!-- Bind $attrs.class, removed px-2 and gap-1 -->
     <div class="flex-grow flex items-center bg-transparent relative gap-1 px-2 w-full"> <!-- Added px-2 here, ensure full width -->
       <!-- Clear Terminal Button -->
       <button
@@ -418,7 +426,7 @@ const handleNL2CMDKeydown = async (event: KeyboardEvent) => {
       <!-- Focus Switcher Config Button (Hide on mobile) -->
       <button
         v-if="!props.isMobile"
-        @click="focusSwitcherStore.toggleConfigurator(true)"
+        @click="focusSwitcherStore.toggleConfigurator(true, readCommandBarDocument())"
         class="flex-shrink-0 flex items-center justify-center w-8 h-8 border border-border/50 rounded-lg text-text-secondary transition-colors duration-200 hover:bg-border hover:text-foreground"
         :title="t('commandInputBar.configureFocusSwitch', '配置焦点切换')"
       >
@@ -577,12 +585,16 @@ const handleNL2CMDKeydown = async (event: KeyboardEvent) => {
   <!-- +++ Quick Commands Modal Instance +++ -->
   <QuickCommandsModal
     :is-visible="showQuickCommands"
+    :teleport-target="commandBarTeleportTarget"
+    :is-mobile="props.isMobile"
     @close="closeQuickCommandsModal"
     @execute-command="handleQuickCommandExecute"
   />
   <!-- +++ Suspended SSH Sessions Modal Instance +++ -->
   <SuspendedSshSessionsModal
     :is-visible="showSuspendedSshSessionsModal"
+    :teleport-target="commandBarTeleportTarget"
+    :is-mobile="props.isMobile"
     @close="closeSuspendedSshSessionsModal"
   />
   <!-- File Manager Modal is now handled by a listener for 'fileManager:openModalRequest' event -->

@@ -109,11 +109,15 @@ const hoveredItemId = ref<number | null>(null);
 const historyListRef = ref<HTMLUListElement | null>(null); // Ref for the history list UL
 const searchInputRef = ref<HTMLInputElement | null>(null); // +++ Ref for the search input +++
 let unregisterFocus: (() => void) | null = null; // +++ 保存注销函数 +++
+const readCommandHistoryDocument = () => historyListRef.value?.ownerDocument ?? document;
+const readCommandHistoryWindow = () => readCommandHistoryDocument().defaultView ?? window;
+const readCommandHistoryClipboard = () => readCommandHistoryWindow().navigator.clipboard;
 
 // +++ 右键菜单状态 +++
 const commandHistoryContextMenuVisible = ref(false);
 const commandHistoryContextMenuPosition = ref({ x: 0, y: 0 });
 const commandHistoryContextTargetEntry = ref<CommandHistoryEntryFE | null>(null);
+let activeCommandHistoryMenuDocument: Document | null = null;
 
 // --- 从 Store 获取状态和 Getter ---
 const searchTerm = computed(() => commandHistoryStore.searchTerm);
@@ -143,7 +147,7 @@ onMounted(() => {
 // +++ 注册/注销自定义聚焦动作 +++
 onMounted(() => {
   // +++ 保存返回的注销函数 +++
-  unregisterFocus = focusSwitcherStore.registerFocusAction('commandHistorySearch', focusSearchInput);
+  unregisterFocus = focusSwitcherStore.registerFocusAction('commandHistorySearch', focusSearchInput, { ownerDocument: historyListRef.value?.ownerDocument ?? document });
 });
 onBeforeUnmount(() => {
   // +++ 调用保存的注销函数 +++
@@ -202,10 +206,11 @@ const handleSearchInputKeydown = (event: KeyboardEvent) => {
 // 处理搜索框失焦事件
 const handleSearchInputBlur = () => {
   // 延迟执行，以允许点击列表项事件先触发
-  setTimeout(() => {
+  readCommandHistoryWindow().setTimeout(() => {
+    const commandHistoryDocument = readCommandHistoryDocument();
     // 检查焦点是否还在组件内部的其他可聚焦元素上（例如按钮）
     // 如果焦点移出整个组件区域，则重置选择
-    if (document.activeElement !== searchInputRef.value && !historyListRef.value?.contains(document.activeElement)) {
+    if (commandHistoryDocument.activeElement !== searchInputRef.value && !historyListRef.value?.contains(commandHistoryDocument.activeElement)) {
        commandHistoryStore.resetSelection();
     }
   }, 100); // 短暂延迟
@@ -224,7 +229,7 @@ const confirmClearAll = async () => { // 注意 async
 // 复制命令到剪贴板
 const copyCommand = async (command: string) => {
   try {
-    await navigator.clipboard.writeText(command);
+    await readCommandHistoryClipboard().writeText(command);
     uiNotificationsStore.showSuccess(t('commandHistory.copied', '已复制到剪贴板'));
   } catch (err) {
     console.error('复制命令失败:', err);
@@ -257,29 +262,33 @@ defineExpose({ focusSearchInput });
 // +++ 右键菜单方法 +++
 const showCommandHistoryContextMenu = (event: MouseEvent, entry: CommandHistoryEntryFE) => {
 event.preventDefault();
+const eventDocument = (event.target as Node | null)?.ownerDocument ?? historyListRef.value?.ownerDocument ?? document;
 commandHistoryContextTargetEntry.value = entry;
 commandHistoryContextMenuPosition.value = { x: event.clientX, y: event.clientY };
 commandHistoryContextMenuVisible.value = true;
-document.addEventListener('click', closeCommandHistoryContextMenu, { once: true });
+activeCommandHistoryMenuDocument?.removeEventListener('click', closeCommandHistoryContextMenu);
+activeCommandHistoryMenuDocument = eventDocument;
+activeCommandHistoryMenuDocument.addEventListener('click', closeCommandHistoryContextMenu, { once: true });
 
 // 使用 nextTick 获取菜单尺寸并调整位置以防止超出屏幕
 nextTick(() => {
-  const menuElement = document.querySelector('.command-history-context-menu') as HTMLElement;
+  const menuElement = eventDocument.querySelector('.command-history-context-menu') as HTMLElement;
   if (menuElement) {
     const menuRect = menuElement.getBoundingClientRect();
+    const menuWindow = menuElement.ownerDocument.defaultView ?? eventDocument.defaultView ?? window;
     let finalX = commandHistoryContextMenuPosition.value.x;
     let finalY = commandHistoryContextMenuPosition.value.y;
     const menuWidth = menuRect.width;
     const menuHeight = menuRect.height;
 
     // 调整水平位置
-    if (finalX + menuWidth > window.innerWidth) {
-      finalX = window.innerWidth - menuWidth - 5;
+    if (finalX + menuWidth > menuWindow.innerWidth) {
+      finalX = menuWindow.innerWidth - menuWidth - 5;
     }
 
     // 调整垂直位置
-    if (finalY + menuHeight > window.innerHeight) {
-      finalY = window.innerHeight - menuHeight - 5;
+    if (finalY + menuHeight > menuWindow.innerHeight) {
+      finalY = menuWindow.innerHeight - menuHeight - 5;
     }
 
     // 确保菜单不超出屏幕左上角
@@ -298,26 +307,27 @@ nextTick(() => {
 const closeCommandHistoryContextMenu = () => {
   commandHistoryContextMenuVisible.value = false;
   commandHistoryContextTargetEntry.value = null;
-  document.removeEventListener('click', closeCommandHistoryContextMenu);
+  activeCommandHistoryMenuDocument?.removeEventListener('click', closeCommandHistoryContextMenu);
+  activeCommandHistoryMenuDocument = null;
 };
 
 const handleCommandHistoryMenuAction = (action: 'sendToAllSessions', entry: CommandHistoryEntryFE) => {
   closeCommandHistoryContextMenu();
   if (action === 'sendToAllSessions') {
-    const activeSshSessions = Array.from(sessionStore.sessions.values()).filter(
+    const activeShellSessions = Array.from(sessionStore.sessions.values()).filter(
       (s: SessionState) => {
         if (s.wsManager.connectionStatus.value !== 'connected') return false;
         const connInfo = connectionsStore.connections.find(c => c.id === Number(s.connectionId));
-        return connInfo?.type === 'SSH';
+        return connInfo?.type === 'SSH' || connInfo?.type === 'TELNET';
       }
     );
 
-    if (activeSshSessions.length > 0) {
-      activeSshSessions.forEach((session: SessionState) => {
+    if (activeShellSessions.length > 0) {
+      activeShellSessions.forEach((session: SessionState) => {
         emitWorkspaceEvent('terminal:sendCommand', { sessionId: session.sessionId, command: entry.command });
       });
       uiNotificationsStore.addNotification({
-        message: t('commandHistory.notifications.sentToAllSessions', { count: activeSshSessions.length }),
+        message: t('commandHistory.notifications.sentToAllSessions', { count: activeShellSessions.length }),
         type: 'success',
       });
     } else {

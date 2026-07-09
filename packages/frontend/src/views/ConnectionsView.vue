@@ -22,6 +22,12 @@ import { beginGlobalDragSelectionGuard } from '../composables/useGlobalDragSelec
 import { useWorkspaceEventEmitter } from '../composables/workspaceEvents';
 import { useThemeToggle } from '../composables/useThemeToggle';
 import { isAccountFeatureAvailable } from '../utils/runtimeConfig';
+import { useDeviceDetection } from '../composables/useDeviceDetection';
+import {
+  createLongPressContextMenuEvent,
+  createMobileLongPressHandlers,
+  type MobileLongPressHandlers,
+} from '../composables/useMobileLongPress';
 
 const { t } = useI18n();
 const { showConfirmDialog } = useConfirmDialog();
@@ -32,6 +38,7 @@ const tagsStore = useTagsStore();
 const authStore = useAuthStore();
 const emitWorkspaceEvent = useWorkspaceEventEmitter();
 const accountFeatureAvailable = isAccountFeatureAvailable();
+const { isMobile } = useDeviceDetection();
 const {
   isDarkUiThemeActive,
   isSwitchingTheme,
@@ -772,6 +779,8 @@ onUnmounted(() => {
   document.removeEventListener('click', handleDocumentClick);
   document.removeEventListener('keydown', handleServerContextMenuKeydown);
   clearServerActionMenuCloseTimer();
+  connectionTestHideTimers.forEach(timer => clearTimeout(timer));
+  connectionTestHideTimers.clear();
   window.removeEventListener('resize', handleServerPanelViewportResize);
   window.removeEventListener(SERVER_PANEL_TOGGLE_EVENT, handleServerPanelToggleRequest);
   stopServerPanelResize();
@@ -849,6 +858,8 @@ const closeServerActionMenu = () => {
 };
 
 const scheduleServerActionMenuClose = () => {
+  if (isMobile.value) return;
+
   clearServerActionMenuCloseTimer();
   serverActionMenuCloseTimer = window.setTimeout(() => {
     serverActionMenuCloseTimer = null;
@@ -1104,6 +1115,47 @@ const showServerContextMenu = (
     targetConnectionId,
   };
 };
+
+const serverConnectionLongPressHandlers = new Map<string, MobileLongPressHandlers>();
+const getServerConnectionLongPressHandlers = (
+  folderId: number | null,
+  connectionId: number,
+) => {
+  const handlerKey = `${folderId ?? 'root'}:${connectionId}`;
+  const cachedHandlers = serverConnectionLongPressHandlers.get(handlerKey);
+  if (cachedHandlers) return cachedHandlers;
+
+  const handlers = createMobileLongPressHandlers({
+    isMobile,
+    onLongPress: (event, point) => {
+      showServerContextMenu(createLongPressContextMenuEvent(event, point), folderId, 'connection', connectionId);
+    },
+  });
+  serverConnectionLongPressHandlers.set(handlerKey, handlers);
+  return handlers;
+};
+
+const serverFolderLongPressHandlers = new Map<number, MobileLongPressHandlers>();
+const getServerFolderLongPressHandlers = (folderId: number) => {
+  const cachedHandlers = serverFolderLongPressHandlers.get(folderId);
+  if (cachedHandlers) return cachedHandlers;
+
+  const handlers = createMobileLongPressHandlers({
+    isMobile,
+    onLongPress: (event, point) => {
+      showServerContextMenu(createLongPressContextMenuEvent(event, point), folderId, 'folder');
+    },
+  });
+  serverFolderLongPressHandlers.set(folderId, handlers);
+  return handlers;
+};
+
+const serverListBodyLongPressHandlers = createMobileLongPressHandlers({
+  isMobile,
+  onLongPress: (event, point) => {
+    showServerContextMenu(createLongPressContextMenuEvent(event, point));
+  },
+});
 
 const contextTargetConnection = computed(() => {
   const targetConnectionId = serverContextMenu.value.targetConnectionId;
@@ -1398,6 +1450,27 @@ interface ConnectionTestState {
 }
 const connectionTestStates = ref<Map<number, ConnectionTestState>>(new Map());
 const isTestingAll = ref(false);
+const isConnectionTestSupported = (type: ConnectionInfo['type']) => ['SSH', 'TELNET', 'RDP', 'VNC'].includes(type);
+const CONNECTION_TEST_RESULT_VISIBLE_MS = 8000;
+const connectionTestHideTimers = new Map<number, ReturnType<typeof setTimeout>>();
+
+const clearConnectionTestHideTimer = (connectionId: number) => {
+  const timer = connectionTestHideTimers.get(connectionId);
+  if (!timer) return;
+
+  clearTimeout(timer);
+  connectionTestHideTimers.delete(connectionId);
+};
+
+const scheduleConnectionTestStateAutoHide = (connectionId: number) => {
+  clearConnectionTestHideTimer(connectionId);
+  const timer = setTimeout(() => {
+    connectionTestHideTimers.delete(connectionId);
+    connectionTestStates.value.delete(connectionId);
+    connectionTestStates.value = new Map(connectionTestStates.value);
+  }, CONNECTION_TEST_RESULT_VISIBLE_MS);
+  connectionTestHideTimers.set(connectionId, timer);
+};
 
 const getLatencyColorString = (latencyMs?: number): string => {
   if (latencyMs === undefined) return 'inherit'; // Default or inherit
@@ -1408,8 +1481,9 @@ const getLatencyColorString = (latencyMs?: number): string => {
 };
 
 const handleTestSingleConnection = async (conn: ConnectionInfo) => {
-  if (!conn.id || conn.type !== 'SSH') return;
+  if (!conn.id || !isConnectionTestSupported(conn.type)) return;
 
+  clearConnectionTestHideTimer(conn.id);
   connectionTestStates.value.set(conn.id, {
     status: 'testing',
     resultText: t('connections.test.testingInProgress', '测试中...'),
@@ -1440,32 +1514,32 @@ const handleTestSingleConnection = async (conn: ConnectionInfo) => {
         latency: latencyMs,
         latencyColor: determinedColor,
       });
+      scheduleConnectionTestStateAutoHide(conn.id);
     } else {
       connectionTestStates.value.set(conn.id, {
         status: 'error',
         resultText: result.message || t('connections.test.unknownError', '未知错误'),
       });
+      scheduleConnectionTestStateAutoHide(conn.id);
     }
   } catch (error: any) {
     connectionTestStates.value.set(conn.id, {
       status: 'error',
       resultText: error.message || t('connections.test.unknownError', '未知错误'),
     });
+    scheduleConnectionTestStateAutoHide(conn.id);
   }
 };
 
 const handleTestAllFilteredConnections = async () => {
   if (isTestingAll.value || isLoadingConnections.value) return;
-  // Ensure conn.id exists for map function and error handling
-  const sshConnectionsToTest = filteredAndSortedConnections.value.filter(c => c.type === 'SSH' && c.id != null);
-  if (sshConnectionsToTest.length === 0) {
-    // Optionally notify user that there are no SSH connections to test
-    // Consider using uiNotificationsStore from your project for a user-friendly message
+  const connectionsToTest = filteredAndSortedConnections.value.filter(c => isConnectionTestSupported(c.type) && c.id != null);
+  if (connectionsToTest.length === 0) {
     return;
   }
 
   isTestingAll.value = true;
-  const testPromises = sshConnectionsToTest.map(conn => {
+  const testPromises = connectionsToTest.map(conn => {
     // conn.id is guaranteed to exist here due to the filter above.
     // We're calling handleTestSingleConnection for each.
     // Individual errors within handleTestSingleConnection will update that specific connection's state.
@@ -1786,7 +1860,15 @@ const handleOpenAllTargetConnections = async () => {
             </button>
           </div>
 
-          <div class="server-list-body" @contextmenu.prevent.stop="showServerContextMenu($event)">
+          <div
+            class="server-list-body"
+            @contextmenu.prevent.stop="showServerContextMenu($event)"
+            @touchstart="serverListBodyLongPressHandlers.onTouchstart"
+            @touchmove="serverListBodyLongPressHandlers.onTouchmove"
+            @touchend="serverListBodyLongPressHandlers.onTouchend"
+            @touchcancel="serverListBodyLongPressHandlers.onTouchcancel"
+            @click.capture="serverListBodyLongPressHandlers.onClickCapture"
+          >
             <div v-if="isLoadingConnections && filteredAndSortedConnections.length === 0" class="server-state">
               <i class="fas fa-spinner fa-spin"></i>
               <span>{{ t('common.loading') }}</span>
@@ -1820,6 +1902,11 @@ const handleOpenAllTargetConnections = async () => {
                     @click="handleConnectionClick(conn.id)"
                     @dblclick="!isBatchEditMode && connectTo(conn)"
                     @contextmenu.prevent.stop="showServerContextMenu($event, null, 'connection', conn.id)"
+                    @touchstart.stop="getServerConnectionLongPressHandlers(null, conn.id).onTouchstart"
+                    @touchmove.stop="getServerConnectionLongPressHandlers(null, conn.id).onTouchmove"
+                    @touchend.stop="getServerConnectionLongPressHandlers(null, conn.id).onTouchend"
+                    @touchcancel.stop="getServerConnectionLongPressHandlers(null, conn.id).onTouchcancel"
+                    @click.capture="getServerConnectionLongPressHandlers(null, conn.id).onClickCapture"
                   >
                     <div class="server-entry-icon">
                       <ServerIcon :icon="conn.icon" :type="conn.type" />
@@ -1849,7 +1936,7 @@ const handleOpenAllTargetConnections = async () => {
                         </span>
                       </div>
                       <div
-                        v-if="conn.type === 'SSH' && connectionTestStates.get(conn.id) && connectionTestStates.get(conn.id)?.status !== 'idle'"
+                        v-if="isConnectionTestSupported(conn.type) && connectionTestStates.get(conn.id) && connectionTestStates.get(conn.id)?.status !== 'idle'"
                         class="server-test-result"
                         :class="`server-test-result-${connectionTestStates.get(conn.id)?.status}`"
                         :style="connectionTestStates.get(conn.id)?.status === 'success' ? { color: connectionTestStates.get(conn.id)?.latencyColor || 'inherit' } : undefined"
@@ -1907,6 +1994,11 @@ const handleOpenAllTargetConnections = async () => {
                   @dragend="handleFolderDragEnd"
                   @dragenter="handleFolderDragEnter(folder.folderId)"
                   @contextmenu.prevent.stop="showServerContextMenu($event, folder.folderId, 'folder')"
+                  @touchstart.stop="getServerFolderLongPressHandlers(folder.folderId).onTouchstart"
+                  @touchmove.stop="getServerFolderLongPressHandlers(folder.folderId).onTouchmove"
+                  @touchend.stop="getServerFolderLongPressHandlers(folder.folderId).onTouchend"
+                  @touchcancel.stop="getServerFolderLongPressHandlers(folder.folderId).onTouchcancel"
+                  @click.capture="getServerFolderLongPressHandlers(folder.folderId).onClickCapture"
                 >
                   <i :class="['fas', isFolderExpanded(folder.folderId) ? 'fa-chevron-down' : 'fa-chevron-right']"></i>
                   <input
@@ -1953,6 +2045,11 @@ const handleOpenAllTargetConnections = async () => {
                     @click="handleConnectionClick(conn.id)"
                     @dblclick="!isBatchEditMode && connectTo(conn)"
                     @contextmenu.prevent.stop="showServerContextMenu($event, folder.folderId, 'connection', conn.id)"
+                    @touchstart.stop="getServerConnectionLongPressHandlers(folder.folderId, conn.id).onTouchstart"
+                    @touchmove.stop="getServerConnectionLongPressHandlers(folder.folderId, conn.id).onTouchmove"
+                    @touchend.stop="getServerConnectionLongPressHandlers(folder.folderId, conn.id).onTouchend"
+                    @touchcancel.stop="getServerConnectionLongPressHandlers(folder.folderId, conn.id).onTouchcancel"
+                    @click.capture="getServerConnectionLongPressHandlers(folder.folderId, conn.id).onClickCapture"
                   >
                     <div class="server-entry-icon">
                       <ServerIcon :icon="conn.icon" :type="conn.type" />
@@ -1982,7 +2079,7 @@ const handleOpenAllTargetConnections = async () => {
                         </span>
                       </div>
                       <div
-                        v-if="conn.type === 'SSH' && connectionTestStates.get(conn.id) && connectionTestStates.get(conn.id)?.status !== 'idle'"
+                        v-if="isConnectionTestSupported(conn.type) && connectionTestStates.get(conn.id) && connectionTestStates.get(conn.id)?.status !== 'idle'"
                         class="server-test-result"
                         :class="`server-test-result-${connectionTestStates.get(conn.id)?.status}`"
                         :style="connectionTestStates.get(conn.id)?.status === 'success' ? { color: connectionTestStates.get(conn.id)?.latencyColor || 'inherit' } : undefined"
@@ -2037,6 +2134,7 @@ const handleOpenAllTargetConnections = async () => {
                 :class="{ active: isServerActionMenuOpen }"
                 :aria-label="t('dock.actions', '操作菜单')"
                 :title="t('dock.actions', '操作菜单')"
+                @pointerdown.stop
                 @click.stop="openServerActionMenu"
               >
                 <i class="fas fa-user-gear"></i>
@@ -2045,6 +2143,7 @@ const handleOpenAllTargetConnections = async () => {
                 v-if="isServerActionMenuOpen"
                 ref="serverActionMenuRef"
                 class="server-actions-menu"
+                @pointerdown.stop
                 @click.stop
               >
                 <RouterLink
@@ -2098,6 +2197,14 @@ const handleOpenAllTargetConnections = async () => {
           @dblclick="resetServerPanelWidth"
         ></button>
       </section>
+
+      <button
+        v-if="!isServerPanelCollapsed && !isServerActionMenuOpen"
+        type="button"
+        class="server-panel-mobile-dismiss-overlay"
+        :aria-label="t('connections.folders.collapsePanel', '收起侧边栏')"
+        @click="collapseServerPanel"
+      ></button>
 
       <teleport to="body">
         <div
@@ -2163,7 +2270,7 @@ const handleOpenAllTargetConnections = async () => {
         <template v-if="serverContextMenu.targetType === 'connection'">
           <button
             type="button"
-            :disabled="contextTargetConnection?.type !== 'SSH'"
+            :disabled="!contextTargetConnection || !isConnectionTestSupported(contextTargetConnection.type)"
             @click="handleTestConnectionFromContext"
           >
             <i class="fas fa-plug"></i>
@@ -2380,9 +2487,9 @@ const handleOpenAllTargetConnections = async () => {
 }
 
 .server-tag-filter-button.active {
-  border-color: var(--button-bg-color);
-  background: color-mix(in srgb, var(--button-bg-color) 14%, var(--app-bg-color));
-  color: var(--text-color);
+  border-color: color-mix(in srgb, var(--link-active-color) 52%, var(--border-color));
+  background: var(--nav-item-active-bg-color);
+  color: var(--link-active-color);
 }
 
 .server-tag-filter-count {
@@ -2582,8 +2689,8 @@ const handleOpenAllTargetConnections = async () => {
 }
 
 .server-switch.active {
-  border-color: var(--button-bg-color);
-  background: var(--button-bg-color);
+  border-color: color-mix(in srgb, var(--link-active-color) 52%, var(--border-color));
+  background: var(--nav-item-active-bg-color);
 }
 
 .server-switch.active span {
@@ -3166,6 +3273,10 @@ const handleOpenAllTargetConnections = async () => {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--link-active-color) 16%, transparent);
 }
 
+.server-panel-mobile-dismiss-overlay {
+  display: none;
+}
+
 .server-context-menu {
   position: fixed;
   z-index: 9999;
@@ -3215,6 +3326,16 @@ const handleOpenAllTargetConnections = async () => {
 }
 
 @media (max-width: 900px) {
+  .server-panel-mobile-dismiss-overlay {
+    position: absolute;
+    inset: 0;
+    display: block;
+    z-index: 11;
+    border: 0;
+    background: transparent;
+    cursor: default;
+  }
+
   .server-list-panel:not(.is-collapsed) {
     position: absolute;
     left: 0;
@@ -3227,8 +3348,9 @@ const handleOpenAllTargetConnections = async () => {
   }
 
   .server-list-panel.is-collapsed {
-    width: 6px !important;
-    min-width: 6px !important;
+    width: 0 !important;
+    min-width: 0 !important;
+    border-right-width: 0;
   }
 }
 

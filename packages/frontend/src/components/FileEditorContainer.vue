@@ -50,6 +50,8 @@ const activeTab = computed((): FileTab | null => {
 // Monaco Editor 的 v-model 处理
 const localEditorContent = ref('');
 const encodingSelectRef = ref<HTMLSelectElement | null>(null); // Ref for the select element
+const editorContainerRef = ref<HTMLElement | null>(null);
+let activeEditorWindow: Window | null = null;
 
 // Function to calculate and set the select width
 const updateSelectWidth = () => {
@@ -61,7 +63,8 @@ const updateSelectWidth = () => {
 
     if (!selectedOption) return;
 
-    const styles = window.getComputedStyle(selectElement);
+    const selectWindow = selectElement.ownerDocument.defaultView ?? window;
+    const styles = selectWindow.getComputedStyle(selectElement);
     const font = `${styles.fontStyle} ${styles.fontVariant} ${styles.fontWeight} ${styles.fontSize} ${styles.fontFamily}`;
     const letterSpacing = Number.parseFloat(styles.letterSpacing);
     const textWidth = measureCachedTextWidth(
@@ -231,9 +234,10 @@ let unregisterFocusFn: (() => void) | null = null; // 保存注销函数
 
 onMounted(() => {
   // 注册动作并保存返回的注销函数
-  unregisterFocusFn = focusSwitcherStore.registerFocusAction('fileEditorActive', focusActiveEditor);
+  unregisterFocusFn = focusSwitcherStore.registerFocusAction('fileEditorActive', focusActiveEditor, { ownerDocument: editorContainerRef.value?.ownerDocument ?? document });
   // +++ 键盘事件监听器 +++
-  window.addEventListener('keydown', handleKeyDown);
+  activeEditorWindow = editorContainerRef.value?.ownerDocument.defaultView ?? window;
+  activeEditorWindow.addEventListener('keydown', handleKeyDown);
 });
 
 onBeforeUnmount(() => {
@@ -242,7 +246,8 @@ onBeforeUnmount(() => {
     unregisterFocusFn();
   }
   // +++ 移除键盘事件监听器 +++
-  window.removeEventListener('keydown', handleKeyDown);
+  activeEditorWindow?.removeEventListener('keydown', handleKeyDown);
+  activeEditorWindow = null;
 });
 
 // +++ 处理键盘事件以切换标签 +++
@@ -279,7 +284,7 @@ const handleKeyDown = (event: KeyboardEvent) => {
 
 <template>
   <!-- 这个容器不再控制自己的显示/隐藏，由 WorkspaceView 的 Pane 控制 -->
-  <div class="file-editor-container">
+  <div ref="editorContainerRef" class="file-editor-container">
 
       <!-- 1. 标签栏 -->
       <FileEditorTabs

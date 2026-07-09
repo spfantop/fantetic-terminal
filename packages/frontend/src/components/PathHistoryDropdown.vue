@@ -77,9 +77,13 @@ const historyListRef = ref<HTMLUListElement | null>(null);
 const itemRefs = ref<HTMLLIElement[]>([]);
 const hoveredItemId = ref<number | null>(null);
 const isTouchDevice = ref(false);
+const readPathHistoryDocument = () => historyListRef.value?.ownerDocument ?? document;
+const readPathHistoryWindow = () => readPathHistoryDocument().defaultView ?? window;
+const readPathHistoryClipboard = () => readPathHistoryWindow().navigator.clipboard;
 
 onMounted(() => {
-  isTouchDevice.value = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  const pathHistoryWindow = readPathHistoryWindow();
+  isTouchDevice.value = 'ontouchstart' in pathHistoryWindow || pathHistoryWindow.navigator.maxTouchPoints > 0;
   // Reset itemRefs before each update to avoid stale references
   watch(filteredHistory, () => {
     itemRefs.value = [];
@@ -95,7 +99,7 @@ const handleItemClick = (path: string) => {
 
 const copyPathToClipboard = async (path: string) => {
   try {
-    await navigator.clipboard.writeText(path);
+    await readPathHistoryClipboard().writeText(path);
     uiNotificationsStore.showSuccess(t('pathHistory.copiedSuccess', '路径已复制到剪贴板'));
   } catch (err) {
     console.error('Failed to copy path:', err);

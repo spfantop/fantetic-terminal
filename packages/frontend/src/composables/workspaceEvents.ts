@@ -8,7 +8,7 @@ export type WorkspaceEventPayloads = {
   // Terminal Events
   'terminal:input': { sessionId: string; data: string; batched?: boolean };
   'terminal:resize': { sessionId: string; dims: { cols: number; rows: number } };
-  'terminal:ready': { sessionId: string; terminal: XtermTerminal; searchAddon: any };
+  'terminal:ready': { sessionId: string; terminal: XtermTerminal; searchAddon?: any; ensureSearchAddonLoaded?: () => any };
   'terminal:sendCommand': { command: string; sessionId?: string }; // sessionId 可选，用于指定目标，默认为 active
   'terminal:clear': { sessionId?: string } | void; // sessionId 可选，默认为 active
   'terminal:scrollToBottomRequest': { sessionId: string };
@@ -53,7 +53,7 @@ export type WorkspaceEventPayloads = {
   'ui:resizeTransaction': { phase: 'start' | 'live' | 'end'; source: 'server-panel' | 'terminal-grid' | 'workspace-layout' };
   'ui:openTransferProgressModal': void; // 请求打开文件传输进度模态框
   // 'ui:toggleVirtualKeyboard': void; // 如果决定迁移 CommandInputBar 的这个事件
-  'fileManager:openModalRequest': { sessionId: string }; // 请求打开文件管理器模态框
+  'fileManager:openModalRequest': { sessionId: string; sourceDocument?: Document }; // 请求打开文件管理器模态框
 
   // Suspended SSH Session Events
   'suspendedSession:actionCompleted': void; // Emitted when a resume/remove action is completed

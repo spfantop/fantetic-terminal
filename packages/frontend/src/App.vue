@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { RouterView, useRoute, useRouter } from 'vue-router';
-import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
+import { ref, onMounted, onUnmounted, watch, computed, defineAsyncComponent } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useAuthStore } from './stores/auth.store';
 import { useDeviceDetection } from './composables/useDeviceDetection';
@@ -12,7 +12,6 @@ import { storeToRefs } from 'pinia';
 import UINotificationDisplay from './components/UINotificationDisplay.vue';
 import FileEditorOverlay from './components/FileEditorOverlay.vue';
 import FocusSwitcherConfigurator from './components/FocusSwitcherConfigurator.vue';
-import VncModal from './components/VncModal.vue';
 import ConfirmDialog from './components/common/ConfirmDialog.vue';
 import SettingsView from './views/SettingsView.vue';
 import { useDialogStore } from './stores/dialog.store';
@@ -23,6 +22,8 @@ import {
 } from './utils/focusSwitcherConfig';
 
 const { t } = useI18n();
+const RemoteDesktopModal = defineAsyncComponent(() => import('./components/RemoteDesktopModal.vue'));
+const VncModal = defineAsyncComponent(() => import('./components/VncModal.vue'));
 const authStore = useAuthStore();
 const settingsStore = useSettingsStore();
 const focusSwitcherStore = useFocusSwitcherStore(); // +++ 实例化焦点切换 Store +++
@@ -32,8 +33,11 @@ const { state: dialogState } = storeToRefs(dialogStore);
 const favoritePathsStore = useFavoritePathsStore(); // +++ 实例化 favoritePathsStore +++
 const { isAuthenticated } = storeToRefs(authStore);
 const { showPopupFileEditorBoolean } = storeToRefs(settingsStore);
-const { isConfiguratorVisible: isFocusSwitcherVisible } = storeToRefs(focusSwitcherStore);
-const { isVncModalOpen, vncConnectionInfo } = storeToRefs(sessionStore); // +++ 获取 VNC 状态 +++
+const {
+  isConfiguratorVisible: isFocusSwitcherVisible,
+  configuratorSourceDocument: focusSwitcherConfiguratorSourceDocument,
+} = storeToRefs(focusSwitcherStore);
+const { isRdpModalOpen, rdpConnectionInfo, isVncModalOpen, vncConnectionInfo } = storeToRefs(sessionStore); // +++ 获取 RDP/VNC 状态 +++
 const { isMobile } = useDeviceDetection();
 
 const route = useRoute();
@@ -89,6 +93,10 @@ const normalizedRoutePath = computed(() => {
 
 const isFocusSwitcherHotkeyRoute = computed(() => shouldEnableFocusSwitcherHotkeys(normalizedRoutePath.value));
 const isSettingsOverlayVisible = computed(() => route.name === 'Connections' && route.query.settings === '1');
+const shouldShowMainFocusSwitcherConfigurator = computed(() => (
+  isFocusSwitcherVisible.value
+  && (focusSwitcherConfiguratorSourceDocument.value === null || focusSwitcherConfiguratorSourceDocument.value === document)
+));
 
 const closeSettingsOverlay = () => {
   void router.push({ name: 'Connections' });
@@ -257,9 +265,16 @@ const handleGlobalKeyUp = async (event: KeyboardEvent) => {
 
     <!-- +++ 条件渲染焦点切换配置器 (使用 v-show 保持实例) +++ -->
     <FocusSwitcherConfigurator
-      v-show="isFocusSwitcherVisible"
-      :isVisible="isFocusSwitcherVisible"
+      v-show="shouldShowMainFocusSwitcherConfigurator"
+      :isVisible="shouldShowMainFocusSwitcherConfigurator"
       @close="focusSwitcherStore.toggleConfigurator(false)"
+    />
+
+    <!-- +++ 条件渲染 RDP 模态框 +++ -->
+    <RemoteDesktopModal
+      v-if="isRdpModalOpen"
+      :connection="rdpConnectionInfo"
+      @close="sessionStore.closeRdpModal()"
     />
 
     <!-- +++ 条件渲染 VNC 模态框 +++ -->

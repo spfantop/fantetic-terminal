@@ -368,6 +368,111 @@ const definedMigrations: Migration[] = [
         sql: `
             ALTER TABLE connection_folders ADD COLUMN parent_id INTEGER NULL REFERENCES connection_folders(id) ON DELETE SET NULL;
         `
+    },
+    {
+        id: 15,
+        name: 'Update connections table to allow TELNET type',
+        check: async (db: Database): Promise<boolean> => {
+            const createSQL = await getTableCreateSQL(db, 'connections');
+            return createSQL ? !createSQL.includes("'TELNET'") : true;
+        },
+        sql: `
+            PRAGMA foreign_keys=off;
+
+            ALTER TABLE connections RENAME TO connections_old_for_telnet_constraint_update;
+            ALTER TABLE connection_tags RENAME TO connection_tags_old_for_telnet_constraint_update;
+
+            CREATE TABLE connections (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NULL,
+                type TEXT NOT NULL CHECK(type IN ('SSH', 'RDP', 'VNC', 'TELNET')) DEFAULT 'SSH',
+                host TEXT NOT NULL,
+                port INTEGER NOT NULL,
+                username TEXT NOT NULL,
+                auth_method TEXT NOT NULL CHECK(auth_method IN ('password', 'key')),
+                encrypted_password TEXT NULL,
+                encrypted_private_key TEXT NULL,
+                encrypted_passphrase TEXT NULL,
+                proxy_id INTEGER NULL,
+                ssh_key_id INTEGER NULL,
+                folder_id INTEGER NULL,
+                icon TEXT NULL,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                notes TEXT NULL,
+                jump_chain TEXT NULL,
+                proxy_type TEXT NULL,
+                created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                last_connected_at INTEGER NULL,
+                FOREIGN KEY (proxy_id) REFERENCES proxies(id) ON DELETE SET NULL,
+                FOREIGN KEY (ssh_key_id) REFERENCES ssh_keys(id) ON DELETE SET NULL,
+                FOREIGN KEY (folder_id) REFERENCES connection_folders(id) ON DELETE SET NULL
+            );
+
+            CREATE TABLE connection_tags (
+                connection_id INTEGER NOT NULL,
+                tag_id INTEGER NOT NULL,
+                PRIMARY KEY (connection_id, tag_id),
+                FOREIGN KEY (connection_id) REFERENCES connections(id) ON DELETE CASCADE,
+                FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+            );
+
+            INSERT INTO connections (
+                id, name, type, host, port, username, auth_method,
+                encrypted_password, encrypted_private_key, encrypted_passphrase,
+                proxy_id, ssh_key_id, folder_id, icon, sort_order, notes,
+                jump_chain, proxy_type, created_at, updated_at, last_connected_at
+            )
+            SELECT
+                id, name,
+                CASE
+                    WHEN UPPER(type) = 'RDP' THEN 'RDP'
+                    WHEN UPPER(type) = 'VNC' THEN 'VNC'
+                    WHEN UPPER(type) = 'TELNET' THEN 'TELNET'
+                    ELSE 'SSH'
+                END,
+                host, port, username, auth_method,
+                encrypted_password, encrypted_private_key, encrypted_passphrase,
+                proxy_id, ssh_key_id, folder_id, icon, sort_order, notes,
+                jump_chain, proxy_type, created_at, updated_at, last_connected_at
+            FROM connections_old_for_telnet_constraint_update;
+
+            INSERT INTO connection_tags (connection_id, tag_id)
+            SELECT connection_id, tag_id FROM connection_tags_old_for_telnet_constraint_update;
+
+            DROP TABLE connections_old_for_telnet_constraint_update;
+            DROP TABLE connection_tags_old_for_telnet_constraint_update;
+
+            PRAGMA foreign_keys=on;
+        `
+    },
+    {
+        id: 16,
+        name: 'Repair connection_tags foreign key after TELNET migration',
+        check: async (db: Database): Promise<boolean> => {
+            const createSQL = await getTableCreateSQL(db, 'connection_tags');
+            return createSQL ? createSQL.includes('connections_old_for_telnet_constraint_update') : true;
+        },
+        sql: `
+            PRAGMA foreign_keys=off;
+
+            ALTER TABLE connection_tags RENAME TO connection_tags_old_for_telnet_fk_repair;
+
+            CREATE TABLE connection_tags (
+                connection_id INTEGER NOT NULL,
+                tag_id INTEGER NOT NULL,
+                PRIMARY KEY (connection_id, tag_id),
+                FOREIGN KEY (connection_id) REFERENCES connections(id) ON DELETE CASCADE,
+                FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+            );
+
+            INSERT INTO connection_tags (connection_id, tag_id)
+            SELECT connection_id, tag_id FROM connection_tags_old_for_telnet_fk_repair;
+
+            DROP TABLE connection_tags_old_for_telnet_fk_repair;
+
+            PRAGMA foreign_keys=on;
+        `
     }
 ];
 

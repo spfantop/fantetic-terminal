@@ -1,7 +1,7 @@
-import { ref, nextTick, type Ref, type ComponentPublicInstance } from 'vue'; 
-import type { FileListItem } from '../../types/sftp.types'; 
-import { type useI18n } from 'vue-i18n'; 
-import type FileManagerContextMenu from '../../components/FileManagerContextMenu.vue'; 
+import { ref, nextTick, type Ref } from 'vue';
+import type { FileListItem } from '../../types/sftp.types';
+import { type useI18n } from 'vue-i18n';
+import type FileManagerContextMenu from '../../components/FileManagerContextMenu.vue';
 import { debugLog } from '../useDebugLog';
 
 // 定义菜单项类型 (可以根据需要扩展)
@@ -15,6 +15,10 @@ export interface ContextMenuItem {
 
 // 支持的压缩格式
 export type CompressFormat = 'zip' | 'targz' | 'tarbz2';
+
+type FileManagerContextMenuInstance = InstanceType<typeof FileManagerContextMenu> & {
+  menuElement?: HTMLDivElement | null;
+};
 
 // 定义剪贴板状态类型
 export interface ClipboardState {
@@ -35,6 +39,7 @@ export interface UseFileManagerContextMenuOptions {
   t: ReturnType<typeof useI18n>['t']; // 使用 useI18n 获取 t 的类型
   // --- 回调函数 ---
   onRefresh: () => void;
+  onOpen: (item: FileListItem) => void;
   onUpload: () => void;
   onDownload: (items: FileListItem[]) => void; // 文件下载回调
   onDownloadDirectory: (item: FileListItem) => void; // +++ 文件夹下载回调 +++
@@ -71,6 +76,7 @@ export function useFileManagerContextMenu(options: UseFileManagerContextMenuOpti
     clipboardState, // +++ 解构剪贴板状态 +++
     t,
     onRefresh,
+    onOpen,
     onUpload,
     onDownload,
     onDelete,
@@ -92,10 +98,21 @@ export function useFileManagerContextMenu(options: UseFileManagerContextMenuOpti
   const contextMenuItems = ref<ContextMenuItem[]>([]);
   const contextTargetItem = ref<FileListItem | null>(null);
   // 修正 Ref 类型为组件实例类型
-  const contextMenuRef = ref<InstanceType<typeof FileManagerContextMenu> | null>(null);
+  const contextMenuRef = ref<FileManagerContextMenuInstance | null>(null);
+  let activeMenuDocument: Document | null = null;
+  let suppressNextContextMenuClose = false;
+
+  const readEventDocument = (event: Event) => {
+    const eventTarget = event.target as (Node & { ownerDocument?: Document }) | null;
+    return eventTarget?.ownerDocument ?? document;
+  };
 
   const showContextMenu = (event: MouseEvent, item?: FileListItem) => {
     event.preventDefault();
+    suppressNextContextMenuClose = Boolean((event as MouseEvent & {
+      isMobileLongPressContextMenuEvent?: boolean;
+    }).isMobileLongPressContextMenuEvent);
+    activeMenuDocument = readEventDocument(event);
     const targetItem = item || null;
 
     // Adjust selection based on right-click target (逻辑保持不变)
@@ -165,6 +182,7 @@ export function useFileManagerContextMenu(options: UseFileManagerContextMenuOpti
 
         // --- 修改：区分文件和文件夹下载 ---
         if (targetItem.attrs.isFile) {
+            menu.push({ label: t('fileManager.actions.openEditor'), action: () => onOpen(targetItem), disabled: !(isConnected.value && isSftpReady.value) });
             menu.push({ label: t('fileManager.actions.download', { name: targetItem.filename }), action: () => onDownload([targetItem]), disabled: !(isConnected.value && isSftpReady.value) }); // 文件下载
         } else if (targetItem.attrs.isDirectory) {
             menu.push({ label: t('fileManager.actions.downloadFolder', { name: targetItem.filename }), action: () => onDownloadDirectory(targetItem), disabled: !(isConnected.value && isSftpReady.value) }); // 文件夹下载
@@ -263,25 +281,25 @@ export function useFileManagerContextMenu(options: UseFileManagerContextMenuOpti
 
     // Use nextTick to allow the DOM to update and the menu to render
     nextTick(() => {
-        // Access the DOM element via $el from the component instance ref
-        const menuElement = contextMenuRef.value?.$el as HTMLDivElement | undefined;
+        const menuElement = contextMenuRef.value?.menuElement
+            ?? contextMenuRef.value?.$el as HTMLDivElement | undefined;
         if (menuElement && contextMenuVisible.value) {
-            // const menuElement = contextMenuRef.value; // Old way
             const menuRect = menuElement.getBoundingClientRect(); // Now should work
             const menuWidth = menuRect.width;
             const menuHeight = menuRect.height;
+            const menuWindow = menuElement.ownerDocument.defaultView ?? activeMenuDocument?.defaultView ?? window;
 
             let finalX = contextMenuPosition.value.x;
             let finalY = contextMenuPosition.value.y;
 
             // Adjust horizontally if needed
-            if (finalX + menuWidth > window.innerWidth) {
-                finalX = window.innerWidth - menuWidth - 5;
+            if (finalX + menuWidth > menuWindow.innerWidth) {
+                finalX = menuWindow.innerWidth - menuWidth - 5;
             }
 
             // Adjust vertically if needed
-            if (finalY + menuHeight > window.innerHeight) {
-                finalY = window.innerHeight - menuHeight - 5;
+            if (finalY + menuHeight > menuWindow.innerHeight) {
+                finalY = menuWindow.innerHeight - menuHeight - 5;
             }
 
             // Ensure menu doesn't go off-screen top or left
@@ -295,22 +313,34 @@ export function useFileManagerContextMenu(options: UseFileManagerContextMenuOpti
             }
 
             // Add global listener to hide menu *after* positioning
-            document.removeEventListener('click', hideContextMenu, { capture: true });
-            document.addEventListener('click', hideContextMenu, { capture: true, once: true });
+            activeMenuDocument?.removeEventListener('click', hideContextMenu, true);
+            activeMenuDocument = menuElement.ownerDocument;
+            activeMenuDocument.addEventListener('click', hideContextMenu, { capture: true, once: true });
         } else {
              // Fallback listener if measurement fails
-             document.removeEventListener('click', hideContextMenu, { capture: true });
-             document.addEventListener('click', hideContextMenu, { capture: true, once: true });
+             const fallbackDocument = activeMenuDocument ?? document;
+             fallbackDocument.removeEventListener('click', hideContextMenu, true);
+             activeMenuDocument = fallbackDocument;
+             activeMenuDocument.addEventListener('click', hideContextMenu, { capture: true, once: true });
         }
     });
   };
 
-  const hideContextMenu = () => {
+  const hideContextMenu = (event?: MouseEvent) => {
+    if (suppressNextContextMenuClose) {
+      suppressNextContextMenuClose = false;
+      event?.preventDefault();
+      event?.stopPropagation();
+      activeMenuDocument?.addEventListener('click', hideContextMenu, { capture: true, once: true });
+      return;
+    }
+
     if (!contextMenuVisible.value) return;
     contextMenuVisible.value = false;
     contextMenuItems.value = [];
     contextTargetItem.value = null; // 清理目标项
-    document.removeEventListener('click', hideContextMenu, { capture: true });
+    activeMenuDocument?.removeEventListener('click', hideContextMenu, true);
+    activeMenuDocument = null;
   };
 
   // 返回需要暴露的状态和方法

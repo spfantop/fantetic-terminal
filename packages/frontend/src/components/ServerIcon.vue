@@ -4,7 +4,7 @@ import { getServerIconPath, readServerIconOption } from '../utils/serverIcons';
 
 const props = defineProps<{
   icon?: string | null;
-  type?: 'SSH' | 'RDP' | 'VNC';
+  type?: 'SSH' | 'RDP' | 'VNC' | 'TELNET';
   title?: string;
 }>();
 

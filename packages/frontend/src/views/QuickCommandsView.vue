@@ -200,7 +200,7 @@
     </div>
 
     <!-- 添加/编辑表单模态框 -->
-    <Teleport to="body">
+    <Teleport :to="quickCommandTeleportTarget">
       <AddEditQuickCommandForm
         v-if="isFormVisible"
         :command-to-edit="commandToEdit"
@@ -263,6 +263,11 @@ const commandToEdit = ref<QuickCommandFE | null>(null);
 const commandListContainerRef = ref<HTMLDivElement | null>(null); // Changed ref name to match template
 const searchInputRef = ref<HTMLInputElement | null>(null); // +++ Ref for the search input +++
 let unregisterFocus: (() => void) | null = null; // +++ 保存注销函数 +++
+let activeQuickCommandMenuDocument: Document | null = null;
+const readQuickCommandsDocument = () => commandListContainerRef.value?.ownerDocument ?? document;
+const readQuickCommandsWindow = () => readQuickCommandsDocument().defaultView ?? window;
+const readQuickCommandsClipboard = () => readQuickCommandsWindow().navigator.clipboard;
+const quickCommandTeleportTarget = computed(() => commandListContainerRef.value?.ownerDocument.body ?? 'body');
 
 // +++ State for inline tag editing +++
 const editingTagId = ref<number | null | 'untagged'>(null);
@@ -355,7 +360,7 @@ onMounted(async () => { // Make onMounted async
     // Also fetch the quick command tags using the correct store instance
     await quickCommandTagsStore.fetchTags();
     // +++ 注册自定义聚焦动作 +++
-    unregisterFocus = focusSwitcherStore.registerFocusAction('quickCommandsSearch', focusSearchInput);
+    unregisterFocus = focusSwitcherStore.registerFocusAction('quickCommandsSearch', focusSearchInput, { ownerDocument: commandListContainerRef.value?.ownerDocument ?? document });
 });
 
 onBeforeUnmount(() => {
@@ -451,10 +456,11 @@ const handleSearchInputKeydown = (event: KeyboardEvent) => {
 // 处理搜索框失焦事件
 const handleSearchInputBlur = () => {
   // 延迟执行，以允许点击列表项事件先触发
-  setTimeout(() => {
+  readQuickCommandsWindow().setTimeout(() => {
+    const quickCommandsDocument = readQuickCommandsDocument();
     // 检查焦点是否还在组件内部的其他可聚焦元素上（例如按钮）
     // 如果焦点移出整个组件区域，则重置选择
-    if (document.activeElement !== searchInputRef.value && !commandListContainerRef.value?.contains(document.activeElement)) {
+    if (quickCommandsDocument.activeElement !== searchInputRef.value && !commandListContainerRef.value?.contains(quickCommandsDocument.activeElement)) {
         quickCommandsStore.resetSelection();
     }
 }, 100); // 短暂延迟
@@ -528,21 +534,22 @@ const confirmDelete = async (command: QuickCommandFE) => {
 // 复制命令到剪贴板
 const copyCommand = async (command: string) => {
   try {
-    await navigator.clipboard.writeText(command);
+    await readQuickCommandsClipboard().writeText(command);
     uiNotificationsStore.showSuccess(t('commandHistory.copied', '已复制到剪贴板'));
   } catch (err) {
     console.error('使用Clipboard API复制命令失败:', err);
     // 备用方案：使用临时文本区域和execCommand
     try {
-      const textarea = document.createElement('textarea');
+      const ownerDocument = commandListContainerRef.value?.ownerDocument ?? document;
+      const textarea = ownerDocument.createElement('textarea');
       textarea.value = command;
       textarea.style.position = 'fixed'; // 避免滚动到页面底部
       textarea.style.opacity = '0'; // 隐藏文本区域
-      document.body.appendChild(textarea);
+      ownerDocument.body.appendChild(textarea);
       textarea.focus();
       textarea.select();
-      const successful = document.execCommand('copy');
-      document.body.removeChild(textarea);
+      const successful = ownerDocument.execCommand('copy');
+      textarea.remove();
       if (successful) {
         uiNotificationsStore.showSuccess(t('commandHistory.copied', '已复制到剪贴板'));
       } else {
@@ -720,29 +727,33 @@ const cancelEditingTag = () => {
 // +++ 右键菜单方法 +++
 const showQuickCommandContextMenu = (event: MouseEvent, command: QuickCommandFE) => {
 event.preventDefault();
+const eventDocument = (event.target as Node | null)?.ownerDocument ?? commandListContainerRef.value?.ownerDocument ?? document;
 quickCommandContextTargetCommand.value = command;
 quickCommandContextMenuPosition.value = { x: event.clientX, y: event.clientY };
 quickCommandContextMenuVisible.value = true;
-document.addEventListener('click', closeQuickCommandContextMenu, { once: true });
+activeQuickCommandMenuDocument?.removeEventListener('click', closeQuickCommandContextMenu);
+activeQuickCommandMenuDocument = eventDocument;
+activeQuickCommandMenuDocument.addEventListener('click', closeQuickCommandContextMenu, { once: true });
 
 // 使用 nextTick 获取菜单尺寸并调整位置以防止超出屏幕
 nextTick(() => {
-  const menuElement = document.querySelector('.quick-command-context-menu') as HTMLElement;
+  const menuElement = eventDocument.querySelector('.quick-command-context-menu') as HTMLElement;
   if (menuElement) {
     const menuRect = menuElement.getBoundingClientRect();
+    const menuWindow = menuElement.ownerDocument.defaultView ?? eventDocument.defaultView ?? window;
     let finalX = quickCommandContextMenuPosition.value.x;
     let finalY = quickCommandContextMenuPosition.value.y;
     const menuWidth = menuRect.width;
     const menuHeight = menuRect.height;
 
     // 调整水平位置
-    if (finalX + menuWidth > window.innerWidth) {
-      finalX = window.innerWidth - menuWidth - 5;
+    if (finalX + menuWidth > menuWindow.innerWidth) {
+      finalX = menuWindow.innerWidth - menuWidth - 5;
     }
 
     // 调整垂直位置
-    if (finalY + menuHeight > window.innerHeight) {
-      finalY = window.innerHeight - menuHeight - 5;
+    if (finalY + menuHeight > menuWindow.innerHeight) {
+      finalY = menuWindow.innerHeight - menuHeight - 5;
     }
 
     // 确保菜单不超出屏幕左上角
@@ -761,26 +772,27 @@ nextTick(() => {
 const closeQuickCommandContextMenu = () => {
   quickCommandContextMenuVisible.value = false;
   quickCommandContextTargetCommand.value = null;
-  document.removeEventListener('click', closeQuickCommandContextMenu);
+  activeQuickCommandMenuDocument?.removeEventListener('click', closeQuickCommandContextMenu);
+  activeQuickCommandMenuDocument = null;
 };
 
 const handleQuickCommandMenuAction = (action: 'sendToAllSessions', command: QuickCommandFE) => {
   closeQuickCommandContextMenu();
   if (action === 'sendToAllSessions') {
-    const activeSshSessions = Array.from(sessionStore.sessions.values()).filter(
+    const activeShellSessions = Array.from(sessionStore.sessions.values()).filter(
       (s: SessionState) => {
         if (s.wsManager.connectionStatus.value !== 'connected') return false;
         const connInfo = connectionsStore.connections.find(c => c.id === Number(s.connectionId));
-        return connInfo?.type === 'SSH';
+        return connInfo?.type === 'SSH' || connInfo?.type === 'TELNET';
       }
     );
 
-    if (activeSshSessions.length > 0) {
-      activeSshSessions.forEach((session: SessionState) => {
+    if (activeShellSessions.length > 0) {
+      activeShellSessions.forEach((session: SessionState) => {
         emitWorkspaceEvent('terminal:sendCommand', { sessionId: session.sessionId, command: command.command });
       });
       uiNotificationsStore.addNotification({
-        message: t('quickCommands.notifications.sentToAllSessions', { count: activeSshSessions.length }),
+        message: t('quickCommands.notifications.sentToAllSessions', { count: activeShellSessions.length }),
         type: 'success',
       });
     } else {

@@ -25,6 +25,7 @@ const isVisible = ref(false);
 // 接收 isMobile 属性
 const props = defineProps<{
   isMobile?: boolean;
+  sessionId?: string | null;
 }>();
 
 // --- 从 Store 获取状态 ---
@@ -86,8 +87,10 @@ const {
 // const popupIsModified = computed(() => popupContent.value !== popupOriginalContent.value);
 
 // --- 弹窗尺寸和拖拽状态 ---
-const popupWidthPx = ref(window.innerWidth * 0.75); // 初始宽度 75vw (像素)
-const popupHeightPx = ref(window.innerHeight * 0.85); // 初始高度 85vh (像素)
+const overlayRootRef = ref<HTMLElement | null>(null);
+const readOverlayWindow = () => overlayRootRef.value?.ownerDocument.defaultView ?? window;
+const popupWidthPx = ref(0);
+const popupHeightPx = ref(0);
 const isResizing = ref(false);
 const startX = ref(0);
 const startY = ref(0);
@@ -95,8 +98,21 @@ const startWidthPx = ref(0);
 const startHeightPx = ref(0);
 const minWidth = 400; // 最小宽度
 const minHeight = 300; // 最小高度
+let activeResizeDocument: Document | null = null;
+let previousResizeCursor = '';
+let previousResizeUserSelect = '';
 const encodingSelectRef = ref<HTMLSelectElement | null>(null); // +++ Ref for the select element +++
 const codeMirrorMobileEditorRef = ref<InstanceType<typeof CodeMirrorMobileEditor> | null>(null); // +++ Ref for CodeMirrorMobileEditor +++
+
+const initializePopupSize = () => {
+    const overlayWindow = readOverlayWindow();
+    if (popupWidthPx.value <= 0) {
+        popupWidthPx.value = overlayWindow.innerWidth * 0.75;
+    }
+    if (popupHeightPx.value <= 0) {
+        popupHeightPx.value = overlayWindow.innerHeight * 0.85;
+    }
+};
 
 // --- 计算属性，用于模板绑定 ---
 const popupStyle = computed(() => {
@@ -128,7 +144,8 @@ const updateSelectWidth = () => {
 
     if (!selectedOption) return;
 
-    const styles = window.getComputedStyle(selectElement);
+    const selectWindow = selectElement.ownerDocument.defaultView ?? window;
+    const styles = selectWindow.getComputedStyle(selectElement);
     const font = `${styles.fontStyle} ${styles.fontVariant} ${styles.fontWeight} ${styles.fontSize} ${styles.fontFamily}`;
     const letterSpacing = Number.parseFloat(styles.letterSpacing);
     const textWidth = measureCachedTextWidth(
@@ -425,18 +442,35 @@ const handleCloseContainer = () => {
     isVisible.value = false;
 };
 
+const shouldHandlePopupForSession = (sessionId: string) => {
+    if (props.sessionId) {
+        return props.sessionId === sessionId;
+    }
+    return !sessionStore.poppedOutSessionIds.includes(sessionId);
+};
+
 
 // --- 拖拽调整大小逻辑 ---
 const startResize = (event: MouseEvent) => {
+    const eventDocument = (event.currentTarget as HTMLElement | null)?.ownerDocument
+        ?? overlayRootRef.value?.ownerDocument
+        ?? document;
+    const eventWindow = eventDocument.defaultView ?? window;
+
     isResizing.value = true;
     startX.value = event.clientX;
     startY.value = event.clientY;
     startWidthPx.value = popupWidthPx.value;
     startHeightPx.value = popupHeightPx.value;
-    document.addEventListener('mousemove', handleResize);
-    document.addEventListener('mouseup', stopResize);
-    document.body.style.cursor = 'nwse-resize'; // 设置拖拽光标
-    document.body.style.userSelect = 'none'; // 禁止拖拽时选中文本
+    activeResizeDocument?.removeEventListener('mousemove', handleResize);
+    activeResizeDocument?.removeEventListener('mouseup', stopResize);
+    activeResizeDocument = eventDocument;
+    previousResizeCursor = eventDocument.body.style.cursor;
+    previousResizeUserSelect = eventDocument.body.style.userSelect;
+    eventDocument.addEventListener('mousemove', handleResize);
+    eventDocument.addEventListener('mouseup', stopResize);
+    eventDocument.body.style.cursor = 'nwse-resize'; // 设置拖拽光标
+    eventDocument.body.style.userSelect = 'none'; // 禁止拖拽时选中文本
 };
 
 const handleResize = (event: MouseEvent) => {
@@ -450,10 +484,13 @@ const handleResize = (event: MouseEvent) => {
 const stopResize = () => {
     if (isResizing.value) {
         isResizing.value = false;
-        document.removeEventListener('mousemove', handleResize);
-        document.removeEventListener('mouseup', stopResize);
-        document.body.style.cursor = ''; // 恢复默认光标
-    document.body.style.userSelect = ''; // 恢复文本选择
+        activeResizeDocument?.removeEventListener('mousemove', handleResize);
+        activeResizeDocument?.removeEventListener('mouseup', stopResize);
+        if (activeResizeDocument) {
+            activeResizeDocument.body.style.cursor = previousResizeCursor;
+            activeResizeDocument.body.style.userSelect = previousResizeUserSelect;
+        }
+        activeResizeDocument = null;
     }
 };
 
@@ -466,9 +503,14 @@ watch(popupTrigger, () => {
     }
 
     const { filePath, sessionId } = popupFileInfo.value;
+    if (!shouldHandlePopupForSession(sessionId)) {
+        isVisible.value = false;
+        return;
+    }
     debugLog(`[FileEditorOverlay] Triggered for file: ${filePath} in session: ${sessionId}`);
 
     isVisible.value = true;
+    nextTick(initializePopupSize);
 
 
 });
@@ -492,7 +534,7 @@ onBeforeUnmount(() => {
 
 <template>
   <!-- 使用本地 isVisible 控制显示 (App.vue 中已有 v-if="showPopupFileEditorBoolean") -->
-  <div v-if="isVisible" class="editor-overlay-backdrop" @click.self="handleCloseContainer"> <!-- 恢复点击背景关闭 -->
+  <div ref="overlayRootRef" v-if="isVisible" class="editor-overlay-backdrop" @click.self="handleCloseContainer"> <!-- 恢复点击背景关闭 -->
     <!-- 编辑器弹窗/容器，应用动态样式 -->
     <div class="editor-popup" :style="popupStyle">
 

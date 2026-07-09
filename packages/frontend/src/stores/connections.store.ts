@@ -5,7 +5,7 @@ import apiClient from '../utils/apiClient'; // 使用统一的 apiClient
 export interface ConnectionInfo {
     id: number;
     name: string;
-    type: 'SSH' | 'RDP' | 'VNC'; // Use uppercase to match backend data
+    type: 'SSH' | 'RDP' | 'VNC' | 'TELNET'; // Use uppercase to match backend data
     host: string;
     port: number;
     username: string;
@@ -248,7 +248,7 @@ export const useConnectionsStore = defineStore('connections', {
         // 更新参数类型以接受新的认证字段
         async addConnection(newConnectionData: {
             name: string;
-            type: 'SSH' | 'RDP' | 'VNC'; // Use uppercase
+            type: 'SSH' | 'RDP' | 'VNC' | 'TELNET'; // Use uppercase
             host: string;
             port: number;
             username: string;
@@ -289,7 +289,7 @@ export const useConnectionsStore = defineStore('connections', {
         // 更新连接 Action
         // 更新参数类型以包含 proxy_id 和 tag_ids
         // Update parameter type to include 'type' and VNC fields
-        async updateConnection(connectionId: number, updatedData: Partial<Omit<ConnectionInfo, 'id' | 'created_at' | 'updated_at' | 'last_connected_at'> & { type?: 'SSH' | 'RDP' | 'VNC'; password?: string; private_key?: string; passphrase?: string; vncPassword?: string; proxy_id?: number | null; proxy_type?: 'proxy' | 'jump' | null; folder_id?: number | null; icon?: string | null; tag_ids?: number[]; jump_chain?: number[] | null; }>) {
+        async updateConnection(connectionId: number, updatedData: Partial<Omit<ConnectionInfo, 'id' | 'created_at' | 'updated_at' | 'last_connected_at'> & { type?: 'SSH' | 'RDP' | 'VNC' | 'TELNET'; password?: string; private_key?: string; passphrase?: string; vncPassword?: string; proxy_id?: number | null; proxy_type?: 'proxy' | 'jump' | null; folder_id?: number | null; icon?: string | null; tag_ids?: number[]; jump_chain?: number[] | null; }>) {
             this.isLoading = true;
             this.error = null;
             try {

@@ -9,8 +9,12 @@ export type PaneName = 'connections' | 'terminal' | 'commandBar' | 'fileManager'
 export interface AppearanceSettings {
   _id?: string; // 通常只有一个文档，ID 固定或不使用
   userId?: string; // 如果需要区分用户设置 (当前假设为全局)
+  uiThemeMode?: 'default' | 'dark'; // 当前 UI 主题模式
   customUiTheme?: string; // UI 主题 (CSS 变量 JSON 字符串)
+  customDarkUiTheme?: string; // 暗黑模式 UI 主题 (CSS 变量 JSON 字符串)
   activeTerminalThemeId?: number | null; // 修改为数字 ID 或 null
+  activeDefaultTerminalThemeId?: number | null; // 默认模式终端主题 ID
+  activeDarkTerminalThemeId?: number | null; // 暗黑模式终端主题 ID
   terminalFontFamily?: string; // 终端字体列表字符串
   terminalFontSize?: number; // 终端字体大小 (px)
   terminalFontSizeMobile?: number; // 移动端终端字体大小 (px)

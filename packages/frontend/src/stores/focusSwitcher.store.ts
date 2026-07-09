@@ -22,10 +22,20 @@ interface FocusSwitcherState {
   sequenceOrder: string[]; // 顺序切换的 ID 列表
   itemConfigs: Record<string, FocusItemConfig>; // 所有项目的配置 (id -> config)
   isConfiguratorVisible: boolean;
+  configuratorSourceDocument: Document | null;
   activateFileManagerSearchTrigger: number;
   activateTerminalSearchTrigger: number;
   // 存储注册的聚焦动作
-  registeredActions: Map<string, Array<() => boolean | Promise<boolean | undefined>>>;
+  registeredActions: Map<string, FocusActionEntry[]>;
+}
+
+interface FocusActionOptions {
+  ownerDocument?: Document;
+}
+
+interface FocusActionEntry {
+  action: () => boolean | Promise<boolean | undefined>;
+  ownerDocument?: Document;
 }
 
 // --- 移除 localStorage Key ---
@@ -49,11 +59,12 @@ export const useFocusSwitcherStore = defineStore('focusSwitcher', () => {
   const sequenceOrder = ref<string[]>([]); // +++ 存储顺序 +++
   const itemConfigs = ref<Record<string, FocusItemConfig>>({}); // +++ 存储所有配置 +++
   const isConfiguratorVisible = ref(false);
+  const configuratorSourceDocument = ref<Document | null>(null);
   const activateFileManagerSearchTrigger = ref(0);
   const activateTerminalSearchTrigger = ref(0);
 
   // 存储注册的聚焦动作 (Map: id -> Array of actions)
-  const registeredActions = ref<Map<string, Array<() => boolean | Promise<boolean | undefined>>>>(new Map());
+  const registeredActions = ref<Map<string, FocusActionEntry[]>>(new Map());
 
   // --- Actions ---
 
@@ -163,8 +174,13 @@ export const useFocusSwitcherStore = defineStore('focusSwitcher', () => {
     // console.log('[FocusSwitcherStore] Triggering FileManager search activation.');
   }
 
-  function toggleConfigurator(visible?: boolean) {
+  function toggleConfigurator(visible?: boolean, sourceDocument?: Document | null) {
     isConfiguratorVisible.value = visible === undefined ? !isConfiguratorVisible.value : visible;
+    if (isConfiguratorVisible.value) {
+      configuratorSourceDocument.value = sourceDocument ?? document;
+    } else {
+      configuratorSourceDocument.value = null;
+    }
     // console.log(`[FocusSwitcherStore] Configurator visibility set to: ${isConfiguratorVisible.value}`);
   }
 
@@ -221,14 +237,22 @@ export const useFocusSwitcherStore = defineStore('focusSwitcher', () => {
 
   // 注册聚焦动作 (添加到 Map 中)
   // 返回一个注销函数，以便组件可以方便地注销自己添加的动作
-  function registerFocusAction(id: string, action: () => boolean | Promise<boolean | undefined>): () => void {
+  function registerFocusAction(
+    id: string,
+    action: () => boolean | Promise<boolean | undefined>,
+    options: FocusActionOptions = {},
+  ): () => void {
     if (!availableInputs.value.some(input => input.id === id)) {
       console.warn(`[FocusSwitcherStore] Attempted to register focus action for unknown ID: ${id}`);
       return () => {}; // 返回一个无操作的注销函数
     }
 
     const actions = registeredActions.value.get(id) || [];
-    actions.push(action);
+    const entry: FocusActionEntry = {
+      action,
+      ownerDocument: options.ownerDocument,
+    };
+    actions.push(entry);
     registeredActions.value.set(id, actions);
     // console.log(`[FocusSwitcherStore] Registered focus action for ID: ${id}. Total actions for this ID: ${actions.length}`);
 
@@ -236,7 +260,7 @@ export const useFocusSwitcherStore = defineStore('focusSwitcher', () => {
     const unregister = () => {
       const currentActions = registeredActions.value.get(id);
       if (currentActions) {
-        const index = currentActions.indexOf(action);
+        const index = currentActions.indexOf(entry);
         if (index > -1) {
           currentActions.splice(index, 1);
           // console.log(`[FocusSwitcherStore] Unregistered a focus action for ID: ${id}. Remaining actions: ${currentActions.length}`);
@@ -260,7 +284,7 @@ export const useFocusSwitcherStore = defineStore('focusSwitcher', () => {
   // }
 
   // 修改：统一的聚焦目标 Action，现在迭代 Map 中的动作数组
-  async function focusTarget(id: string): Promise<boolean> {
+  async function focusTarget(id: string, targetDocument?: Document): Promise<boolean> {
     // console.log(`[FocusSwitcherStore] Attempting to focus target ID: ${id}`);
     const actions = registeredActions.value.get(id);
 
@@ -271,10 +295,14 @@ export const useFocusSwitcherStore = defineStore('focusSwitcher', () => {
 
     // console.log(`[FocusSwitcherStore] Found ${actions.length} action(s) for ID: ${id}. Iterating...`);
 
-    for (const action of actions) {
+    for (const entry of actions) {
+      if (targetDocument && entry.ownerDocument && entry.ownerDocument !== targetDocument) {
+        continue;
+      }
+
       try {
         // 执行动作，可能是同步或异步的
-        const result = await action();
+        const result = await entry.action();
 
         if (result === true) {
           // 如果动作返回 true，表示成功聚焦，停止迭代并返回 true
@@ -400,6 +428,7 @@ export const useFocusSwitcherStore = defineStore('focusSwitcher', () => {
     sequenceOrder, // +++ 暴露新状态 +++
     itemConfigs,   // +++ 暴露新状态 +++
     isConfiguratorVisible,
+    configuratorSourceDocument,
     activateFileManagerSearchTrigger,
     activateTerminalSearchTrigger,
     // Actions

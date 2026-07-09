@@ -9,6 +9,10 @@ import AddConnectionFormComponent from '../components/AddConnectionForm.vue';
 import TerminalTabBar from '../components/TerminalTabBar.vue';
 import LayoutRenderer from '../components/LayoutRenderer.vue';
 import LayoutConfigurator from '../components/LayoutConfigurator.vue';
+import FocusSwitcherConfigurator from '../components/FocusSwitcherConfigurator.vue';
+import FileEditorOverlay from '../components/FileEditorOverlay.vue';
+import UINotificationDisplay from '../components/UINotificationDisplay.vue';
+import ConfirmDialog from '../components/common/ConfirmDialog.vue';
 import Terminal from '../components/Terminal.vue';
 import CommandInputBar from '../components/CommandInputBar.vue'; 
 import VirtualKeyboard from '../components/VirtualKeyboard.vue';
@@ -19,6 +23,8 @@ import { useSettingsStore } from '../stores/settings.store';
 import { useFileEditorStore, type FileTab } from '../stores/fileEditor.store';
 import { useCommandHistoryStore } from '../stores/commandHistory.store';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
+import { useDialogStore } from '../stores/dialog.store';
+import { useFocusSwitcherStore } from '../stores/focusSwitcher.store';
 import i18n from '../i18n';
 import type { Terminal as XtermTerminal } from 'xterm';
 import type { ISearchOptions } from '@xterm/addon-search';
@@ -46,6 +52,8 @@ const layoutStore = useLayoutStore();
 const commandHistoryStore = useCommandHistoryStore();
 const connectionsStore = useConnectionsStore(); 
 const uiNotificationsStore = useUiNotificationsStore();
+const dialogStore = useDialogStore();
+const focusSwitcherStore = useFocusSwitcherStore();
 const { isHeaderVisible } = storeToRefs(layoutStore);
 const { isMobile } = useDeviceDetection();
 
@@ -104,6 +112,7 @@ const visibleActiveSession = computed(() => (
   visibleActiveSessionId.value ? sessionStore.sessions.get(visibleActiveSessionId.value) ?? null : null
 ));
 const isRemoteDesktopSessionKind = (kind?: string) => kind === 'rdp' || kind === 'vnc';
+const isTerminalShellSessionKind = (kind?: string) => kind === 'ssh' || kind === 'telnet';
 const isVisibleActiveSessionRemoteDesktop = computed(() => isRemoteDesktopSessionKind(visibleActiveSession.value?.kind));
 const fullscreenSessionId = ref<string | null>(null);
 const isSessionFullscreenActive = computed(() => fullscreenSessionId.value !== null);
@@ -126,7 +135,7 @@ let cachedTerminalInputManager: SshTerminalInstance | null = null;
 
 const refreshTerminalInputCache = (sessionId: string) => {
   const session = sessionStore.sessions.get(sessionId) ?? null;
-  const manager = session?.kind === 'ssh'
+  const manager = isTerminalShellSessionKind(session?.kind)
     ? (session.terminalManager as SshTerminalInstance | undefined) ?? null
     : null;
   if (
@@ -152,7 +161,7 @@ const readTerminalInputSession = (sessionId: string) => {
 
 const getSshSessionForAction = (sessionId?: string) => {
   const session = sessionId ? sessionStore.sessions.get(sessionId) ?? null : activeSession.value ?? null;
-  return session?.kind === 'ssh' ? session : null;
+  return isTerminalShellSessionKind(session?.kind) ? session : null;
 };
 
 const workspaceSplitAvailable = computed(() => !isMobile.value && visibleSessionTabsWithStatus.value.length > 1);
@@ -185,11 +194,11 @@ const orderedVisibleSessionTabs = computed(() => {
 });
 
 const workspaceSplitSessionIds = computed(() => orderedVisibleSessionTabs.value.map(tab => tab.sessionId));
-const workspaceSplitSshSessionIds = computed(() => (
-  workspaceSplitSessionIds.value.filter(sessionId => sessionStore.sessions.get(sessionId)?.kind === 'ssh')
+const workspaceSplitShellSessionIds = computed(() => (
+  workspaceSplitSessionIds.value.filter(sessionId => isTerminalShellSessionKind(sessionStore.sessions.get(sessionId)?.kind))
 ));
 const isBatchTerminalInputAvailable = computed(() => (
-  isWorkspaceSplitActive.value && workspaceSplitSshSessionIds.value.length > 1
+  isWorkspaceSplitActive.value && workspaceSplitShellSessionIds.value.length > 1
 ));
 
 watch(isBatchTerminalInputAvailable, (available) => {
@@ -263,12 +272,13 @@ const { centerDialog: centerFileManagerModal, startDialogDrag: startFileManagerM
   rootRef: fileManagerModalRootRef,
   dialogRef: fileManagerModalContentRef,
 });
-const fileManagerPropsMap = shallowRef<Map<string, {
+type FileManagerModalProps = {
   sessionId: string;
   instanceId: string;
   dbConnectionId: string;
   wsDeps: WebSocketDependencies;
-}>>(new Map());
+};
+const fileManagerPropsMap = shallowRef<Map<string, FileManagerModalProps>>(new Map());
 const currentFileManagerSessionId = ref<string | null>(null);
 type PoppedOutTerminalState = {
   sessionId: string;
@@ -280,6 +290,8 @@ type PoppedOutTerminalState = {
   closeTimer: number;
   closeHandler: () => void;
   focusHandler: () => void;
+  focusSwitcherKeyDownHandler: (event: KeyboardEvent) => void;
+  focusSwitcherKeyUpHandler: (event: KeyboardEvent) => void;
   resizeHandler: () => void;
   visibilityHandler: () => void;
 };
@@ -387,6 +399,111 @@ const requestRemoteDesktopSessionResize = (sessionElement: HTMLElement) => {
   sessionElement.dispatchEvent(new eventWindow.Event(REMOTE_DESKTOP_RESIZE_EVENT));
 };
 
+const shouldHandleFocusSwitcherHotkeys = () => true;
+
+const registerPopoutFocusSwitcherHotkeys = (popup: Window, sessionId: string) => {
+  const popupDocument = popup.document;
+  let lastFocusedIdBySwitcher: string | null = null;
+  let isAltPressed = false;
+  let altShortcutKey: string | null = null;
+
+  const suppressPlainAltDefault = (event: KeyboardEvent) => {
+    if (!(event.key === 'Alt' || event.altKey) || !shouldHandleFocusSwitcherHotkeys()) return;
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  const focusTargetInPopup = async (targetId: string) => (
+    focusSwitcherStore.focusTarget(targetId, popupDocument)
+  );
+
+  const focusSwitcherKeyDownHandler = async (event: KeyboardEvent) => {
+    suppressPlainAltDefault(event);
+    if (!shouldHandleFocusSwitcherHotkeys()) return;
+
+    if (event.key === 'Alt') {
+      if (event.repeat) return;
+      isAltPressed = true;
+      altShortcutKey = null;
+      return;
+    }
+
+    if (
+      (isAltPressed || (event.altKey && !event.ctrlKey && !event.metaKey))
+      && !['Control', 'Shift', 'Alt', 'Meta'].includes(event.key)
+    ) {
+      let key = event.key;
+      if (key.length === 1) key = key.toUpperCase();
+
+      if (/^[a-zA-Z0-9]$/.test(key)) {
+        isAltPressed = true;
+        altShortcutKey = key;
+        const targetId = focusSwitcherStore.getFocusTargetIdByShortcut(`Alt+${key}`);
+        if (targetId) {
+          event.preventDefault();
+          const success = await focusTargetInPopup(targetId);
+          if (success) {
+            lastFocusedIdBySwitcher = targetId;
+          }
+        }
+      } else {
+        isAltPressed = false;
+        altShortcutKey = null;
+      }
+      return;
+    }
+
+    if (isAltPressed && ['Control', 'Shift', 'Meta'].includes(event.key)) {
+      isAltPressed = false;
+      altShortcutKey = null;
+    }
+  };
+
+  const focusSwitcherKeyUpHandler = async (event: KeyboardEvent) => {
+    suppressPlainAltDefault(event);
+    if (!shouldHandleFocusSwitcherHotkeys() || event.key !== 'Alt') return;
+
+    const altWasPressed = isAltPressed;
+    const triggeredShortcutKey = altShortcutKey;
+    isAltPressed = false;
+    altShortcutKey = null;
+
+    if (!altWasPressed || triggeredShortcutKey !== null) return;
+
+    event.preventDefault();
+    let currentFocusId = lastFocusedIdBySwitcher;
+    if (!currentFocusId) {
+      const activeElement = popupDocument.activeElement as HTMLElement | null;
+      if (activeElement?.hasAttribute('data-focus-id')) {
+        currentFocusId = activeElement.getAttribute('data-focus-id');
+      }
+    }
+
+    const order = focusSwitcherStore.sequenceOrder;
+    for (let i = 0; i < order.length; i += 1) {
+      const nextFocusId = focusSwitcherStore.getNextFocusTargetId(currentFocusId);
+      if (!nextFocusId) break;
+
+      const success = await focusTargetInPopup(nextFocusId);
+      if (success) {
+        lastFocusedIdBySwitcher = nextFocusId;
+        return;
+      }
+      currentFocusId = nextFocusId;
+    }
+
+    lastFocusedIdBySwitcher = null;
+  };
+
+  popup.addEventListener('keydown', focusSwitcherKeyDownHandler, { capture: true });
+  popup.addEventListener('keyup', focusSwitcherKeyUpHandler, { capture: true });
+
+  return {
+    focusSwitcherKeyDownHandler,
+    focusSwitcherKeyUpHandler,
+  };
+};
+
 const rebindXtermRenderWindow = (sessionId: string, targetWindow: Window) => {
   const terminal = getTerminalForSession(sessionId);
   if (!terminal) {
@@ -452,6 +569,8 @@ const restorePoppedOutTerminalElement = (sessionId: string) => {
     state.windowRef.removeEventListener('beforeunload', state.closeHandler);
     state.windowRef.removeEventListener('focus', state.focusHandler);
     state.windowRef.removeEventListener('pageshow', state.focusHandler);
+    state.windowRef.removeEventListener('keydown', state.focusSwitcherKeyDownHandler, { capture: true });
+    state.windowRef.removeEventListener('keyup', state.focusSwitcherKeyUpHandler, { capture: true });
     state.windowRef.removeEventListener('resize', state.resizeHandler);
     state.windowRef.document.removeEventListener('visibilitychange', state.visibilityHandler);
   } catch (error) {
@@ -461,7 +580,7 @@ const restorePoppedOutTerminalElement = (sessionId: string) => {
   if (state.placeholder.parentNode) {
     state.placeholder.parentNode.replaceChild(state.sessionElement, state.placeholder);
   }
-  if (sessionStore.sessions.get(state.sessionId)?.kind === 'ssh') {
+  if (isTerminalShellSessionKind(sessionStore.sessions.get(state.sessionId)?.kind)) {
     rebindXtermRenderWindow(state.sessionId, window);
   }
   if (!state.windowRef.closed) {
@@ -525,7 +644,7 @@ const focusPoppedOutTerminal = (sessionId: string, options: { force?: boolean; r
 };
 
 const focusPoppedOutSession = (sessionId: string, options: { force?: boolean; resize?: boolean } = {}) => {
-  if (sessionStore.sessions.get(sessionId)?.kind === 'ssh') {
+  if (isTerminalShellSessionKind(sessionStore.sessions.get(sessionId)?.kind)) {
     focusPoppedOutTerminal(sessionId, options);
     return;
   }
@@ -548,7 +667,7 @@ const focusPoppedOutSession = (sessionId: string, options: { force?: boolean; re
 
 const requestSessionResize = (sessionId: string) => {
   const session = sessionStore.sessions.get(sessionId);
-  if (session?.kind === 'ssh' || poppedOutTerminalMap.value.has(sessionId)) {
+  if (isTerminalShellSessionKind(session?.kind) || poppedOutTerminalMap.value.has(sessionId)) {
     focusPoppedOutSession(sessionId, { force: true, resize: true });
     return;
   }
@@ -746,7 +865,7 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
   const existingPoppedOutTerminal = poppedOutTerminalMap.value.get(sessionId);
   if (existingPoppedOutTerminal) {
     windowRef?.close();
-    if (sessionStore.sessions.get(sessionId)?.kind === 'ssh') {
+    if (isTerminalShellSessionKind(sessionStore.sessions.get(sessionId)?.kind)) {
       rebindXtermRenderWindow(sessionId, existingPoppedOutTerminal.windowRef);
     }
     focusPoppedOutSession(sessionId, { force: true, resize: true });
@@ -814,9 +933,23 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
       min-height: 0;
       overflow: hidden;
     }
-    .external-session-popout-terminal .layout-renderer-wrapper {
+    .external-session-popout-terminal .popout-workspace-root {
+      position: relative;
+      display: flex;
+      flex-direction: column;
       width: 100%;
       height: 100%;
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .external-session-popout-terminal .layout-renderer-wrapper {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
     }
   `;
   popup.document.head.appendChild(popoutStyle);
@@ -843,18 +976,47 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
         const sessionEditorTabs = computed(() => getEditorTabsForSession(sessionId));
         const sessionActiveEditorTabId = computed(() => getActiveEditorTabIdForSession(sessionId));
 
-        return () => h(LayoutRenderer, {
-          isRootRenderer: !isRemoteDesktopPopout,
-          layoutNode: popoutLayoutTree,
-          activeSessionId: sessionId,
-          includedSessionId: sessionId,
-          externalTerminalSessionId: sessionId,
-          layoutLocked: layoutLockedBoolean.value,
-          class: 'layout-renderer-wrapper',
-          editorTabs: sessionEditorTabs.value,
-          activeEditorTabId: sessionActiveEditorTabId.value,
-          terminalInputHandler: handleTerminalInputData,
-        });
+        return () => h('div', { class: 'popout-workspace-root' }, [
+          h(LayoutRenderer, {
+            isRootRenderer: !isRemoteDesktopPopout,
+            layoutNode: popoutLayoutTree,
+            activeSessionId: sessionId,
+            includedSessionId: sessionId,
+            externalTerminalSessionId: sessionId,
+            layoutLocked: layoutLockedBoolean.value,
+            class: 'layout-renderer-wrapper',
+            editorTabs: sessionEditorTabs.value,
+            activeEditorTabId: sessionActiveEditorTabId.value,
+            terminalInputHandler: handleTerminalInputData,
+          }),
+          h(FileEditorOverlay, {
+            isMobile: isMobile.value,
+            sessionId: sessionId,
+          }),
+          h(UINotificationDisplay),
+          h(FocusSwitcherConfigurator, {
+            isVisible: focusSwitcherStore.isConfiguratorVisible && focusSwitcherStore.configuratorSourceDocument === popup.document,
+            teleportTarget: popup.document.body,
+            onClose: () => focusSwitcherStore.toggleConfigurator(false),
+          }),
+          h(PopoutFileManagerModal, {
+            ownerDocument: popup.document,
+          }),
+          h(ConfirmDialog, {
+            visible: dialogStore.state.visible,
+            title: dialogStore.state.title,
+            message: dialogStore.state.message,
+            confirmText: dialogStore.state.confirmText,
+            cancelText: dialogStore.state.cancelText,
+            isLoading: dialogStore.state.isLoading,
+            teleportTarget: popup.document.body,
+            onConfirm: dialogStore.handleConfirm,
+            onCancel: dialogStore.handleCancel,
+            'onUpdate:visible': (val: boolean) => {
+              dialogStore.state.visible = val;
+            },
+          }),
+        ]);
       },
     });
     if (appContext) {
@@ -888,7 +1050,7 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
   sessionElement.parentNode.replaceChild(placeholder, sessionElement);
   externalTerminalHost.appendChild(sessionElement);
   sessionStore.popOutSession(sessionId);
-  if (sessionStore.sessions.get(sessionId)?.kind === 'ssh') {
+  if (isTerminalShellSessionKind(sessionStore.sessions.get(sessionId)?.kind)) {
     rebindXtermRenderWindow(sessionId, popup);
   }
 
@@ -908,6 +1070,10 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
 
   const closeHandler = () => restorePoppedOutTerminalElement(sessionId);
   const focusHandler = () => focusPoppedOutSession(sessionId, { resize: true });
+  const {
+    focusSwitcherKeyDownHandler,
+    focusSwitcherKeyUpHandler,
+  } = registerPopoutFocusSwitcherHotkeys(popup, sessionId);
   const resizeHandler = () => {
     if (isRemoteDesktopSessionKind(sessionStore.sessions.get(sessionId)?.kind)) {
       requestRemoteDesktopSessionResize(sessionElement);
@@ -929,6 +1095,8 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
     closeTimer,
     closeHandler,
     focusHandler,
+    focusSwitcherKeyDownHandler,
+    focusSwitcherKeyUpHandler,
     resizeHandler,
     visibilityHandler,
   });
@@ -1216,15 +1384,15 @@ const unsubscribeFromWorkspaceEvents = useWorkspaceEventOff();
    }
  };
 
- const handleSingleTerminalInputData = (sessionId: string, data: string, batched?: boolean) => {
+  const handleSingleTerminalInputData = (sessionId: string, data: string, batched?: boolean, localEcho = true) => {
    const manager = readTerminalInputManager(sessionId);
    if (!manager) {
      console.warn(`[WorkspaceView] handleTerminalInput: 未找到会话 ${sessionId} 或其 terminalManager`);
      return;
    }
 
-   if (data !== '\r' || !manager.isSshConnected || manager.isSshConnected.value) {
-     manager.handleTerminalData(data, { batched });
+    if (data !== '\r' || !manager.isSshConnected || manager.isSshConnected.value) {
+      manager.handleTerminalData(data, { batched, localEcho });
      return;
    }
 
@@ -1264,9 +1432,9 @@ const unsubscribeFromWorkspaceEvents = useWorkspaceEventOff();
      return;
    }
 
-   targetSessionIds.forEach(targetSessionId => {
-     handleSingleTerminalInputData(targetSessionId, data, true);
-   });
+    targetSessionIds.forEach(targetSessionId => {
+      handleSingleTerminalInputData(targetSessionId, data, true, targetSessionId === sessionId);
+    });
  };
 
  const handleTerminalInput = (payload: WorkspaceEventPayloads['terminal:input']) => {
@@ -1281,13 +1449,13 @@ const unsubscribeFromWorkspaceEvents = useWorkspaceEventOff();
  // 处理终端就绪 (用于 Terminal)
  // 注意：LayoutRenderer 内部的 Terminal 组件需要 emit('terminal-ready', payload)
  // *** 修正：更新 payload 类型以包含 searchAddon ***
- const handleTerminalReady = (payload: { sessionId: string; terminal: XtermTerminal; searchAddon: any | null }) => { // --- 使用重命名的 XtermTerminal ---
+ const handleTerminalReady = (payload: { sessionId: string; terminal: XtermTerminal; searchAddon?: any | null; ensureSearchAddonLoaded?: () => any }) => { // --- 使用重命名的 XtermTerminal ---
    debugLog(`[工作区视图 ${payload.sessionId}] 收到 terminal-ready 事件。Payload:`, payload);
     // *** 检查 payload 中 searchAddon 是否存在 ***
-    if (payload && payload.searchAddon) {
-        debugLog(`[工作区视图 ${payload.sessionId}] Payload 包含 searchAddon 实例。`);
+    if (payload?.searchAddon || payload?.ensureSearchAddonLoaded) {
+        debugLog(`[工作区视图 ${payload.sessionId}] Payload 包含搜索插件实例或按需加载函数。`);
    } else {
-        console.warn(`[工作区视图 ${payload.sessionId}] Payload 未包含 searchAddon 实例！ Payload:`, payload);
+        console.warn(`[工作区视图 ${payload.sessionId}] Payload 未包含搜索插件加载能力！ Payload:`, payload);
     }
     // *** 修正：传递包含 terminal 和 searchAddon 的完整 payload ***
     getSshSessionForAction(payload.sessionId)?.terminalManager.handleTerminalReady(payload);
@@ -1573,14 +1741,12 @@ const toggleVirtualKeyboard = () => {
    tabsToClose.forEach(id => handleCloseEditorTab(id));
  };
 
-// --- 文件管理器模态框处理 ---
-const handleFileManagerOpenRequest = (payload: { sessionId: string }) => {
-  const { sessionId } = payload;
+const readFileManagerModalProps = (sessionId: string, existingProps?: FileManagerModalProps): FileManagerModalProps | null => {
   const session = getSshSessionForAction(sessionId);
   if (!session) {
     console.error(`[WorkspaceView] Cannot open file manager: Session ${sessionId} not found.`);
     // TODO: Show error notification
-    return;
+    return null;
   }
 
   // 1. 获取 dbConnectionId
@@ -1588,18 +1754,19 @@ const handleFileManagerOpenRequest = (payload: { sessionId: string }) => {
   if (!dbConnectionId) {
     console.error(`[WorkspaceView] Cannot open file manager: Missing dbConnectionId for session ${sessionId}.`);
     // TODO: Show error notification
-    return;
+    return null;
   }
 
   // 2. 获取 wsDeps (从 session.wsManager 获取)
   if (!session.wsManager) {
      console.error(`[WorkspaceView] Cannot open file manager: wsManager not found for session ${sessionId}.`);
       // TODO: Show error notification
-      return;
+      return null;
   }
   const wsDeps: WebSocketDependencies = {
       sendMessage: session.wsManager.sendMessage,
       onMessage: session.wsManager.onMessage,
+      getBufferedAmount: session.wsManager.getBufferedAmount,
       isConnected: session.wsManager.isConnected,
       isSftpReady: session.wsManager.isSftpReady,
   };
@@ -1607,20 +1774,119 @@ const handleFileManagerOpenRequest = (payload: { sessionId: string }) => {
   if (!wsDeps) {
       // 如果 wsDeps 仍然为 null，则无法继续
      console.error(`[WorkspaceView] Cannot open file manager: wsDeps are null after attempting retrieval for session ${sessionId}.`);
-      return;
+      return null;
   }
 
   // 3. 生成或获取 instanceId
-  const currentProps = fileManagerPropsMap.value.get(sessionId);
-  const instanceId = currentProps ? currentProps.instanceId : `fm-modal-${sessionId}`;
+  const instanceId = existingProps ? existingProps.instanceId : `fm-modal-${sessionId}`;
 
-  // 4. 设置 props 并显示模态框
-  const newProps = {
+  return {
     sessionId,
     instanceId,
     dbConnectionId: String(dbConnectionId), // 确保是 string
     wsDeps,
   };
+};
+
+const PopoutFileManagerModal = {
+  name: 'PopoutFileManagerModal',
+  props: {
+    ownerDocument: {
+      type: Object as PropType<Document>,
+      required: true,
+    },
+  },
+  setup(props: { ownerDocument: Document }) {
+    const isVisible = ref(false);
+    const modalRootRef = ref<HTMLElement | null>(null);
+    const modalContentRef = ref<HTMLElement | null>(null);
+    const propsMap = shallowRef<Map<string, FileManagerModalProps>>(new Map());
+    const currentSessionId = ref<string | null>(null);
+    const { centerDialog, startDialogDrag } = useDraggableDialog({
+      rootRef: modalRootRef,
+      dialogRef: modalContentRef,
+    });
+
+    const openModal = (payload: WorkspaceEventPayloads['fileManager:openModalRequest']) => {
+      if (payload.sourceDocument && payload.sourceDocument !== props.ownerDocument) return;
+
+      const nextProps = readFileManagerModalProps(payload.sessionId, propsMap.value.get(payload.sessionId));
+      if (!nextProps) return;
+
+      propsMap.value.set(payload.sessionId, nextProps);
+      currentSessionId.value = payload.sessionId;
+      isVisible.value = true;
+      centerDialog();
+    };
+
+    const closeModal = () => {
+      isVisible.value = false;
+    };
+
+    onMounted(() => {
+      subscribeToWorkspaceEvents('fileManager:openModalRequest', openModal);
+    });
+
+    onBeforeUnmount(() => {
+      unsubscribeFromWorkspaceEvents('fileManager:openModalRequest', openModal);
+    });
+
+    return () => {
+      const activeSessionId = currentSessionId.value;
+      const activeProps = activeSessionId ? propsMap.value.get(activeSessionId) : null;
+      if (!isVisible.value || !activeSessionId || !activeProps) return null;
+
+      const sessionName = sessionStore.sessions.get(activeSessionId)?.connectionName || activeSessionId;
+      return h('div', {
+        ref: modalRootRef,
+        class: 'file-manager-modal-root fixed inset-0 flex items-center justify-center z-50 p-4',
+        style: { backgroundColor: 'var(--overlay-bg-color)' },
+        onClick: (event: MouseEvent) => {
+          if (event.target === event.currentTarget) closeModal();
+        },
+      }, [
+        h('div', {
+          ref: modalContentRef,
+          class: 'file-manager-modal-content bg-background rounded-lg shadow-xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden border border-border',
+        }, [
+          h('div', {
+            class: 'flex justify-between items-center p-3 border-b border-border flex-shrink-0 bg-header cursor-move select-none',
+            onPointerdown: startDialogDrag,
+          }, [
+            h('h2', { class: 'text-lg font-semibold text-foreground' }, `${t('fileManager.modalTitle', '文件管理器')} (${sessionName})`),
+            h('button', {
+              class: 'text-text-secondary hover:text-foreground transition-colors',
+              onPointerdown: (event: PointerEvent) => event.stopPropagation(),
+              onClick: closeModal,
+            }, [
+              h('i', { class: 'fas fa-times text-xl' }),
+            ]),
+          ]),
+          h('div', { class: 'file-manager-modal-body flex-grow overflow-hidden' }, [
+            h(FileManager, {
+              sessionId: activeProps.sessionId,
+              instanceId: activeProps.instanceId,
+              dbConnectionId: activeProps.dbConnectionId,
+              wsDeps: activeProps.wsDeps,
+              isMobile: isMobile.value,
+              class: 'h-full',
+            }),
+          ]),
+        ]),
+      ]);
+    };
+  },
+};
+
+// --- 文件管理器模态框处理 ---
+const handleFileManagerOpenRequest = (payload: WorkspaceEventPayloads['fileManager:openModalRequest']) => {
+  const ownerDocument = workspaceRootRef.value?.ownerDocument ?? document;
+  if (payload.sourceDocument && payload.sourceDocument !== ownerDocument) return;
+
+  const { sessionId } = payload;
+  const newProps = readFileManagerModalProps(sessionId, fileManagerPropsMap.value.get(sessionId));
+  if (!newProps) return;
+
   fileManagerPropsMap.value.set(sessionId, newProps);
   currentFileManagerSessionId.value = sessionId;
   showFileManagerModal.value = true;
@@ -1738,6 +2004,7 @@ const closeFileManagerModal = () => {
         v-show="isVirtualKeyboardVisible"
         class="mobile-virtual-keyboard"
         @send-key="handleVirtualKeyPress"
+        @hide="isVirtualKeyboardVisible = false"
       />
     </template>
 
@@ -1759,15 +2026,15 @@ const closeFileManagerModal = () => {
     <!-- VNC Modal is now rendered in App.vue -->
 
     <!-- FileManager Modal Container -->
-    <div ref="fileManagerModalRootRef" v-show="showFileManagerModal && currentFileManagerSessionId && fileManagerPropsMap.get(currentFileManagerSessionId)" class="fixed inset-0 flex items-center justify-center z-50 p-4" :style="{ backgroundColor: 'var(--overlay-bg-color)' }" @click.self="closeFileManagerModal">
-      <div ref="fileManagerModalContentRef" class="bg-background rounded-lg shadow-xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden border border-border">
+    <div ref="fileManagerModalRootRef" v-show="showFileManagerModal && currentFileManagerSessionId && fileManagerPropsMap.get(currentFileManagerSessionId)" class="file-manager-modal-root fixed inset-0 flex items-center justify-center z-50 p-4" :style="{ backgroundColor: 'var(--overlay-bg-color)' }" @click.self="closeFileManagerModal">
+      <div ref="fileManagerModalContentRef" class="file-manager-modal-content bg-background rounded-lg shadow-xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden border border-border">
         <div class="flex justify-between items-center p-3 border-b border-border flex-shrink-0 bg-header cursor-move select-none" @pointerdown="startFileManagerModalDrag">
           <h2 class="text-lg font-semibold text-foreground">{{ t('fileManager.modalTitle', '文件管理器') }} ({{ currentFileManagerSessionId ? (sessionStore.sessions.get(currentFileManagerSessionId)?.connectionName || currentFileManagerSessionId) : '未知会话' }})</h2>
           <button @pointerdown.stop @click="closeFileManagerModal" class="text-text-secondary hover:text-foreground transition-colors">
             <i class="fas fa-times text-xl"></i>
           </button>
         </div>
-        <div class="flex-grow overflow-hidden">
+        <div class="file-manager-modal-body flex-grow overflow-hidden">
           <template v-for="propsData in fileManagerPropsMap.values()" :key="`${propsData.sessionId}-${isMobile}`">
             <div v-show="propsData.sessionId === currentFileManagerSessionId" class="h-full">
               <FileManager
@@ -1809,13 +2076,21 @@ const closeFileManagerModal = () => {
   overflow: hidden;
 }
 
+.file-manager-modal-content {
+  max-width: min(56rem, calc(100vw - 2rem));
+}
+
+.file-manager-modal-body {
+  min-width: 0;
+}
+
 .main-content-area {
     display: flex;
     flex: 1;
     min-height: 0;
     min-width: 0;
     overflow: hidden; /* Keep overflow hidden */
-    border: 1px solid var(--border-color, #ccc); /* Use variable for border */
+    border: 0px solid var(--border-color, #ccc); /* Use variable for border */
     border-top: none; /* Remove top border as it's handled by the tab bar */
     border-radius: 0 0 5px 5px; /* Top-left, Top-right, Bottom-right, Bottom-left */
     margin: var(--base-margin, 0.5rem); /* Add some margin around the content area */
@@ -1857,6 +2132,7 @@ const closeFileManagerModal = () => {
   /* Ensure flex column layout */
   display: flex; /* Uncommented */
   flex-direction: column; /* Uncommented */
+  --mobile-virtual-keyboard-height: min(42dvh, 19.5rem);
   /* Height is already handled by .workspace-view and .with-header */
 }
 
@@ -1892,8 +2168,27 @@ const closeFileManagerModal = () => {
 .mobile-virtual-keyboard {
   flex-shrink: 0; /* 防止虚拟键盘缩小 */
   width: 100%; /* 确保宽度为 100% */
+  height: var(--mobile-virtual-keyboard-height);
+  max-height: var(--mobile-virtual-keyboard-height);
   box-sizing: border-box; /* 边框和内边距包含在宽度内 */
   /* 可以添加更多样式，例如背景色、边框等 */
+}
+
+@media (max-width: 768px) {
+  .file-manager-modal-root {
+    padding: 0.5rem;
+  }
+
+  .file-manager-modal-content {
+    width: min(100%, calc(100dvw - 2rem));
+    max-width: calc(100dvw - 2rem);
+    height: min(85dvh, calc(100dvh - 2rem));
+    max-height: calc(100dvh - 2rem);
+  }
+
+  .file-manager-modal-body {
+    overflow-x: auto;
+  }
 }
 
 

@@ -11,6 +11,7 @@ import { debugLog, debugLogLazy } from './useDebugLog';
 export interface WebSocketDependencies {
     sendMessage: (message: WebSocketMessage) => void;
     onMessage: (type: string, handler: MessageHandler) => () => void;
+    getBufferedAmount?: () => number;
     isConnected: ComputedRef<boolean>;
     isSftpReady: Readonly<Ref<boolean>>;
 }

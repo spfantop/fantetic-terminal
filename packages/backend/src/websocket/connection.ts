@@ -75,6 +75,12 @@ import {
     handleSftpUploadChunk,
     handleSftpUploadCancel
 } from './handlers/sftp.handler';
+import {
+    handleTelnetConnect,
+    handleTelnetInput,
+    handleTelnetResize,
+    handleTelnetDisconnect
+} from '../telnet/telnet.handler';
 
 export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendService: SshSuspendService, sftpService: SftpService): void { // +++ Add sftpService parameter +++
     wss.on('connection', (ws: AuthenticatedWebSocket, request: Request) => {
@@ -157,6 +163,18 @@ export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendServ
                 void (async () => {
                     try {
                         switch (type) {
+                            case 'client:ping':
+                                if (ws.readyState === WebSocket.OPEN) {
+                                    ws.send(JSON.stringify({
+                                        type: 'client:pong',
+                                        payload: {
+                                            ...(payload && typeof payload === 'object' ? payload : {}),
+                                            serverAt: Date.now(),
+                                        },
+                                    }));
+                                }
+                                break;
+
                             // SSH Cases
                             case 'ssh:connect':
                                 // Pass the original Express request object for IP and session
@@ -167,6 +185,19 @@ export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendServ
                                 break;
                             case 'ssh:resize':
                                 handleSshResize(ws, payload);
+                                break;
+
+                            case 'telnet:connect':
+                                await handleTelnetConnect(ws, payload, request as any);
+                                break;
+                            case 'telnet:input':
+                                handleTelnetInput(ws, payload);
+                                break;
+                            case 'telnet:resize':
+                                handleTelnetResize(ws, payload);
+                                break;
+                            case 'telnet:disconnect':
+                                handleTelnetDisconnect(ws, payload);
                                 break;
 
                             // Docker Cases
