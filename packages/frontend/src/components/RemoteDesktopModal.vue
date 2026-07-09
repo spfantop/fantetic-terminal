@@ -41,6 +41,9 @@ const mouse = ref<any | null>(null);
 const desiredModalWidth = ref(1064);
 const desiredModalHeight = ref(858);
 
+const readRdpDisplayWindow = () => rdpContainerRef.value?.ownerDocument.defaultView ?? window;
+const readRdpDisplayClipboard = () => readRdpDisplayWindow().navigator.clipboard;
+
 const tempInputWidth = ref<number | string>(desiredModalWidth.value);
 const tempInputHeight = ref<number | string>(desiredModalHeight.value);
 
@@ -193,7 +196,7 @@ const handleConnection = async () => {
 };
 
 const waitForAnimationFrame = () => new Promise<void>((resolve) => {
-  window.requestAnimationFrame(() => resolve());
+  readRdpDisplayWindow().requestAnimationFrame(() => resolve());
 });
 
 const measureRdpDisplaySize = () => {
@@ -225,7 +228,7 @@ const trySyncClipboardOnDisplayFocus = async () => {
     return;
   }
   try {
-    const currentClipboardText = await navigator.clipboard.readText();
+    const currentClipboardText = await readRdpDisplayClipboard().readText();
     if (currentClipboardText && guacClient.value) {
       // @ts-ignore
       const stream = guacClient.value.createClipboardStream('text/plain');
@@ -252,7 +255,7 @@ const setupInputListeners = () => {
 
         // 添加点击事件监听器以处理失焦逻辑
         const handleRdpDisplayClick = () => {
-          const activeElement = document.activeElement as HTMLElement;
+          const activeElement = displayEl.ownerDocument.activeElement as HTMLElement;
           // 检查活动元素是否是宽度或高度输入框
           if (activeElement && (activeElement.id === 'modal-width' || activeElement.id === 'modal-height')) {
             activeElement.blur();
@@ -341,7 +344,7 @@ const setupInputListeners = () => {
             };
             reader.onend = async () => {
               try {
-                await navigator.clipboard.writeText(text);
+                await readRdpDisplayClipboard().writeText(text);
                 debugLog('[RemoteDesktopModal] Received clipboard from RDP and wrote to host:', text.substring(0, 50) + (text.length > 50 ? '...' : ''));
               } catch (err) {
                 console.warn('[RemoteDesktopModal] Could not write to host clipboard:', err);

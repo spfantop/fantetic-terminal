@@ -131,9 +131,13 @@ const pathInputRef = ref<HTMLInputElement | null>(null);
 const editablePath = ref('');
 const fileListContainerRef = ref<HTMLDivElement | null>(null); // 文件列表容器引用
 const dropOverlayRef = ref<HTMLDivElement | null>(null); // +++ 拖拽蒙版引用 +++
+let activePathInputDocument: Document | null = null;
+let activeResizeDocument: Document | null = null;
 const contextMenuTeleportTarget = computed(() => fileListContainerRef.value?.ownerDocument.body ?? 'body');
 const readFileManagerDocument = () => fileListContainerRef.value?.ownerDocument ?? document;
 const readFileManagerWindow = () => readFileManagerDocument().defaultView ?? window;
+const readFileManagerClipboard = () => readFileManagerWindow().navigator.clipboard;
+const readColumnResizeWindow = () => activeResizeDocument?.defaultView ?? readFileManagerWindow();
 
 // +++ Favorite Paths Modal State +++
 const showFavoritePathsModal = ref(false);
@@ -930,7 +934,7 @@ const handleCopyPath = async (item: FileListItem) => {
   if (!currentSftpManager.value) return;
   const fullPath = currentSftpManager.value.joinPath(currentSftpManager.value.currentPath.value, item.filename);
   try {
-    await navigator.clipboard.writeText(fullPath);
+    await readFileManagerClipboard().writeText(fullPath);
     // 可选：显示成功通知
     debugLog(`[FileManager ${props.sessionId}-${props.instanceId}] Copied path to clipboard: ${fullPath}`);
     uiNotificationsStore.showSuccess(t('fileManager.notifications.pathCopied', 'Path copied to clipboard'));
@@ -1274,7 +1278,8 @@ onMounted(() => {
      }
   };
   unregisterPathFocusAction = focusSwitcherStore.registerFocusAction('fileManagerPathInput', focusPathActionWrapper, { ownerDocument: readFileManagerDocument() });
-  document.addEventListener('click', handleClickOutsidePathInput);
+  activePathInputDocument = readFileManagerDocument();
+  activePathInputDocument.addEventListener('click', handleClickOutsidePathInput);
 });
 
 onBeforeUnmount(() => {
@@ -1291,11 +1296,16 @@ onBeforeUnmount(() => {
    debugLog(`[FileManager ${props.sessionId}-${props.instanceId}] Unregistered path edit focus action on unmount.`);
   }
   unregisterPathFocusAction = null;
-  document.removeEventListener('click', handleClickOutsidePathInput);
-  document.removeEventListener('mousemove', handleResize);
-  document.removeEventListener('mouseup', stopResize);
+  activePathInputDocument?.removeEventListener('click', handleClickOutsidePathInput);
+  activePathInputDocument = null;
+  activeResizeDocument?.removeEventListener('mousemove', handleResize);
+  activeResizeDocument?.removeEventListener('mouseup', stopResize);
+  if (activeResizeDocument) {
+      activeResizeDocument.body.style.cursor = '';
+      activeResizeDocument.body.style.userSelect = '';
+  }
   if (columnResizeFrameId !== null) {
-      window.cancelAnimationFrame(columnResizeFrameId);
+      readColumnResizeWindow().cancelAnimationFrame(columnResizeFrameId);
       columnResizeFrameId = null;
   }
   pendingColumnResize = null;
@@ -1339,12 +1349,12 @@ const scheduleColumnResize = (key: keyof typeof colWidths.value, width: number) 
     pendingColumnResize = { key, width };
     if (columnResizeFrameId !== null) return;
 
-    columnResizeFrameId = window.requestAnimationFrame(applyPendingColumnResize);
+    columnResizeFrameId = readColumnResizeWindow().requestAnimationFrame(applyPendingColumnResize);
 };
 
 const flushPendingColumnResize = () => {
     if (columnResizeFrameId !== null) {
-        window.cancelAnimationFrame(columnResizeFrameId);
+        readColumnResizeWindow().cancelAnimationFrame(columnResizeFrameId);
         columnResizeFrameId = null;
     }
     applyPendingColumnResize();
@@ -1363,10 +1373,13 @@ const startResize = (event: MouseEvent, index: number) => {
         const thElement = (event.target as HTMLElement).closest('th');
         startWidth.value = thElement?.offsetWidth ?? 100;
     }
-    document.addEventListener('mousemove', handleResize);
-    document.addEventListener('mouseup', stopResize);
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
+    activeResizeDocument?.removeEventListener('mousemove', handleResize);
+    activeResizeDocument?.removeEventListener('mouseup', stopResize);
+    activeResizeDocument = (event.target as Node | null)?.ownerDocument ?? readFileManagerDocument();
+    activeResizeDocument.addEventListener('mousemove', handleResize);
+    activeResizeDocument.addEventListener('mouseup', stopResize);
+    activeResizeDocument.body.style.cursor = 'col-resize';
+    activeResizeDocument.body.style.userSelect = 'none';
 };
 
 const handleResize = (event: MouseEvent) => {
@@ -1385,10 +1398,13 @@ const stopResize = () => {
         flushPendingColumnResize();
         isResizing.value = false;
         resizingColumnIndex.value = -1;
-        document.removeEventListener('mousemove', handleResize);
-        document.removeEventListener('mouseup', stopResize);
-        document.body.style.cursor = '';
-        document.body.style.userSelect = '';
+        activeResizeDocument?.removeEventListener('mousemove', handleResize);
+        activeResizeDocument?.removeEventListener('mouseup', stopResize);
+        if (activeResizeDocument) {
+            activeResizeDocument.body.style.cursor = '';
+            activeResizeDocument.body.style.userSelect = '';
+        }
+        activeResizeDocument = null;
         // +++ 在调整结束后保存列宽 +++
         // +++ 日志：记录触发保存 +++
         debugLog(`[FileManager ${props.sessionId}-${props.instanceId}] stopResize triggered saveLayoutSettings.`);
@@ -1517,8 +1533,8 @@ const handlePathInput = async (event?: Event | FocusEvent) => {
     }
 
     if (event && event.type === 'blur') {
-      setTimeout(() => {
-        const activeEl = document.activeElement;
+      readFileManagerWindow().setTimeout(() => {
+        const activeEl = readFileManagerDocument().activeElement;
         const dropdownEl = pathHistoryDropdownRef.value?.$el;
         if (dropdownEl && dropdownEl.contains(activeEl)) {
           // Focus is within the dropdown, do nothing yet

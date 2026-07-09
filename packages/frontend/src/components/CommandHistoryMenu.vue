@@ -56,6 +56,9 @@ const { t } = useI18n();
 const { showConfirmDialog } = useConfirmDialog();
 const hoveredItemId = ref<number | null>(null);
 const listContainer = ref<HTMLElement | null>(null);
+const readCommandHistoryMenuDocument = () => listContainer.value?.ownerDocument ?? document;
+const readCommandHistoryMenuWindow = () => readCommandHistoryMenuDocument().defaultView ?? window;
+const readCommandHistoryMenuClipboard = () => readCommandHistoryMenuWindow().navigator.clipboard;
 
 // --- 从 Store 获取状态和 Getter ---
 const searchTerm = computed(() => commandHistoryStore.searchTerm);
@@ -94,7 +97,7 @@ const confirmClearAll = async () => { // 注意 async，并替换为实际函数
 // 复制命令到剪贴板
 const copyCommand = async (command: string) => {
   try {
-    await navigator.clipboard.writeText(command);
+    await readCommandHistoryMenuClipboard().writeText(command);
     // 可以选择性地显示一个复制成功的提示
     uiNotificationsStore.showSuccess(t('commandHistory.copied', '已复制到剪贴板')); // 使用独立的 uiNotificationsStore
   } catch (err) {

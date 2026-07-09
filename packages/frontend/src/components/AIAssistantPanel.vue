@@ -27,6 +27,7 @@ const emitWorkspaceEvent = useWorkspaceEventEmitter();
 const { activeSessionId } = storeToRefs(sessionStore);
 const { updateSessionCommandInput } = sessionStore;
 
+const assistantRootRef = ref<HTMLElement | null>(null);
 const inputRef = ref<HTMLTextAreaElement | null>(null);
 const chatContainerRef = ref<HTMLElement | null>(null);
 const inputMessage = ref('');
@@ -91,6 +92,9 @@ const formatTime = (date: Date) => date.toLocaleTimeString([], { hour: '2-digit'
 const readLastCommand = (conversationMessages: readonly AssistantMessage[]) => (
   [...conversationMessages].reverse().find(message => message.command)?.command || ''
 );
+
+const readAssistantWindow = () => assistantRootRef.value?.ownerDocument.defaultView ?? window;
+const readAssistantClipboard = () => readAssistantWindow().navigator.clipboard;
 
 const createId = (prefix: string) => `${Date.now()}-${prefix}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -221,7 +225,7 @@ const executeCommand = (command: string) => {
 };
 
 const copyCommand = async (command: string) => {
-  await navigator.clipboard?.writeText(command);
+  await readAssistantClipboard()?.writeText(command);
 };
 
 const startNewSession = () => {
@@ -249,7 +253,7 @@ watch(() => messages.value.length, scrollToBottom);
 </script>
 
 <template>
-  <section class="ai-assistant-panel relative flex h-full min-h-0 flex-col bg-background text-foreground">
+  <section ref="assistantRootRef" class="ai-assistant-panel relative flex h-full min-h-0 flex-col bg-background text-foreground">
     <header class="flex items-center justify-between gap-2 border-b border-border bg-header px-3 py-2">
       <div class="flex min-w-0 items-center gap-2">
         <i class="fas fa-robot text-primary"></i>

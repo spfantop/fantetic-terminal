@@ -50,6 +50,7 @@ let resizeObserver: ResizeObserver | null = null;
 let observedElement: HTMLElement | null = null; // +++ Store the observed element +++
 let selectionListenerDisposable: IDisposable | null = null; // +++ 提升声明并添加类型 +++
 let resizeAnimationFrameId: number | null = null;
+let resizeAnimationFrameWindow: Window | null = null;
 let pendingFitOptions: { forceFit: boolean; forceResizeEmit: boolean; pixelSize?: TerminalPixelSize } = { forceFit: false, forceResizeEmit: false };
 let resizeEmitTimer: number | null = null;
 let pendingResizeDimensions: TerminalDimensions | null = null;
@@ -63,6 +64,7 @@ let resizeTransactionDepth = 0;
 let hasDeferredFitDuringResize = false;
 let resizeTransactionSettleTimer: number | null = null;
 let zoomPopupHideTimer: number | null = null;
+let terminalClipboardKeydownTargets: HTMLElement[] = [];
 const RESIZE_THRESHOLD = 0.5; // px
 const RESIZE_EMIT_DELAY = 150;
 const STABILIZED_RESIZE_DELAY = 150;
@@ -203,6 +205,10 @@ const readTerminalCore = (): XtermInternalCore | null => {
   return (terminal as unknown as { _core?: XtermInternalCore })._core ?? null;
 };
 
+const readTerminalDocument = () => terminalRef.value?.ownerDocument ?? document;
+const readTerminalWindow = () => readTerminalDocument().defaultView ?? window;
+const readTerminalClipboard = () => readTerminalWindow().navigator.clipboard;
+
 const invalidateTerminalFitMetrics = () => {
   cachedFitMetrics = null;
 };
@@ -216,7 +222,8 @@ const refreshTerminalFitMetrics = (): TerminalFitMetrics | null => {
   const cellHeight = Number(cell?.height ?? 0);
   if (cellWidth <= 0 || cellHeight <= 0) return null;
 
-  const elementStyle = window.getComputedStyle(terminal.element);
+  const terminalWindow = terminal.element.ownerDocument.defaultView ?? readTerminalWindow();
+  const elementStyle = terminalWindow.getComputedStyle(terminal.element);
   const paddingHorizontal = readCssPixelValue(elementStyle, 'padding-left') + readCssPixelValue(elementStyle, 'padding-right');
   const paddingVertical = readCssPixelValue(elementStyle, 'padding-top') + readCssPixelValue(elementStyle, 'padding-bottom');
   const scrollbarWidth = terminal.options.scrollback === 0 ? 0 : Math.max(0, core?.viewport?.scrollBarWidth ?? 0);
@@ -374,8 +381,10 @@ const scheduleTerminalFit = (options: { forceFit?: boolean; forceResizeEmit?: bo
 
   if (resizeAnimationFrameId !== null) return;
 
-  resizeAnimationFrameId = window.requestAnimationFrame(() => {
+  resizeAnimationFrameWindow = readTerminalWindow();
+  resizeAnimationFrameId = resizeAnimationFrameWindow.requestAnimationFrame(() => {
     resizeAnimationFrameId = null;
+    resizeAnimationFrameWindow = null;
     const nextOptions = { ...pendingFitOptions };
     pendingFitOptions = { forceFit: false, forceResizeEmit: false };
     fitTerminalToContainer(nextOptions);
@@ -541,8 +550,9 @@ const handleTerminalWheel = (event: WheelEvent) => {
 // --- 右键粘贴功能 ---
 const handleContextMenuPaste = async (event: MouseEvent) => {
   event.preventDefault(); // 阻止默认右键菜单
+  event.stopPropagation();
   try {
-    const text = await navigator.clipboard.readText();
+    const text = await readTerminalClipboard()?.readText();
     if (text && terminal) {
       const processedText = text.replace(/\r\n?/g, '\n');
       emitTerminalInput(processedText);
@@ -554,14 +564,72 @@ const handleContextMenuPaste = async (event: MouseEvent) => {
 
 const addContextMenuListener = () => {
   if (terminalRef.value) {
-    terminalRef.value.addEventListener('contextmenu', handleContextMenuPaste);
+    terminalRef.value.addEventListener('contextmenu', handleContextMenuPaste, { capture: true });
   }
 };
 
 const removeContextMenuListener = () => {
   if (terminalRef.value) {
-    terminalRef.value.removeEventListener('contextmenu', handleContextMenuPaste);
+    terminalRef.value.removeEventListener('contextmenu', handleContextMenuPaste, { capture: true });
   }
+};
+
+const terminalClipboardKeyDownHandler = async (event: KeyboardEvent) => {
+  if (!event.ctrlKey || !event.shiftKey) return;
+
+  // Ctrl+Shift+C copies the current xterm selection.
+  if (event.code === 'KeyC') {
+    event.preventDefault();
+    event.stopPropagation();
+    const selection = terminal?.getSelection();
+    if (!selection) return;
+
+    try {
+      await readTerminalClipboard()?.writeText(selection);
+      debugLog('[Terminal] Copied via Ctrl+Shift+C:', selection);
+    } catch (err) {
+      console.error('[Terminal] Failed to copy via Ctrl+Shift+C:', err);
+    }
+    return;
+  }
+
+  // Ctrl+Shift+V pastes clipboard text into the active terminal session.
+  if (event.code === 'KeyV') {
+    event.preventDefault();
+    event.stopPropagation();
+    try {
+      const text = await readTerminalClipboard()?.readText();
+      if (text) {
+        const processedText = text.replace(/\r\n?/g, '\n');
+        emitTerminalInput(processedText);
+      }
+    } catch (err) {
+      console.error('[Terminal] Failed to paste via Ctrl+Shift+V:', err);
+    }
+  }
+};
+
+const addTerminalClipboardKeydownListener = () => {
+  removeTerminalClipboardKeydownListener();
+  const nextTargets: HTMLElement[] = [];
+
+  if (terminal?.textarea) {
+    terminal.textarea.addEventListener('keydown', terminalClipboardKeyDownHandler, { capture: true });
+    nextTargets.push(terminal.textarea);
+  }
+  if (terminalRef.value && terminalRef.value !== terminal?.textarea) {
+    terminalRef.value.addEventListener('keydown', terminalClipboardKeyDownHandler, { capture: true });
+    nextTargets.push(terminalRef.value);
+  }
+
+  terminalClipboardKeydownTargets = nextTargets;
+};
+
+const removeTerminalClipboardKeydownListener = () => {
+  terminalClipboardKeydownTargets.forEach((target) => {
+    target.removeEventListener('keydown', terminalClipboardKeyDownHandler, { capture: true });
+  });
+  terminalClipboardKeydownTargets = [];
 };
 
 
@@ -767,7 +835,9 @@ onMounted(() => {
             // 仅在选区内容发生变化且不为空时执行复制
             if (newSelection && newSelection !== currentSelection) {
                 currentSelection = newSelection;
-                navigator.clipboard.writeText(newSelection).then(() => {
+                const clipboard = readTerminalClipboard();
+                if (!clipboard) return;
+                clipboard.writeText(newSelection).then(() => {
                 }).catch(err => {
                     console.error('[Terminal] 自动复制到剪贴板失败:', err);
                     // 可以在这里向用户显示一个短暂的错误提示
@@ -862,41 +932,7 @@ onMounted(() => {
     }
 
     // --- 添加 Ctrl+Shift+C/V 复制粘贴 ---
-    if (terminal && terminal.textarea) { // 确保 terminal 和 textarea 存在
-        terminal.textarea.addEventListener('keydown', async (event: KeyboardEvent) => {
-            // Ctrl+Shift+C for Copy
-            if (event.ctrlKey && event.shiftKey && event.code === 'KeyC') {
-                event.preventDefault(); // 阻止默认行为 (例如浏览器开发者工具)
-                event.stopPropagation(); // 阻止事件冒泡
-                const selection = terminal?.getSelection();
-                if (selection) {
-                    try {
-                        await navigator.clipboard.writeText(selection);
-                        debugLog('[Terminal] Copied via Ctrl+Shift+C:', selection);
-                    } catch (err) {
-                        console.error('[Terminal] Failed to copy via Ctrl+Shift+C:', err);
-                        // 可以考虑添加 UI 提示
-                    }
-                }
-            }
-            // Ctrl+Shift+V for Paste
-            else if (event.ctrlKey && event.shiftKey && event.code === 'KeyV') {
-                event.preventDefault();
-                event.stopPropagation();
-                try {
-                    const text = await navigator.clipboard.readText();
-                    if (text) {
-                        const processedText = text.replace(/\r\n?/g, '\n');
-                        emitTerminalInput(processedText);
-                    }
-                } catch (err) {
-                    console.error('[Terminal] Failed to paste via Ctrl+Shift+V:', err);
-                    // 检查权限问题，例如 navigator.clipboard.readText 需要用户授权或安全上下文
-                    // 可以考虑添加 UI 提示
-                }
-            }
-        });
-    }
+    addTerminalClipboardKeydownListener();
 
     // 根据初始设置添加监听器
     if (terminalEnableRightClickPasteBoolean.value) {
@@ -936,8 +972,9 @@ onBeforeUnmount(() => {
   unsubscribeFromWorkspaceEvent('ui:resizeTransaction', handleResizeTransaction);
 
   if (resizeAnimationFrameId !== null) {
-    window.cancelAnimationFrame(resizeAnimationFrameId);
+    (resizeAnimationFrameWindow ?? readTerminalWindow()).cancelAnimationFrame(resizeAnimationFrameId);
     resizeAnimationFrameId = null;
+    resizeAnimationFrameWindow = null;
   }
   clearPendingResizeEmit();
   if (stabilizedResizeTimer !== null) {
@@ -980,6 +1017,7 @@ onBeforeUnmount(() => {
   
     // 确保在卸载时移除右键监听器
     removeContextMenuListener();
+    removeTerminalClipboardKeydownListener();
 
     if (terminalRef.value) {
       terminalRef.value.removeEventListener('wheel', handleTerminalWheel);

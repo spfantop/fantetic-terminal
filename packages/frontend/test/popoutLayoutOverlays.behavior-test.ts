@@ -18,6 +18,11 @@ const commandInputBar = fs.readFileSync(path.resolve('src/components/CommandInpu
 const quickCommandsModal = fs.readFileSync(path.resolve('src/components/QuickCommandsModal.vue'), 'utf8');
 const suspendedSshSessionsModal = fs.readFileSync(path.resolve('src/components/SuspendedSshSessionsModal.vue'), 'utf8');
 const focusSwitcherConfigurator = fs.readFileSync(path.resolve('src/components/FocusSwitcherConfigurator.vue'), 'utf8');
+const aiAssistantPanel = fs.readFileSync(path.resolve('src/components/AIAssistantPanel.vue'), 'utf8');
+const statusMonitor = fs.readFileSync(path.resolve('src/components/StatusMonitor.vue'), 'utf8');
+const remoteDesktopSession = fs.readFileSync(path.resolve('src/components/RemoteDesktopSession.vue'), 'utf8');
+const remoteDesktopModal = fs.readFileSync(path.resolve('src/components/RemoteDesktopModal.vue'), 'utf8');
+const vncModal = fs.readFileSync(path.resolve('src/components/VncModal.vue'), 'utf8');
 const workspaceEvents = fs.readFileSync(path.resolve('src/composables/workspaceEvents.ts'), 'utf8');
 const focusSwitcherStore = fs.readFileSync(path.resolve('src/stores/focusSwitcher.store.ts'), 'utf8');
 
@@ -148,6 +153,36 @@ assert.match(
 );
 
 assert.match(
+  fileManager,
+  /readFileManagerClipboard[\s\S]*readFileManagerWindow\(\)\.navigator\.clipboard[\s\S]*readFileManagerClipboard\(\)\.writeText\(fullPath\)/,
+  'file manager copy path should use the file manager document clipboard',
+);
+
+assert.match(
+  fileManager,
+  /activePathInputDocument = readFileManagerDocument\(\);[\s\S]*activePathInputDocument\.addEventListener\('click', handleClickOutsidePathInput\)/,
+  'file manager path editor should bind outside-click handling to the file manager document',
+);
+
+assert.doesNotMatch(
+  fileManager,
+  /document\.addEventListener\('click', handleClickOutsidePathInput\)/,
+  'file manager path editor should not bind outside-click handling to the main document',
+);
+
+assert.match(
+  fileManager,
+  /activeResizeDocument = \(event\.target as Node \| null\)\?\.ownerDocument \?\? readFileManagerDocument\(\);[\s\S]*activeResizeDocument\.addEventListener\('mousemove', handleResize\)/,
+  'file manager column resize should bind pointer tracking to the file manager document',
+);
+
+assert.doesNotMatch(
+  fileManager,
+  /document\.addEventListener\('mousemove', handleResize\)/,
+  'file manager column resize should not bind move tracking to the main document',
+);
+
+assert.match(
   fileEditorContainer,
   /registerFocusAction\('fileEditorActive', focusActiveEditor, \{ ownerDocument: editorContainerRef\.value\?\.ownerDocument \?\? document \}\)/,
   'file editor focus action should be scoped to the editor document',
@@ -160,9 +195,51 @@ assert.match(
 );
 
 assert.match(
+  quickCommandsView,
+  /readQuickCommandsClipboard[\s\S]*readQuickCommandsWindow\(\)\.navigator\.clipboard[\s\S]*readQuickCommandsClipboard\(\)\.writeText\(command\)/,
+  'quick commands copy should use the quick command document clipboard',
+);
+
+assert.match(
   commandHistoryView,
   /registerFocusAction\('commandHistorySearch', focusSearchInput, \{ ownerDocument: historyListRef\.value\?\.ownerDocument \?\? document \}\)/,
   'command history focus action should be scoped to the command history document',
+);
+
+assert.match(
+  commandHistoryView,
+  /readCommandHistoryClipboard[\s\S]*readCommandHistoryWindow\(\)\.navigator\.clipboard[\s\S]*readCommandHistoryClipboard\(\)\.writeText\(command\)/,
+  'command history copy should use the command history document clipboard',
+);
+
+assert.match(
+  aiAssistantPanel,
+  /assistantRootRef[\s\S]*readAssistantClipboard[\s\S]*readAssistantWindow\(\)\.navigator\.clipboard[\s\S]*readAssistantClipboard\(\)\?\.writeText\(command\)/,
+  'AI assistant command copy should use the assistant document clipboard',
+);
+
+assert.match(
+  statusMonitor,
+  /statusMonitorRootRef[\s\S]*readStatusMonitorClipboard[\s\S]*readStatusMonitorWindow\(\)\.navigator\.clipboard[\s\S]*readStatusMonitorClipboard\(\)\.writeText\(ipAddress\)/,
+  'status monitor IP copy should use the status monitor document clipboard',
+);
+
+assert.match(
+  remoteDesktopSession,
+  /getDisplayClipboard[\s\S]*getDisplayWindow\(\)\.navigator\.clipboard[\s\S]*getDisplayClipboard\(\)\.readText\(\)[\s\S]*getDisplayClipboard\(\)\.writeText\(text\)/,
+  'remote desktop session clipboard sync should use the display document clipboard',
+);
+
+assert.match(
+  remoteDesktopModal,
+  /readRdpDisplayClipboard[\s\S]*readRdpDisplayWindow\(\)\.navigator\.clipboard[\s\S]*readRdpDisplayClipboard\(\)\.readText\(\)[\s\S]*readRdpDisplayClipboard\(\)\.writeText\(text\)/,
+  'RDP modal clipboard sync should use the modal display document clipboard',
+);
+
+assert.match(
+  vncModal,
+  /readVncDisplayClipboard[\s\S]*readVncDisplayWindow\(\)\.navigator\.clipboard[\s\S]*readVncDisplayClipboard\(\)\.readText\(\)/,
+  'VNC modal clipboard sync should use the modal display document clipboard',
 );
 
 assert.match(

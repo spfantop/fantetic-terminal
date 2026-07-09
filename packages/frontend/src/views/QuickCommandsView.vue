@@ -264,6 +264,9 @@ const commandListContainerRef = ref<HTMLDivElement | null>(null); // Changed ref
 const searchInputRef = ref<HTMLInputElement | null>(null); // +++ Ref for the search input +++
 let unregisterFocus: (() => void) | null = null; // +++ 保存注销函数 +++
 let activeQuickCommandMenuDocument: Document | null = null;
+const readQuickCommandsDocument = () => commandListContainerRef.value?.ownerDocument ?? document;
+const readQuickCommandsWindow = () => readQuickCommandsDocument().defaultView ?? window;
+const readQuickCommandsClipboard = () => readQuickCommandsWindow().navigator.clipboard;
 const quickCommandTeleportTarget = computed(() => commandListContainerRef.value?.ownerDocument.body ?? 'body');
 
 // +++ State for inline tag editing +++
@@ -453,10 +456,11 @@ const handleSearchInputKeydown = (event: KeyboardEvent) => {
 // 处理搜索框失焦事件
 const handleSearchInputBlur = () => {
   // 延迟执行，以允许点击列表项事件先触发
-  setTimeout(() => {
+  readQuickCommandsWindow().setTimeout(() => {
+    const quickCommandsDocument = readQuickCommandsDocument();
     // 检查焦点是否还在组件内部的其他可聚焦元素上（例如按钮）
     // 如果焦点移出整个组件区域，则重置选择
-    if (document.activeElement !== searchInputRef.value && !commandListContainerRef.value?.contains(document.activeElement)) {
+    if (quickCommandsDocument.activeElement !== searchInputRef.value && !commandListContainerRef.value?.contains(quickCommandsDocument.activeElement)) {
         quickCommandsStore.resetSelection();
     }
 }, 100); // 短暂延迟
@@ -530,7 +534,7 @@ const confirmDelete = async (command: QuickCommandFE) => {
 // 复制命令到剪贴板
 const copyCommand = async (command: string) => {
   try {
-    await navigator.clipboard.writeText(command);
+    await readQuickCommandsClipboard().writeText(command);
     uiNotificationsStore.showSuccess(t('commandHistory.copied', '已复制到剪贴板'));
   } catch (err) {
     console.error('使用Clipboard API复制命令失败:', err);

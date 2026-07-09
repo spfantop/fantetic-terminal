@@ -109,6 +109,9 @@ const hoveredItemId = ref<number | null>(null);
 const historyListRef = ref<HTMLUListElement | null>(null); // Ref for the history list UL
 const searchInputRef = ref<HTMLInputElement | null>(null); // +++ Ref for the search input +++
 let unregisterFocus: (() => void) | null = null; // +++ 保存注销函数 +++
+const readCommandHistoryDocument = () => historyListRef.value?.ownerDocument ?? document;
+const readCommandHistoryWindow = () => readCommandHistoryDocument().defaultView ?? window;
+const readCommandHistoryClipboard = () => readCommandHistoryWindow().navigator.clipboard;
 
 // +++ 右键菜单状态 +++
 const commandHistoryContextMenuVisible = ref(false);
@@ -203,10 +206,11 @@ const handleSearchInputKeydown = (event: KeyboardEvent) => {
 // 处理搜索框失焦事件
 const handleSearchInputBlur = () => {
   // 延迟执行，以允许点击列表项事件先触发
-  setTimeout(() => {
+  readCommandHistoryWindow().setTimeout(() => {
+    const commandHistoryDocument = readCommandHistoryDocument();
     // 检查焦点是否还在组件内部的其他可聚焦元素上（例如按钮）
     // 如果焦点移出整个组件区域，则重置选择
-    if (document.activeElement !== searchInputRef.value && !historyListRef.value?.contains(document.activeElement)) {
+    if (commandHistoryDocument.activeElement !== searchInputRef.value && !historyListRef.value?.contains(commandHistoryDocument.activeElement)) {
        commandHistoryStore.resetSelection();
     }
   }, 100); // 短暂延迟
@@ -225,7 +229,7 @@ const confirmClearAll = async () => { // 注意 async
 // 复制命令到剪贴板
 const copyCommand = async (command: string) => {
   try {
-    await navigator.clipboard.writeText(command);
+    await readCommandHistoryClipboard().writeText(command);
     uiNotificationsStore.showSuccess(t('commandHistory.copied', '已复制到剪贴板'));
   } catch (err) {
     console.error('复制命令失败:', err);
