@@ -21,4 +21,6 @@ const versionCheckPath = path.resolve('src/composables/settings/useVersionCheck.
 assert.equal(fs.existsSync(versionCheckPath), true);
 const versionCheckSource = fs.readFileSync(versionCheckPath, 'utf8');
 assert.match(versionCheckSource, /\/VERSION/);
-assert.match(versionCheckSource, /\/api\/v1\/version\/remote/);
+assert.match(versionCheckSource, /apiClient/);
+assert.match(versionCheckSource, /apiClient\.get\('\/version\/remote'\)/);
+assert.doesNotMatch(versionCheckSource, /axios\.get\('\/api\/v1\/version\/remote'/);

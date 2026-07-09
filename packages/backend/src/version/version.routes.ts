@@ -21,6 +21,46 @@ const writeCached = (key: string, data: unknown) => {
   cache.set(key, { timestamp: Date.now(), data });
 };
 
+const normalizeRemoteVersion = (version: unknown): string | null => {
+  if (typeof version !== 'string') return null;
+  const normalized = version.trim();
+  return normalized.length > 0 ? normalized : null;
+};
+
+const readLatestReleaseVersion = async (): Promise<string | null> => {
+  try {
+    const response = await fetch(GITHUB_RELEASES_URL, {
+      headers: { Accept: 'application/vnd.github.v3+json' },
+    });
+    if (response.status === 404) return null;
+    if (!response.ok) {
+      console.warn(`[Version] GitHub releases 请求失败，状态码: ${response.status}`);
+      return null;
+    }
+
+    const data = await response.json() as { tag_name?: string };
+    return normalizeRemoteVersion(data.tag_name);
+  } catch (error) {
+    console.warn('[Version] GitHub releases 请求失败:', error);
+    return null;
+  }
+};
+
+const readVersionFileVersion = async (): Promise<string | null> => {
+  try {
+    const response = await fetch(VERSION_FILE_URL, { headers: { Accept: 'text/plain' } });
+    if (!response.ok) {
+      console.warn(`[Version] 远程 VERSION 文件请求失败，状态码: ${response.status}`);
+      return null;
+    }
+
+    return normalizeRemoteVersion(await response.text());
+  } catch (error) {
+    console.warn('[Version] 远程 VERSION 文件请求失败:', error);
+    return null;
+  }
+};
+
 router.get('/remote', async (_req: Request, res: Response) => {
   const cached = readCached('remote');
   if (cached) {
@@ -28,20 +68,23 @@ router.get('/remote', async (_req: Request, res: Response) => {
     return;
   }
 
-  try {
-    const response = await fetch(VERSION_FILE_URL, { headers: { Accept: 'text/plain' } });
-    if (!response.ok) {
-      res.status(502).json({ version: null, error: 'fetch_failed' });
-      return;
-    }
-
-    const result = { version: (await response.text()).trim() };
+  const releaseVersion = await readLatestReleaseVersion();
+  if (releaseVersion) {
+    const result = { version: releaseVersion, source: 'release' };
     writeCached('remote', result);
     res.json(result);
-  } catch (error) {
-    console.warn('[Version] 远程 VERSION 文件请求失败:', error);
-    res.status(502).json({ version: null, error: 'fetch_failed' });
+    return;
   }
+
+  const versionFileVersion = await readVersionFileVersion();
+  if (versionFileVersion) {
+    const result = { version: versionFileVersion, source: 'version_file' };
+    writeCached('remote', result);
+    res.json(result);
+    return;
+  }
+
+  res.status(502).json({ version: null, error: 'fetch_failed' });
 });
 
 router.get('/latest', async (_req: Request, res: Response) => {

@@ -2,6 +2,7 @@ import { computed, onMounted, ref } from 'vue';
 import axios from 'axios';
 import { useI18n } from 'vue-i18n';
 import { debugLog } from '../useDebugLog';
+import apiClient from '../../utils/apiClient';
 
 const normalizeVersion = (version: string) => version.trim().replace(/^v/i, '');
 
@@ -32,7 +33,7 @@ export function useVersionCheck() {
     versionCheckError.value = null;
     latestVersion.value = null;
     try {
-      const response = await axios.get('/api/v1/version/remote');
+      const response = await apiClient.get('/version/remote');
       const version = response.data?.version;
       if (typeof version !== 'string' || !version.trim()) {
         throw new Error('Empty remote version');
