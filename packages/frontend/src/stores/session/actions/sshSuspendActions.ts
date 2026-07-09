@@ -615,9 +615,9 @@ const handleSshOutputCachedChunk = (payload: SshOutputCachedChunkPayload): void 
   const session = sessions.value.get(payload.frontendSessionId) as SessionState | undefined;
   if (session && session.terminalManager) {
     if (session.terminalManager.terminalInstance.value) {
-      // 终端实例已就绪，直接写入
+      // 复用终端管理器的输出入口，确保恢复缓存内容也经过高亮与分批写入。
       debugLog('[SSH Suspend Frontend] Received cached chunk data (writing to terminal):', payload.data);
-      session.terminalManager.terminalInstance.value.write(payload.data);
+      session.terminalManager.writeOutput(payload.data);
     } else {
       // 终端实例尚未就绪，暂存输出
       if (!session.pendingOutput) {

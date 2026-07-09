@@ -937,6 +937,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         handleTerminalData, // 这个处理来自 xterm.js 的输入
         handleTerminalResize,
         sendData, // 允许外部直接发送数据
+        writeOutput: scheduleTerminalOutput,
         cleanup,
         // --- 搜索方法 ---
         searchNext,
