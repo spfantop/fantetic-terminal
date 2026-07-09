@@ -20,10 +20,10 @@
     "show": "显示导航栏",
     "resize": "拖拽调整导航栏宽度",
     "actions": "操作菜单",
-    "themeToDefault": "默认主题",
-    "themeToDark": "暗黑主题",
-    "defaultThemeApplied": "默认主题已应用",
-    "darkThemeApplied": "暗黑主题已应用"
+    "themeToDefault": "默认模式",
+    "themeToDark": "暗黑模式",
+    "defaultThemeApplied": "已切换到默认模式",
+    "darkThemeApplied": "已切换到暗黑模式"
   },
   "styleCustomizer": {
     "title": "外观自定义",
@@ -103,6 +103,8 @@
     "themeModeLabel": "主题模式:",
     "defaultMode": "默认模式",
     "darkMode": "黑暗模式",
+    "themeModeSwitched": "主题模式已切换",
+    "themeModeSwitchFailed": "切换主题模式失败: {message}",
     "darkModeApplied": "黑暗模式已应用",
     "darkModeApplyFailed": "应用黑暗模式失败: {message}",
     "terminalBgOverlayOpacity": "终端背景蒙版透明度:",

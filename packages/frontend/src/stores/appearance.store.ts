@@ -6,7 +6,8 @@ import { useDeviceDetection } from '../composables/useDeviceDetection';
 import type { ITheme } from 'xterm';
 import type { TerminalTheme } from '../types/terminal-theme.types';
 import type { AppearanceSettings, UpdateAppearanceDto } from '../types/appearance.types';
-import { defaultXtermTheme, defaultUiTheme } from '../features/appearance/config/default-themes';
+import { darkUiTheme, defaultXtermTheme, defaultUiTheme } from '../features/appearance/config/default-themes';
+import { createUiThemeModeUpdate, readUiThemeMode, resolveActiveUiTheme, type UiThemeMode } from '../utils/uiThemeState';
 
 // Helper function to safely parse JSON
 export const safeJsonParse = <T>(jsonString: string | undefined | null, defaultValue: T): T => {
@@ -49,8 +50,10 @@ export const useAppearanceStore = defineStore('appearance', () => {
     // 移除 availableTerminalThemes 计算属性，直接使用 allTerminalThemes
     // 当前应用的 UI 主题 (CSS 变量对象)
     const currentUiTheme = computed<Record<string, string>>(() => {
-        return safeJsonParse(appearanceSettings.value.customUiTheme, defaultUiTheme);
+        return resolveActiveUiTheme(appearanceSettings.value);
     });
+
+    const currentUiThemeMode = computed<UiThemeMode>(() => readUiThemeMode(appearanceSettings.value));
 
     // 当前激活的终端主题 ID
     const activeTerminalThemeId = computed(() => appearanceSettings.value.activeTerminalThemeId);
@@ -254,7 +257,11 @@ export const useAppearanceStore = defineStore('appearance', () => {
             debugLog('[AppearanceStore] 外观设置已更新:', appearanceSettings.value);
 
             // 如果 UI 主题或背景更新，重新应用
-            if (updates.customUiTheme !== undefined) applyUiTheme(currentUiTheme.value);
+            if (
+                updates.customUiTheme !== undefined
+                || updates.customDarkUiTheme !== undefined
+                || updates.uiThemeMode !== undefined
+            ) applyUiTheme(currentUiTheme.value);
             if (updates.pageBackgroundImage !== undefined) applyPageBackground(); // 移除 pageBackgroundOpacity 检查
             // 终端相关设置由 Terminal 组件监听应用
             // 注意：terminalBackgroundEnabled 的应用逻辑在 Terminal 组件中处理
@@ -273,11 +280,23 @@ export const useAppearanceStore = defineStore('appearance', () => {
         await updateAppearanceSettings({ customUiTheme: JSON.stringify(uiTheme) });
     }
 
+    async function saveCustomDarkUiTheme(uiTheme: Record<string, string>) {
+        await updateAppearanceSettings({ customDarkUiTheme: JSON.stringify(uiTheme) });
+    }
+
     /**
      * 重置为默认 UI 主题并保存。
      */
     async function resetCustomUiTheme() {
         await saveCustomUiTheme(defaultUiTheme);
+    }
+
+    async function resetCustomDarkUiTheme() {
+        await saveCustomDarkUiTheme(darkUiTheme);
+    }
+
+    async function setUiThemeMode(uiThemeMode: UiThemeMode) {
+        await updateAppearanceSettings(createUiThemeModeUpdate(uiThemeMode));
     }
 
      /**
@@ -897,6 +916,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
         isPreviewingTerminalTheme,
         previewTerminalThemeData,
         currentUiTheme,
+        currentUiThemeMode,
         activeTerminalThemeId,
         currentTerminalTheme,
         effectiveTerminalTheme,
@@ -914,7 +934,10 @@ export const useAppearanceStore = defineStore('appearance', () => {
         loadInitialAppearanceData,
         updateAppearanceSettings,
         saveCustomUiTheme,
+        saveCustomDarkUiTheme,
         resetCustomUiTheme,
+        resetCustomDarkUiTheme,
+        setUiThemeMode,
         setActiveTerminalTheme,
         setTerminalFontFamily,
         setTerminalFontSize, // 设置桌面端字体大小

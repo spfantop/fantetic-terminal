@@ -1,6 +1,6 @@
 import { getDbInstance, runDb, getDb, allDb } from '../database/connection';
 import { AppearanceSettings, UpdateAppearanceDto } from '../types/appearance.types';
-import { defaultUiTheme } from '../config/default-themes';
+import { darkUiTheme, defaultUiTheme } from '../config/default-themes';
 import { findThemeById as findTerminalThemeById } from '../terminal-themes/terminal-theme.repository';
 import * as sqlite3 from 'sqlite3'; 
 
@@ -36,8 +36,14 @@ let terminalTextStrokeEnabledFound = false;
         }
 
         switch (row.key) {
+            case 'uiThemeMode':
+                settings.uiThemeMode = row.value === 'dark' ? 'dark' : 'default';
+                break;
             case 'customUiTheme':
                 settings.customUiTheme = row.value;
+                break;
+            case 'customDarkUiTheme':
+                settings.customDarkUiTheme = row.value;
                 break;
             case 'activeTerminalThemeId':
                 const parsedId = parseInt(row.value, 10);
@@ -119,7 +125,9 @@ case 'terminalTextStrokeEnabled':
     const defaults = getDefaultAppearanceSettings();
     return {
         _id: 'global_appearance', // 全局外观设置的固定 ID
+        uiThemeMode: settings.uiThemeMode ?? defaults.uiThemeMode,
         customUiTheme: settings.customUiTheme ?? defaults.customUiTheme,
+        customDarkUiTheme: settings.customDarkUiTheme ?? defaults.customDarkUiTheme,
         activeTerminalThemeId: settings.activeTerminalThemeId ?? defaults.activeTerminalThemeId,
         terminalFontFamily: settings.terminalFontFamily ?? defaults.terminalFontFamily,
         terminalFontSize: settings.terminalFontSize ?? defaults.terminalFontSize,
@@ -170,7 +178,9 @@ case 'terminalTextStrokeEnabled':
 // 获取默认外观设置 (已简化, _id 在此不再相关)
 const getDefaultAppearanceSettings = (): Omit<AppearanceSettings, '_id'> => {
     return {
+        uiThemeMode: 'default',
         customUiTheme: JSON.stringify(defaultUiTheme),
+        customDarkUiTheme: JSON.stringify(darkUiTheme),
         activeTerminalThemeId: null, // 初始默认应为 null
         terminalFontFamily: 'Consolas, "Courier New", monospace, "Microsoft YaHei", "微软雅黑"',
         terminalFontSize: 14,
@@ -212,7 +222,9 @@ export const ensureDefaultSettingsExist = async (db: sqlite3.Database): Promise<
 
     // 定义默认键值对以确保存在
     const defaultEntries: Array<{ key: keyof Omit<AppearanceSettings, '_id' | 'updatedAt'>, value: any }> = [
+        { key: 'uiThemeMode', value: defaults.uiThemeMode },
         { key: 'customUiTheme', value: defaults.customUiTheme },
+        { key: 'customDarkUiTheme', value: defaults.customDarkUiTheme },
         { key: 'activeTerminalThemeId', value: null }, // 以 null 开始
         { key: 'terminalFontFamily', value: defaults.terminalFontFamily },
         { key: 'terminalFontSize', value: defaults.terminalFontSize },

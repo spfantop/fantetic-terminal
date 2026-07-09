@@ -1,8 +1,7 @@
 import { computed, nextTick, ref } from 'vue';
 import type { ComposerTranslation } from 'vue-i18n';
-import { useAppearanceStore, safeJsonParse } from '../stores/appearance.store';
+import { useAppearanceStore } from '../stores/appearance.store';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
-import { darkUiTheme, defaultUiTheme } from '../features/appearance/config/default-themes';
 
 const THEME_REVEAL_DURATION = 680;
 
@@ -97,27 +96,22 @@ export const useThemeToggle = (t: ComposerTranslation) => {
   const isSwitchingTheme = ref(false);
 
   const isDarkUiThemeActive = computed(() => {
-    const userTheme = safeJsonParse<Record<string, string>>(appearanceStore.appearanceSettings.customUiTheme, {});
-    const mergedTheme = { ...defaultUiTheme, ...userTheme };
-
-    return mergedTheme['--app-bg-color'] === darkUiTheme['--app-bg-color']
-      && mergedTheme['--header-bg-color'] === darkUiTheme['--header-bg-color']
-      && mergedTheme['--text-color'] === darkUiTheme['--text-color'];
+    return appearanceStore.currentUiThemeMode === 'dark';
   });
 
   const themeToggleLabel = computed(() => (
     isDarkUiThemeActive.value
-      ? t('dock.themeToDefault', '默认主题')
-      : t('dock.themeToDark', '暗黑主题')
+      ? t('dock.themeToDefault', '默认模式')
+      : t('dock.themeToDark', '暗黑模式')
   ));
 
   const applyThemeToggle = async (): Promise<ThemeMode> => {
     if (isDarkUiThemeActive.value) {
-      await appearanceStore.resetCustomUiTheme();
+      await appearanceStore.setUiThemeMode('default');
       return 'default';
     }
 
-    await appearanceStore.saveCustomUiTheme(darkUiTheme);
+    await appearanceStore.setUiThemeMode('dark');
     return 'dark';
   };
 
@@ -128,13 +122,13 @@ export const useThemeToggle = (t: ComposerTranslation) => {
     try {
       const appliedMode = await runThemeRevealTransition(event, applyThemeToggle);
       if (appliedMode === 'default') {
-        uiNotificationsStore.showInfo(t('dock.defaultThemeApplied', '默认主题已应用'));
+        uiNotificationsStore.showInfo(t('dock.defaultThemeApplied', '已切换到默认模式'));
       } else {
-        uiNotificationsStore.showSuccess(t('dock.darkThemeApplied', '暗黑主题已应用'));
+        uiNotificationsStore.showSuccess(t('dock.darkThemeApplied', '已切换到暗黑模式'));
       }
     } catch (error: any) {
       console.error('[ThemeToggle] Failed to toggle theme:', error);
-      uiNotificationsStore.showError(t('styleCustomizer.uiThemeSaveFailed', { message: error.message || t('common.error', '未知错误') }));
+      uiNotificationsStore.showError(t('styleCustomizer.themeModeSwitchFailed', { message: error.message || t('common.error', '未知错误') }));
     } finally {
       isSwitchingTheme.value = false;
     }

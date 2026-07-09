@@ -171,7 +171,7 @@ onMounted(() => {
                 : 'block w-auto md:w-full px-3 py-2 md:py-[0.7rem] mb-0 md:mb-2 mx-1 md:mx-0 text-center md:text-left bg-transparent border border-transparent rounded cursor-pointer text-foreground text-sm md:text-[0.95rem] transition-colors duration-200 ease-in-out hover:bg-black/5 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-transparent disabled:text-text-secondary',
               {
                 'style-customizer-nav-tile-active': props.embedded && currentTab === 'ui',
-                '!bg-button !text-button-text !font-bold': !props.embedded && currentTab === 'ui'
+                '!bg-nav-active-bg !text-link-active !border-link-active/40 !font-bold': !props.embedded && currentTab === 'ui'
               }
             ]"
           >
@@ -185,7 +185,7 @@ onMounted(() => {
                 : 'block w-auto md:w-full px-3 py-2 md:py-[0.7rem] mb-0 md:mb-2 mx-1 md:mx-0 text-center md:text-left bg-transparent border border-transparent rounded cursor-pointer text-foreground text-sm md:text-[0.95rem] transition-colors duration-200 ease-in-out hover:bg-black/5 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-transparent disabled:text-text-secondary',
               {
                 'style-customizer-nav-tile-active': props.embedded && currentTab === 'terminal' && !isEditingTheme,
-                '!bg-button !text-button-text !font-bold': !props.embedded && currentTab === 'terminal' && !isEditingTheme
+                '!bg-nav-active-bg !text-link-active !border-link-active/40 !font-bold': !props.embedded && currentTab === 'terminal' && !isEditingTheme
               }
             ]"
             :disabled="isEditingTheme"
@@ -200,7 +200,7 @@ onMounted(() => {
                 : 'block w-auto md:w-full px-3 py-2 md:py-[0.7rem] mb-0 md:mb-2 mx-1 md:mx-0 text-center md:text-left bg-transparent border border-transparent rounded cursor-pointer text-foreground text-sm md:text-[0.95rem] transition-colors duration-200 ease-in-out hover:bg-black/5 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-transparent disabled:text-text-secondary',
               {
                 'style-customizer-nav-tile-active': props.embedded && currentTab === 'background',
-                '!bg-button !text-button-text !font-bold': !props.embedded && currentTab === 'background'
+                '!bg-nav-active-bg !text-link-active !border-link-active/40 !font-bold': !props.embedded && currentTab === 'background'
               }
             ]"
             :disabled="isEditingTheme"
@@ -215,7 +215,7 @@ onMounted(() => {
                 : 'block w-auto md:w-full px-3 py-2 md:py-[0.7rem] mb-0 md:mb-2 mx-1 md:mx-0 text-center md:text-left bg-transparent border border-transparent rounded cursor-pointer text-foreground text-sm md:text-[0.95rem] transition-colors duration-200 ease-in-out hover:bg-black/5 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-transparent disabled:text-text-secondary',
               {
                 'style-customizer-nav-tile-active': props.embedded && currentTab === 'other',
-                '!bg-button !text-button-text !font-bold': !props.embedded && currentTab === 'other'
+                '!bg-nav-active-bg !text-link-active !border-link-active/40 !font-bold': !props.embedded && currentTab === 'other'
               }
             ]"
             :disabled="isEditingTheme"

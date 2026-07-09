@@ -2410,9 +2410,9 @@ const handleOpenAllTargetConnections = async () => {
 }
 
 .server-tag-filter-button.active {
-  border-color: var(--button-bg-color);
-  background: color-mix(in srgb, var(--button-bg-color) 14%, var(--app-bg-color));
-  color: var(--text-color);
+  border-color: color-mix(in srgb, var(--link-active-color) 52%, var(--border-color));
+  background: var(--nav-item-active-bg-color);
+  color: var(--link-active-color);
 }
 
 .server-tag-filter-count {
@@ -2612,8 +2612,8 @@ const handleOpenAllTargetConnections = async () => {
 }
 
 .server-switch.active {
-  border-color: var(--button-bg-color);
-  background: var(--button-bg-color);
+  border-color: color-mix(in srgb, var(--link-active-color) 52%, var(--border-color));
+  background: var(--nav-item-active-bg-color);
 }
 
 .server-switch.active span {

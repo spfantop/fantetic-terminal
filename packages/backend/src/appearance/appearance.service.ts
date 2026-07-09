@@ -58,6 +58,14 @@ export const getSettings = async (): Promise<AppearanceSettings> => {
  * @returns Promise<boolean> 是否成功更新
  */
 export const updateSettings = async (settingsDto: UpdateAppearanceDto): Promise<boolean> => {
+  if (
+    settingsDto.uiThemeMode !== undefined
+    && settingsDto.uiThemeMode !== 'default'
+    && settingsDto.uiThemeMode !== 'dark'
+  ) {
+    throw new Error('无效的 UI 主题模式，应为 default 或 dark。');
+  }
+
   // 验证 activeTerminalThemeId (如果提供了)
   if (settingsDto.activeTerminalThemeId !== undefined && settingsDto.activeTerminalThemeId !== null) {
       const themeIdNum = settingsDto.activeTerminalThemeId; // ID is now number | null

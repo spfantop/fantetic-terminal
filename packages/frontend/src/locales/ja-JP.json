@@ -768,10 +768,10 @@
         "show": "ナビゲーションを表示",
         "resize": "ドラッグしてナビゲーション幅を調整",
         "actions": "操作メニュー",
-        "themeToDefault": "デフォルトテーマ",
-        "themeToDark": "ダークテーマ",
-        "defaultThemeApplied": "デフォルトテーマを適用しました",
-        "darkThemeApplied": "ダークテーマを適用しました"
+        "themeToDefault": "デフォルトモード",
+        "themeToDark": "ダークモード",
+        "defaultThemeApplied": "デフォルトモードに切り替えました",
+        "darkThemeApplied": "ダークモードに切り替えました"
     },
     "notificationController": {
         "errorCreateSetting": "通知設定の作成に失敗しました",
@@ -1599,6 +1599,8 @@
         "themeDeleteFailed": "テーマの削除に失敗しました: {message}",
         "themeDeletedSuccess": "テーマの削除に成功しました。",
         "themeModeLabel": "テーマモード:",
+        "themeModeSwitched": "テーマモードを切り替えました。",
+        "themeModeSwitchFailed": "テーマモードの切り替えに失敗しました: {message}",
         "themeName": "テーマ名",
         "themeSaveFailed": "テーマの保存に失敗しました。",
         "themeUpdatedSuccess": "テーマの更新に成功しました。",

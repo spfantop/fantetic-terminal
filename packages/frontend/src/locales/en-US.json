@@ -20,10 +20,10 @@
     "show": "Show navigation",
     "resize": "Drag to resize navigation",
     "actions": "Actions",
-    "themeToDefault": "Default theme",
-    "themeToDark": "Dark theme",
-    "defaultThemeApplied": "Default theme applied",
-    "darkThemeApplied": "Dark theme applied"
+    "themeToDefault": "Default mode",
+    "themeToDark": "Dark mode",
+    "defaultThemeApplied": "Switched to default mode",
+    "darkThemeApplied": "Switched to dark mode"
   },
   "styleCustomizer": {
     "title": "Appearance Customizer",
@@ -104,6 +104,8 @@
     "themeModeLabel": "Theme Mode:",
     "defaultMode": "Default Mode",
     "darkMode": "Dark Mode",
+    "themeModeSwitched": "Theme mode switched.",
+    "themeModeSwitchFailed": "Failed to switch theme mode: {message}",
     "darkModeApplied": "Dark mode applied",
     "darkModeApplyFailed": "Failed to apply dark mode: {message}",
     "terminalBgOverlayOpacity": "Terminal Background Overlay Opacity:",

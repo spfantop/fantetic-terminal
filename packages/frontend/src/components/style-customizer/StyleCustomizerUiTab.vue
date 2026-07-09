@@ -7,6 +7,7 @@ import { useUiNotificationsStore } from '../../stores/uiNotifications.store';
 import { storeToRefs } from 'pinia';
 import { darkUiTheme, defaultUiTheme } from '../../features/appearance/config/default-themes';
 import { safeJsonParse } from '../../stores/appearance.store';
+import { readUiThemeMode } from '../../utils/uiThemeState';
 
 const { t } = useI18n();
 const appearanceStore = useAppearanceStore();
@@ -18,9 +19,13 @@ const editableUiThemeString = ref('');
 const themeParseError = ref<string | null>(null);
 
 const initializeEditableState = () => {
-  const userThemeJson = appearanceSettings.value.customUiTheme;
+  const isDarkMode = readUiThemeMode(appearanceSettings.value) === 'dark';
+  const baseTheme = isDarkMode ? darkUiTheme : defaultUiTheme;
+  const userThemeJson = isDarkMode
+    ? appearanceSettings.value.customDarkUiTheme
+    : appearanceSettings.value.customUiTheme;
   const userTheme = safeJsonParse(userThemeJson, {});
-  const mergedTheme = { ...defaultUiTheme, ...userTheme };
+  const mergedTheme = { ...baseTheme, ...userTheme };
   editableUiTheme.value = JSON.parse(JSON.stringify(mergedTheme));
   themeParseError.value = null;
   try {
@@ -39,15 +44,23 @@ const initializeEditableState = () => {
 
 onMounted(initializeEditableState);
 
-watch(() => appearanceSettings.value.customUiTheme, () => {
-    debugLog('[StyleCustomizerUiTab Watch] customUiTheme changed, re-initializing.');
+watch(() => [
+    appearanceSettings.value.uiThemeMode,
+    appearanceSettings.value.customUiTheme,
+    appearanceSettings.value.customDarkUiTheme,
+], () => {
+    debugLog('[StyleCustomizerUiTab Watch] UI theme settings changed, re-initializing.');
     initializeEditableState();
 }, { deep: true });
 
 
 const handleSaveUiTheme = async () => {
   try {
-    await appearanceStore.saveCustomUiTheme(editableUiTheme.value);
+    if (readUiThemeMode(appearanceSettings.value) === 'dark') {
+      await appearanceStore.saveCustomDarkUiTheme(editableUiTheme.value);
+    } else {
+      await appearanceStore.saveCustomUiTheme(editableUiTheme.value);
+    }
     notificationsStore.addNotification({ type: 'success', message: t('styleCustomizer.uiThemeSaved') });
   } catch (error: any) {
     console.error("保存 UI 主题失败:", error);
@@ -57,7 +70,11 @@ const handleSaveUiTheme = async () => {
 
 const handleResetUiTheme = async () => {
     try {
-        await appearanceStore.resetCustomUiTheme();
+        if (readUiThemeMode(appearanceSettings.value) === 'dark') {
+            await appearanceStore.resetCustomDarkUiTheme();
+        } else {
+            await appearanceStore.resetCustomUiTheme();
+        }
         notificationsStore.addNotification({ type: 'info', message: t('styleCustomizer.uiThemeReset') });
     } catch (error: any) {
         console.error("重置 UI 主题失败:", error);
@@ -65,14 +82,23 @@ const handleResetUiTheme = async () => {
     }
 };
 
-const applyDarkMode = async () => {
+const setDarkMode = async () => {
   try {
-    editableUiTheme.value = JSON.parse(JSON.stringify(darkUiTheme));
-    await appearanceStore.saveCustomUiTheme(editableUiTheme.value);
-    notificationsStore.addNotification({ type: 'success', message: t('styleCustomizer.darkModeApplied') });
+    await appearanceStore.setUiThemeMode('dark');
+    notificationsStore.addNotification({ type: 'success', message: t('styleCustomizer.themeModeSwitched') });
   } catch (error: any) {
-    console.error("应用黑暗模式失败:", error);
-    notificationsStore.addNotification({ type: 'error', message: t('styleCustomizer.darkModeApplyFailed', { message: error.message || '未知错误' }) });
+    console.error("切换黑暗模式失败:", error);
+    notificationsStore.addNotification({ type: 'error', message: t('styleCustomizer.themeModeSwitchFailed', { message: error.message || '未知错误' }) });
+  }
+};
+
+const setDefaultMode = async () => {
+  try {
+    await appearanceStore.setUiThemeMode('default');
+    notificationsStore.addNotification({ type: 'success', message: t('styleCustomizer.themeModeSwitched') });
+  } catch (error: any) {
+    console.error("切换默认模式失败:", error);
+    notificationsStore.addNotification({ type: 'error', message: t('styleCustomizer.themeModeSwitchFailed', { message: error.message || '未知错误' }) });
   }
 };
 
@@ -186,8 +212,8 @@ defineExpose({
     <div class="grid grid-cols-1 md:grid-cols-[auto_1fr] items-start md:items-center gap-2 md:gap-3 mb-6">
         <label class="text-left text-foreground text-sm font-medium mb-1 md:mb-0">{{ t('styleCustomizer.themeModeLabel', '主题模式:') }}</label>
         <div class="flex gap-2 justify-start flex-wrap">
-            <button @click="handleResetUiTheme" class="px-3 py-1.5 text-sm border border-border rounded bg-header hover:bg-border transition duration-200 ease-in-out whitespace-nowrap">{{ t('styleCustomizer.defaultMode', '默认模式') }}</button>
-            <button @click="applyDarkMode" class="px-3 py-1.5 text-sm border border-border rounded bg-header hover:bg-border transition duration-200 ease-in-out whitespace-nowrap">{{ t('styleCustomizer.darkMode', '黑暗模式') }}</button>
+            <button @click="setDefaultMode" class="px-3 py-1.5 text-sm border border-border rounded bg-header hover:bg-border transition duration-200 ease-in-out whitespace-nowrap">{{ t('styleCustomizer.defaultMode', '默认模式') }}</button>
+            <button @click="setDarkMode" class="px-3 py-1.5 text-sm border border-border rounded bg-header hover:bg-border transition duration-200 ease-in-out whitespace-nowrap">{{ t('styleCustomizer.darkMode', '黑暗模式') }}</button>
         </div>
     </div>
     <p class="text-text-secondary text-sm leading-relaxed mb-3">{{ t('styleCustomizer.uiDescription') }}</p>
