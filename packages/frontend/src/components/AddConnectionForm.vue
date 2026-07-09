@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, Teleport, nextTick, onMounted, type Ref } from 'vue';
+import { computed, ref, Teleport, nextTick, onMounted, type Ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { ConnectionInfo } from '../stores/connections.store'; // Keep ConnectionInfo type
 import { useAddConnectionForm } from '../composables/useAddConnectionForm';
@@ -25,6 +25,18 @@ const { t, locale } = useI18n();
 const scriptModeFormatInfo = ref(getTranslation('connections.form.scriptModeFormatInfo', locale.value));
 const modalRootRef = ref<HTMLElement | null>(null);
 const modalContentRef = ref<HTMLElement | null>(null);
+const isMobileViewport = computed(() => (
+  (modalRootRef.value?.ownerDocument.defaultView ?? window).innerWidth <= 768
+));
+const mobileModalContentStyle = {
+  width: 'min(100%, calc(100dvw - 2rem))',
+  maxWidth: 'calc(100dvw - 2rem)',
+  height: 'min(90dvh, calc(100dvh - 2rem))',
+  maxHeight: 'calc(100dvh - 2rem)',
+};
+const modalContentStyle = computed(() => (
+  isMobileViewport.value ? mobileModalContentStyle : undefined
+));
 const { centerDialog, startDialogDrag } = useDraggableDialog({
   rootRef: modalRootRef,
   dialogRef: modalContentRef,
@@ -115,9 +127,14 @@ onMounted(() => {
        but if there was a general tooltip at this level, Teleport would be here.
        The original Teleport for host tooltip is removed as it's now encapsulated. -->
   <div ref="modalRootRef" class="fixed inset-0 bg-overlay flex justify-center items-center z-50 p-4"> <!-- Overlay -->
-    <div ref="modalContentRef" class="bg-background text-foreground p-6 rounded-lg shadow-xl border border-border w-full max-w-2xl max-h-[90vh] flex flex-col"> <!-- Form Panel -->
+    <div
+      ref="modalContentRef"
+      class="bg-background text-foreground p-6 rounded-lg shadow-xl border border-border w-full max-w-2xl max-h-[90vh] flex flex-col connection-form-panel"
+      :class="{ 'connection-form-mobile': isMobileViewport }"
+      :style="modalContentStyle"
+    > <!-- Form Panel -->
       <h3 class="text-xl font-semibold text-center mb-6 flex-shrink-0 cursor-move select-none" @pointerdown="startDialogDrag">{{ formTitle }}</h3> <!-- Title -->
-      <form @submit.prevent="handleSubmit" class="flex-grow overflow-y-auto pr-2 space-y-6"> <!-- Form with scroll and spacing -->
+      <form @submit.prevent="handleSubmit" class="connection-form-body flex-grow overflow-y-auto pr-2 space-y-6"> <!-- Form with scroll and spacing -->
 
         <!-- Regular Form Sections (conditionally rendered) -->
         <template v-if="!isScriptModeActive">
@@ -188,7 +205,7 @@ onMounted(() => {
        </form> <!-- End Form -->
 
        <!-- Form Actions -->
-      <div class="flex justify-between items-center pt-5 mt-6 flex-shrink-0">
+      <div class="connection-form-actions flex justify-between items-center pt-5 mt-6 flex-shrink-0">
          <!-- Test Area (Only show for SSH and when script mode is NOT active) -->
           <div v-if="['SSH', 'TELNET', 'RDP', 'VNC'].includes(formData.type) && !isScriptModeActive" class="flex flex-col items-start gap-1">
              <div class="flex items-center gap-2"> <!-- Button and Icon -->
@@ -225,7 +242,7 @@ onMounted(() => {
          <!-- Placeholder for alignment when test button is hidden or script mode is active -->
          <div v-else-if="!isScriptModeActive" class="flex-1"></div>
          <div v-else class="flex-1"></div> <!-- Also take up space if script mode is active, pushing buttons right -->
-         <div class="flex space-x-3"> <!-- Main Actions -->
+         <div class="connection-form-main-actions flex space-x-3"> <!-- Main Actions -->
               <button v-if="isEditMode && !isScriptModeActive" type="button" @click="handleDeleteConnection" :disabled="isLoading || testStatus === 'testing'"
                      class="px-4 py-2 bg-transparent text-red-600 border border-red-500 rounded-md shadow-sm hover:bg-red-500/10 hover:text-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 ease-in-out">
                {{ t('connections.actions.delete') }}
@@ -245,4 +262,36 @@ onMounted(() => {
   </div> <!-- End Overlay -->
 </template>
 
-<!-- Scoped styles removed, now using Tailwind utility classes -->
+<style scoped>
+.connection-form-panel {
+  overflow: hidden;
+}
+
+.connection-form-mobile {
+  min-width: 0;
+  min-height: 0;
+  padding: 1rem;
+}
+
+.connection-form-mobile .connection-form-body {
+  padding-right: 0;
+}
+
+.connection-form-mobile .connection-form-actions {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+}
+
+.connection-form-mobile .connection-form-main-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.connection-form-mobile .connection-form-main-actions button {
+  width: 100%;
+}
+</style>

@@ -100,6 +100,7 @@ export function useFileManagerContextMenu(options: UseFileManagerContextMenuOpti
   // 修正 Ref 类型为组件实例类型
   const contextMenuRef = ref<FileManagerContextMenuInstance | null>(null);
   let activeMenuDocument: Document | null = null;
+  let suppressNextContextMenuClose = false;
 
   const readEventDocument = (event: Event) => {
     const eventTarget = event.target as (Node & { ownerDocument?: Document }) | null;
@@ -108,6 +109,9 @@ export function useFileManagerContextMenu(options: UseFileManagerContextMenuOpti
 
   const showContextMenu = (event: MouseEvent, item?: FileListItem) => {
     event.preventDefault();
+    suppressNextContextMenuClose = Boolean((event as MouseEvent & {
+      isMobileLongPressContextMenuEvent?: boolean;
+    }).isMobileLongPressContextMenuEvent);
     activeMenuDocument = readEventDocument(event);
     const targetItem = item || null;
 
@@ -322,7 +326,15 @@ export function useFileManagerContextMenu(options: UseFileManagerContextMenuOpti
     });
   };
 
-  const hideContextMenu = () => {
+  const hideContextMenu = (event?: MouseEvent) => {
+    if (suppressNextContextMenuClose) {
+      suppressNextContextMenuClose = false;
+      event?.preventDefault();
+      event?.stopPropagation();
+      activeMenuDocument?.addEventListener('click', hideContextMenu, { capture: true, once: true });
+      return;
+    }
+
     if (!contextMenuVisible.value) return;
     contextMenuVisible.value = false;
     contextMenuItems.value = [];

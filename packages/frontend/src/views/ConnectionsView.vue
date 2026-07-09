@@ -856,6 +856,8 @@ const closeServerActionMenu = () => {
 };
 
 const scheduleServerActionMenuClose = () => {
+  if (isMobile.value) return;
+
   clearServerActionMenuCloseTimer();
   serverActionMenuCloseTimer = window.setTimeout(() => {
     serverActionMenuCloseTimer = null;
@@ -1145,6 +1147,13 @@ const getServerFolderLongPressHandlers = (folderId: number) => {
   serverFolderLongPressHandlers.set(folderId, handlers);
   return handlers;
 };
+
+const serverListBodyLongPressHandlers = createMobileLongPressHandlers({
+  isMobile,
+  onLongPress: (event, point) => {
+    showServerContextMenu(createLongPressContextMenuEvent(event, point));
+  },
+});
 
 const contextTargetConnection = computed(() => {
   const targetConnectionId = serverContextMenu.value.targetConnectionId;
@@ -1849,7 +1858,15 @@ const handleOpenAllTargetConnections = async () => {
             </button>
           </div>
 
-          <div class="server-list-body" @contextmenu.prevent.stop="showServerContextMenu($event)">
+          <div
+            class="server-list-body"
+            @contextmenu.prevent.stop="showServerContextMenu($event)"
+            @touchstart="serverListBodyLongPressHandlers.onTouchstart"
+            @touchmove="serverListBodyLongPressHandlers.onTouchmove"
+            @touchend="serverListBodyLongPressHandlers.onTouchend"
+            @touchcancel="serverListBodyLongPressHandlers.onTouchcancel"
+            @click.capture="serverListBodyLongPressHandlers.onClickCapture"
+          >
             <div v-if="isLoadingConnections && filteredAndSortedConnections.length === 0" class="server-state">
               <i class="fas fa-spinner fa-spin"></i>
               <span>{{ t('common.loading') }}</span>
@@ -1883,10 +1900,10 @@ const handleOpenAllTargetConnections = async () => {
                     @click="handleConnectionClick(conn.id)"
                     @dblclick="!isBatchEditMode && connectTo(conn)"
                     @contextmenu.prevent.stop="showServerContextMenu($event, null, 'connection', conn.id)"
-                    @touchstart="getServerConnectionLongPressHandlers(null, conn.id).onTouchstart"
-                    @touchmove="getServerConnectionLongPressHandlers(null, conn.id).onTouchmove"
-                    @touchend="getServerConnectionLongPressHandlers(null, conn.id).onTouchend"
-                    @touchcancel="getServerConnectionLongPressHandlers(null, conn.id).onTouchcancel"
+                    @touchstart.stop="getServerConnectionLongPressHandlers(null, conn.id).onTouchstart"
+                    @touchmove.stop="getServerConnectionLongPressHandlers(null, conn.id).onTouchmove"
+                    @touchend.stop="getServerConnectionLongPressHandlers(null, conn.id).onTouchend"
+                    @touchcancel.stop="getServerConnectionLongPressHandlers(null, conn.id).onTouchcancel"
                     @click.capture="getServerConnectionLongPressHandlers(null, conn.id).onClickCapture"
                   >
                     <div class="server-entry-icon">
@@ -1975,10 +1992,10 @@ const handleOpenAllTargetConnections = async () => {
                   @dragend="handleFolderDragEnd"
                   @dragenter="handleFolderDragEnter(folder.folderId)"
                   @contextmenu.prevent.stop="showServerContextMenu($event, folder.folderId, 'folder')"
-                  @touchstart="getServerFolderLongPressHandlers(folder.folderId).onTouchstart"
-                  @touchmove="getServerFolderLongPressHandlers(folder.folderId).onTouchmove"
-                  @touchend="getServerFolderLongPressHandlers(folder.folderId).onTouchend"
-                  @touchcancel="getServerFolderLongPressHandlers(folder.folderId).onTouchcancel"
+                  @touchstart.stop="getServerFolderLongPressHandlers(folder.folderId).onTouchstart"
+                  @touchmove.stop="getServerFolderLongPressHandlers(folder.folderId).onTouchmove"
+                  @touchend.stop="getServerFolderLongPressHandlers(folder.folderId).onTouchend"
+                  @touchcancel.stop="getServerFolderLongPressHandlers(folder.folderId).onTouchcancel"
                   @click.capture="getServerFolderLongPressHandlers(folder.folderId).onClickCapture"
                 >
                   <i :class="['fas', isFolderExpanded(folder.folderId) ? 'fa-chevron-down' : 'fa-chevron-right']"></i>
@@ -2026,10 +2043,10 @@ const handleOpenAllTargetConnections = async () => {
                     @click="handleConnectionClick(conn.id)"
                     @dblclick="!isBatchEditMode && connectTo(conn)"
                     @contextmenu.prevent.stop="showServerContextMenu($event, folder.folderId, 'connection', conn.id)"
-                    @touchstart="getServerConnectionLongPressHandlers(folder.folderId, conn.id).onTouchstart"
-                    @touchmove="getServerConnectionLongPressHandlers(folder.folderId, conn.id).onTouchmove"
-                    @touchend="getServerConnectionLongPressHandlers(folder.folderId, conn.id).onTouchend"
-                    @touchcancel="getServerConnectionLongPressHandlers(folder.folderId, conn.id).onTouchcancel"
+                    @touchstart.stop="getServerConnectionLongPressHandlers(folder.folderId, conn.id).onTouchstart"
+                    @touchmove.stop="getServerConnectionLongPressHandlers(folder.folderId, conn.id).onTouchmove"
+                    @touchend.stop="getServerConnectionLongPressHandlers(folder.folderId, conn.id).onTouchend"
+                    @touchcancel.stop="getServerConnectionLongPressHandlers(folder.folderId, conn.id).onTouchcancel"
                     @click.capture="getServerConnectionLongPressHandlers(folder.folderId, conn.id).onClickCapture"
                   >
                     <div class="server-entry-icon">
@@ -2115,6 +2132,7 @@ const handleOpenAllTargetConnections = async () => {
                 :class="{ active: isServerActionMenuOpen }"
                 :aria-label="t('dock.actions', '操作菜单')"
                 :title="t('dock.actions', '操作菜单')"
+                @pointerdown.stop
                 @click.stop="openServerActionMenu"
               >
                 <i class="fas fa-user-gear"></i>
@@ -2123,6 +2141,7 @@ const handleOpenAllTargetConnections = async () => {
                 v-if="isServerActionMenuOpen"
                 ref="serverActionMenuRef"
                 class="server-actions-menu"
+                @pointerdown.stop
                 @click.stop
               >
                 <RouterLink
@@ -2178,7 +2197,7 @@ const handleOpenAllTargetConnections = async () => {
       </section>
 
       <button
-        v-if="!isServerPanelCollapsed"
+        v-if="!isServerPanelCollapsed && !isServerActionMenuOpen"
         type="button"
         class="server-panel-mobile-dismiss-overlay"
         :aria-label="t('connections.folders.collapsePanel', '收起侧边栏')"

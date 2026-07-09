@@ -21,6 +21,7 @@ export const createLongPressContextMenuEvent = (
   event: TouchEvent,
   point: { x: number; y: number },
 ): MouseEvent => ({
+  isMobileLongPressContextMenuEvent: true,
   clientX: point.x,
   clientY: point.y,
   button: 2,

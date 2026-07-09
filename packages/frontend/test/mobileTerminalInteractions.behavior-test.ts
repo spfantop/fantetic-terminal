@@ -11,8 +11,10 @@ const connectionsView = fs.readFileSync(path.resolve('src/views/ConnectionsView.
 const workspaceView = fs.readFileSync(path.resolve('src/views/WorkspaceView.vue'), 'utf8');
 const settingsView = fs.readFileSync(path.resolve('src/views/SettingsView.vue'), 'utf8');
 const fileManager = fs.readFileSync(path.resolve('src/components/FileManager.vue'), 'utf8');
+const fileManagerContextMenu = fs.readFileSync(path.resolve('src/composables/file-manager/useFileManagerContextMenu.ts'), 'utf8');
 const layoutRenderer = fs.readFileSync(path.resolve('src/components/LayoutRenderer.vue'), 'utf8');
 const virtualKeyboard = fs.readFileSync(path.resolve('src/components/VirtualKeyboard.vue'), 'utf8');
+const addConnectionForm = fs.readFileSync(path.resolve('src/components/AddConnectionForm.vue'), 'utf8');
 const addEditQuickCommandForm = fs.readFileSync(path.resolve('src/components/AddEditQuickCommandForm.vue'), 'utf8');
 const mobileLongPress = fs.readFileSync(path.resolve('src/composables/useMobileLongPress.ts'), 'utf8');
 
@@ -53,6 +55,36 @@ assert.match(
 );
 
 assert.match(
+  terminalTabBar,
+  /const isConnectionListPopupMobileViewport = computed/,
+  'terminal tab new connection popup should detect mobile viewport',
+);
+
+assert.match(
+  terminalTabBar,
+  /const connectionListPopupContentStyle = computed/,
+  'terminal tab new connection popup should apply responsive content sizing',
+);
+
+assert.match(
+  terminalTabBar,
+  /calc\(100dvw - 2rem\)/,
+  'terminal tab new connection popup should keep comfortable mobile side gutters',
+);
+
+assert.match(
+  terminalTabBar,
+  /disabled:\s*isConnectionListPopupMobileViewport/,
+  'terminal tab new connection popup should not keep draggable absolute positioning on mobile',
+);
+
+assert.match(
+  terminalTabBar,
+  /if \(!isConnectionListPopupMobileViewport\.value\) \{\s*centerConnectionListPopup\(\);/s,
+  'terminal tab new connection popup should not write absolute center positioning on mobile',
+);
+
+assert.match(
   mobileLongPress,
   /export function createMobileLongPressHandlers/,
   'mobile long press helper should be reusable',
@@ -80,6 +112,42 @@ assert.match(
   fileManager,
   /createMobileLongPressHandlers/,
   'file manager should support mobile long press menus',
+);
+
+assert.match(
+  fileManagerContextMenu,
+  /suppressNextContextMenuClose/,
+  'file manager context menu should ignore the synthetic click after mobile long press',
+);
+
+assert.match(
+  connectionsView,
+  /serverListBodyLongPressHandlers/,
+  'connections page server list empty area should support mobile long press menus',
+);
+
+assert.match(
+  connectionsView,
+  /const scheduleServerActionMenuClose = \(\) => \{\s*if \(isMobile\.value\) return;/s,
+  'mobile server action menu should not be closed by synthetic hover leave events',
+);
+
+assert.match(
+  connectionsView,
+  /v-if="!isServerPanelCollapsed && !isServerActionMenuOpen"/,
+  'mobile server panel dismiss overlay should not stay active while the action menu is open',
+);
+
+assert.match(
+  connectionsView,
+  /class="server-actions-menu"[\s\S]*@pointerdown\.stop/,
+  'mobile server action menu should stop pointer events from leaking to surrounding mobile dismiss handlers',
+);
+
+assert.match(
+  connectionsView,
+  /@touchstart="serverListBodyLongPressHandlers\.onTouchstart"/,
+  'connections page server list body should bind mobile long press touchstart',
 );
 
 assert.match(
@@ -126,8 +194,8 @@ assert.match(
 
 assert.match(
   virtualKeyboard,
-  /Space[\s\S]*sequence:\s*' '/,
-  'virtual keyboard should include a real space key',
+  /label:\s*'空格'[\s\S]*sequence:\s*' '/,
+  'virtual keyboard should include the reference-style Chinese space key',
 );
 
 assert.match(
@@ -142,10 +210,16 @@ assert.match(
   'virtual keyboard should send DEL for Backspace in SSH terminals',
 );
 
+assert.doesNotMatch(
+  virtualKeyboard,
+  /label:\s*'Ctrl\+C'/,
+  'virtual keyboard should match the reference by using a Ctrl lock key instead of a separate Ctrl+C key',
+);
+
 assert.match(
   virtualKeyboard,
-  /Ctrl\+C[\s\S]*sequence:\s*'\\x03'/,
-  'virtual keyboard should expose common SSH control keys directly',
+  /controlSequenceFor[\s\S]*charCodeAt\(0\) - 'A'\.charCodeAt\(0\) \+ 1/,
+  'virtual keyboard should still send Ctrl+C by locking Ctrl and tapping c',
 );
 
 assert.match(
@@ -156,8 +230,116 @@ assert.match(
 
 assert.match(
   virtualKeyboard,
+  /const modeTabs: KeyDefinition\[\]/,
+  'virtual keyboard should render a fixed segmented mode switcher',
+);
+
+assert.match(
+  virtualKeyboard,
+  /label:\s*'字母'[\s\S]*label:\s*'符号'[\s\S]*label:\s*'命令'/,
+  'virtual keyboard mode tabs should use the same Chinese labels as the reference',
+);
+
+assert.match(
+  virtualKeyboard,
+  /id:\s*'quick-actions'[\s\S]*label:\s*'Esc'[\s\S]*label:\s*'Tab'[\s\S]*label:\s*'Ctrl'[\s\S]*label:\s*'Alt'[\s\S]*label:\s*'↑'[\s\S]*label:\s*'↓'[\s\S]*label:\s*'←'[\s\S]*label:\s*'→'[\s\S]*label:\s*'Paste'[\s\S]*label:\s*'Enter'/,
+  'virtual keyboard fixed control row should mirror the reference order',
+);
+
+assert.match(
+  virtualKeyboard,
+  /label:\s*'Paste'[\s\S]*type:\s*'paste'/,
+  'virtual keyboard should include a fixed Paste key like the terminal keyboard reference',
+);
+
+assert.match(
+  virtualKeyboard,
+  /const isShiftActive = ref\(false\)/,
+  'virtual keyboard should support a shift state for normal keyboard input',
+);
+
+assert.match(
+  virtualKeyboard,
+  /type:\s*'command-template'/,
+  'virtual keyboard command mode should select reusable command templates',
+);
+
+assert.match(
+  virtualKeyboard,
+  /commandAction:\s*'execute'/,
+  'virtual keyboard command mode should support executing the selected command',
+);
+
+assert.match(
+  virtualKeyboard,
+  /docker logs -f[\s\S]*systemctl status/,
+  'virtual keyboard command mode should include common SSH command templates',
+);
+
+assert.match(
+  virtualKeyboard,
+  /label:\s*'全角'[\s\S]*type:\s*'noop'/,
+  'virtual keyboard symbol mode should include the reference full-width toggle placeholder',
+);
+
+assert.match(
+  virtualKeyboard,
+  /type:\s*'hide'/,
+  'virtual keyboard should include the reference-style hide keyboard key',
+);
+
+assert.match(
+  workspaceView,
+  /@hide="isVirtualKeyboardVisible = false"/,
+  'workspace mobile virtual keyboard should be hideable from the reference-style down key',
+);
+
+assert.match(
+  virtualKeyboard,
+  /class="virtual-keyboard-mode-tabs"/,
+  'virtual keyboard should show mode tabs as a dedicated segmented control',
+);
+
+assert.match(
+  virtualKeyboard,
+  /class="virtual-keyboard-command-actions"/,
+  'virtual keyboard command mode should expose insert and execute actions',
+);
+
+assert.match(
+  virtualKeyboard,
+  /linear-gradient\(180deg[\s\S]*box-shadow:\s*inset/,
+  'virtual keyboard should use the darker raised key visual style from the reference',
+);
+
+assert.match(
+  virtualKeyboard,
   /\.virtual-keyboard-mode-panel/,
   'virtual keyboard should keep a stable mode panel height',
+);
+
+assert.match(
+  virtualKeyboard,
+  /id:\s*'quick-actions'/,
+  'virtual keyboard should include a compact SSH quick action row',
+);
+
+assert.match(
+  virtualKeyboard,
+  /label:\s*'命令'/,
+  'virtual keyboard should provide the reference command mode tab',
+);
+
+assert.match(
+  addConnectionForm,
+  /connection-form-mobile/,
+  'add/edit connection dialog should have mobile-specific layout',
+);
+
+assert.match(
+  addConnectionForm,
+  /calc\(100dvw - 2rem\)/,
+  'add/edit connection dialog should keep comfortable mobile side gutters',
 );
 
 assert.match(

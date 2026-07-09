@@ -2004,6 +2004,7 @@ const closeFileManagerModal = () => {
         v-show="isVirtualKeyboardVisible"
         class="mobile-virtual-keyboard"
         @send-key="handleVirtualKeyPress"
+        @hide="isVirtualKeyboardVisible = false"
       />
     </template>
 
