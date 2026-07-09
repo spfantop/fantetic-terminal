@@ -76,4 +76,43 @@ assert.equal(
   'dark mode should use the saved dark theme style',
 );
 
+const switchToDarkWithTerminalTheme = createUiThemeModeUpdate('dark', {
+  activeDefaultTerminalThemeId: 12,
+  activeDarkTerminalThemeId: 34,
+});
+assert.deepEqual(
+  switchToDarkWithTerminalTheme,
+  {
+    uiThemeMode: 'dark',
+    activeTerminalThemeId: 34,
+    activeDarkTerminalThemeId: 34,
+  },
+  'switching to dark mode should select the saved dark terminal theme without changing terminal output state',
+);
+assert.equal(
+  Object.prototype.hasOwnProperty.call(switchToDarkWithTerminalTheme, 'terminalOutput'),
+  false,
+  'theme mode switching must not carry terminal output mutations',
+);
+
+const switchToDefaultWithTerminalTheme = createUiThemeModeUpdate('default', {
+  activeDefaultTerminalThemeId: 12,
+  activeDarkTerminalThemeId: 34,
+});
+assert.deepEqual(
+  switchToDefaultWithTerminalTheme,
+  {
+    uiThemeMode: 'default',
+    activeTerminalThemeId: 12,
+    activeDefaultTerminalThemeId: 12,
+  },
+  'switching to default mode should select the saved default terminal theme',
+);
+
+assert.deepEqual(
+  createUiThemeModeUpdate('dark', { activeTerminalThemeId: 12 }),
+  { uiThemeMode: 'dark' },
+  'mode switching should not infer mode terminal themes from the current activeTerminalThemeId alone',
+);
+
 console.log('ui theme state behavior ok');

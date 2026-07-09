@@ -26,6 +26,7 @@ const emit = defineEmits<{
 const {
   allTerminalThemes,
   activeTerminalThemeId,
+  currentUiThemeMode,
   currentTerminalFontFamily,
   currentTerminalFontSize,
   terminalTextStrokeEnabled,
@@ -206,6 +207,16 @@ const handleApplyTheme = async (theme: TerminalTheme) => {
   } catch (error: any) {
     console.error("应用终端主题失败:", error);
     notificationsStore.addNotification({ type: 'error', message: t('styleCustomizer.setActiveThemeFailed', { message: error.message }) });
+  }
+};
+
+const handleResetCurrentModeTerminalTheme = async () => {
+  try {
+    await appearanceStore.resetActiveTerminalThemeForCurrentUiMode();
+    notificationsStore.addNotification({ type: 'info', message: t('styleCustomizer.terminalThemeResetForMode') });
+  } catch (error: any) {
+    console.error("还原当前模式默认终端主题失败:", error);
+    notificationsStore.addNotification({ type: 'error', message: t('styleCustomizer.terminalThemeResetForModeFailed', { message: error.message }) });
   }
 };
 
@@ -612,6 +623,7 @@ watch(() => props.isEditingTheme, (isEditing) => {
 
     <div class="mt-4 mb-6 flex gap-2 flex-wrap items-center pb-4 border-b border-dashed border-border">
         <button @click="handleAddNewTheme" class="px-3 py-1.5 text-sm border border-border rounded bg-header hover:bg-border transition duration-200 ease-in-out whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed">{{ t('styleCustomizer.addNewTheme') }}</button>
+        <button @click="handleResetCurrentModeTerminalTheme" class="px-3 py-1.5 text-sm border border-border rounded bg-header hover:bg-border transition duration-200 ease-in-out whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed">{{ t('styleCustomizer.resetTerminalThemeForMode', { mode: currentUiThemeMode === 'dark' ? t('styleCustomizer.darkMode') : t('styleCustomizer.defaultMode') }) }}</button>
     </div>
      
      <div class="mb-4">

@@ -6,10 +6,16 @@ export type UiThemeSettingsLike = {
   uiThemeMode?: UiThemeMode | null;
   customUiTheme?: string | null;
   customDarkUiTheme?: string | null;
+  activeTerminalThemeId?: number | null;
+  activeDefaultTerminalThemeId?: number | null;
+  activeDarkTerminalThemeId?: number | null;
 };
 
 export type UiThemeModeUpdate = {
   uiThemeMode: UiThemeMode;
+  activeTerminalThemeId?: number | null;
+  activeDefaultTerminalThemeId?: number | null;
+  activeDarkTerminalThemeId?: number | null;
 };
 
 const safeParseUiTheme = (themeJson: string | null | undefined, fallback: Record<string, string>) => {
@@ -67,6 +73,38 @@ export const resolveActiveUiTheme = (settings: UiThemeSettingsLike): Record<stri
   return normalizeUiTheme(safeParseUiTheme(settings.customUiTheme, defaultUiTheme));
 };
 
-export const createUiThemeModeUpdate = (uiThemeMode: UiThemeMode): UiThemeModeUpdate => ({
-  uiThemeMode,
-});
+const readModeTerminalThemeId = (
+  settings: UiThemeSettingsLike,
+  uiThemeMode: UiThemeMode,
+): number | null | undefined => (
+  uiThemeMode === 'dark'
+    ? settings.activeDarkTerminalThemeId
+    : settings.activeDefaultTerminalThemeId
+);
+
+export const resolveActiveTerminalThemeId = (
+  settings: UiThemeSettingsLike,
+  uiThemeMode = readUiThemeMode(settings),
+): number | null | undefined => (
+  readModeTerminalThemeId(settings, uiThemeMode)
+);
+
+export const createUiThemeModeUpdate = (
+  uiThemeMode: UiThemeMode,
+  settings?: UiThemeSettingsLike,
+): UiThemeModeUpdate => {
+  const update: UiThemeModeUpdate = { uiThemeMode };
+  if (!settings) return update;
+
+  const targetThemeId = resolveActiveTerminalThemeId(settings, uiThemeMode);
+  if (targetThemeId === undefined) return update;
+
+  update.activeTerminalThemeId = targetThemeId;
+  if (uiThemeMode === 'dark') {
+    update.activeDarkTerminalThemeId = targetThemeId;
+  } else {
+    update.activeDefaultTerminalThemeId = targetThemeId;
+  }
+
+  return update;
+};

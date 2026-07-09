@@ -13,6 +13,8 @@ export interface AppearanceSettings {
   customUiTheme?: string; // UI 主题 (CSS 变量 JSON 字符串)
   customDarkUiTheme?: string; // 暗黑模式 UI 主题 (CSS 变量 JSON 字符串)
   activeTerminalThemeId?: number | null; // 修改为数字 ID 或 null
+  activeDefaultTerminalThemeId?: number | null; // 默认模式终端主题 ID
+  activeDarkTerminalThemeId?: number | null; // 暗黑模式终端主题 ID
   terminalFontFamily?: string; // 终端字体列表字符串
   terminalFontSize?: number; // 终端字体大小 (px)
   terminalFontSizeMobile?: number; // 移动端终端字体大小 (px)
