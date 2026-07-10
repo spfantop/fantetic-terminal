@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 
 const router = Router();
 const GITHUB_REPO = 'spfantop/fantetic-terminal';
-const VERSION_FILE_URL = `https://raw.githubusercontent.com/${GITHUB_REPO}/main/VERSION`;
+const PACKAGE_JSON_URL = `https://raw.githubusercontent.com/${GITHUB_REPO}/main/package.json`;
 const GITHUB_RELEASES_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
 const CACHE_TTL_MS = 10 * 60 * 1000;
 
@@ -46,17 +46,20 @@ const readLatestReleaseVersion = async (): Promise<string | null> => {
   }
 };
 
-const readVersionFileVersion = async (): Promise<string | null> => {
+const readPackageVersion = async (): Promise<string | null> => {
   try {
-    const response = await fetch(VERSION_FILE_URL, { headers: { Accept: 'text/plain' } });
+    const response = await fetch(PACKAGE_JSON_URL, {
+      headers: { Accept: 'application/vnd.github.v3+json' },
+    });
     if (!response.ok) {
-      console.warn(`[Version] 远程 VERSION 文件请求失败，状态码: ${response.status}`);
+      console.warn(`[Version] 远程 package.json 请求失败，状态码: ${response.status}`);
       return null;
     }
 
-    return normalizeRemoteVersion(await response.text());
+    const data = await response.json() as { version?: unknown };
+    return normalizeRemoteVersion(data.version);
   } catch (error) {
-    console.warn('[Version] 远程 VERSION 文件请求失败:', error);
+    console.warn('[Version] 远程 package.json 请求失败:', error);
     return null;
   }
 };
@@ -76,9 +79,9 @@ router.get('/remote', async (_req: Request, res: Response) => {
     return;
   }
 
-  const versionFileVersion = await readVersionFileVersion();
-  if (versionFileVersion) {
-    const result = { version: versionFileVersion, source: 'version_file' };
+  const packageVersion = await readPackageVersion();
+  if (packageVersion) {
+    const result = { version: packageVersion, source: 'package_metadata' };
     writeCached('remote', result);
     res.json(result);
     return;
