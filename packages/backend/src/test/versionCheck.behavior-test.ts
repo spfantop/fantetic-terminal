@@ -12,9 +12,12 @@ assert.match(
 
 assert.match(
   versionRoutes,
-  /readVersionFileVersion/,
-  'version remote endpoint should keep VERSION file fallback for repositories without releases',
+  /readPackageVersion/,
+  'version remote endpoint should fall back to the repository package version when no release exists',
 );
+
+assert.match(versionRoutes, /raw\.githubusercontent\.com\/\$\{GITHUB_REPO\}\/main\/package\.json/, 'version fallback should use the root package metadata, which is the release version source');
+assert.doesNotMatch(versionRoutes, /main\/VERSION/, 'version fallback must not reference a VERSION file that is absent from the repository root');
 
 assert.match(
   versionRoutes,
@@ -24,6 +27,6 @@ assert.match(
 
 assert.match(
   versionRoutes,
-  /const versionFileVersion = await readVersionFileVersion\(\);[\s\S]*if \(versionFileVersion\) \{[\s\S]*version: versionFileVersion/s,
-  'version remote endpoint should return VERSION content when no release tag is available',
+  /const packageVersion = await readPackageVersion\(\);[\s\S]*if \(packageVersion\) \{[\s\S]*version: packageVersion/s,
+  'version remote endpoint should return the repository package version when no release tag is available',
 );

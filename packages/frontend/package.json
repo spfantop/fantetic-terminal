@@ -4,9 +4,11 @@
    "private": true,
    "type": "module",
    "scripts": {
+      "prebuild": "node ../../build-tools/sync-frontend-version.js",
       "dev": "vite --host",
       "build": "vue-tsc --noEmit && vite build",
       "preview": "vite preview",
+      "test:version-metadata": "esbuild test/versionMetadata.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/versionMetadata.behavior-test.mjs && node ../../.vite-codex-cache/versionMetadata.behavior-test.mjs",
       "test:highlighter": "esbuild test/terminalOutputHighlighter.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/terminalOutputHighlighter.behavior-test.mjs && node ../../.vite-codex-cache/terminalOutputHighlighter.behavior-test.mjs",
       "test:terminal-local-echo": "esbuild test/terminalLocalEcho.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/terminalLocalEcho.behavior-test.mjs && node ../../.vite-codex-cache/terminalLocalEcho.behavior-test.mjs",
       "test:add-connection-tags": "esbuild test/addConnectionFormTagSelection.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/addConnectionFormTagSelection.behavior-test.mjs && node ../../.vite-codex-cache/addConnectionFormTagSelection.behavior-test.mjs",
