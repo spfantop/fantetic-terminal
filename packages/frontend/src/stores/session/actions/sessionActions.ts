@@ -16,6 +16,7 @@ import { createDockerManager, type DockerManagerDependencies } from '../../../co
 import { registerSshSuspendHandlers } from './sshSuspendActions'; 
 import { debugLog } from '../../../composables/useDebugLog';
 import type { WsConnectionStatus } from '../../../composables/useWebSocketConnection';
+import { isRemoteDesktopFeatureAvailable, resolveWebSocketBaseUrl } from '../../../utils/runtimeConfig';
 // --- 辅助函数 (特定于此模块的 actions) ---
 const findConnectionInfo = (connectionId: number | string, connectionsStore: ReturnType<typeof useConnectionsStore>): ConnectionInfo | undefined => {
   return connectionsStore.connections.find(c => c.id === Number(connectionId));
@@ -186,9 +187,7 @@ export const openNewSession = (
 
 
   // 4. 启动 WebSocket 连接
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsHostAndPort = window.location.host;
-  const wsUrl = `${protocol}//${wsHostAndPort}/ws/`;
+  const wsUrl = resolveWebSocketBaseUrl();
   debugLog(`[SessionActions] Generated WebSocket URL: ${wsUrl}`);
   wsManager.connect(wsUrl);
   debugLog(`[SessionActions] 已为会话 ${newSessionId} 启动 WebSocket 连接。`);
@@ -218,6 +217,10 @@ export const openTelnetSession = (
 export const openRemoteDesktopSession = (connection: ConnectionInfo) => {
   if (connection.type !== 'RDP' && connection.type !== 'VNC') {
     console.warn(`[SessionActions] openRemoteDesktopSession 仅用于 RDP/VNC，会话类型为 ${connection.type}。`);
+    return;
+  }
+  if (!isRemoteDesktopFeatureAvailable()) {
+    console.warn('[SessionActions] Electron App 未内置 guacd，已禁用 RDP/VNC 会话。');
     return;
   }
 
@@ -370,6 +373,10 @@ export const handleConnectRequest = (
     }
 ) => {
   const { connectionsStore, router, openRdpSessionAction, t, navigateToWorkspace = true } = dependencies;
+  if ((connection.type === 'RDP' || connection.type === 'VNC') && !isRemoteDesktopFeatureAvailable()) {
+    console.warn('[SessionActions] Electron App 未内置 guacd，已忽略 RDP/VNC 连接请求。');
+    return;
+  }
 
   if (connection.type === 'RDP') {
     openRdpSessionAction(connection);
@@ -399,9 +406,7 @@ export const handleConnectRequest = (
         if (currentStatus === 'disconnected' || currentStatus === 'error') {
           activeAndDisconnected = true;
           debugLog(`[SessionActions] 活动会话 ${activeSessionId.value} 已断开或出错，尝试重连...`);
-          const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-          const wsHostAndPort = window.location.host;
-          const wsUrl = `${protocol}//${wsHostAndPort}/ws/`;
+          const wsUrl = resolveWebSocketBaseUrl();
           debugLog(`[SessionActions handleConnectRequest] Generated WebSocket URL for reconnect: ${wsUrl}`);
           currentActiveSession.wsManager.connect(wsUrl);
           activateSession(activeSessionId.value);

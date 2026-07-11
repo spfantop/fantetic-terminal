@@ -1,6 +1,6 @@
 {
   "name": "fantetic-terminal",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "main": "index.js",
   "private": true,
   "workspaces": [
@@ -11,6 +11,10 @@
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
+    "build:frontend": "npm --workspace @fantetic-terminal/frontend run build",
+    "build:backend": "npm --workspace @fantetic-terminal/backend run build",
+    "build:app": "npx cross-env VITE_FANTETIC_APP_MODE=electron npm run build:frontend && npm run build:backend && npm --prefix electron-app run build",
+    "dev:app": "node electron-app/dev-app.js",
     "postinstall": "patch-package"
   },
   "repository": {

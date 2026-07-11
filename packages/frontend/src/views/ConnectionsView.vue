@@ -21,6 +21,7 @@ import type { ConnectionFolderInfo } from '../stores/connections.store';
 import { beginGlobalDragSelectionGuard } from '../composables/useGlobalDragSelectionGuard';
 import { useWorkspaceEventEmitter } from '../composables/workspaceEvents';
 import { useThemeToggle } from '../composables/useThemeToggle';
+import { isAccountFeatureAvailable } from '../utils/runtimeConfig';
 import { useDeviceDetection } from '../composables/useDeviceDetection';
 import {
   createLongPressContextMenuEvent,
@@ -36,6 +37,7 @@ const sessionStore = useSessionStore();
 const tagsStore = useTagsStore();
 const authStore = useAuthStore();
 const emitWorkspaceEvent = useWorkspaceEventEmitter();
+const accountFeatureAvailable = isAccountFeatureAvailable();
 const { isMobile } = useDeviceDetection();
 const {
   isDarkUiThemeActive,
@@ -2153,7 +2155,7 @@ const handleOpenAllTargetConnections = async () => {
                   <span>{{ t('nav.settings') }}</span>
                 </RouterLink>
                 <RouterLink
-                  v-if="!isAuthenticated"
+                  v-if="accountFeatureAvailable && !isAuthenticated"
                   :to="{ name: 'Login' }"
                   class="server-actions-menu-item"
                   @click="closeServerActionMenu"
@@ -2162,7 +2164,7 @@ const handleOpenAllTargetConnections = async () => {
                   <span>{{ t('nav.login') }}</span>
                 </RouterLink>
                 <button
-                  v-else
+                  v-else-if="accountFeatureAvailable"
                   type="button"
                   class="server-actions-menu-item danger"
                   @click="handleLogout"

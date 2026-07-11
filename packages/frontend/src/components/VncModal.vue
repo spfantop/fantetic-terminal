@@ -7,6 +7,7 @@ import { useConnectionsStore } from '../stores/connections.store';
 // @ts-ignore - guacamole-common-js 缺少官方类型定义
 import Guacamole from 'guacamole-common-js';
 import type { ConnectionInfo } from '../stores/connections.store';
+import { resolveRemoteDesktopProxyWebSocketUrl } from '../utils/runtimeConfig';
 
 const { t } = useI18n();
 const settingsStore = useSettingsStore();
@@ -101,19 +102,6 @@ let dragOffsetX = 0;
 let dragOffsetY = 0;
 let hasDragged = false;
 
-let remoteDesktopWsBaseUrl: string; // Renamed for clarity
-const LOCAL_BACKEND_URL_FOR_PROXY = 'ws://localhost:3001'; // Main backend's WebSocket for proxying
-
-if (window.location.hostname === 'localhost') {
-  // For local development, VNC will also go through the main backend's proxy
-  remoteDesktopWsBaseUrl = `${LOCAL_BACKEND_URL_FOR_PROXY}/ws/rdp-proxy`; // Use the same RDP proxy path
-} else {
-  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsHostAndPort = window.location.host;
-  // For deployed environments, assume the proxy is at /ws/rdp-proxy relative to the main backend
-  remoteDesktopWsBaseUrl = `${wsProtocol}//${wsHostAndPort}/ws/rdp-proxy`;
-}
-
 const handleConnection = async () => {
   if (!props.connection || !vncDisplayRef.value) {
     statusMessage.value = t('remoteDesktopModal.errors.missingInfo');
@@ -141,7 +129,11 @@ const handleConnection = async () => {
     // For VNC, DPI is less critical but the proxy might expect it. Send a default or let backend handle.
     // The backend's websocket.ts rdp-proxy handler now calculates DPI if not provided or uses a default.
     // We need to ensure width and height are passed for the proxy to correctly forward.
-    const tunnelUrl = `${remoteDesktopWsBaseUrl}?token=${encodeURIComponent(token)}&width=${desiredModalWidth.value}&height=${desiredModalHeight.value}`;
+    const tunnelUrl = resolveRemoteDesktopProxyWebSocketUrl(
+      token,
+      desiredModalWidth.value,
+      desiredModalHeight.value,
+    );
   
 
     // @ts-ignore

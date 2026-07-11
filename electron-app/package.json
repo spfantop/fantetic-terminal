@@ -1,0 +1,80 @@
+{
+  "name": "fantetic-electron-app",
+  "version": "1.5.1",
+  "description": "Electron application for Fantetic Terminal",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "sync:version": "node ../build-tools/sync-frontend-version.js",
+    "prepare:runtime": "node build-tools/prepare-runtime.js",
+    "build": "npm run sync:version && npm run prepare:runtime && electron-builder",
+    "build:windows": "npm run sync:version && npm run prepare:runtime && electron-builder --win nsis --x64",
+    "build:linux": "npm run sync:version && npm run prepare:runtime && electron-builder --linux AppImage deb --x64",
+    "build:macos": "npm run build:macos:x64",
+    "build:macos:x64": "npm run sync:version && npm run prepare:runtime && electron-builder --mac dmg --x64",
+    "build:macos:arm64": "npm run sync:version && npm run prepare:runtime && electron-builder --mac dmg --arm64"
+  },
+  "keywords": [
+    "electron",
+    "fantetic",
+    "terminal"
+  ],
+  "author": "",
+  "homepage": "https://github.com/spfantop/fantetic-terminal",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.0.0"
+  },
+  "dependencies": {
+    "electron-store": "^10.0.1",
+    "express": "^5.1.0"
+  },
+  "build": {
+    "appId": "com.fantetic.terminal",
+    "productName": "Fantetic Terminal",
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "asar": true,
+    "directories": {
+      "output": "dist_electron",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "runtime/packages",
+        "to": "packages",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "../packages/frontend/public/icons/icon-512x512.png"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "icon": "../packages/frontend/public/icons/icon-512x512.png"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "../packages/frontend/public/icons/icon-512x512.png",
+      "maintainer": "Fantetic"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

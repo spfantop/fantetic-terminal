@@ -1,23 +1,11 @@
 
 import sqlite3, { OPEN_READWRITE, OPEN_CREATE } from 'sqlite3';
 import path from 'path';
-import fs from 'fs';
 import { tableDefinitions } from './schema.registry';
 import { runMigrations } from './migrations'; // +++ Import runMigrations +++
+import { getAppDataPath } from '../config/app-data-path';
 
-const dbDir = path.join(__dirname, '..', '..', 'data');
 const dbFilename = 'fantetic-terminal.db';
-const dbPath = path.join(dbDir, dbFilename);
-
-if (!fs.existsSync(dbDir)) {
-    try {
-        fs.mkdirSync(dbDir, { recursive: true });
-    } catch (mkdirErr: any) {
-        console.error(`[数据库文件系统] 创建目录 ${dbDir} 失败:`, mkdirErr.message);
-        throw new Error(`创建数据库目录失败: ${mkdirErr.message}`);
-    }
-} else {
-}
 
 const verboseSqlite3 = sqlite3.verbose();
 let dbInstancePromise: Promise<sqlite3.Database> | null = null;
@@ -88,6 +76,7 @@ const runDatabaseInitializations = async (db: sqlite3.Database): Promise<void> =
 
 export const getDbInstance = (): Promise<sqlite3.Database> => {
     if (!dbInstancePromise) {
+        const dbPath = path.join(getAppDataPath(), dbFilename);
         dbInstancePromise = new Promise((resolve, reject) => {
         
             const db = new verboseSqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, async (err) => { // Mark callback as async

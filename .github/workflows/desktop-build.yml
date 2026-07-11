@@ -1,0 +1,122 @@
+name: Build desktop applications
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Optional release tag to create/update (for example v1.5.2)
+        required: false
+        type: string
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  build-desktop:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-latest
+            command: build:windows
+            artifact: windows-x64
+            files: |
+              electron-app/dist_electron/*.exe
+          - name: Linux x64
+            os: ubuntu-latest
+            command: build:linux
+            artifact: linux-x64
+            files: |
+              electron-app/dist_electron/*.AppImage
+              electron-app/dist_electron/*.deb
+          - name: macOS x64
+            os: macos-15-intel
+            command: build:macos:x64
+            artifact: macos-x64
+            files: |
+              electron-app/dist_electron/*.dmg
+          - name: macOS arm64
+            os: macos-latest
+            command: build:macos:arm64
+            artifact: macos-arm64
+            files: |
+              electron-app/dist_electron/*.dmg
+
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            electron-app/package-lock.json
+
+      - name: Install workspace dependencies
+        run: npm ci
+
+      - name: Install Electron dependencies
+        run: npm ci --prefix electron-app
+
+      - name: Build backend
+        run: npm run build --workspace=@fantetic-terminal/backend
+
+      - name: Build frontend
+        run: npm run build --workspace=@fantetic-terminal/frontend
+
+      - name: Package desktop application
+        run: npm run ${{ matrix.command }} --prefix electron-app
+
+      - name: Upload desktop packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: fantetic-terminal-${{ matrix.artifact }}
+          path: ${{ matrix.files }}
+          if-no-files-found: error
+          retention-days: 14
+
+  publish-release:
+    name: Publish GitHub Release assets
+    needs: build-desktop
+    if: ${{ github.ref_type == 'tag' || inputs.release_tag != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all desktop packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: fantetic-terminal-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Generate SHA256 checksums
+        shell: bash
+        run: find release-assets -maxdepth 1 -type f -print0 | sort -z | xargs -0 sha256sum > release-assets/SHA256SUMS.txt
+
+      - name: Create release and upload Assets
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            release-assets/*.exe
+            release-assets/*.AppImage
+            release-assets/*.deb
+            release-assets/*.dmg
+            release-assets/SHA256SUMS.txt

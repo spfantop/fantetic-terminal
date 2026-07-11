@@ -2,6 +2,10 @@ import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs'; // fs is needed for early env loading if data/.env is checked
 
+import { ensureAndGetPathInAppData, getAppDataPath, initializeAppDataPath } from './config/app-data-path';
+
+initializeAppDataPath();
+
 // --- 开始环境变量的早期加载 ---
 // 1. 加载根目录的 .env 文件 (定义部署模式等)
 // 注意: __dirname 在 dist/src 中，所以需要回退三级到项目根目录
@@ -17,8 +21,7 @@ if (rootConfigResult.error && (rootConfigResult.error as NodeJS.ErrnoException).
 }
 
 // 2. 加载 data/.env 文件 (定义密钥等)
-// 注意: 这个路径是相对于编译后的 dist/src/index.js
-const dataEnvPathGlobal = path.resolve(__dirname, '../data/.env'); // Renamed to avoid conflict if 'dataEnvPath' is used later
+const dataEnvPathGlobal = path.join(getAppDataPath(), '.env'); // Renamed to avoid conflict if 'dataEnvPath' is used later
 const dataConfigResultGlobal = dotenv.config({ path: dataEnvPathGlobal }); // Renamed
 
 if (dataConfigResultGlobal.error && (dataConfigResultGlobal.error as NodeJS.ErrnoException).code !== 'ENOENT') {
@@ -31,6 +34,7 @@ if (dataConfigResultGlobal.error && (dataConfigResultGlobal.error as NodeJS.Errn
 import express = require('express');
 import { Request, Response, NextFunction, RequestHandler } from 'express';
 import http from 'http';
+import cors from 'cors';
 
 
 import crypto from 'crypto';
@@ -179,11 +183,25 @@ app.set('trust proxy', true);
 app.use(ipWhitelistMiddleware as RequestHandler);
 app.use(express.json());
 
+const allowedCorsOrigins = new Set([
+    process.env.RP_ORIGIN || 'http://localhost:5173',
+    'http://localhost:22457',
+]);
+
+app.use(cors({
+    origin: (origin, callback) => {
+        if (!origin || allowedCorsOrigins.has(origin)) {
+            callback(null, true);
+            return;
+        }
+
+        callback(new Error(`CORS origin not allowed: ${origin}`));
+    },
+    credentials: true,
+}));
+
 // --- 静态文件服务 ---
-const uploadsPath = path.join(__dirname, '../uploads');
-if (!fs.existsSync(uploadsPath)) { // 确保 uploads 目录存在
-    fs.mkdirSync(uploadsPath, { recursive: true });
-}
+const uploadsPath = ensureAndGetPathInAppData('uploads');
 // app.use('/uploads', express.static(uploadsPath)); // 不再需要，文件通过 API 提供
 
 
@@ -222,11 +240,7 @@ const initializeDatabase = async () => {
 const startServer = () => {
     // --- 会话中间件配置 ---
     const FileStore = sessionFileStore(session);
-    // 修改路径以匹配 Docker volume 挂载点 /app/data
-    const sessionsPath = path.join('/app/data', 'sessions');
-    if (!fs.existsSync(sessionsPath)) {
-        fs.mkdirSync(sessionsPath, { recursive: true });
-    }
+    const sessionsPath = ensureAndGetPathInAppData('sessions');
     const sessionMiddleware = session({
         store: new FileStore({
             path: sessionsPath,

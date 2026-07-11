@@ -14,6 +14,7 @@ import {
 import type { ConnectionInfo } from '../stores/connections.store';
 import { useSettingsStore } from '../stores/settings.store';
 import type { WsConnectionStatus } from '../composables/useWebSocketConnection';
+import { resolveRemoteDesktopProxyWebSocketUrl } from '../utils/runtimeConfig';
 
 const { t } = useI18n();
 const settingsStore = useSettingsStore();
@@ -55,11 +56,6 @@ let resizeRequestVersion = 0;
 let connectionResizeTimers: number[] = [];
 let inputListenerCleanupList: Array<() => void> = [];
 let defaultsAppliedForConnectionId: ConnectionInfo['id'] | null = null;
-
-const LOCAL_BACKEND_URL = 'ws://localhost:3001';
-const backendBaseUrl = window.location.hostname === 'localhost'
-  ? LOCAL_BACKEND_URL
-  : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`;
 
 const DEFAULT_REMOTE_DESKTOP_WIDTH = 1024;
 const DEFAULT_REMOTE_DESKTOP_HEIGHT = 768;
@@ -657,7 +653,7 @@ const handleConnection = async () => {
     }
 
     updateStatus('connecting', t('remoteDesktopModal.status.connectingWs'));
-    const tunnelUrl = `${backendBaseUrl}/rdp-proxy?token=${encodeURIComponent(token)}&width=${width}&height=${height}&dpi=96`;
+    const tunnelUrl = resolveRemoteDesktopProxyWebSocketUrl(token, width, height);
 
     // @ts-ignore
     const tunnel = new Guacamole.WebSocketTunnel(tunnelUrl);

@@ -9,6 +9,7 @@ import {
   serverIconOptions,
   type ServerIconOption,
 } from '../utils/serverIcons';
+import { isRemoteDesktopFeatureAvailable } from '../utils/runtimeConfig';
 
 // Define Props. formData is expected to be a reactive object from the parent composable.
 const props = defineProps<{
@@ -30,6 +31,7 @@ const iconSearchInputRef = ref<HTMLInputElement | null>(null);
 const isIconChooserOpen = ref(false);
 const iconSearchTerm = ref('');
 const filteredIconOptions = ref<ServerIconOption[]>(serverIconOptions);
+const remoteDesktopFeatureAvailable = isRemoteDesktopFeatureAvailable();
 
 const selectedIconOption = computed(() =>
   getServerIconOption(props.formData.icon, props.formData.type)
@@ -270,16 +272,19 @@ const handleHostIconMouseLeave = () => {
         <button type="button"
                 @click="props.formData.type = 'TELNET'"
                 :class="['flex-1 px-3 py-2 border border-border text-sm font-medium focus:outline-none -ml-px',
-                         props.formData.type === 'TELNET' ? 'bg-primary text-white' : 'bg-background text-foreground hover:bg-border']">
+                         props.formData.type === 'TELNET' ? 'bg-primary text-white' : 'bg-background text-foreground hover:bg-border',
+                         remoteDesktopFeatureAvailable ? '' : 'rounded-r-md']">
           {{ t('connections.form.typeTelnet', 'Telnet') }}
         </button>
         <button type="button"
+                v-if="remoteDesktopFeatureAvailable"
                 @click="props.formData.type = 'RDP'"
                 :class="['flex-1 px-3 py-2 border-t border-b border-r border-border text-sm font-medium focus:outline-none -ml-px',
                          props.formData.type === 'RDP' ? 'bg-primary text-white' : 'bg-background text-foreground hover:bg-border']">
           {{ t('connections.form.typeRdp', 'RDP') }}
         </button>
         <button type="button"
+                v-if="remoteDesktopFeatureAvailable"
                 @click="props.formData.type = 'VNC'"
                 :class="['flex-1 px-3 py-2 border border-border text-sm font-medium focus:outline-none -ml-px',
                          props.formData.type === 'VNC' ? 'bg-primary text-white' : 'bg-background text-foreground hover:bg-border',

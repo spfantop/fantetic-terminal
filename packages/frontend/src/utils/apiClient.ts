@@ -2,10 +2,11 @@ import { debugLog } from '../composables/useDebugLog';
 import axios from 'axios';
 import router from '../router'; 
 import { useAuthStore } from '../stores/auth.store'; 
+import { resolveApiBaseUrl } from './runtimeConfig';
 
 // 创建 axios 实例
 const apiClient = axios.create({
-  baseURL: '/api/v1', // 设置基础URL
+  baseURL: resolveApiBaseUrl(), // 设置基础URL
   timeout: 10000, // 设置请求超时时间
   withCredentials: true, // 允许携带 cookie
 });

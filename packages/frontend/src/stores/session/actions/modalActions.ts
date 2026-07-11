@@ -2,9 +2,15 @@
 
 import { isRdpModalOpen, rdpConnectionInfo, isVncModalOpen, vncConnectionInfo } from '../state';
 import type { ConnectionInfo } from '../../connections.store'; // 路径: packages/frontend/src/stores/connections.store.ts
+import { isRemoteDesktopFeatureAvailable } from '../../../utils/runtimeConfig';
 
 // --- RDP Modal Actions ---
 export const openRdpModal = (connection: ConnectionInfo) => {
+  if (!isRemoteDesktopFeatureAvailable()) {
+    console.warn('[ModalActions] Electron App 未内置 guacd，已禁用 RDP 弹窗。');
+    return;
+  }
+
   // console.log(`[ModalActions] Opening RDP modal for connection: ${connection.name} (ID: ${connection.id})`);
   rdpConnectionInfo.value = connection;
   isRdpModalOpen.value = true;
@@ -18,6 +24,11 @@ export const closeRdpModal = () => {
 
 // --- VNC Modal Actions ---
 export const openVncModal = (connection: ConnectionInfo) => {
+  if (!isRemoteDesktopFeatureAvailable()) {
+    console.warn('[ModalActions] Electron App 未内置 guacd，已禁用 VNC 弹窗。');
+    return;
+  }
+
   // console.log(`[ModalActions] Opening VNC modal for connection: ${connection.name} (ID: ${connection.id})`);
   vncConnectionInfo.value = connection;
   isVncModalOpen.value = true;
