@@ -1,18 +1,15 @@
-import { ref, readonly, type Ref, ComputedRef } from 'vue';
+import { ref, readonly, watch, type Ref, ComputedRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
 import { sessions as globalSessionsRef, poppedOutSessionIds } from '../stores/session/state'; // +++ 导入全局 sessions state +++
 // import { useWebSocketConnection } from './useWebSocketConnection'; // 移除全局导入
-import type { Terminal } from 'xterm';
+import type { Terminal } from '@xterm/xterm';
 import type { SearchAddon, ISearchOptions } from '@xterm/addon-search'; // *** 移除 ISearchResult 导入 ***
 import type { WebSocketMessage, MessagePayload } from '../types/websocket.types';
 import type { SshOutputHandler } from './useWebSocketConnection';
 import { debugLog } from './useDebugLog';
 import { useSettingsStore } from '../stores/settings.store';
-import {
-    createTerminalHighlightThroughputGuard,
-    createTerminalOutputHighlightStream,
-} from '../utils/terminalOutputHighlighter';
+import { createTerminalRenderHighlighter } from '../utils/terminalRenderHighlighter';
 import {
     consumeLocalEchoFromOutput,
     createTerminalLocalEchoState,
@@ -22,12 +19,6 @@ import {
     resetTerminalLocalEcho,
     resolveLocalEchoText,
 } from '../utils/terminalLocalEcho';
-
-type XtermWriteSyncTerminal = Terminal & {
-    _core?: {
-        writeSync?: (data: string | Uint8Array, maxSubsequentCalls?: number) => void;
-    };
-};
 
 // 定义与 WebSocket 相关的依赖接口
 export interface SshTerminalDependencies {
@@ -78,8 +69,6 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
     let outputDecodeWindow: Window | null = null;
     let outputDecodeMicrotaskScheduled = false;
     const terminalHighlightTextDecoder = new TextDecoder();
-    const terminalOutputHighlightStream = createTerminalOutputHighlightStream();
-    const terminalHighlightThroughputGuard = createTerminalHighlightThroughputGuard();
     const terminalLocalEchoState = createTerminalLocalEchoState();
     const terminalPerformanceStats = {
         localEchoCount: 0,
@@ -94,13 +83,17 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
     const OUTPUT_FLUSH_FALLBACK_DELAY = 32;
     const OUTPUT_IDLE_FLUSH_DELAY = 48;
     const INTERACTIVE_OUTPUT_FLUSH_LIMIT = 512;
-    // 大输出按帧分批写入，避免 xterm 解析长期占用主线程。
+    // xterm 的 VT 解析和 DOM 行创建都运行在主线程。严格限制每帧输入，
+    // 不能因为一批数据“尚未超过预算”就把几十 KB 日志一次写入而卡住页面。
     const OUTPUT_FRAME_BUDGET_MIN_BYTES = 16 * 1024;
     const OUTPUT_FRAME_BUDGET_DEFAULT_BYTES = 64 * 1024;
     const OUTPUT_FRAME_BUDGET_MAX_BYTES = 128 * 1024;
-    const OUTPUT_FRAME_BUDGET_CHUNKS = 64;
+    const OUTPUT_QUEUE_CHUNK_BYTES = 16 * 1024;
+    const OUTPUT_FRAME_BUDGET_CHUNKS = 16;
     let outputFrameBudgetBytes = OUTPUT_FRAME_BUDGET_DEFAULT_BYTES;
-    const DEFERRED_BASE64_DECODE_LENGTH = 16 * 1024;
+    const INTERACTIVE_BASE64_DECODE_LENGTH = 4 * 1024;
+    const OUTPUT_DECODE_FRAME_BUDGET_BYTES = 256 * 1024;
+    const OUTPUT_DECODE_FRAME_CHUNKS = 32;
 
     // 辅助函数：获取终端消息文本
     const getTerminalText = (key: string, params?: Record<string, any>): string => {
@@ -144,14 +137,6 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
             return;
         }
 
-        const internalTerminal = term as XtermWriteSyncTerminal;
-        if (internalTerminal._core?.writeSync) {
-            internalTerminal._core.writeSync(data);
-            refreshTerminalAfterPoppedOutWrite(term);
-            callback?.();
-            return;
-        }
-
         term.write(data, () => {
             refreshTerminalAfterPoppedOutWrite(term);
             callback?.();
@@ -171,36 +156,19 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
     const adjustOutputFrameBudget = (durationMs: number, writtenBytes: number) => {
         if (writtenBytes < INTERACTIVE_OUTPUT_FLUSH_LIMIT) return;
 
-        if (durationMs > 24 && outputFrameBudgetBytes > OUTPUT_FRAME_BUDGET_MIN_BYTES) {
+        if (durationMs > 80 && outputFrameBudgetBytes > OUTPUT_FRAME_BUDGET_MIN_BYTES) {
             updateOutputFrameBudget(outputFrameBudgetBytes / 2);
             return;
         }
 
         if (
-            durationMs < 8
+            durationMs < 16
             && pendingOutputBytes > outputFrameBudgetBytes * 2
             && outputFrameBudgetBytes < OUTPUT_FRAME_BUDGET_MAX_BYTES
         ) {
             updateOutputFrameBudget(outputFrameBudgetBytes * 2);
         }
     };
-
-    const writeTerminalOutputAsync = (term: Terminal, data: string | Uint8Array) => new Promise<void>(resolve => {
-        const startedAt = performance.now();
-        const writtenBytes = getOutputLength(data);
-        writeTerminalOutput(term, data, () => {
-            const durationMs = performance.now() - startedAt;
-            terminalPerformanceStats.outputWriteCount += 1;
-            terminalPerformanceStats.lastOutputWriteMs = durationMs;
-            terminalPerformanceStats.maxOutputWriteMs = Math.max(terminalPerformanceStats.maxOutputWriteMs, durationMs);
-            if (durationMs > 24) {
-                terminalPerformanceStats.slowOutputWriteCount += 1;
-                debugLog(`[会话 ${sessionId}][SSH终端模块] xterm write 较慢: ${durationMs.toFixed(1)}ms`);
-            }
-            adjustOutputFrameBudget(durationMs, writtenBytes);
-            resolve();
-        });
-    });
 
     const writeLocalEcho = (data: string) => {
         const term = terminalInstance.value;
@@ -210,44 +178,24 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         writeTerminalOutput(term, data);
     };
 
-    const mergeBinaryOutputChunks = (chunkList: Uint8Array[]) => {
-        if (chunkList.length === 1) return chunkList[0];
-
-        let byteLength = 0;
-        for (const chunk of chunkList) byteLength += chunk.byteLength;
-
-        const merged = new Uint8Array(byteLength);
-        let offset = 0;
-        for (const chunk of chunkList) {
-            merged.set(chunk, offset);
-            offset += chunk.byteLength;
-        }
-        return merged;
-    };
-
     const getTerminalHighlightOptions = () => ({
         enabled: terminalHighlightEnabledBoolean.value,
         rules: terminalHighlightRulesList.value,
     });
+    const terminalRenderHighlighter = createTerminalRenderHighlighter(getTerminalHighlightOptions);
+    const stopTerminalHighlightWatcher = watch(
+        [terminalHighlightEnabledBoolean, terminalHighlightRulesList],
+        () => {
+            terminalRenderHighlighter.invalidate();
+            const term = terminalInstance.value;
+            if (term) {
+                term.refresh(0, Math.max(term.rows - 1, 0));
+            }
+        },
+    );
 
-    const writeHighlightedTextOutput = async (term: Terminal, text: string) => {
-        const shouldHighlight = terminalHighlightThroughputGuard.shouldHighlight(text.length);
-        const highlightedText = terminalOutputHighlightStream.write(text, {
-            ...getTerminalHighlightOptions(),
-            enabled: shouldHighlight && terminalHighlightEnabledBoolean.value,
-        });
-        if (highlightedText) {
-            await writeTerminalOutputAsync(term, highlightedText);
-        }
-    };
-
-    const flushHighlightedTextOutput = async (term: Terminal) => {
-        const highlightedText = terminalOutputHighlightStream.flush(getTerminalHighlightOptions());
-        if (highlightedText) {
-            await writeTerminalOutputAsync(term, highlightedText);
-        }
-    };
-
+    // PTY 文本必须原样交给 xterm。高亮只在 xterm 创建可见行时以临时
+    // 渲染属性提供，不能在此处插入 ANSI 或阻塞输出。
     const cancelOutputIdleFlush = () => {
         if (outputIdleFlushTimer !== null) {
             clearTimeout(outputIdleFlushTimer);
@@ -255,38 +203,25 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         }
     };
 
-    const writeOutputBatch = async (term: Terminal, chunkList: (string | Uint8Array)[]) => {
-        let textChunkList: string[] = [];
-        let binaryChunkList: Uint8Array[] = [];
-
-        const flushTextChunks = async () => {
-            if (textChunkList.length === 0) return;
-            const text = textChunkList.join('');
-            textChunkList = [];
-            await writeHighlightedTextOutput(term, text);
-        };
-
-        const flushBinaryChunks = async () => {
-            if (binaryChunkList.length === 0) return;
-            await flushHighlightedTextOutput(term);
-            const binary = mergeBinaryOutputChunks(binaryChunkList);
-            binaryChunkList = [];
-            await writeTerminalOutputAsync(term, binary);
-        };
-
-        for (const chunk of chunkList) {
-            if (typeof chunk === 'string') {
-                await flushBinaryChunks();
-                textChunkList.push(chunk);
-                continue;
-            }
-
-            await flushTextChunks();
-            binaryChunkList.push(chunk);
-        }
-        await flushTextChunks();
-        await flushBinaryChunks();
-    };
+    const writeOutputBatch = (term: Terminal, chunkList: (string | Uint8Array)[]) => new Promise<void>(resolve => {
+        if (chunkList.length === 0) return resolve();
+        const startedAt = performance.now();
+        const writtenBytes = chunkList.reduce((total, chunk) => total + getOutputLength(chunk), 0);
+        // Queue multiple medium chunks synchronously. xterm's WriteBuffer then
+        // parses them within its own 12ms deadline and coalesces redraws. Awaiting
+        // every chunk here used to force one redundant viewport render per 8KB.
+        chunkList.forEach((chunk, index) => {
+            writeTerminalOutput(term, chunk, index === chunkList.length - 1 ? () => {
+                const durationMs = performance.now() - startedAt;
+                terminalPerformanceStats.outputWriteCount += chunkList.length;
+                terminalPerformanceStats.lastOutputWriteMs = durationMs;
+                terminalPerformanceStats.maxOutputWriteMs = Math.max(terminalPerformanceStats.maxOutputWriteMs, durationMs);
+                if (durationMs > 48) terminalPerformanceStats.slowOutputWriteCount += 1;
+                adjustOutputFrameBudget(durationMs, writtenBytes);
+                resolve();
+            } : undefined);
+        });
+    });
 
     const compactPendingOutputBufferIfNeeded = () => {
         if (pendingOutputHeadIndex === 0) return;
@@ -336,14 +271,14 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
 
     const enqueueTerminalOutput = (data: string | Uint8Array) => {
         const outputLength = getOutputLength(data);
-        if (outputLength <= outputFrameBudgetBytes) {
+        if (outputLength <= OUTPUT_QUEUE_CHUNK_BYTES) {
             pendingOutputBuffer.push(data);
             pendingOutputBytes += outputLength;
             return outputLength;
         }
 
-        for (let offset = 0; offset < outputLength; offset += outputFrameBudgetBytes) {
-            const nextChunk = data.slice(offset, offset + outputFrameBudgetBytes);
+        for (let offset = 0; offset < outputLength; offset += OUTPUT_QUEUE_CHUNK_BYTES) {
+            const nextChunk = data.slice(offset, offset + OUTPUT_QUEUE_CHUNK_BYTES);
             pendingOutputBuffer.push(nextChunk);
         }
         pendingOutputBytes += outputLength;
@@ -385,23 +320,23 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         }
 
         if (isOutputWriteInProgress) return;
-        if (!term || (getPendingOutputChunkCount() === 0 && !terminalOutputHighlightStream.hasPending())) return;
+        if (!term || getPendingOutputChunkCount() === 0) return;
 
         if (source === 'microtask' && pendingOutputBytes > INTERACTIVE_OUTPUT_FLUSH_LIMIT) {
             scheduleOutputFrameFlush();
             return;
         }
 
-        const shouldLimitBatch = source !== 'microtask' && pendingOutputBytes > outputFrameBudgetBytes;
+        // 非交互输出始终按预算切分。此前只在累计待处理量超过预算时才切分，
+        // 会让 8~64KB 的单批日志直接阻塞一次 xterm.write。
+        const shouldLimitBatch = source !== 'microtask';
         const chunkList = takeOutputBatch(shouldLimitBatch);
-        if (chunkList.length === 0 && !terminalOutputHighlightStream.hasPending()) return;
+        if (chunkList.length === 0) return;
 
         isOutputWriteInProgress = true;
         try {
             if (chunkList.length > 0) {
                 await writeOutputBatch(term, chunkList);
-            } else {
-                await flushHighlightedTextOutput(term);
             }
         } finally {
             isOutputWriteInProgress = false;
@@ -410,8 +345,6 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         if (terminalInstance.value !== term) return;
         if (getPendingOutputChunkCount() > 0) {
             scheduleOutputFrameFlush();
-        } else if (terminalOutputHighlightStream.hasPending()) {
-            scheduleOutputIdleFlush();
         }
     }
 
@@ -495,12 +428,8 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         return bytes;
     };
 
-    const shouldDecodeOutputForHighlight = () => (
-        terminalHighlightEnabledBoolean.value && terminalHighlightRulesList.value.length > 0
-    );
-
     const scheduleTerminalByteOutput = (bytes: Uint8Array) => {
-        if (!shouldDecodeOutputForHighlight() && !hasPendingLocalEcho(terminalLocalEchoState)) {
+        if (!hasPendingLocalEcho(terminalLocalEchoState)) {
             scheduleTerminalOutput(bytes);
             return;
         }
@@ -540,41 +469,61 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         }
     };
 
-    const processNextOutputDecode = () => {
+    const processOutputDecodeBatch = (maxChunks: number, maxBytes: number) => {
         cancelScheduledOutputDecode();
         outputDecodeMicrotaskScheduled = false;
 
-        const next = pendingBase64OutputQueue[pendingBase64OutputHeadIndex];
-        if (!next) {
-            compactPendingBase64OutputQueueIfNeeded();
-            return;
-        }
-        pendingBase64OutputHeadIndex += 1;
+        let decodedBytes = 0;
+        let decodedChunks = 0;
+        while (decodedChunks < maxChunks) {
+            const next = pendingBase64OutputQueue[pendingBase64OutputHeadIndex];
+            if (!next) break;
 
-        try {
-            scheduleTerminalByteOutput(decodeBase64Output(next.base64String));
-        } catch (e) {
-            console.error(`[会话 ${sessionId}][SSH终端模块] Base64 解码失败:`, e, '原始数据:', next.message?.payload);
-            scheduleTerminalOutput(`\r\n[解码错误: ${e}]\r\n`);
+            // Base64 的有效载荷大小约为字符串长度的 3/4，用它限制单帧工作量。
+            const estimatedBytes = Math.floor(next.base64String.length * 3 / 4);
+            if (decodedChunks > 0 && decodedBytes + estimatedBytes > maxBytes) break;
+            pendingBase64OutputHeadIndex += 1;
+
+            try {
+                scheduleTerminalByteOutput(decodeBase64Output(next.base64String));
+            } catch (e) {
+                console.error(`[会话 ${sessionId}][SSH终端模块] Base64 解码失败:`, e, '原始数据:', next.message?.payload);
+                scheduleTerminalOutput(`\r\n[解码错误: ${e}]\r\n`);
+            }
+            decodedBytes += estimatedBytes;
+            decodedChunks += 1;
         }
 
         compactPendingBase64OutputQueueIfNeeded();
-        scheduleOutputDecodeDrain();
+        if (getPendingBase64OutputCount() > 0) {
+            scheduleOutputDecodeFrame();
+        }
+    };
+
+    const scheduleOutputDecodeFrame = () => {
+        if (getPendingBase64OutputCount() === 0 || outputDecodeFrame !== null || outputDecodeTimer !== null) return;
+        outputDecodeWindow = terminalInstance.value ? getTerminalWindow(terminalInstance.value) : window;
+        outputDecodeFrame = outputDecodeWindow.requestAnimationFrame(() => {
+            processOutputDecodeBatch(OUTPUT_DECODE_FRAME_CHUNKS, OUTPUT_DECODE_FRAME_BUDGET_BYTES);
+        });
+        outputDecodeTimer = setTimeout(() => {
+            processOutputDecodeBatch(OUTPUT_DECODE_FRAME_CHUNKS, OUTPUT_DECODE_FRAME_BUDGET_BYTES);
+        }, OUTPUT_FLUSH_FALLBACK_DELAY);
     };
 
     function scheduleOutputDecodeDrain() {
         if (getPendingBase64OutputCount() === 0 || outputDecodeFrame !== null || outputDecodeTimer !== null || outputDecodeMicrotaskScheduled) return;
 
         const next = pendingBase64OutputQueue[pendingBase64OutputHeadIndex];
-        if (next.base64String.length > DEFERRED_BASE64_DECODE_LENGTH && terminalInstance.value) {
-            outputDecodeWindow = getTerminalWindow(terminalInstance.value);
-            outputDecodeFrame = outputDecodeWindow.requestAnimationFrame(processNextOutputDecode);
-            outputDecodeTimer = setTimeout(processNextOutputDecode, OUTPUT_FLUSH_FALLBACK_DELAY);
+        if (!next) return;
+        if (getPendingBase64OutputCount() > 1 || next.base64String.length > INTERACTIVE_BASE64_DECODE_LENGTH) {
+            scheduleOutputDecodeFrame();
             return;
         }
 
+        // 单个极小响应仍可立即显示；批量输出绝不递归占满微任务队列。
         outputDecodeMicrotaskScheduled = true;
-        queueMicrotask(processNextOutputDecode);
+        queueMicrotask(() => processOutputDecodeBatch(1, INTERACTIVE_BASE64_DECODE_LENGTH));
     }
 
     const scheduleOutputDecode = (base64String: string, message?: WebSocketMessage) => {
@@ -594,6 +543,9 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         const { terminal: term, searchAddon: addon } = payload;
         debugLog(`[会话 ${sessionId}][SSH终端模块] 终端实例已就绪。SearchAddon 实例:`, addon ? '存在' : '按需加载');
         terminalInstance.value = term;
+        if (!terminalRenderHighlighter.attach(term)) {
+            console.warn(`[会话 ${sessionId}][SSH终端模块] 当前 xterm 渲染器不支持行级高亮，已保留原始终端输出。`);
+        }
         searchAddon.value = addon ?? null; // *** 存储 searchAddon 实例 ***
         ensureSearchAddonLoaded = payload.ensureSearchAddonLoaded ?? null;
 
@@ -865,8 +817,8 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         pendingOutputHeadIndex = 0;
         pendingOutputBytes = 0;
         updateOutputFrameBudget(OUTPUT_FRAME_BUDGET_DEFAULT_BYTES);
-        terminalOutputHighlightStream.reset();
-        terminalHighlightThroughputGuard.reset();
+        terminalRenderHighlighter.dispose();
+        stopTerminalHighlightWatcher();
         resetTerminalLocalEcho(terminalLocalEchoState);
         if (inputFlushTimer !== null) {
             clearTimeout(inputFlushTimer);

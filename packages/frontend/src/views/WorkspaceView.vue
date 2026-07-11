@@ -26,7 +26,7 @@ import { useUiNotificationsStore } from '../stores/uiNotifications.store';
 import { useDialogStore } from '../stores/dialog.store';
 import { useFocusSwitcherStore } from '../stores/focusSwitcher.store';
 import i18n from '../i18n';
-import type { Terminal as XtermTerminal } from 'xterm';
+import type { Terminal as XtermTerminal } from '@xterm/xterm';
 import type { ISearchOptions } from '@xterm/addon-search';
 import {
   useWorkspaceEventSubscriber,

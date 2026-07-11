@@ -29,6 +29,23 @@ export interface TerminalHighlightPreviewSegment {
   underline?: boolean;
 }
 
+/**
+ * A semantic match in a single terminal buffer line.  Unlike
+ * `highlightTerminalOutput`, this deliberately carries no ANSI escape data:
+ * the renderer consumes it as presentation metadata and the PTY payload stays
+ * byte-for-byte intact.
+ */
+export interface TerminalHighlightRange {
+  start: number;
+  end: number;
+  foreground?: string;
+  background?: string;
+  bold?: boolean;
+  underline?: boolean;
+}
+
+export type TerminalHighlightRangeResolver = (line: string) => TerminalHighlightRange[];
+
 export interface TerminalOutputHighlightStream {
   write(input: string, options: TerminalHighlightOptions): string;
   flush(options: TerminalHighlightOptions): string;
@@ -282,6 +299,54 @@ export function previewTerminalHighlightSegments(input: string, options: Termina
       if (part.length === 0 || part.length > maxLineLength) return [{ text: part }];
       return previewLine(part, compiledRules);
     });
+}
+
+/**
+ * Resolve styles for one already-parsed terminal line.  This is used by the
+ * xterm render bridge; it must never be used to rewrite terminal output.
+ */
+export function resolveTerminalHighlightRanges(line: string, options: TerminalHighlightOptions): TerminalHighlightRange[] {
+  if (!options.enabled || !line || line.length > (options.maxLineLength ?? DEFAULT_MAX_LINE_LENGTH) || shouldBypassHighlight(line)) {
+    return [];
+  }
+
+  const compiledRules = compileTerminalHighlightRules(options.rules);
+  if (compiledRules.length === 0) {
+    return [];
+  }
+
+  return collectHighlightRanges(line, compiledRules).map(range => ({
+    start: range.start,
+    end: range.end,
+    foreground: range.rule.foreground,
+    background: range.rule.background,
+    bold: range.rule.bold,
+    underline: range.rule.underline,
+  }));
+}
+
+/**
+ * Compile a rule set once for the renderer hot path.  Buffer rows are resolved
+ * many times while scrolling/resizing, so rule normalization and RegExp
+ * construction must not be repeated from createRow.
+ */
+export function createTerminalHighlightRangeResolver(options: TerminalHighlightOptions): TerminalHighlightRangeResolver {
+  if (!options.enabled) return () => [];
+  const maxLineLength = options.maxLineLength ?? DEFAULT_MAX_LINE_LENGTH;
+  const compiledRules = compileTerminalHighlightRules(options.rules);
+  if (compiledRules.length === 0) return () => [];
+
+  return (line: string) => {
+    if (!line || line.length > maxLineLength || shouldBypassHighlight(line)) return [];
+    return collectHighlightRanges(line, compiledRules).map(range => ({
+      start: range.start,
+      end: range.end,
+      foreground: range.rule.foreground,
+      background: range.rule.background,
+      bold: range.rule.bold,
+      underline: range.rule.underline,
+    }));
+  };
 }
 
 function shouldBypassHighlight(input: string): boolean {
