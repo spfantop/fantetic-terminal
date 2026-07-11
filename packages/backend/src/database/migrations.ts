@@ -1,4 +1,5 @@
 import { Database } from 'sqlite3';
+import { migrateLegacyResourcesToAccessControlSQL } from '../access-control/access-control.schema';
 
 // 1. 定义 migrations 表 SQL
 const createMigrationsTableSQL = `
@@ -473,6 +474,16 @@ const definedMigrations: Migration[] = [
 
             PRAGMA foreign_keys=on;
         `
+    },
+    {
+        id: 17,
+        name: 'Add multi-user group access control and resource ownership',
+        check: async (db: Database): Promise<boolean> => {
+            const groupsExist = await tableExists(db, 'user_groups');
+            const connectionOwnerExists = await columnExists(db, 'connections', 'owner_user_id');
+            return !groupsExist || !connectionOwnerExists;
+        },
+        sql: migrateLegacyResourcesToAccessControlSQL,
     }
 ];
 
