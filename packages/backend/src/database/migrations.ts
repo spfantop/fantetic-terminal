@@ -1,6 +1,7 @@
 import { Database } from 'sqlite3';
 import {
     migrateLegacyResourcesToAccessControlSQL,
+    migrateQuickCommandTagsToOwnerScopedNamesSQL,
     migrateTagsToOwnerScopedNamesSQL,
     migrateUserPrivateResourcesSQL,
 } from '../access-control/access-control.schema';
@@ -504,9 +505,18 @@ const definedMigrations: Migration[] = [
         name: 'Scope tag names to their owning user',
         check: async (db: Database): Promise<boolean> => {
             const tableSql = await getTableCreateSQL(db, 'tags');
-            return !!tableSql && /name\s+TEXT\s+(?:NOT\s+)?UNIQUE/i.test(tableSql);
+            return !!tableSql && /name\s+TEXT[^,\n]*\bUNIQUE\b/i.test(tableSql);
         },
         sql: migrateTagsToOwnerScopedNamesSQL,
+    },
+    {
+        id: 20,
+        name: 'Scope quick command tag names to their owning user',
+        check: async (db: Database): Promise<boolean> => {
+            const tableSql = await getTableCreateSQL(db, 'quick_command_tags');
+            return !!tableSql && /name\s+TEXT[^,\n]*\bUNIQUE\b/i.test(tableSql);
+        },
+        sql: migrateQuickCommandTagsToOwnerScopedNamesSQL,
     }
 ];
 

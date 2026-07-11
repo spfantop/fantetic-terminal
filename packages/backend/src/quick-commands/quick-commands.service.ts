@@ -13,18 +13,18 @@ export type QuickCommandSortBy = 'name' | 'usage_count';
  * @param variables - 变量对象 (可选)
  * @returns 返回添加记录的 ID
  */
-export const addQuickCommand = async (name: string | null, command: string, tagIds?: number[], variables?: Record<string, string>): Promise<number> => {
+export const addQuickCommand = async (name: string | null, command: string, ownerUserId: number, tagIds?: number[], variables?: Record<string, string>): Promise<number> => {
     if (!command || command.trim().length === 0) {
         throw new Error('指令内容不能为空');
     }
     // 如果 name 是空字符串，则视为 null
     const finalName = name && name.trim().length > 0 ? name.trim() : null;
-    const commandId = await QuickCommandsRepository.addQuickCommand(finalName, command.trim(), variables);
+    const commandId = await QuickCommandsRepository.addQuickCommand(finalName, command.trim(), ownerUserId, variables);
 
     // 添加成功后，设置标签关联
     if (commandId > 0 && tagIds && Array.isArray(tagIds)) {
         try {
-            await QuickCommandTagRepository.setCommandTagAssociations(commandId, tagIds);
+            await QuickCommandTagRepository.setCommandTagAssociations(commandId, tagIds, ownerUserId);
         } catch (tagError: any) {
             // 如果标签关联失败，可以选择记录警告或回滚（但通常不回滚主记录）
             console.warn(`[Service] 添加快捷指令 ${commandId} 成功，但设置标签关联失败:`, tagError.message);
@@ -43,17 +43,17 @@ export const addQuickCommand = async (name: string | null, command: string, tagI
  * @param variables - 新的变量对象 (可选)
  * @returns 返回是否成功更新 (更新行数 > 0)
  */
-export const updateQuickCommand = async (id: number, name: string | null, command: string, tagIds?: number[], variables?: Record<string, string>): Promise<boolean> => {
+export const updateQuickCommand = async (id: number, name: string | null, command: string, ownerUserId: number, tagIds?: number[], variables?: Record<string, string>): Promise<boolean> => {
     if (!command || command.trim().length === 0) {
         throw new Error('指令内容不能为空');
     }
     const finalName = name && name.trim().length > 0 ? name.trim() : null;
-    const commandUpdated = await QuickCommandsRepository.updateQuickCommand(id, finalName, command.trim(), variables);
+    const commandUpdated = await QuickCommandsRepository.updateQuickCommand(id, finalName, command.trim(), ownerUserId, variables);
 
     // 如果指令更新成功，并且提供了 tagIds (即使是空数组也表示要更新)，则更新标签关联
     if (commandUpdated && typeof tagIds !== 'undefined') {
          try {
-            await QuickCommandTagRepository.setCommandTagAssociations(id, tagIds);
+            await QuickCommandTagRepository.setCommandTagAssociations(id, tagIds, ownerUserId);
          } catch (tagError: any) {
              console.warn(`[Service] 更新快捷指令 ${id} 成功，但更新标签关联失败:`, tagError.message);
              // 即使标签更新失败，主记录已更新，通常返回 true
@@ -68,8 +68,8 @@ export const updateQuickCommand = async (id: number, name: string | null, comman
  * @param id - 要删除的记录 ID
  * @returns 返回是否成功删除 (删除行数 > 0)
  */
-export const deleteQuickCommand = async (id: number): Promise<boolean> => {
-    const changes = await QuickCommandsRepository.deleteQuickCommand(id);
+export const deleteQuickCommand = async (id: number, ownerUserId: number): Promise<boolean> => {
+    const changes = await QuickCommandsRepository.deleteQuickCommand(id, ownerUserId);
     return changes;
 };
 
@@ -78,9 +78,9 @@ export const deleteQuickCommand = async (id: number): Promise<boolean> => {
  * @param sortBy - 排序字段 ('name' 或 'usage_count')
  * @returns 返回排序后的快捷指令数组 (包含 tagIds)
  */
-export const getAllQuickCommands = async (sortBy: QuickCommandSortBy = 'name'): Promise<QuickCommandWithTags[]> => {
+export const getAllQuickCommands = async (sortBy: QuickCommandSortBy, ownerUserId: number): Promise<QuickCommandWithTags[]> => {
     // Repository 已返回带 tagIds 的数据
-    return QuickCommandsRepository.getAllQuickCommands(sortBy);
+    return QuickCommandsRepository.getAllQuickCommands(sortBy, ownerUserId);
 };
 
 /**
@@ -88,8 +88,8 @@ export const getAllQuickCommands = async (sortBy: QuickCommandSortBy = 'name'): 
  * @param id - 记录 ID
  * @returns 返回是否成功更新 (更新行数 > 0)
  */
-export const incrementUsageCount = async (id: number): Promise<boolean> => {
-    const changes = await QuickCommandsRepository.incrementUsageCount(id);
+export const incrementUsageCount = async (id: number, ownerUserId: number): Promise<boolean> => {
+    const changes = await QuickCommandsRepository.incrementUsageCount(id, ownerUserId);
     return changes;
 };
 
@@ -98,9 +98,9 @@ export const incrementUsageCount = async (id: number): Promise<boolean> => {
  * @param id - 记录 ID
  * @returns 返回找到的快捷指令 (包含 tagIds)，或 undefined
  */
-export const getQuickCommandById = async (id: number): Promise<QuickCommandWithTags | undefined> => {
+export const getQuickCommandById = async (id: number, ownerUserId: number): Promise<QuickCommandWithTags | undefined> => {
     // Repository 已返回带 tagIds 的数据
-    return QuickCommandsRepository.findQuickCommandById(id);
+    return QuickCommandsRepository.findQuickCommandById(id, ownerUserId);
 };
 
 /**
@@ -109,7 +109,7 @@ export const getQuickCommandById = async (id: number): Promise<QuickCommandWithT
  * @param tagId - 要添加的标签 ID
  * @returns Promise<void>
  */
-export const assignTagToCommands = async (commandIds: number[], tagId: number): Promise<void> => {
+export const assignTagToCommands = async (commandIds: number[], tagId: number, ownerUserId: number): Promise<void> => {
     try {
         // 基本验证
         if (!Array.isArray(commandIds) || commandIds.some(id => typeof id !== 'number' || isNaN(id))) {
@@ -122,7 +122,7 @@ export const assignTagToCommands = async (commandIds: number[], tagId: number): 
         // 调用 Repository 函数执行批量关联
         // 注意：这里需要导入 QuickCommandTagRepository
         console.log(`[Service] assignTagToCommands: Calling repo with commandIds: ${JSON.stringify(commandIds)}, tagId: ${tagId}`); 
-        await QuickCommandTagRepository.addTagToCommands(commandIds, tagId);
+        await QuickCommandTagRepository.addTagToCommands(commandIds, tagId, ownerUserId);
         console.log(`[Service] assignTagToCommands: Repo call finished for tag ${tagId}.`); // +++ 修改日志 +++
         // 可以在这里添加额外的业务逻辑，例如发送事件通知等
     } catch (error: any) {

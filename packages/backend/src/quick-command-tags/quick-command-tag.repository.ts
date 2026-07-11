@@ -1,4 +1,3 @@
-import { Database } from 'sqlite3';
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
 
 // 定义 Quick Command Tag 类型
@@ -7,15 +6,16 @@ export interface QuickCommandTag {
     name: string;
     created_at: number;
     updated_at: number;
+    owner_user_id?: number;
 }
 
 /**
  * 获取所有快捷指令标签
  */
-export const findAllQuickCommandTags = async (): Promise<QuickCommandTag[]> => {
+export const findAllQuickCommandTags = async (ownerUserId: number): Promise<QuickCommandTag[]> => {
     try {
         const db = await getDbInstance();
-        const rows = await allDb<QuickCommandTag>(db, `SELECT * FROM quick_command_tags ORDER BY name ASC`);
+        const rows = await allDb<QuickCommandTag>(db, `SELECT * FROM quick_command_tags WHERE owner_user_id = ? ORDER BY name ASC`, [ownerUserId]);
         return rows;
     } catch (err: any) {
         console.error('[仓库] 查询快捷指令标签列表时出错:', err.message);
@@ -26,10 +26,10 @@ export const findAllQuickCommandTags = async (): Promise<QuickCommandTag[]> => {
 /**
  * 根据 ID 获取单个快捷指令标签
  */
-export const findQuickCommandTagById = async (id: number): Promise<QuickCommandTag | null> => {
+export const findQuickCommandTagById = async (id: number, ownerUserId: number): Promise<QuickCommandTag | null> => {
      try {
         const db = await getDbInstance();
-        const row = await getDbRow<QuickCommandTag>(db, `SELECT * FROM quick_command_tags WHERE id = ?`, [id]);
+        const row = await getDbRow<QuickCommandTag>(db, `SELECT * FROM quick_command_tags WHERE id = ? AND owner_user_id = ?`, [id, ownerUserId]);
         return row || null;
      } catch (err: any) {
         console.error(`[仓库] 查询快捷指令标签 ${id} 时出错:`, err.message);
@@ -40,12 +40,12 @@ export const findQuickCommandTagById = async (id: number): Promise<QuickCommandT
 /**
  * 创建新快捷指令标签
  */
-export const createQuickCommandTag = async (name: string): Promise<number> => {
+export const createQuickCommandTag = async (name: string, ownerUserId: number): Promise<number> => {
     const now = Math.floor(Date.now() / 1000);
-    const sql = `INSERT INTO quick_command_tags (name, created_at, updated_at) VALUES (?, ?, ?)`;
+    const sql = `INSERT INTO quick_command_tags (name, owner_user_id, created_at, updated_at) VALUES (?, ?, ?, ?)`;
     try {
         const db = await getDbInstance();
-        const result = await runDb(db, sql, [name, now, now]);
+        const result = await runDb(db, sql, [name, ownerUserId, now, now]);
         if (typeof result.lastID !== 'number' || result.lastID <= 0) {
              throw new Error('创建快捷指令标签后未能获取有效的 lastID');
         }
@@ -62,12 +62,12 @@ export const createQuickCommandTag = async (name: string): Promise<number> => {
 /**
  * 更新快捷指令标签名称
  */
-export const updateQuickCommandTag = async (id: number, name: string): Promise<boolean> => {
+export const updateQuickCommandTag = async (id: number, name: string, ownerUserId: number): Promise<boolean> => {
     const now = Math.floor(Date.now() / 1000);
-    const sql = `UPDATE quick_command_tags SET name = ?, updated_at = ? WHERE id = ?`;
+    const sql = `UPDATE quick_command_tags SET name = ?, updated_at = ? WHERE id = ? AND owner_user_id = ?`;
     try {
         const db = await getDbInstance();
-        const result = await runDb(db, sql, [name, now, id]);
+        const result = await runDb(db, sql, [name, now, id, ownerUserId]);
         return result.changes > 0;
     } catch (err: any) {
          console.error(`[仓库] 更新快捷指令标签 ${id} 时出错:`, err.message);
@@ -81,13 +81,13 @@ export const updateQuickCommandTag = async (id: number, name: string): Promise<b
 /**
  * 删除快捷指令标签 (同时会通过外键 CASCADE 删除关联)
  */
-export const deleteQuickCommandTag = async (id: number): Promise<boolean> => {
-    const sql = `DELETE FROM quick_command_tags WHERE id = ?`;
+export const deleteQuickCommandTag = async (id: number, ownerUserId: number): Promise<boolean> => {
+    const sql = `DELETE FROM quick_command_tags WHERE id = ? AND owner_user_id = ?`;
     try {
         const db = await getDbInstance();
         // 由于 quick_command_tag_associations 设置了 ON DELETE CASCADE,
         // 删除 quick_command_tags 中的记录会自动删除关联表中的相关记录。
-        const result = await runDb(db, sql, [id]);
+        const result = await runDb(db, sql, [id, ownerUserId]);
         return result.changes > 0;
     } catch (err: any) {
         console.error(`[仓库] 删除快捷指令标签 ${id} 时出错:`, err.message);
@@ -101,34 +101,39 @@ export const deleteQuickCommandTag = async (id: number): Promise<boolean> => {
  * @param tagIds - 新的标签 ID 数组 (空数组表示清除所有关联)
  * @returns Promise<void>
  */
-export const setCommandTagAssociations = async (commandId: number, tagIds: number[]): Promise<void> => {
+export const setCommandTagAssociations = async (commandId: number, tagIds: number[], ownerUserId: number): Promise<void> => {
     const db = await getDbInstance();
     const deleteSql = `DELETE FROM quick_command_tag_associations WHERE quick_command_id = ?`;
     const insertSql = `INSERT INTO quick_command_tag_associations (quick_command_id, tag_id) VALUES (?, ?)`;
 
     try {
         await runDb(db, 'BEGIN TRANSACTION');
+        const command = await getDbRow<{ id: number }>(db, `SELECT id FROM quick_commands WHERE id = ? AND owner_user_id = ?`, [commandId, ownerUserId]);
+        if (!command) throw new Error('快捷指令未找到或无权管理');
+        if (tagIds.length > 0) {
+            const placeholders = tagIds.map(() => '?').join(',');
+            const owned = await getDbRow<{ count: number }>(db, `SELECT COUNT(*) AS count FROM quick_command_tags WHERE owner_user_id = ? AND id IN (${placeholders})`, [ownerUserId, ...tagIds]);
+            if (owned?.count !== new Set(tagIds).size) throw new Error('快捷指令标签未找到或无权使用');
+        }
         // 1. 删除该指令的所有旧关联
         await runDb(db, deleteSql, [commandId]);
 
         // 2. 插入新关联 (如果 tagIds 不为空)
         if (tagIds && tagIds.length > 0) {
-            const stmt = await db.prepare(insertSql);
             for (const tagId of tagIds) {
                  // 验证 tagId 是否为有效数字
                  if (typeof tagId !== 'number' || isNaN(tagId)) {
                      console.warn(`[Repo] setCommandTagAssociations: 无效的 tagId (${tagId})，跳过关联到指令 ${commandId}。`);
                      continue;
                  }
-                await stmt.run(commandId, tagId);
+                await runDb(db, insertSql, [commandId, tagId]);
             }
-            await stmt.finalize();
         }
         await runDb(db, 'COMMIT');
     } catch (err: any) {
         console.error('设置快捷指令标签关联时出错:', err.message);
         await runDb(db, 'ROLLBACK'); // 出错时回滚
-        throw new Error('无法设置快捷指令标签关联');
+        throw new Error(`无法设置快捷指令标签关联: ${err.message}`);
     }
 };
 
@@ -138,7 +143,7 @@ export const setCommandTagAssociations = async (commandId: number, tagIds: numbe
  * @param tagId - 要添加的标签 ID
  * @returns Promise<void>
  */
-export const addTagToCommands = async (commandIds: number[], tagId: number): Promise<void> => {
+export const addTagToCommands = async (commandIds: number[], tagId: number, ownerUserId: number): Promise<void> => {
     if (!commandIds || commandIds.length === 0) {
         return; // 没有指令需要关联
     }
@@ -147,23 +152,24 @@ export const addTagToCommands = async (commandIds: number[], tagId: number): Pro
 
     try {
         await runDb(db, 'BEGIN TRANSACTION');
-        // 准备批量插入语句
-        const stmt = await db.prepare(insertSql);
+        const tag = await getDbRow<{ id: number }>(db, `SELECT id FROM quick_command_tags WHERE id = ? AND owner_user_id = ?`, [tagId, ownerUserId]);
+        if (!tag) throw new Error('快捷指令标签未找到或无权使用');
         for (const commandId of commandIds) {
             // 验证 commandId 和 tagId 是否为有效数字（可选，但推荐）
             if (typeof commandId !== 'number' || isNaN(commandId) || typeof tagId !== 'number' || isNaN(tagId)) {
                  console.warn(`[Repo] addTagToCommands: 无效的 commandId (${commandId}) 或 tagId (${tagId})，跳过关联。`);
                  continue;
             }
-            await stmt.run(commandId, tagId);
+            const command = await getDbRow<{ id: number }>(db, `SELECT id FROM quick_commands WHERE id = ? AND owner_user_id = ?`, [commandId, ownerUserId]);
+            if (!command) throw new Error('快捷指令未找到或无权管理');
+            await runDb(db, insertSql, [commandId, tagId]);
         }
-        await stmt.finalize(); // 完成批量插入
         await runDb(db, 'COMMIT');
         console.log(`[Repo] addTagToCommands: 成功将标签 ${tagId} 关联到 ${commandIds.length} 个指令。`);
     } catch (err: any) {
         console.error(`[Repo] addTagToCommands: 批量关联标签 ${tagId} 到指令时出错:`, err.message);
         await runDb(db, 'ROLLBACK');
-        throw new Error('无法批量关联标签到快捷指令');
+        throw new Error(`无法批量关联标签到快捷指令: ${err.message}`);
     }
 };
 
@@ -179,16 +185,17 @@ export const addTagToCommands = async (commandIds: number[], tagId: number): Pro
  * @param commandId 快捷指令 ID
  * @returns 标签对象数组 { id: number, name: string }[]
  */
-export const findTagsByCommandId = async (commandId: number): Promise<QuickCommandTag[]> => {
+export const findTagsByCommandId = async (commandId: number, ownerUserId: number): Promise<QuickCommandTag[]> => {
     const sql = `
         SELECT t.id, t.name, t.created_at, t.updated_at
         FROM quick_command_tags t
         JOIN quick_command_tag_associations ta ON t.id = ta.tag_id
-        WHERE ta.quick_command_id = ?
+        JOIN quick_commands qc ON qc.id = ta.quick_command_id
+        WHERE ta.quick_command_id = ? AND qc.owner_user_id = ? AND t.owner_user_id = ?
         ORDER BY t.name ASC`;
     try {
         const db = await getDbInstance();
-        const rows = await allDb<QuickCommandTag>(db, sql, [commandId]);
+        const rows = await allDb<QuickCommandTag>(db, sql, [commandId, ownerUserId, ownerUserId]);
         return rows;
     } catch (err: any) {
         console.error(`Repository: 查询快捷指令 ${commandId} 的标签时出错:`, err.message);

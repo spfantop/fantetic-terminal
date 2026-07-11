@@ -33,9 +33,10 @@ export const addQuickCommand = async (req: Request, res: Response): Promise<void
 
     try {
         // 将 tagIds 和 variables 传递给 Service 层
-        const newId = await QuickCommandsService.addQuickCommand(name, command, tagIds, variables);
+        const ownerUserId = req.authorization!.userId;
+        const newId = await QuickCommandsService.addQuickCommand(name, command, ownerUserId, tagIds, variables);
         // 尝试获取新创建的带标签的指令信息返回
-        const newCommand = await QuickCommandsService.getQuickCommandById(newId);
+        const newCommand = await QuickCommandsService.getQuickCommandById(newId, ownerUserId);
         if (newCommand) {
             res.status(201).json({ message: '快捷指令已添加', command: newCommand });
         } else {
@@ -57,7 +58,7 @@ export const getAllQuickCommands = async (req: Request, res: Response): Promise<
     const validSortBy: QuickCommandSortBy = (sortBy === 'name' || sortBy === 'usage_count') ? sortBy : 'name';
 
     try {
-        const commands = await QuickCommandsService.getAllQuickCommands(validSortBy);
+        const commands = await QuickCommandsService.getAllQuickCommands(validSortBy, req.authorization!.userId);
         res.status(200).json(commands);
     } catch (error: any) {
         console.error('获取快捷指令控制器出错:', error);
@@ -101,10 +102,11 @@ export const updateQuickCommand = async (req: Request, res: Response): Promise<v
 
     try {
         // 将 tagIds 和 variables 传递给 Service 层
-        const success = await QuickCommandsService.updateQuickCommand(id, name, command, tagIds, variables);
+        const ownerUserId = req.authorization!.userId;
+        const success = await QuickCommandsService.updateQuickCommand(id, name, command, ownerUserId, tagIds, variables);
         if (success) {
              // 尝试获取更新后的带标签的指令信息返回
-            const updatedCommand = await QuickCommandsService.getQuickCommandById(id);
+            const updatedCommand = await QuickCommandsService.getQuickCommandById(id, ownerUserId);
             if (updatedCommand) {
                  res.status(200).json({ message: '快捷指令已更新', command: updatedCommand });
             } else {
@@ -113,7 +115,7 @@ export const updateQuickCommand = async (req: Request, res: Response): Promise<v
             }
         } else {
             // 检查指令是否真的不存在
-            const commandExists = await QuickCommandsService.getQuickCommandById(id);
+            const commandExists = await QuickCommandsService.getQuickCommandById(id, ownerUserId);
             if (!commandExists) {
                  res.status(404).json({ message: '未找到要更新的快捷指令' });
             } else {
@@ -139,7 +141,7 @@ export const deleteQuickCommand = async (req: Request, res: Response): Promise<v
     }
 
     try {
-        const success = await QuickCommandsService.deleteQuickCommand(id);
+        const success = await QuickCommandsService.deleteQuickCommand(id, req.authorization!.userId);
         if (success) {
             res.status(200).json({ message: '快捷指令已删除' });
         } else {
@@ -163,7 +165,7 @@ export const incrementUsage = async (req: Request, res: Response): Promise<void>
     }
 
     try {
-        const success = await QuickCommandsService.incrementUsageCount(id);
+        const success = await QuickCommandsService.incrementUsageCount(id, req.authorization!.userId);
         if (success) {
             res.status(200).json({ message: '使用次数已增加' });
         } else {
@@ -192,7 +194,7 @@ export const assignTagToCommands = async (req: Request, res: Response): Promise<
     try {
         // 调用 Service 函数处理批量分配
         console.log(`[Controller] assignTagToCommands: Received commandIds: ${JSON.stringify(commandIds)}, tagId: ${tagId}`); 
-        await QuickCommandsService.assignTagToCommands(commandIds, tagId);
+        await QuickCommandsService.assignTagToCommands(commandIds, tagId, req.authorization!.userId);
         res.status(200).json({ success: true, message: `标签 ${tagId} 已成功尝试关联到 ${commandIds.length} 个指令。` });
     } catch (error: any) {
         console.error('[Controller] 批量分配标签时出错:', error.message);

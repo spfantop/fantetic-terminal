@@ -147,3 +147,33 @@ SELECT connection_id, tag_id FROM connection_tags_before_owner_scope;
 DROP TABLE connection_tags_before_owner_scope;
 DROP TABLE tags_before_owner_scope;
 `;
+
+export const migrateQuickCommandTagsToOwnerScopedNamesSQL = `
+ALTER TABLE quick_command_tag_associations RENAME TO quick_command_tag_associations_before_owner_scope;
+ALTER TABLE quick_command_tags RENAME TO quick_command_tags_before_owner_scope;
+
+CREATE TABLE quick_command_tags (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    owner_user_id INTEGER NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+    updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+);
+INSERT INTO quick_command_tags(id, name, owner_user_id, created_at, updated_at)
+SELECT id, name, owner_user_id, created_at, updated_at FROM quick_command_tags_before_owner_scope;
+CREATE UNIQUE INDEX ux_quick_command_tags_owner_name
+    ON quick_command_tags(COALESCE(owner_user_id, 0), name);
+CREATE INDEX idx_quick_command_tags_owner ON quick_command_tags(owner_user_id, name);
+
+CREATE TABLE quick_command_tag_associations (
+    quick_command_id INTEGER NOT NULL,
+    tag_id INTEGER NOT NULL,
+    PRIMARY KEY (quick_command_id, tag_id),
+    FOREIGN KEY (quick_command_id) REFERENCES quick_commands(id) ON DELETE CASCADE,
+    FOREIGN KEY (tag_id) REFERENCES quick_command_tags(id) ON DELETE CASCADE
+);
+INSERT INTO quick_command_tag_associations(quick_command_id, tag_id)
+SELECT quick_command_id, tag_id FROM quick_command_tag_associations_before_owner_scope;
+DROP TABLE quick_command_tag_associations_before_owner_scope;
+DROP TABLE quick_command_tags_before_owner_scope;
+`;
