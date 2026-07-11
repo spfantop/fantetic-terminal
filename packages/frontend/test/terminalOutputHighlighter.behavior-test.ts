@@ -113,9 +113,9 @@ assert.equal(parsedDocumentRules[0].pattern, 'ERROR');
 assert.throws(() => parseTerminalHighlightRulesDocument('{'), /valid JSON/);
 assert.throws(() => parseTerminalHighlightRulesDocument('{"rules":{}}'), /array/);
 
-assert.equal(DEFAULT_TERMINAL_HIGHLIGHT_RULES.length, 59);
+assert.equal(DEFAULT_TERMINAL_HIGHLIGHT_RULES.length, 62);
 assert.ok(DEFAULT_TERMINAL_HIGHLIGHT_RULES.some(rule => rule.id === 'preset-common-command'));
-assert.equal(parseTerminalHighlightRules(DEFAULT_TERMINAL_HIGHLIGHT_RULES_JSON).length, 59);
+assert.equal(parseTerminalHighlightRules(DEFAULT_TERMINAL_HIGHLIGHT_RULES_JSON).length, 62);
 
 const previewSegments = previewTerminalHighlightSegments('ERROR failed', {
   enabled: true,

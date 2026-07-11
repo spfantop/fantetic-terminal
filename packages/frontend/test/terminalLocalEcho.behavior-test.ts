@@ -21,6 +21,15 @@ assert.equal(consumeLocalEchoFromOutput('\r\n', state), '\r\n');
 assert.equal(resolveLocalEchoText('\r', state), '');
 assert.equal(resolveLocalEchoText('\x03', state), '');
 assert.equal(resolveLocalEchoText('\x1b[A', state), '');
+assert.equal(resolveLocalEchoText('x', state), '', 'history navigation must hand the current line to remote Readline');
+assert.equal(state.pendingEcho, '', 'editing controls must clear pending local echo');
+rememberTerminalOutputText('\r\nyunwei@host:~$ ', state);
+assert.equal(resolveLocalEchoText('x', state), 'x', 'a new shell prompt may re-enable local echo');
+
+const cursorEditingState = createTerminalLocalEchoState();
+recordLocalEcho('previous command', cursorEditingState);
+assert.equal(resolveLocalEchoText('\x1b[D', cursorEditingState), '');
+assert.equal(resolveLocalEchoText('X', cursorEditingState), '', 'typing after cursor movement must not overwrite the xterm row locally');
 
 rememberTerminalOutputText('\x1b[?2004hhyf@debian:~$ ', state);
 assert.equal(resolveLocalEchoText('x', state), 'x');
