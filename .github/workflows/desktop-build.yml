@@ -1,0 +1,84 @@
+name: Build desktop applications
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  build-desktop:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-latest
+            command: build:windows
+            artifact: windows-x64
+            files: |
+              electron-app/dist_electron/*.exe
+          - name: Linux x64
+            os: ubuntu-latest
+            command: build:linux
+            artifact: linux-x64
+            files: |
+              electron-app/dist_electron/*.AppImage
+              electron-app/dist_electron/*.deb
+          - name: macOS x64
+            os: macos-15-intel
+            command: build:macos:x64
+            artifact: macos-x64
+            files: |
+              electron-app/dist_electron/*.dmg
+          - name: macOS arm64
+            os: macos-latest
+            command: build:macos:arm64
+            artifact: macos-arm64
+            files: |
+              electron-app/dist_electron/*.dmg
+
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            electron-app/package-lock.json
+
+      - name: Install workspace dependencies
+        run: npm ci
+
+      - name: Install Electron dependencies
+        run: npm ci --prefix electron-app
+
+      - name: Build backend
+        run: npm run build --workspace=@fantetic-terminal/backend
+
+      - name: Build frontend
+        run: npm run build --workspace=@fantetic-terminal/frontend
+
+      - name: Package desktop application
+        run: npm run ${{ matrix.command }} --prefix electron-app
+
+      - name: Upload desktop packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: fantetic-terminal-${{ matrix.artifact }}
+          path: ${{ matrix.files }}
+          if-no-files-found: error
+          retention-days: 14

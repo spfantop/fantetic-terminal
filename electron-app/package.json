@@ -6,8 +6,14 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
+    "sync:version": "node ../build-tools/sync-frontend-version.js",
     "prepare:runtime": "node build-tools/prepare-runtime.js",
-    "build": "node ../build-tools/sync-frontend-version.js && npm run prepare:runtime && electron-builder"
+    "build": "npm run sync:version && npm run prepare:runtime && electron-builder",
+    "build:windows": "npm run sync:version && npm run prepare:runtime && electron-builder --win nsis --x64",
+    "build:linux": "npm run sync:version && npm run prepare:runtime && electron-builder --linux AppImage deb --x64",
+    "build:macos": "npm run build:macos:x64",
+    "build:macos:x64": "npm run sync:version && npm run prepare:runtime && electron-builder --mac dmg --x64",
+    "build:macos:arm64": "npm run sync:version && npm run prepare:runtime && electron-builder --mac dmg --arm64"
   },
   "keywords": [
     "electron",
@@ -28,6 +34,7 @@
   "build": {
     "appId": "com.fantetic.terminal",
     "productName": "Fantetic Terminal",
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "asar": true,
     "directories": {
       "output": "dist_electron",
