@@ -60,6 +60,7 @@ const createDevProcessSpecs = ({
     cwd: rootDir,
     env: {
       FANTETIC_APP_MODE: 'electron',
+      HOST: '127.0.0.1',
     },
   },
   {
@@ -72,7 +73,7 @@ const createDevProcessSpecs = ({
       'dev',
       '--',
       '--host',
-      '0.0.0.0',
+      '127.0.0.1',
       '--port',
       String(DEV_FRONTEND_PORT),
       '--strictPort',

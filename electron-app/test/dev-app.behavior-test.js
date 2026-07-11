@@ -25,6 +25,7 @@ assert.deepEqual(specs[0], {
   cwd: rootDir,
   env: {
     FANTETIC_APP_MODE: 'electron',
+    HOST: '127.0.0.1',
   },
 });
 
@@ -38,7 +39,7 @@ assert.deepEqual(specs[1], {
     'dev',
     '--',
     '--host',
-    '0.0.0.0',
+    '127.0.0.1',
     '--port',
     '22457',
     '--strictPort',
@@ -75,6 +76,7 @@ assert.deepEqual(createSpawnConfig(specs[0], {
     env: {
       ...testEnv,
       FANTETIC_APP_MODE: 'electron',
+      HOST: '127.0.0.1',
     },
   },
 });
@@ -91,6 +93,7 @@ assert.deepEqual(createSpawnConfig(specs[0], {
     env: {
       ...testEnv,
       FANTETIC_APP_MODE: 'electron',
+      HOST: '127.0.0.1',
     },
   },
 });

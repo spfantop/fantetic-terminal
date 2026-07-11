@@ -97,6 +97,7 @@ const startBackendProcess = (backendDataPath) => {
       APP_BACKEND_DATA_PATH: backendDataPath,
       ELECTRON_RUN_AS_NODE: '1',
       FANTETIC_APP_MODE: 'electron',
+      HOST: '127.0.0.1',
       PORT: String(PROD_BACKEND_PORT),
       RP_ORIGIN: `http://localhost:${PROD_FRONTEND_PORT}`,
       NODE_ENV: 'production',
@@ -129,7 +130,7 @@ const startFrontendServer = async () => {
 
   await new Promise((resolve, reject) => {
     frontendServer
-      .listen(PROD_FRONTEND_PORT, resolve)
+      .listen(PROD_FRONTEND_PORT, '127.0.0.1', resolve)
       .on('error', reject);
   });
 };

@@ -65,6 +65,8 @@ import aiRoutes from './ai-ops/ai.routes';
 import { initializeWebSocket } from './websocket';
 import { ipWhitelistMiddleware } from './auth/ipWhitelist.middleware';
 import { isCorsOriginAllowed, parseCorsOrigins, readForwardedHost } from './config/cors-origin';
+import { resolveServerBinding } from './config/server-binding';
+import { createClientIpResolver } from './config/client-ip';
 
 
 import './services/event.service'; 
@@ -176,9 +178,10 @@ const initializeEnvironment = async () => {
 // 基础 Express 应用设置
 const app = express();
 const server = http.createServer(app);
+const clientIpResolver = createClientIpResolver();
 
 // --- 信任代理设置 ---
-app.set('trust proxy', true);
+app.set('trust proxy', (address: string) => clientIpResolver.isTrustedProxy(address));
 
 // --- 中间件 ---
 app.use(ipWhitelistMiddleware as RequestHandler);
@@ -214,7 +217,11 @@ declare module 'express-session' {
     }
 }
 
-const port = process.env.PORT || 3001;
+const serverBinding = resolveServerBinding({
+    appMode: process.env.FANTETIC_APP_MODE,
+    host: process.env.HOST,
+    port: process.env.PORT,
+});
 
 // 初始化数据库
 const initializeDatabase = async () => {
@@ -290,9 +297,9 @@ const startServer = () => {
     // --- 结束 API 路由 ---
 
 
-    server.listen(port, () => {
-        console.log(`后端服务器正在监听 http://localhost:${port}`);
-        initializeWebSocket(server, sessionMiddleware as RequestHandler); // Initialize existing WebSocket
+    server.listen(serverBinding.port, serverBinding.host, () => {
+        console.log(`后端服务器正在监听 http://${serverBinding.host}:${serverBinding.port}`);
+        initializeWebSocket(server, sessionMiddleware as RequestHandler, clientIpResolver); // Initialize existing WebSocket
 
     });
 };

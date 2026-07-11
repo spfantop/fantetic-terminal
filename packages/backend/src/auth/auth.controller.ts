@@ -16,6 +16,7 @@ import {
     ELECTRON_APP_USER_ID,
     isElectronAppMode,
 } from '../config/app-mode';
+import { completeLogin, startTwoFactorChallenge } from './auth-session';
 
 const notificationService = new NotificationService();
 const auditLogService = new AuditLogService();
@@ -183,19 +184,7 @@ export const verifyPasskeyAuthenticationHandler = async (req: Request, res: Resp
             auditLogService.logAction('PASSKEY_AUTH_SUCCESS', { userId: user.id, username: user.username, credentialId: verification.passkey.credential_id, ip: clientIp });
             notificationService.sendNotification('LOGIN_SUCCESS', { userId: user.id, username: user.username, ip: clientIp, method: 'Passkey' });
 
-            // Setup session similar to password login
-            req.session.userId = user.id;
-            req.session.username = user.username;
-            req.session.requiresTwoFactor = false; // Passkey implies 2FA characteristics
-
-            if (rememberMe) {
-                req.session.cookie.maxAge = 315360000000; // 10 years
-            } else {
-                req.session.cookie.maxAge = undefined; // Session cookie
-            }
-            
-            delete req.session.currentChallenge;
-            delete req.session.passkeyUserHandle;
+            await completeLogin(req, user, { rememberMe: Boolean(rememberMe) });
 
             res.status(200).json({
                 verified: true,
@@ -414,9 +403,10 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         // 检查是否启用了 2FA
         if (user.two_factor_secret) {
             console.log(`用户 ${username} 已启用 2FA，需要进行二次验证。`);
-            req.session.userId = user.id; 
-            req.session.requiresTwoFactor = true;
-            req.session.rememberMe = rememberMe; 
+            await startTwoFactorChallenge(req, {
+                userId: user.id,
+                rememberMe: Boolean(rememberMe),
+            });
             res.status(200).json({ message: '需要进行两步验证。', requiresTwoFactor: true });
         } else {
             console.log(`登录成功 (无 2FA): ${username}`);
@@ -424,15 +414,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
             ipBlacklistService.resetAttempts(clientIp);
             auditLogService.logAction('LOGIN_SUCCESS', { userId: user.id, username, ip: clientIp });
             notificationService.sendNotification('LOGIN_SUCCESS', { userId: user.id, username, ip: clientIp }); 
-            req.session.userId = user.id;
-            req.session.username = user.username;
-            req.session.requiresTwoFactor = false; 
-
-            if (rememberMe) {
-                req.session.cookie.maxAge = 315360000000;
-            } else {
-                req.session.cookie.maxAge = undefined;
-            }
+            await completeLogin(req, user, { rememberMe: Boolean(rememberMe) });
 
             res.status(200).json({
                 message: '登录成功。',
@@ -501,7 +483,7 @@ export const getAuthStatus = async (req: Request, res: Response): Promise<void> 
  */
 export const verifyLogin2FA = async (req: Request, res: Response): Promise<void> => {
     const { token } = req.body;
-    const userId = req.session.userId; 
+    const userId = req.session.pendingTwoFactorUserId;
 
     if (!userId || !req.session.requiresTwoFactor) {
         res.status(400).json({ message: '无效的请求或会话状态。' });
@@ -538,15 +520,8 @@ export const verifyLogin2FA = async (req: Request, res: Response): Promise<void>
             ipBlacklistService.resetAttempts(clientIp);
             auditLogService.logAction('LOGIN_SUCCESS', { userId: user.id, username: user.username, ip: clientIp, twoFactor: true });
             notificationService.sendNotification('LOGIN_SUCCESS', { userId: user.id, username: user.username, ip: clientIp, twoFactor: true }); 
-            req.session.username = user.username;
-            req.session.requiresTwoFactor = false; 
-
-            if (req.session.rememberMe) {
-                req.session.cookie.maxAge = 315360000000; 
-            } else {
-                req.session.cookie.maxAge = undefined; 
-            }
-            delete req.session.rememberMe;
+            const rememberMe = Boolean(req.session.rememberMe);
+            await completeLogin(req, user, { rememberMe });
 
             res.status(200).json({
                 message: '登录成功。',

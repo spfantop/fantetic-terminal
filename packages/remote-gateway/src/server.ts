@@ -4,6 +4,7 @@ import express, { Request, Response } from 'express';
 import http from 'http';
 import crypto from 'crypto';
 import cors from 'cors';
+import { createHealthSnapshot } from './health';
 
 // --- 配置 ---
 const REMOTE_GATEWAY_WS_PORT = process.env.REMOTE_GATEWAY_WS_PORT || 8080; // 统一端口，或按需分开
@@ -52,6 +53,7 @@ const clientOptions = {
 };
 
 let guacServer: any;
+let guacamoleReady = false;
 
 type RemoteDesktopConnectionConfig = Record<string, string | number | boolean | null | undefined>;
 
@@ -80,6 +82,7 @@ const logRemoteDesktopSettingsSnapshot = (protocol: 'rdp' | 'vnc', settings: Rec
 try {
     console.log(`[Remote Gateway] 正在使用选项初始化 GuacamoleLite: WS 端口=${websocketOptions.port}, Guacd=${guacdOptions.host}:${guacdOptions.port}`);
     guacServer = new GuacamoleLite(websocketOptions, guacdOptions, clientOptions);
+    guacamoleReady = true;
     console.log(`[Remote Gateway] GuacamoleLite 初始化成功。`);
 
     if (guacServer.on) {
@@ -104,6 +107,15 @@ try {
    console.error(`[Remote Gateway] 初始化 GuacamoleLite 失败:`, error);
    process.exit(1);
 }
+
+app.get('/health/live', (_req: Request, res: Response): void => {
+    res.status(200).json({ status: 'alive' });
+});
+
+app.get(['/health', '/health/ready'], (_req: Request, res: Response): void => {
+    const snapshot = createHealthSnapshot({ guacamoleReady });
+    res.status(guacamoleReady ? 200 : 503).json(snapshot);
+});
 
 const encryptToken = (data: string, keyBuffer: Buffer): string => {
     try {
@@ -208,6 +220,7 @@ apiServer.listen(REMOTE_GATEWAY_API_PORT, () => {
 const gracefulShutdown = (signal: string) => {
     console.log(`[Remote Gateway] 收到 ${signal} 信号。正在优雅地关闭...`);
 
+  guacamoleReady = false;
   let guacClosed = false;
   let apiClosed = false;
 
