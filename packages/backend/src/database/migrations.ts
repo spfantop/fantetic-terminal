@@ -1,5 +1,8 @@
 import { Database } from 'sqlite3';
-import { migrateLegacyResourcesToAccessControlSQL } from '../access-control/access-control.schema';
+import {
+    migrateLegacyResourcesToAccessControlSQL,
+    migrateUserPrivateResourcesSQL,
+} from '../access-control/access-control.schema';
 
 // 1. 定义 migrations 表 SQL
 const createMigrationsTableSQL = `
@@ -484,6 +487,16 @@ const definedMigrations: Migration[] = [
             return !groupsExist || !connectionOwnerExists;
         },
         sql: migrateLegacyResourcesToAccessControlSQL,
+    },
+    {
+        id: 18,
+        name: 'Add ownership for user-private resources and preferences',
+        check: async (db: Database): Promise<boolean> => {
+            const userSettingsExist = await tableExists(db, 'user_settings');
+            const quickCommandOwnerExists = await columnExists(db, 'quick_commands', 'owner_user_id');
+            return !userSettingsExist || !quickCommandOwnerExists;
+        },
+        sql: migrateUserPrivateResourcesSQL,
     }
 ];
 

@@ -21,6 +21,15 @@ await exec(`
   CREATE TABLE ssh_keys (id INTEGER PRIMARY KEY, name TEXT);
   CREATE TABLE connection_folders (id INTEGER PRIMARY KEY, name TEXT);
   CREATE TABLE tags (id INTEGER PRIMARY KEY, name TEXT);
+  CREATE TABLE command_history (id INTEGER PRIMARY KEY, command TEXT, timestamp INTEGER);
+  CREATE TABLE path_history (id INTEGER PRIMARY KEY, path TEXT, timestamp INTEGER);
+  CREATE TABLE quick_commands (id INTEGER PRIMARY KEY, name TEXT);
+  CREATE TABLE quick_command_tags (id INTEGER PRIMARY KEY, name TEXT);
+  CREATE TABLE favorite_paths (id INTEGER PRIMARY KEY, path TEXT);
+  CREATE TABLE terminal_themes (id INTEGER PRIMARY KEY, name TEXT, theme_type TEXT);
+  CREATE TABLE audit_logs (id INTEGER PRIMARY KEY, details TEXT, timestamp INTEGER);
+  CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, created_at INTEGER, updated_at INTEGER);
+  CREATE TABLE appearance_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, created_at INTEGER, updated_at INTEGER);
   INSERT INTO users(id, username) VALUES (3, 'legacy-admin');
   INSERT INTO connections(id, name) VALUES (30, 'legacy-connection');
 `);
@@ -29,7 +38,7 @@ await runMigrations(db);
 
 assert.deepEqual(
   await get<{ currentVersion: number }>('SELECT MAX(id) AS currentVersion FROM migrations'),
-  { currentVersion: 17 },
+  { currentVersion: 18 },
 );
 assert.deepEqual(
   await get<{ system_role: string }>('SELECT system_role FROM users WHERE id = 3'),

@@ -1,4 +1,5 @@
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
+import { AuthorizationSubject } from '../access-control/authorization-subject';
 
 export interface ProxyData {
     id: number;
@@ -13,6 +14,7 @@ export interface ProxyData {
     encrypted_passphrase?: string | null;
     created_at: number;
     updated_at: number;
+    owner_user_id?: number | null;
 }
 
 type DbProxyRow = ProxyData;
@@ -20,11 +22,29 @@ type DbProxyRow = ProxyData;
 /**
  * 根据名称、类型、主机和端口查找代理
  */
-export const findProxyByNameTypeHostPort = async (name: string, type: string, host: string, port: number): Promise<{ id: number } | undefined> => {
-    const sql = `SELECT id FROM proxies WHERE name = ? AND type = ? AND host = ? AND port = ?`;
+export const findProxyByNameTypeHostPort = async (
+    name: string,
+    type: string,
+    host: string,
+    port: number,
+    subject: AuthorizationSubject,
+): Promise<{ id: number } | undefined> => {
+    const canReadAll = subject.runtime === 'desktop'
+        || subject.systemRole === 'super_admin'
+        || subject.systemRole === 'admin';
+    const sql = `SELECT id FROM proxies
+        WHERE name = ? AND type = ? AND host = ? AND port = ?
+          AND (? = 1 OR owner_user_id = ?)`;
     try {
         const db = await getDbInstance();
-        const row = await getDbRow<{ id: number }>(db, sql, [name, type, host, port]);
+        const row = await getDbRow<{ id: number }>(db, sql, [
+            name,
+            type,
+            host,
+            port,
+            canReadAll ? 1 : 0,
+            subject.userId,
+        ]);
         return row;
     } catch (err: any) {
         console.error(`Repository: 查找代理时出错 (name=${name}, type=${type}, host=${host}, port=${port}):`, err.message);
@@ -37,8 +57,8 @@ export const findProxyByNameTypeHostPort = async (name: string, type: string, ho
  */
 export const createProxy = async (data: Omit<ProxyData, 'id' | 'created_at' | 'updated_at'>): Promise<number> => {
     const now = Math.floor(Date.now() / 1000);
-    const sql = `INSERT INTO proxies (name, type, host, port, username, auth_method, encrypted_password, encrypted_private_key, encrypted_passphrase, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    const sql = `INSERT INTO proxies (name, type, host, port, username, auth_method, encrypted_password, encrypted_private_key, encrypted_passphrase, owner_user_id, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
     const params = [
         data.name, data.type, data.host, data.port,
         data.username || null,
@@ -46,6 +66,7 @@ export const createProxy = async (data: Omit<ProxyData, 'id' | 'created_at' | 'u
         data.encrypted_password || null,
         data.encrypted_private_key || null,
         data.encrypted_passphrase || null,
+        data.owner_user_id ?? null,
         now, now
     ];
     try {
@@ -74,6 +95,15 @@ export const findAllProxies = async (): Promise<ProxyData[]> => {
         console.error('Repository: 查询代理列表时出错:', err.message);
         throw new Error('获取代理列表失败');
     }
+};
+
+export const findVisibleProxies = async (subject: AuthorizationSubject): Promise<ProxyData[]> => {
+    if (subject.runtime === 'desktop' || subject.systemRole === 'super_admin' || subject.systemRole === 'admin') {
+        return findAllProxies();
+    }
+    return allDb<DbProxyRow>(await getDbInstance(), `
+        SELECT * FROM proxies WHERE owner_user_id = ? ORDER BY name
+    `, [subject.userId]);
 };
 
 /**

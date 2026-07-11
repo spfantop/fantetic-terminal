@@ -14,7 +14,7 @@ const sanitizeProxy = (proxy: ProxyService.ProxyData | null): Partial<ProxyServi
 // 获取所有代理配置 (不含敏感信息)
 export const getAllProxies = async (req: Request, res: Response) => {
     try {
-        const proxies = await ProxyService.getAllProxies();
+        const proxies = await ProxyService.getAllProxies(req.authorization!);
         res.status(200).json(proxies.map(sanitizeProxy));
     } catch (error: any) {
         console.error('Controller: 获取代理列表失败:', error);
@@ -54,7 +54,8 @@ export const createProxy = async (req: Request, res: Response) => {
             return res.status(400).json({ message: '无效的代理类型，仅支持 SOCKS5 或 HTTP' });
         }
 
-        const newProxy = await ProxyService.createProxy(req.body);
+        const ownerUserId = req.authorization?.runtime === 'web' ? req.authorization.userId : null;
+        const newProxy = await ProxyService.createProxy(req.body, ownerUserId);
         // 记录审计日志
         auditLogService.logAction('PROXY_CREATED', { proxyId: newProxy.id, name: newProxy.name, type: newProxy.type });
         res.status(201).json({

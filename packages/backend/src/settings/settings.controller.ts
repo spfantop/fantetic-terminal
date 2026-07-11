@@ -582,7 +582,7 @@ async setCaptchaConfig(req: Request, res: Response): Promise<void> {
   */
   async exportAllConnections(req: Request, res: Response): Promise<void> {
    try {
-     const encryptedZipBuffer = await exportConnectionsAsEncryptedZip(true);
+     const encryptedZipBuffer = await exportConnectionsAsEncryptedZip(req.authorization!, true);
 
      res.setHeader('Content-Type', 'application/zip');
      res.setHeader('Content-Disposition', 'attachment; filename="fantetic_connections_export.zip"');
@@ -613,7 +613,7 @@ async setCaptchaConfig(req: Request, res: Response): Promise<void> {
    }
 
    try {
-     const result = await importConnectionsFromEncryptedZip(file.buffer);
+     const result = await importConnectionsFromEncryptedZip(file.buffer, req.authorization!);
      const status = result.failureCount > 0 ? 207 : 200;
      res.status(status).json({
        message: result.failureCount > 0

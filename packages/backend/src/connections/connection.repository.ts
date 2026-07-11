@@ -217,7 +217,7 @@ export const findFullConnectionById = async (id: number): Promise<FullConnection
  /**
   * 根据名称查找连接 (用于检查名称是否重复)
   */
- export const findConnectionByName = async (name: string): Promise<ConnectionBase | null> => {
+export const findConnectionByName = async (name: string): Promise<ConnectionBase | null> => {
      const sql = `SELECT id, name, type, host, port, username, auth_method, proxy_id, proxy_type, folder_id, icon, sort_order, ssh_key_id, notes, jump_chain, created_at, updated_at, last_connected_at FROM connections WHERE name = ?`;
      try {
          const db = await getDbInstance();
@@ -294,6 +294,23 @@ export const createConnection = async (data: Omit<FullConnectionData, 'id' | 'cr
         console.error('Repository: 插入连接时出错:', err.message);
         throw new Error('创建连接记录失败');
     }
+};
+
+export const findVisibleConnectionByName = async (
+    name: string,
+    subject: AuthorizationSubject,
+): Promise<ConnectionBase | null> => {
+    if (subject.runtime === 'desktop' || subject.systemRole === 'super_admin' || subject.systemRole === 'admin') {
+        return findConnectionByName(name);
+    }
+
+    const db = await getDbInstance();
+    const row = await getDbRow<ConnectionBase>(db, `
+        SELECT * FROM connections
+        WHERE name = ? AND owner_user_id = ?
+        LIMIT 1
+    `, [name, subject.userId]);
+    return row || null;
 };
 
 /**
@@ -587,7 +604,7 @@ export const bulkInsertConnections = async (
     connections: Array<Omit<FullConnectionData, 'id' | 'created_at' | 'updated_at' | 'last_connected_at'> & { tag_ids?: number[] }>
 ): Promise<{ connectionId: number, originalData: any }[]> => {
 
-    const insertConnSql = `INSERT INTO connections (name, type, host, port, username, auth_method, encrypted_password, encrypted_private_key, encrypted_passphrase, proxy_id, proxy_type, folder_id, icon, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    const insertConnSql = `INSERT INTO connections (name, type, host, port, username, auth_method, encrypted_password, encrypted_private_key, encrypted_passphrase, proxy_id, proxy_type, folder_id, icon, notes, owner_user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
     const results: { connectionId: number, originalData: any }[] = [];
     const now = Math.floor(Date.now() / 1000);
 
@@ -602,6 +619,7 @@ export const bulkInsertConnections = async (
             connData.folder_id || null,
             connData.icon || null,
 connData.notes || null, // Add notes parameter
+            connData.owner_user_id ?? null,
             now, now
         ];
         try {

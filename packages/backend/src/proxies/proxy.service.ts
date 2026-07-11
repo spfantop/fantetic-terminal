@@ -1,5 +1,6 @@
 import * as ProxyRepository from '../proxies/proxy.repository';
 import { encrypt, decrypt } from '../utils/crypto';
+import { AuthorizationSubject } from '../access-control/authorization-subject';
 
 export interface ProxyData extends ProxyRepository.ProxyData {}
 
@@ -31,8 +32,8 @@ export interface UpdateProxyInput {
 /**
  * 获取所有代理
  */
-export const getAllProxies = async (): Promise<ProxyData[]> => {
-    return ProxyRepository.findAllProxies();
+export const getAllProxies = async (subject: AuthorizationSubject): Promise<ProxyData[]> => {
+    return ProxyRepository.findVisibleProxies(subject);
 };
 
 /**
@@ -45,7 +46,7 @@ export const getProxyById = async (id: number): Promise<ProxyData | null> => {
 /**
  * 创建新代理
  */
-export const createProxy = async (input: CreateProxyInput): Promise<ProxyData> => {
+export const createProxy = async (input: CreateProxyInput, ownerUserId: number | null): Promise<ProxyData> => {
     // 1. 验证输入
     if (!input.name || !input.type || !input.host || !input.port) {
         throw new Error('缺少必要的代理信息 (name, type, host, port)。');
@@ -73,6 +74,7 @@ export const createProxy = async (input: CreateProxyInput): Promise<ProxyData> =
         encrypted_password: encryptedPassword,
         encrypted_private_key: encryptedPrivateKey,
         encrypted_passphrase: encryptedPassphrase,
+        owner_user_id: ownerUserId,
     };
 
     // 4. 创建代理记录

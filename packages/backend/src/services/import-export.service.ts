@@ -7,6 +7,7 @@ import * as SshKeyService from '../ssh_keys/ssh_key.service';
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
 import { decrypt, getEncryptionKeyBuffer as getCryptoKeyBuffer } from '../utils/crypto'; 
 import { getAllDecryptedSshKeys, DecryptedSshKeyDetails } from '../ssh_keys/ssh_key.service'; 
+import { AuthorizationSubject } from '../access-control/authorization-subject';
 import type { CreateConnectionInput } from '../types/connection.types';
 import { readEncryptedZipEntries } from './encrypted-zip-reader';
 import { parseConnectionImportScript, type ParsedConnectionImportItem } from './connection-import-script';
@@ -170,7 +171,7 @@ const buildConnectionInputFromParsedItem = async (
  * 获取所有连接的明文数据以供导出。
  * 敏感信息将被解密。
  */
-const getPlaintextConnectionsData = async (): Promise<PlaintextExportConnectionData[]> => {
+const getPlaintextConnectionsData = async (subject: AuthorizationSubject): Promise<PlaintextExportConnectionData[]> => {
     try {
         const db = await getDbInstance();
 
@@ -189,6 +190,9 @@ const getPlaintextConnectionsData = async (): Promise<PlaintextExportConnectionD
         };
 
 
+        const canExportAll = subject.runtime === 'desktop'
+            || subject.systemRole === 'super_admin'
+            || subject.systemRole === 'admin';
         const connectionsWithProxies = await allDb<ExportRow>(db,
             `SELECT
                 c.*,
@@ -200,7 +204,9 @@ const getPlaintextConnectionsData = async (): Promise<PlaintextExportConnectionD
                 p.encrypted_passphrase as proxy_encrypted_passphrase
              FROM connections c
              LEFT JOIN proxies p ON c.proxy_id = p.id
-             ORDER BY c.name ASC`
+             WHERE ? = 1 OR c.owner_user_id = ?
+             ORDER BY c.name ASC`,
+            [canExportAll ? 1 : 0, subject.userId]
         );
 
 
@@ -313,11 +319,14 @@ function escapeCliArgument(value: string | number | null | undefined): string {
 }
 
 
-export const exportConnectionsAsEncryptedZip = async (includeSshKeys: boolean = false): Promise<Buffer> => {
+export const exportConnectionsAsEncryptedZip = async (
+    subject: AuthorizationSubject,
+    includeSshKeys: boolean = false,
+): Promise<Buffer> => {
     try {
-        const connectionsData = await getPlaintextConnectionsData(); // This now returns PlaintextExportConnectionData[]
+        const connectionsData = await getPlaintextConnectionsData(subject); // This now returns PlaintextExportConnectionData[]
         const allTags = await TagService.getAllTags();
-        const allSshKeys = includeSshKeys ? await getAllDecryptedSshKeys() : [];
+        const allSshKeys = includeSshKeys ? await getAllDecryptedSshKeys(subject) : [];
 
         const tagsMap = new Map(allTags.map(tag => [tag.id, tag.name]));
         const fullSshKeysMap = new Map(allSshKeys.map(key => [key.id, key])); // Store full key details, not just name
@@ -447,7 +456,10 @@ export const exportConnectionsAsEncryptedZip = async (includeSshKeys: boolean = 
  * 导入连接配置
  * @param fileBuffer Buffer containing the JSON file content
  */
-export const importConnections = async (fileBuffer: Buffer): Promise<ImportResult> => {
+export const importConnections = async (
+    fileBuffer: Buffer,
+    subject: AuthorizationSubject,
+): Promise<ImportResult> => {
     let importedData: ImportedConnectionData[];
     try {
         const fileContent = fileBuffer.toString('utf8');
@@ -500,7 +512,13 @@ export const importConnections = async (fileBuffer: Buffer): Promise<ImportResul
                     if (proxyCache[cacheKey]) {
                         proxyIdToUse = proxyCache[cacheKey];
                     } else {
-                        const existingProxy = await ProxyRepository.findProxyByNameTypeHostPort(proxyData.name, proxyData.type, proxyData.host, proxyData.port);
+                        const existingProxy = await ProxyRepository.findProxyByNameTypeHostPort(
+                            proxyData.name,
+                            proxyData.type,
+                            proxyData.host,
+                            proxyData.port,
+                            subject,
+                        );
                         if (existingProxy) {
                             proxyIdToUse = existingProxy.id;
                         } else {
@@ -514,6 +532,7 @@ export const importConnections = async (fileBuffer: Buffer): Promise<ImportResul
                                 encrypted_password: proxyData.encrypted_password || null,
                                 encrypted_private_key: proxyData.encrypted_private_key || null,
                                 encrypted_passphrase: proxyData.encrypted_passphrase || null,
+                                owner_user_id: subject.runtime === 'web' ? subject.userId : null,
                             };
                             proxyIdToUse = await ProxyRepository.createProxy(newProxyData);
                             console.log(`Service: 导入连接 ${connData.name}: 新代理 ${proxyData.name} 创建成功 (ID: ${proxyIdToUse})`);
@@ -539,6 +558,7 @@ export const importConnections = async (fileBuffer: Buffer): Promise<ImportResul
                     icon: connData.icon ?? null,
                     tag_ids: connData.tag_ids || [],
                     jump_chain: null, // 为 jump_chain 添加默认值
+                    owner_user_id: subject.runtime === 'web' ? subject.userId : null,
                 });
 
             } catch (connError: any) {
@@ -591,7 +611,10 @@ export const importConnections = async (fileBuffer: Buffer): Promise<ImportResul
     }
 };
 
-export const importConnectionsFromEncryptedZip = async (fileBuffer: Buffer): Promise<ZipImportResult> => {
+export const importConnectionsFromEncryptedZip = async (
+    fileBuffer: Buffer,
+    subject: AuthorizationSubject,
+): Promise<ZipImportResult> => {
     const zipPassword = process.env.ENCRYPTION_KEY;
     if (!zipPassword || zipPassword.trim() === '') {
         throw new Error('ENCRYPTION_KEY is not set or is empty, cannot decrypt the ZIP file.');
@@ -617,7 +640,7 @@ export const importConnectionsFromEncryptedZip = async (fileBuffer: Buffer): Pro
         warnings: [],
     };
 
-    const existingSshKeys = await SshKeyService.getAllSshKeyNames();
+    const existingSshKeys = await SshKeyService.getAllSshKeyNames(subject);
     const sshKeyMap = new Map(existingSshKeys.map(key => [key.name, key.id]));
     const referencedKeyNames = parsed.connections
         .map(connection => connection.ssh_key_name)
@@ -643,7 +666,7 @@ export const importConnectionsFromEncryptedZip = async (fileBuffer: Buffer): Pro
                 name: keyName,
                 private_key: keyContent.toString('utf8'),
                 passphrase: passphraseByKeyName.get(keyName),
-            });
+            }, subject.runtime === 'web' ? subject.userId : null);
             sshKeyMap.set(createdKey.name, createdKey.id);
             result.importedSshKeyCount += 1;
         } catch (error: any) {
@@ -653,7 +676,10 @@ export const importConnectionsFromEncryptedZip = async (fileBuffer: Buffer): Pro
 
     for (const parsedConnection of parsed.connections) {
         try {
-            const existingConnection = await ConnectionRepository.findConnectionByName(parsedConnection.name);
+            const existingConnection = await ConnectionRepository.findVisibleConnectionByName(
+                parsedConnection.name,
+                subject,
+            );
             if (existingConnection) {
                 result.skippedCount += 1;
                 result.warnings.push(`连接 "${parsedConnection.name}" 已存在，已跳过。`);
@@ -661,7 +687,7 @@ export const importConnectionsFromEncryptedZip = async (fileBuffer: Buffer): Pro
             }
 
             const input = await buildConnectionInputFromParsedItem(parsedConnection, sshKeyMap);
-            await ConnectionService.createConnection(input);
+            await ConnectionService.createConnection(input, subject.runtime === 'web' ? subject.userId : null);
             result.successCount += 1;
         } catch (error: any) {
             result.failureCount += 1;

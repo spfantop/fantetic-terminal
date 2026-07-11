@@ -315,7 +315,7 @@ export const testUnsavedConnection = async (req: Request, res: Response): Promis
  */
 export const exportConnections = async (req: Request, res: Response): Promise<void> => {
     try {
-        const exportedData = await ImportExportService.exportConnectionsAsEncryptedZip();
+        const exportedData = await ImportExportService.exportConnectionsAsEncryptedZip(req.authorization!);
 
         // 设置响应头，提示浏览器下载文件
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -340,7 +340,7 @@ export const importConnections = async (req: Request, res: Response): Promise<vo
     }
 
     try {
-        const result = await ImportExportService.importConnections(req.file.buffer);
+        const result = await ImportExportService.importConnections(req.file.buffer, req.authorization!);
 
         if (result.failureCount > 0) {
              res.status(400).json({ 
