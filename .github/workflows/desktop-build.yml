@@ -2,6 +2,11 @@ name: Build desktop applications
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Optional release tag to create/update (for example v1.5.2)
+        required: false
+        type: string
   push:
     tags:
       - 'v*'
@@ -82,3 +87,36 @@ jobs:
           path: ${{ matrix.files }}
           if-no-files-found: error
           retention-days: 14
+
+  publish-release:
+    name: Publish GitHub Release assets
+    needs: build-desktop
+    if: ${{ github.ref_type == 'tag' || inputs.release_tag != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all desktop packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: fantetic-terminal-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Generate SHA256 checksums
+        shell: bash
+        run: find release-assets -maxdepth 1 -type f -print0 | sort -z | xargs -0 sha256sum > release-assets/SHA256SUMS.txt
+
+      - name: Create release and upload Assets
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            release-assets/*.exe
+            release-assets/*.AppImage
+            release-assets/*.deb
+            release-assets/*.dmg
+            release-assets/SHA256SUMS.txt
