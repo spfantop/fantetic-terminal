@@ -15,19 +15,19 @@ type DbCommandHistoryRow = CommandHistoryEntry;
  * @param command - 要添加或更新的命令字符串
  * @returns 返回插入或更新记录的 ID
  */
-export const upsertCommand = async (command: string): Promise<number> => {
+export const upsertCommand = async (command: string, ownerUserId: number): Promise<number> => {
     const now = Math.floor(Date.now() / 1000); // 获取当前时间戳
     const db = await getDbInstance();
 
     try {
         // 1. 尝试更新现有记录的时间戳
-        const updateSql = `UPDATE command_history SET timestamp = ? WHERE command = ?`;
-        const updateResult = await runDb(db, updateSql, [now, command]);
+        const updateSql = `UPDATE command_history SET timestamp = ? WHERE command = ? AND owner_user_id = ?`;
+        const updateResult = await runDb(db, updateSql, [now, command, ownerUserId]);
 
         if (updateResult.changes > 0) {
             // 更新成功，需要获取被更新记录的 ID
-            const selectSql = `SELECT id FROM command_history WHERE command = ? ORDER BY timestamp DESC LIMIT 1`;
-            const row = await getDbRow<{ id: number }>(db, selectSql, [command]);
+            const selectSql = `SELECT id FROM command_history WHERE command = ? AND owner_user_id = ? ORDER BY timestamp DESC LIMIT 1`;
+            const row = await getDbRow<{ id: number }>(db, selectSql, [command, ownerUserId]);
             if (row) {
                 return row.id;
             } else {
@@ -36,8 +36,8 @@ export const upsertCommand = async (command: string): Promise<number> => {
             }
         } else {
             // 2. 没有记录被更新，说明命令不存在，执行插入
-            const insertSql = `INSERT INTO command_history (command, timestamp) VALUES (?, ?)`;
-            const insertResult = await runDb(db, insertSql, [command, now]);
+            const insertSql = `INSERT INTO command_history (command, timestamp, owner_user_id) VALUES (?, ?, ?)`;
+            const insertResult = await runDb(db, insertSql, [command, now, ownerUserId]);
             // Ensure lastID is valid before returning
             if (typeof insertResult.lastID !== 'number' || insertResult.lastID <= 0) {
                  throw new Error('插入新命令历史记录后未能获取有效的 lastID');
@@ -54,11 +54,11 @@ export const upsertCommand = async (command: string): Promise<number> => {
  * 获取所有命令历史记录，按时间戳升序排列（最旧的在前）
  * @returns 返回包含所有历史记录条目的数组
  */
-export const getAllCommands = async (): Promise<CommandHistoryEntry[]> => {
-    const sql = `SELECT id, command, timestamp FROM command_history ORDER BY timestamp ASC`;
+export const getAllCommands = async (ownerUserId: number): Promise<CommandHistoryEntry[]> => {
+    const sql = `SELECT id, command, timestamp FROM command_history WHERE owner_user_id = ? ORDER BY timestamp ASC`;
     try {
         const db = await getDbInstance();
-        const rows = await allDb<DbCommandHistoryRow>(db, sql);
+        const rows = await allDb<DbCommandHistoryRow>(db, sql, [ownerUserId]);
         return rows;
     } catch (err: any) {
         console.error('获取命令历史记录时出错:', err.message);
@@ -71,11 +71,11 @@ export const getAllCommands = async (): Promise<CommandHistoryEntry[]> => {
  * @param id - 要删除的记录 ID
  * @returns 返回是否成功删除 (true/false)
  */
-export const deleteCommandById = async (id: number): Promise<boolean> => {
-    const sql = `DELETE FROM command_history WHERE id = ?`;
+export const deleteCommandById = async (id: number, ownerUserId: number): Promise<boolean> => {
+    const sql = `DELETE FROM command_history WHERE id = ? AND owner_user_id = ?`;
     try {
         const db = await getDbInstance();
-        const result = await runDb(db, sql, [id]);
+        const result = await runDb(db, sql, [id, ownerUserId]);
         return result.changes > 0;
     } catch (err: any) {
         console.error('删除命令历史记录时出错:', err.message);
@@ -87,11 +87,11 @@ export const deleteCommandById = async (id: number): Promise<boolean> => {
  * 清空所有命令历史记录
  * @returns 返回删除的行数
  */
-export const clearAllCommands = async (): Promise<number> => {
-    const sql = `DELETE FROM command_history`;
+export const clearAllCommands = async (ownerUserId: number): Promise<number> => {
+    const sql = `DELETE FROM command_history WHERE owner_user_id = ?`;
     try {
         const db = await getDbInstance();
-        const result = await runDb(db, sql);
+        const result = await runDb(db, sql, [ownerUserId]);
         return result.changes;
     } catch (err: any) {
         console.error('清空命令历史记录时出错:', err.message);

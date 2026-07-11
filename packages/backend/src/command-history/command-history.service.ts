@@ -6,22 +6,22 @@ import { CommandHistoryEntry } from '../command-history/command-history.reposito
  * @param command - 要添加的命令
  * @returns 返回添加记录的 ID
  */
-export const addCommandHistory = async (command: string): Promise<number> => {
+export const addCommandHistory = async (command: string, ownerUserId: number): Promise<number> => {
     // 可以在这里添加额外的业务逻辑，例如校验命令格式、长度限制等
     if (!command || command.trim().length === 0) {
         throw new Error('命令不能为空');
     }
 
     // 调用 upsertCommand 来处理插入或更新时间戳
-    return CommandHistoryRepository.upsertCommand(command.trim());
+    return CommandHistoryRepository.upsertCommand(command.trim(), ownerUserId);
 };
 
 /**
  * 获取所有命令历史记录
  * @returns 返回所有历史记录条目数组，按时间戳升序
  */
-export const getAllCommandHistory = async (): Promise<CommandHistoryEntry[]> => {
-    return CommandHistoryRepository.getAllCommands();
+export const getAllCommandHistory = async (ownerUserId: number): Promise<CommandHistoryEntry[]> => {
+    return CommandHistoryRepository.getAllCommands(ownerUserId);
 };
 
 /**
@@ -29,9 +29,9 @@ export const getAllCommandHistory = async (): Promise<CommandHistoryEntry[]> => 
  * @param id - 要删除的记录 ID
  * @returns 返回是否成功删除 (删除行数 > 0)
  */
-export const deleteCommandHistoryById = async (id: number): Promise<boolean> => {
+export const deleteCommandHistoryById = async (id: number, ownerUserId: number): Promise<boolean> => {
     // deleteCommandById now directly returns boolean indicating success
-    const success = await CommandHistoryRepository.deleteCommandById(id);
+    const success = await CommandHistoryRepository.deleteCommandById(id, ownerUserId);
     return success;
 };
 
@@ -39,6 +39,6 @@ export const deleteCommandHistoryById = async (id: number): Promise<boolean> => 
  * 清空所有命令历史记录
  * @returns 返回删除的记录条数
  */
-export const clearAllCommandHistory = async (): Promise<number> => {
-    return CommandHistoryRepository.clearAllCommands();
+export const clearAllCommandHistory = async (ownerUserId: number): Promise<number> => {
+    return CommandHistoryRepository.clearAllCommands(ownerUserId);
 };

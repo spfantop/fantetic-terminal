@@ -6,22 +6,22 @@ import { PathHistoryEntry } from '../path-history/path-history.repository';
  * @param path - 要添加的路径
  * @returns 返回添加记录的 ID
  */
-export const addPathHistory = async (path: string): Promise<number> => {
+export const addPathHistory = async (path: string, ownerUserId: number): Promise<number> => {
     // 可以在这里添加额外的业务逻辑，例如校验路径格式、长度限制等
     if (!path || path.trim().length === 0) {
         throw new Error('路径不能为空');
     }
 
     // 调用 upsertPath 来处理插入或更新时间戳
-    return PathHistoryRepository.upsertPath(path.trim());
+    return PathHistoryRepository.upsertPath(path.trim(), ownerUserId);
 };
 
 /**
  * 获取所有路径历史记录
  * @returns 返回所有历史记录条目数组，按时间戳升序
  */
-export const getAllPathHistory = async (): Promise<PathHistoryEntry[]> => {
-    return PathHistoryRepository.getAllPaths();
+export const getAllPathHistory = async (ownerUserId: number): Promise<PathHistoryEntry[]> => {
+    return PathHistoryRepository.getAllPaths(ownerUserId);
 };
 
 /**
@@ -29,8 +29,8 @@ export const getAllPathHistory = async (): Promise<PathHistoryEntry[]> => {
  * @param id - 要删除的记录 ID
  * @returns 返回是否成功删除 (删除行数 > 0)
  */
-export const deletePathHistoryById = async (id: number): Promise<boolean> => {
-    const success = await PathHistoryRepository.deletePathById(id);
+export const deletePathHistoryById = async (id: number, ownerUserId: number): Promise<boolean> => {
+    const success = await PathHistoryRepository.deletePathById(id, ownerUserId);
     return success;
 };
 
@@ -38,6 +38,6 @@ export const deletePathHistoryById = async (id: number): Promise<boolean> => {
  * 清空所有路径历史记录
  * @returns 返回删除的记录条数
  */
-export const clearAllPathHistory = async (): Promise<number> => {
-    return PathHistoryRepository.clearAllPaths();
+export const clearAllPathHistory = async (ownerUserId: number): Promise<number> => {
+    return PathHistoryRepository.clearAllPaths(ownerUserId);
 };
