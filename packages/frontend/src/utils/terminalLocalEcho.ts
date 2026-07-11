@@ -11,16 +11,29 @@ export interface TerminalLocalEchoState {
   pendingEcho: string;
   recentOutput: string;
   suppressed: boolean;
+  remoteEditing: boolean;
 }
 
 export const createTerminalLocalEchoState = (): TerminalLocalEchoState => ({
   pendingEcho: '',
   recentOutput: '',
   suppressed: false,
+  remoteEditing: false,
 });
 
 export function resolveLocalEchoText(input: string, state: TerminalLocalEchoState): string {
-  if (!input || state.suppressed || CONTROL_CHARACTER_PATTERN.test(input) || PASSWORD_PROMPT_PATTERN.test(state.recentOutput)) {
+  if (!input) return '';
+  if (CONTROL_CHARACTER_PATTERN.test(input)) {
+    // Once Readline receives history/cursor/editing controls it owns the
+    // logical line and cursor. A client-side character write cannot model
+    // insertion and the remote repaint at the same time.
+    if (input !== '\r' && input !== '\n') {
+      state.remoteEditing = true;
+      state.pendingEcho = '';
+    }
+    return '';
+  }
+  if (state.suppressed || state.remoteEditing || PASSWORD_PROMPT_PATTERN.test(state.recentOutput)) {
     return '';
   }
 
@@ -82,6 +95,7 @@ export function resetTerminalLocalEcho(state: TerminalLocalEchoState): void {
   state.pendingEcho = '';
   state.recentOutput = '';
   state.suppressed = false;
+  state.remoteEditing = false;
 }
 
 export function hasPendingLocalEcho(state: TerminalLocalEchoState): boolean {
@@ -95,6 +109,10 @@ function updateLocalEchoSuppression(output: string, state: TerminalLocalEchoStat
 
   if (ALTERNATE_SCREEN_EXIT_PATTERN.test(output) || SHELL_PROMPT_PATTERN.test(state.recentOutput)) {
     state.suppressed = false;
+    if (SHELL_PROMPT_PATTERN.test(state.recentOutput)) {
+      state.remoteEditing = false;
+      state.pendingEcho = '';
+    }
   }
 }
 

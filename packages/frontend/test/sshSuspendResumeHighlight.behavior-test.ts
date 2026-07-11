@@ -8,23 +8,35 @@ const sshSuspendActions = readFileSync(resolve('src/stores/session/actions/sshSu
 assert.match(
   sshTerminalManager,
   /writeOutput:\s*scheduleTerminalOutput/,
-  'terminal manager should expose the same highlighted output path for restored cached chunks',
+  'terminal manager should expose the same raw output path for restored cached chunks',
 );
 
 assert.match(
   sshSuspendActions,
   /session\.terminalManager\.writeOutput\(payload\.data\)/,
-  'restored SSH cached chunks should be written through terminalManager.writeOutput so output highlighting still applies',
+  'restored SSH cached chunks should be written through terminalManager.writeOutput so xterm receives the original output',
 );
 
 assert.match(
   sshTerminalManager,
   /currentSessionState\.pendingOutput\.forEach\(data => \{\s*scheduleTerminalOutput\(data\);/s,
-  'buffered restored SSH cached chunks should also enter the highlighted output path when the terminal becomes ready',
+  'buffered restored SSH cached chunks should also enter the raw output path when the terminal becomes ready',
 );
 
 assert.doesNotMatch(
   sshSuspendActions,
   /SSH Suspend Frontend[\s\S]{0,220}terminalInstance\.value\.write\(payload\.data\)/,
-  'restored SSH cached chunks must not write directly to xterm because that bypasses highlighting',
+  'restored SSH cached chunks must not bypass the terminal output scheduler',
+);
+
+assert.match(
+  sshTerminalManager,
+  /createTerminalRenderHighlighter\(getTerminalHighlightOptions\)/,
+  'terminal highlighting should be installed as a render-time concern rather than an output rewrite',
+);
+
+assert.doesNotMatch(
+  sshTerminalManager,
+  /createTerminalOutputHighlightStream|createTerminalHighlightThroughputGuard/,
+  'the terminal output path must not retain ANSI-injection highlighter state',
 );
