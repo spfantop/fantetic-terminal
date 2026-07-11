@@ -14,7 +14,7 @@ COPY packages/remote-gateway/package.json ./packages/remote-gateway/
 # Install dependencies (using install instead of ci for potential armv7 compatibility issues)
 RUN npm install
 
-COPY packages/frontend/build-tools ./packages/frontend/build-tools
+COPY build-tools ./build-tools
 COPY packages/frontend/src ./packages/frontend/src
 COPY packages/frontend/index.html ./packages/frontend/
 COPY packages/frontend/tsconfig.json ./packages/frontend/
