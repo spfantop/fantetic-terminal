@@ -13,7 +13,7 @@ import * as ConnectionRepository from './connection.repository';
 export const createConnection = async (req: Request, res: Response): Promise<void> => {
     try {
         const ownerUserId = req.authorization?.runtime === 'web' ? req.authorization.userId : null;
-        const newConnection = await ConnectionService.createConnection(req.body, ownerUserId);
+        const newConnection = await ConnectionService.createConnection(req.body, ownerUserId, req.authorization!);
         res.status(201).json({ message: '连接创建成功。', connection: newConnection });
 
     } catch (error: any) {
@@ -122,7 +122,7 @@ export const reorderConnectionFolders = async (req: Request, res: Response): Pro
 export const reorderConnections = async (req: Request, res: Response): Promise<void> => {
     try {
         const { items } = req.body;
-        const connections = await ConnectionService.reorderConnections(items);
+        const connections = await ConnectionService.reorderConnections(items, req.authorization!);
         res.status(200).json({ message: '服务器排序更新成功。', connections });
     } catch (error: any) {
         console.error('Controller: 更新连接排序时发生错误:', error);
@@ -167,7 +167,7 @@ export const updateConnection = async (req: Request, res: Response): Promise<voi
         }
 
 
-        const updatedConnection = await ConnectionService.updateConnection(connectionId, req.body);
+        const updatedConnection = await ConnectionService.updateConnection(connectionId, req.body, req.authorization!);
 
         if (!updatedConnection) {
             res.status(404).json({ message: '连接未找到。' });
@@ -628,7 +628,7 @@ export const addTagToConnections = async (req: Request, res: Response): Promise<
         }
 
         // 调用服务层批量添加标签
-        await ConnectionService.addTagToConnections(connection_ids, tag_id);
+        await ConnectionService.addTagToConnections(connection_ids, tag_id, req.authorization!);
 
         res.status(200).json({ message: '标签已成功添加到指定连接。' });
 
@@ -662,7 +662,7 @@ export const updateConnectionTags = async (req: Request, res: Response): Promise
              return;
         }
 
-        const success = await ConnectionService.updateConnectionTags(connectionId, tag_ids);
+        const success = await ConnectionService.updateConnectionTags(connectionId, tag_ids, req.authorization!);
 
         if (!success) {
             res.status(404).json({ message: '连接未找到或更新标签失败。' });

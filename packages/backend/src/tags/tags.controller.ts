@@ -16,7 +16,7 @@ export const createTag = async (req: Request, res: Response): Promise<void> => {
     }
 
     try {
-        const newTag = await TagService.createTag(name);
+        const newTag = await TagService.createTag(name, req.authorization!);
         // 记录审计日志
         auditLogService.logAction('TAG_CREATED', { tagId: newTag.id, name: newTag.name });
         res.status(201).json({ message: '标签创建成功。', tag: newTag });
@@ -35,7 +35,7 @@ export const createTag = async (req: Request, res: Response): Promise<void> => {
  */
 export const getTags = async (req: Request, res: Response): Promise<void> => {
     try {
-        const tags = await TagService.getAllTags();
+        const tags = await TagService.getAllTags(req.authorization!);
         res.status(200).json(tags);
     } catch (error: any) {
         console.error('Controller: 获取标签列表时发生错误:', error);
@@ -55,7 +55,7 @@ export const getTagById = async (req: Request, res: Response): Promise<void> => 
     }
 
     try {
-        const tag = await TagService.getTagById(tagId);
+        const tag = await TagService.getTagById(tagId, req.authorization!);
         if (!tag) {
             res.status(404).json({ message: '标签未找到。' });
         } else {
@@ -84,7 +84,7 @@ export const updateTag = async (req: Request, res: Response): Promise<void> => {
     }
 
     try {
-        const updatedTag = await TagService.updateTag(tagId, name);
+        const updatedTag = await TagService.updateTag(tagId, name, req.authorization!);
         if (!updatedTag) {
             res.status(404).json({ message: '标签未找到。' });
         } else {
@@ -117,7 +117,7 @@ export const deleteTag = async (req: Request, res: Response): Promise<void> => {
     }
 
     try {
-        const deleted = await TagService.deleteTag(tagId);
+        const deleted = await TagService.deleteTag(tagId, req.authorization!);
         if (!deleted) {
             res.status(404).json({ message: '标签未找到。' });
         } else {
@@ -155,7 +155,7 @@ export const updateTagConnections = async (req: Request, res: Response): Promise
     }
 
     try {
-        await TagService.updateTagConnections(tagId, connection_ids);
+        await TagService.updateTagConnections(tagId, connection_ids, req.authorization!);
         res.status(200).json({ message: '标签的连接关联更新成功。' });
     } catch (error: any) {
         console.error(`Controller: 更新标签 ${tagId} 的连接关联时发生错误:`, error);

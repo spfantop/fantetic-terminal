@@ -20,7 +20,8 @@ await exec(`
   CREATE TABLE proxies (id INTEGER PRIMARY KEY, name TEXT);
   CREATE TABLE ssh_keys (id INTEGER PRIMARY KEY, name TEXT);
   CREATE TABLE connection_folders (id INTEGER PRIMARY KEY, name TEXT);
-  CREATE TABLE tags (id INTEGER PRIMARY KEY, name TEXT);
+  CREATE TABLE tags (id INTEGER PRIMARY KEY, name TEXT UNIQUE, created_at INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL DEFAULT 0);
+  CREATE TABLE connection_tags (connection_id INTEGER NOT NULL, tag_id INTEGER NOT NULL, PRIMARY KEY(connection_id, tag_id));
   CREATE TABLE command_history (id INTEGER PRIMARY KEY, command TEXT, timestamp INTEGER);
   CREATE TABLE path_history (id INTEGER PRIMARY KEY, path TEXT, timestamp INTEGER);
   CREATE TABLE quick_commands (id INTEGER PRIMARY KEY, name TEXT);
@@ -38,7 +39,7 @@ await runMigrations(db);
 
 assert.deepEqual(
   await get<{ currentVersion: number }>('SELECT MAX(id) AS currentVersion FROM migrations'),
-  { currentVersion: 18 },
+  { currentVersion: 19 },
 );
 assert.deepEqual(
   await get<{ system_role: string }>('SELECT system_role FROM users WHERE id = 3'),

@@ -14,6 +14,48 @@ import {
     ReorderConnectionFolderInput
 } from '../types/connection.types';
 import { AuthorizationSubject } from '../access-control/authorization-subject';
+import * as TagRepository from '../tags/tag.repository';
+import { AccessControlApplication } from '../access-control/access-control.application';
+import { accessControlRepository } from '../access-control/access-control.repository';
+import * as ProxyRepository from '../proxies/proxy.repository';
+import * as SshKeyRepository from '../ssh_keys/ssh_key.repository';
+
+const accessControl = new AccessControlApplication(accessControlRepository);
+
+const requireOwnedTags = async (tagIds: number[], subject: AuthorizationSubject): Promise<void> => {
+    if (tagIds.length === 0) return;
+    const tags = await Promise.all(tagIds.map(tagId => TagRepository.findTagById(tagId, subject)));
+    const mayWriteAll = subject.runtime === 'desktop'
+        || subject.systemRole === 'super_admin'
+        || subject.systemRole === 'admin';
+    if (tags.some(tag => !tag || (!mayWriteAll && tag.owner_user_id !== subject.userId))) {
+        throw new Error('标签未找到或无权管理。');
+    }
+};
+
+const mayManageAllPrivateResources = (subject: AuthorizationSubject): boolean => subject.runtime === 'desktop'
+    || subject.systemRole === 'super_admin'
+    || subject.systemRole === 'admin';
+
+const requireOwnedDependencies = async (
+    input: { folder_id?: number | null; proxy_id?: number | null; ssh_key_id?: number | null },
+    subject: AuthorizationSubject,
+): Promise<void> => {
+    if (mayManageAllPrivateResources(subject)) return;
+    if (input.folder_id) {
+        const folder = (await ConnectionRepository.findAllConnectionFolders(subject))
+            .find(candidate => candidate.id === input.folder_id);
+        if (!folder || folder.owner_user_id !== subject.userId) throw new Error('连接文件夹未找到或无权使用。');
+    }
+    if (input.proxy_id) {
+        const proxy = await ProxyRepository.findProxyById(input.proxy_id);
+        if (!proxy || proxy.owner_user_id !== subject.userId) throw new Error('代理未找到或无权使用。');
+    }
+    if (input.ssh_key_id) {
+        const key = await SshKeyRepository.findSshKeyById(input.ssh_key_id);
+        if (!key || key.owner_user_id !== subject.userId) throw new Error('SSH 密钥未找到或无权使用。');
+    }
+};
 
 export type { ConnectionBase, ConnectionWithTags, CreateConnectionInput, UpdateConnectionInput, ConnectionFolder };
 
@@ -28,7 +70,8 @@ export type { ConnectionBase, ConnectionWithTags, CreateConnectionInput, UpdateC
 const _validateAndProcessJumpChain = async (
     jumpChain: number[] | null | undefined,
     proxyId: number | null | undefined,
-    connectionId?: number
+    connectionId?: number,
+    subject?: AuthorizationSubject,
 ): Promise<number[] | null> => {
 
     if (!jumpChain || jumpChain.length === 0) {
@@ -43,6 +86,7 @@ const _validateAndProcessJumpChain = async (
         if (connectionId && id === connectionId) {
             throw new Error(`jump_chain 不能包含当前连接自身的 ID (${connectionId})。`);
         }
+        if (subject) await accessControl.requireConnectionPermission(subject, id, 'connect');
         const existingConnection = await ConnectionRepository.findConnectionByIdWithTags(id);
         if (!existingConnection) {
             throw new Error(`jump_chain 中的连接 ID ${id} 未找到。`);
@@ -187,7 +231,7 @@ export const reorderConnectionFolders = async (items: ReorderConnectionFolderInp
     return getAllConnectionFolders(subject);
 };
 
-export const reorderConnections = async (items: ReorderConnectionInput[]): Promise<ConnectionWithTags[]> => {
+export const reorderConnections = async (items: ReorderConnectionInput[], subject: AuthorizationSubject): Promise<ConnectionWithTags[]> => {
     if (!Array.isArray(items)) {
         throw new Error('需要提供有效的服务器排序列表。');
     }
@@ -209,8 +253,12 @@ export const reorderConnections = async (items: ReorderConnectionInput[]): Promi
         return { id, folder_id: folderId, sort_order: sortOrder };
     });
 
-    await ConnectionRepository.updateConnectionsOrder(normalizedItems);
-    return getAllConnections();
+    await Promise.all(normalizedItems.map(async item => {
+        await accessControl.requireConnectionPermission(subject, item.id, 'manage');
+        await requireOwnedDependencies({ folder_id: item.folder_id }, subject);
+    }));
+    await ConnectionRepository.updateConnectionsOrder(normalizedItems, subject);
+    return getAllConnections(subject);
 };
 
 /**
@@ -219,6 +267,7 @@ export const reorderConnections = async (items: ReorderConnectionInput[]): Promi
 export const createConnection = async (
     input: CreateConnectionInput,
     ownerUserId: number | null = input.owner_user_id ?? null,
+    subject?: AuthorizationSubject,
 ): Promise<ConnectionWithTags> => {
     // +++ Define a local type alias for clarity, including ssh_key_id +++
     type ConnectionDataForRepo = Omit<FullConnectionData, 'id' | 'created_at' | 'updated_at' | 'last_connected_at' | 'tag_ids'> & { jump_chain?: number[] | null; proxy_type?: 'proxy' | 'jump' | null };
@@ -226,7 +275,8 @@ export const createConnection = async (
     console.log('[Service:createConnection] Received input:', JSON.stringify(input, null, 2)); // Log input
 
     // 0. 处理和验证 jump_chain
-    const processedJumpChain = await _validateAndProcessJumpChain(input.jump_chain, input.proxy_id);
+    if (subject) await requireOwnedDependencies(input, subject);
+    const processedJumpChain = await _validateAndProcessJumpChain(input.jump_chain, input.proxy_id, undefined, subject);
 
 
     // 1. 验证输入 (包含 type)
@@ -377,6 +427,7 @@ export const createConnection = async (
 
     // 5. 处理标签
     const tagIds = input.tag_ids?.filter(id => typeof id === 'number' && id > 0) ?? [];
+    if (subject) await requireOwnedTags(tagIds, subject);
     if (tagIds.length > 0) {
         await ConnectionRepository.updateConnectionTags(newConnectionId, tagIds);
     }
@@ -397,7 +448,12 @@ export const createConnection = async (
 /**
  * 更新连接信息
  */
-export const updateConnection = async (id: number, input: UpdateConnectionInput): Promise<ConnectionWithTags | null> => {
+export const updateConnection = async (
+    id: number,
+    input: UpdateConnectionInput,
+    subject?: AuthorizationSubject,
+): Promise<ConnectionWithTags | null> => {
+    if (subject) await requireOwnedDependencies(input, subject);
     // 1. 获取当前连接数据（包括加密字段）以进行比较
     const currentFullConnection = await ConnectionRepository.findFullConnectionById(id);
     if (!currentFullConnection) {
@@ -427,7 +483,7 @@ export const updateConnection = async (id: number, input: UpdateConnectionInput)
         }
         const currentJumpChainForValidation: number[] | null | undefined = input.jump_chain !== undefined ? input.jump_chain : jumpChainFromDb;
         
-        const processedJumpChain = await _validateAndProcessJumpChain(currentJumpChainForValidation, currentProxyId, id);
+        const processedJumpChain = await _validateAndProcessJumpChain(currentJumpChainForValidation, currentProxyId, id, subject);
         
         dataToUpdate.jump_chain = processedJumpChain;
         // 直接使用 currentProxyId，不再因为 jump_chain 存在而将其设为 null
@@ -594,6 +650,7 @@ export const updateConnection = async (id: number, input: UpdateConnectionInput)
     // 4. 如果提供了 tag_ids，则处理标签更新
     if (input.tag_ids !== undefined) {
         const validTagIds = input.tag_ids.filter(tagId => typeof tagId === 'number' && tagId > 0);
+        if (subject) await requireOwnedTags(validTagIds, subject);
         await ConnectionRepository.updateConnectionTags(id, validTagIds);
     }
     // 如果 tag_ids 已更新，则将其添加到审计日志
@@ -799,12 +856,21 @@ export const cloneConnection = async (originalId: number, newName: string): Prom
  * @param connectionIds 连接 ID 数组
  * @param tagId 要添加的标签 ID
  */
-export const addTagToConnections = async (connectionIds: number[], tagId: number): Promise<void> => {
-    // 1. 验证 tagId 是否有效（可选，但建议）
-    // const tagExists = await TagRepository.findTagById(tagId); // 需要导入 TagRepository
-    // if (!tagExists) {
-    //     throw new Error(`标签 ID ${tagId} 不存在。`);
-    // }
+export const addTagToConnections = async (
+    connectionIds: number[],
+    tagId: number,
+    subject: AuthorizationSubject,
+): Promise<void> => {
+    const tag = await TagRepository.findTagById(tagId, subject);
+    if (!tag || (subject.runtime === 'web'
+        && subject.systemRole !== 'super_admin'
+        && subject.systemRole !== 'admin'
+        && tag.owner_user_id !== subject.userId)) {
+        throw new Error(`标签 ID ${tagId} 不存在或无权管理。`);
+    }
+    await Promise.all(connectionIds.map(connectionId => (
+        accessControl.requireConnectionPermission(subject, connectionId, 'manage')
+    )));
 
     // 2. 调用仓库层批量添加标签
     try {
@@ -826,8 +892,10 @@ export const addTagToConnections = async (connectionIds: number[], tagId: number
  * @param tagIds 新的标签 ID 数组
  * @returns boolean 指示操作是否成功（找到连接并尝试更新）
  */
-export const updateConnectionTags = async (connectionId: number, tagIds: number[]): Promise<boolean> => {
+export const updateConnectionTags = async (connectionId: number, tagIds: number[], subject: AuthorizationSubject): Promise<boolean> => {
     try {
+        await accessControl.requireConnectionPermission(subject, connectionId, 'manage');
+        await requireOwnedTags(tagIds, subject);
         const updated = await ConnectionRepository.updateConnectionTags(connectionId, tagIds);
         return updated;
     } catch (error: any) {

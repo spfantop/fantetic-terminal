@@ -118,3 +118,32 @@ CREATE INDEX IF NOT EXISTS idx_favorite_paths_owner ON favorite_paths(owner_user
 CREATE INDEX IF NOT EXISTS idx_terminal_themes_owner ON terminal_themes(owner_user_id, theme_type);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_actor ON audit_logs(actor_user_id, timestamp);
 `;
+
+export const migrateTagsToOwnerScopedNamesSQL = `
+ALTER TABLE connection_tags RENAME TO connection_tags_before_owner_scope;
+ALTER TABLE tags RENAME TO tags_before_owner_scope;
+
+CREATE TABLE tags (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    owner_user_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL,
+    created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+    updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+);
+INSERT INTO tags(id, name, owner_user_id, created_at, updated_at)
+SELECT id, name, owner_user_id, created_at, updated_at FROM tags_before_owner_scope;
+CREATE UNIQUE INDEX ux_tags_owner_name ON tags(COALESCE(owner_user_id, 0), name);
+CREATE INDEX idx_tags_owner ON tags(owner_user_id, name);
+
+CREATE TABLE connection_tags (
+    connection_id INTEGER NOT NULL,
+    tag_id INTEGER NOT NULL,
+    PRIMARY KEY (connection_id, tag_id),
+    FOREIGN KEY (connection_id) REFERENCES connections(id) ON DELETE CASCADE,
+    FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+);
+INSERT INTO connection_tags(connection_id, tag_id)
+SELECT connection_id, tag_id FROM connection_tags_before_owner_scope;
+DROP TABLE connection_tags_before_owner_scope;
+DROP TABLE tags_before_owner_scope;
+`;

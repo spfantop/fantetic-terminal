@@ -108,10 +108,10 @@ const resolveImportedSshKeyName = (pathInZip: string, referencedKeyNames: string
     return matchedReference || fileBaseName;
 };
 
-const resolveTagIdsByName = async (tagNames: string[]): Promise<number[]> => {
+const resolveTagIdsByName = async (tagNames: string[], subject: AuthorizationSubject): Promise<number[]> => {
     if (tagNames.length === 0) return [];
 
-    const allTags = await TagService.getAllTags();
+    const allTags = await TagService.getAllTags(subject);
     const tagMap = new Map(allTags.map(tag => [tag.name, tag.id]));
     const tagIds: number[] = [];
 
@@ -125,7 +125,7 @@ const resolveTagIdsByName = async (tagNames: string[]): Promise<number[]> => {
             continue;
         }
 
-        const createdTag = await TagService.createTag(tagName);
+        const createdTag = await TagService.createTag(tagName, subject);
         tagMap.set(createdTag.name, createdTag.id);
         tagIds.push(createdTag.id);
     }
@@ -136,8 +136,9 @@ const resolveTagIdsByName = async (tagNames: string[]): Promise<number[]> => {
 const buildConnectionInputFromParsedItem = async (
     item: ParsedConnectionImportItem,
     sshKeyMap: Map<string, number>,
+    subject: AuthorizationSubject,
 ): Promise<CreateConnectionInput> => {
-    const tagIds = await resolveTagIdsByName(item.tags);
+    const tagIds = await resolveTagIdsByName(item.tags, subject);
     const input: CreateConnectionInput = {
         name: item.name,
         type: item.type,
@@ -325,7 +326,7 @@ export const exportConnectionsAsEncryptedZip = async (
 ): Promise<Buffer> => {
     try {
         const connectionsData = await getPlaintextConnectionsData(subject); // This now returns PlaintextExportConnectionData[]
-        const allTags = await TagService.getAllTags();
+        const allTags = await TagService.getAllTags(subject);
         const allSshKeys = includeSshKeys ? await getAllDecryptedSshKeys(subject) : [];
 
         const tagsMap = new Map(allTags.map(tag => [tag.id, tag.name]));
@@ -476,6 +477,15 @@ export const importConnections = async (
     let failureCount = 0;
     const errors: { connectionName?: string; message: string }[] = [];
     const db = await getDbInstance();
+    const mayWriteAll = subject.runtime === 'desktop'
+        || subject.systemRole === 'super_admin'
+        || subject.systemRole === 'admin';
+    const writableTagIds = new Set((await TagService.getAllTags(subject))
+        .filter(tag => mayWriteAll || tag.owner_user_id === subject.userId)
+        .map(tag => tag.id));
+    const writableFolderIds = new Set((await ConnectionRepository.findAllConnectionFolders(subject))
+        .filter(folder => mayWriteAll || folder.owner_user_id === subject.userId)
+        .map(folder => folder.id));
 
     try {
         await runDb(db, 'BEGIN TRANSACTION');
@@ -543,6 +553,13 @@ export const importConnections = async (
 
                 // Prepare data for repository, ensuring correct auth_method for RDP
                 const authMethodForDb = (connData.type === 'RDP' || connData.type === 'VNC') ? 'password' : connData.auth_method!;
+                const importedTagIds = (connData.tag_ids || []).filter(id => typeof id === 'number' && id > 0);
+                if (importedTagIds.some(id => !writableTagIds.has(id))) {
+                    throw new Error('导入数据包含不存在或无权使用的标签。');
+                }
+                if (connData.folder_id && !writableFolderIds.has(connData.folder_id)) {
+                    throw new Error('导入数据包含不存在或无权使用的文件夹。');
+                }
                 connectionsToInsert.push({
                     name: connData.name,
                     type: connData.type, // Add type
@@ -556,7 +573,7 @@ export const importConnections = async (
                     proxy_id: proxyIdToUse,
                     folder_id: connData.folder_id ?? null,
                     icon: connData.icon ?? null,
-                    tag_ids: connData.tag_ids || [],
+                    tag_ids: importedTagIds,
                     jump_chain: null, // 为 jump_chain 添加默认值
                     owner_user_id: subject.runtime === 'web' ? subject.userId : null,
                 });
@@ -686,8 +703,8 @@ export const importConnectionsFromEncryptedZip = async (
                 continue;
             }
 
-            const input = await buildConnectionInputFromParsedItem(parsedConnection, sshKeyMap);
-            await ConnectionService.createConnection(input, subject.runtime === 'web' ? subject.userId : null);
+            const input = await buildConnectionInputFromParsedItem(parsedConnection, sshKeyMap, subject);
+            await ConnectionService.createConnection(input, subject.runtime === 'web' ? subject.userId : null, subject);
             result.successCount += 1;
         } catch (error: any) {
             result.failureCount += 1;

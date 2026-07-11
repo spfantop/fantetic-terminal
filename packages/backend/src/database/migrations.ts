@@ -1,6 +1,7 @@
 import { Database } from 'sqlite3';
 import {
     migrateLegacyResourcesToAccessControlSQL,
+    migrateTagsToOwnerScopedNamesSQL,
     migrateUserPrivateResourcesSQL,
 } from '../access-control/access-control.schema';
 
@@ -497,6 +498,15 @@ const definedMigrations: Migration[] = [
             return !userSettingsExist || !quickCommandOwnerExists;
         },
         sql: migrateUserPrivateResourcesSQL,
+    },
+    {
+        id: 19,
+        name: 'Scope tag names to their owning user',
+        check: async (db: Database): Promise<boolean> => {
+            const tableSql = await getTableCreateSQL(db, 'tags');
+            return !!tableSql && /name\s+TEXT\s+(?:NOT\s+)?UNIQUE/i.test(tableSql);
+        },
+        sql: migrateTagsToOwnerScopedNamesSQL,
     }
 ];
 

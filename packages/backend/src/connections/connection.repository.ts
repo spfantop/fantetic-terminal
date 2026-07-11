@@ -582,7 +582,7 @@ export const updateConnectionFoldersOrder = async (items: ConnectionFolderOrderI
     }
 };
 
-export const updateConnectionsOrder = async (items: ConnectionOrderItem[]): Promise<boolean> => {
+export const updateConnectionsOrder = async (items: ConnectionOrderItem[], subject: AuthorizationSubject): Promise<boolean> => {
     const db = await getDbInstance();
     const now = Math.floor(Date.now() / 1000);
     try {
@@ -590,8 +590,26 @@ export const updateConnectionsOrder = async (items: ConnectionOrderItem[]): Prom
         for (const item of items) {
             await runDb(
                 db,
-                `UPDATE connections SET folder_id = ?, sort_order = ?, updated_at = ? WHERE id = ?`,
-                [item.folder_id, item.sort_order, now, item.id]
+                `UPDATE connections SET folder_id = ?, sort_order = ?, updated_at = ?
+                 WHERE id = ? AND (
+                    ? = 1 OR owner_user_id = ? OR EXISTS (
+                        SELECT 1 FROM connection_group_permissions cgp
+                        JOIN user_group_members ugm ON ugm.group_id = cgp.group_id
+                        WHERE cgp.connection_id = connections.id
+                          AND ugm.user_id = ?
+                          AND cgp.permission = 'manage'
+                          AND ugm.role IN ('owner', 'admin')
+                    )
+                 )`,
+                [
+                    item.folder_id,
+                    item.sort_order,
+                    now,
+                    item.id,
+                    subject.runtime === 'desktop' || subject.systemRole === 'super_admin' || subject.systemRole === 'admin' ? 1 : 0,
+                    subject.userId,
+                    subject.userId,
+                ]
             );
         }
         await runDb(db, 'COMMIT');
