@@ -1,6 +1,7 @@
 import WebSocket from 'ws';
 import { Client, ClientChannel, SFTPWrapper } from 'ssh2';
 import type { TelnetService } from '../telnet/telnet.service';
+import type { AuthorizationSubject } from '../access-control/authorization-subject';
 
 // 扩展 WebSocket 类型以包含会话 ID
 export interface AuthenticatedWebSocket extends WebSocket {
@@ -9,6 +10,7 @@ export interface AuthenticatedWebSocket extends WebSocket {
     username?: string;
     sessionId?: string; 
     missedHeartbeatCount?: number;
+    authorization?: AuthorizationSubject;
 }
 
 // 中心化的客户端状态接口 (统一版本)

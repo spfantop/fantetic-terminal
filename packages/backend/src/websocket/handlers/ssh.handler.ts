@@ -9,6 +9,10 @@ import WebSocket from 'ws';
 import { flushSshOutput, scheduleSshOutput } from '../ssh-output-buffer';
 import { writeSshInput } from '../ssh-input-writer';
 import { appendSuspendLogBatch, createSuspendLogBatcher, flushSuspendLogBatcher } from '../suspend-log-batcher';
+import { AccessControlApplication } from '../../access-control/access-control.application';
+import { accessControlRepository } from '../../access-control/access-control.repository';
+
+const accessControlApplication = new AccessControlApplication(accessControlRepository);
 
 export async function handleSshConnect(
     ws: AuthenticatedWebSocket,
@@ -27,6 +31,21 @@ export async function handleSshConnect(
     const dbConnectionId = payload?.connectionId;
     if (!dbConnectionId) {
         if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ssh:error', payload: '缺少 connectionId。' }));
+        return;
+    }
+
+    if (!ws.authorization) {
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ssh:error', payload: 'ACCESS_DENIED' }));
+        return;
+    }
+    try {
+        await accessControlApplication.requireConnectionPermission(
+            ws.authorization,
+            Number(dbConnectionId),
+            'connect',
+        );
+    } catch {
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ssh:error', payload: 'ACCESS_DENIED' }));
         return;
     }
 

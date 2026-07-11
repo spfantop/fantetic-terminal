@@ -2,7 +2,7 @@ export type SystemRole = 'super_admin' | 'admin' | 'user' | 'auditor';
 export type GroupRole = 'owner' | 'admin' | 'operator' | 'viewer';
 export type ConnectionPermission = 'none' | 'view' | 'connect' | 'manage';
 
-type ConnectionGrant = {
+export type ConnectionGrant = {
   groupRole: GroupRole;
   permission: Exclude<ConnectionPermission, 'none'>;
 };

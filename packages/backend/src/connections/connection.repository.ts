@@ -1,5 +1,6 @@
 import { Database } from 'sqlite3';
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
+import { AuthorizationSubject } from '../access-control/authorization-subject';
 
 
 // Define Connection 类型 (可以从 controller 或 types 文件导入，暂时在此定义)
@@ -20,6 +21,7 @@ interface ConnectionBase {
     created_at: number;
     updated_at: number;
     last_connected_at: number | null;
+    owner_user_id?: number | null;
     ssh_key_id?: number | null;
 notes?: string | null;
 //    jump_chain: number[] | null; // <-- REMOVE from ConnectionBase
@@ -115,6 +117,44 @@ export const findAllConnectionsWithTags = async (): Promise<ConnectionWithTags[]
         console.error('Repository: 查询连接列表时出错:', err.message);
         throw new Error('获取连接列表失败');
     }
+};
+
+export const findAccessibleConnectionsWithTags = async (
+    subject: AuthorizationSubject,
+): Promise<ConnectionWithTags[]> => {
+    if (subject.runtime === 'desktop'
+        || subject.systemRole === 'super_admin'
+        || subject.systemRole === 'admin'
+        || subject.systemRole === 'auditor') {
+        return findAllConnectionsWithTags();
+    }
+
+    const sql = `
+        SELECT
+            c.id, c.name, c.type, c.host, c.port, c.username, c.auth_method,
+            c.proxy_id, c.proxy_type, c.folder_id, c.icon, c.sort_order,
+            c.ssh_key_id, c.notes, c.jump_chain, c.owner_user_id,
+            c.created_at, c.updated_at, c.last_connected_at,
+            GROUP_CONCAT(DISTINCT ct.tag_id) as tag_ids_str
+        FROM connections c
+        LEFT JOIN connection_tags ct ON c.id = ct.connection_id
+        WHERE c.owner_user_id = ? OR EXISTS (
+            SELECT 1
+            FROM connection_group_permissions permission
+            JOIN user_group_members membership ON membership.group_id = permission.group_id
+            WHERE permission.connection_id = c.id AND membership.user_id = ?
+        )
+        GROUP BY c.id
+        ORDER BY COALESCE(c.folder_id, 0), c.sort_order, c.name, c.id`;
+    const rows = await allDb<ConnectionWithTagsRow>(await getDbInstance(), sql, [subject.userId, subject.userId]);
+    return rows.map((row) => {
+        const { jump_chain: jumpChain, ...rest } = row;
+        return {
+            ...rest,
+            tag_ids: row.tag_ids_str ? row.tag_ids_str.split(',').map(Number).filter(Number.isFinite) : [],
+            jump_chain: jumpChain ? JSON.parse(jumpChain) as number[] : null,
+        } as ConnectionWithTags;
+    });
 };
 
 /**
@@ -213,8 +253,8 @@ export const createConnection = async (data: Omit<FullConnectionData, 'id' | 'cr
     console.log('[Repository:createConnection] Received data:', JSON.stringify(data, null, 2));
     const now = Math.floor(Date.now() / 1000);
     const sql = `
-        INSERT INTO connections (name, type, host, port, username, auth_method, encrypted_password, encrypted_private_key, encrypted_passphrase, proxy_id, proxy_type, folder_id, icon, sort_order, ssh_key_id, notes, jump_chain, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+        INSERT INTO connections (name, type, host, port, username, auth_method, encrypted_password, encrypted_private_key, encrypted_passphrase, proxy_id, proxy_type, folder_id, icon, sort_order, ssh_key_id, notes, jump_chain, owner_user_id, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
     
     const jumpChainStringified = (data.jump_chain && data.jump_chain.length > 0) ? JSON.stringify(data.jump_chain) : null;
     console.log(`[Repository:createConnection] jump_chain input: ${JSON.stringify(data.jump_chain)}, stringified to: ${jumpChainStringified}`);
@@ -231,6 +271,7 @@ export const createConnection = async (data: Omit<FullConnectionData, 'id' | 'cr
         data.ssh_key_id ?? null, // +++ Add ssh_key_id parameter +++
         data.notes ?? null, // Add notes parameter
         jumpChainStringified, // Use the stringified jump_chain
+        data.owner_user_id ?? null,
         now, now
     ];
     console.log('[Repository:createConnection] SQL:', sql);

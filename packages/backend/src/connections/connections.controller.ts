@@ -12,7 +12,8 @@ import * as ConnectionRepository from './connection.repository';
  */
 export const createConnection = async (req: Request, res: Response): Promise<void> => {
     try {
-        const newConnection = await ConnectionService.createConnection(req.body);
+        const ownerUserId = req.authorization?.runtime === 'web' ? req.authorization.userId : null;
+        const newConnection = await ConnectionService.createConnection(req.body, ownerUserId);
         res.status(201).json({ message: '连接创建成功。', connection: newConnection });
 
     } catch (error: any) {
@@ -30,7 +31,7 @@ export const createConnection = async (req: Request, res: Response): Promise<voi
  */
 export const getConnections = async (req: Request, res: Response): Promise<void> => {
     try {
-        const connections = await ConnectionService.getAllConnections();
+        const connections = await ConnectionService.getAllConnections(req.authorization);
         res.status(200).json(connections);
     } catch (error: any) {
         console.error('Controller: 获取连接列表时发生错误:', error);

@@ -14,6 +14,7 @@ export interface ConnectionBase {
     created_at: number;
     updated_at: number;
     last_connected_at: number | null;
+    owner_user_id?: number | null;
 notes?: string | null;
     jump_chain: number[] | null;
 }
@@ -42,6 +43,7 @@ export interface CreateConnectionInput {
     tag_ids?: number[];
 notes?: string | null;
     jump_chain?: number[] | null;
+    owner_user_id?: number | null;
 }
 
 
@@ -88,6 +90,7 @@ export interface FullConnectionData {
 notes: string | null;
     updated_at: number;
     last_connected_at: number | null;
+    owner_user_id?: number | null;
     jump_chain: number[] | null;
 }
 

@@ -67,6 +67,7 @@ import { ipWhitelistMiddleware } from './auth/ipWhitelist.middleware';
 import { isCorsOriginAllowed, parseCorsOrigins, readForwardedHost } from './config/cors-origin';
 import { resolveServerBinding } from './config/server-binding';
 import { createClientIpResolver } from './config/client-ip';
+import accessControlRouter from './access-control/access-control.routes';
 
 
 import './services/event.service'; 
@@ -289,6 +290,7 @@ const startServer = () => {
     app.use('/api/v1/path-history', pathHistoryRoutes);
     app.use('/api/v1/favorite-paths', favoritePathsRouter);
     app.use('/api/v1/ai', aiRoutes);
+    app.use('/api/v1/access-control', accessControlRouter);
     
     // 状态检查接口
     app.get('/api/v1/status', (req: Request, res: Response) => {

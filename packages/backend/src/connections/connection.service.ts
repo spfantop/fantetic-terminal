@@ -13,6 +13,7 @@ import {
     ReorderConnectionInput,
     ReorderConnectionFolderInput
 } from '../types/connection.types';
+import { AuthorizationSubject } from '../access-control/authorization-subject';
 
 export type { ConnectionBase, ConnectionWithTags, CreateConnectionInput, UpdateConnectionInput, ConnectionFolder };
 
@@ -64,10 +65,12 @@ const normalizeConnectionUsername = (username?: string | null): string => {
 /**
  * 获取所有连接（包含标签）
  */
-export const getAllConnections = async (): Promise<ConnectionWithTags[]> => {
+export const getAllConnections = async (subject?: AuthorizationSubject): Promise<ConnectionWithTags[]> => {
     // Repository now returns ConnectionWithTags including 'type'
     // Explicit type assertion to ensure compatibility
-    return ConnectionRepository.findAllConnectionsWithTags() as Promise<ConnectionWithTags[]>;
+    return (subject
+        ? ConnectionRepository.findAccessibleConnectionsWithTags(subject)
+        : ConnectionRepository.findAllConnectionsWithTags()) as Promise<ConnectionWithTags[]>;
 };
 
 /**
@@ -213,7 +216,10 @@ export const reorderConnections = async (items: ReorderConnectionInput[]): Promi
 /**
  * 创建新连接
  */
-export const createConnection = async (input: CreateConnectionInput): Promise<ConnectionWithTags> => {
+export const createConnection = async (
+    input: CreateConnectionInput,
+    ownerUserId: number | null = input.owner_user_id ?? null,
+): Promise<ConnectionWithTags> => {
     // +++ Define a local type alias for clarity, including ssh_key_id +++
     type ConnectionDataForRepo = Omit<FullConnectionData, 'id' | 'created_at' | 'updated_at' | 'last_connected_at' | 'tag_ids'> & { jump_chain?: number[] | null; proxy_type?: 'proxy' | 'jump' | null };
 
@@ -356,6 +362,7 @@ export const createConnection = async (input: CreateConnectionInput): Promise<Co
         folder_id: input.folder_id ?? null,
         icon: input.icon?.trim() || null,
         jump_chain: processedJumpChain,
+        owner_user_id: ownerUserId,
     };
     // Remove ssh_key_id property if it's null before logging/saving if repository expects exact type match without optional nulls
     const finalConnectionData = { ...connectionData };

@@ -17,6 +17,7 @@ import {
     isElectronAppMode,
 } from '../config/app-mode';
 import { completeLogin, startTwoFactorChallenge } from './auth-session';
+import { SystemRole } from '../access-control/access-policy';
 
 const notificationService = new NotificationService();
 const auditLogService = new AuditLogService();
@@ -26,6 +27,8 @@ export interface User {
     username: string;
     hashed_password: string; 
     two_factor_secret?: string | null;
+    system_role: SystemRole;
+    status: 'active' | 'disabled';
 }
 
 declare module 'express-session' {
@@ -374,7 +377,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
 
         const db = await getDbInstance(); 
-        const user = await getDb<User>(db, 'SELECT id, username, hashed_password, two_factor_secret FROM users WHERE username = ?', [username]);
+        const user = await getDb<User>(db, 'SELECT id, username, hashed_password, two_factor_secret, system_role, status FROM users WHERE username = ?', [username]);
 
      
 
@@ -385,6 +388,11 @@ export const login = async (req: Request, res: Response): Promise<void> => {
             auditLogService.logAction('LOGIN_FAILURE', { username, reason: 'User not found', ip: clientIp });
             notificationService.sendNotification('LOGIN_FAILURE', { username, reason: 'User not found', ip: clientIp }); 
             res.status(401).json({ message: '无效的凭据。' });
+            return;
+        }
+
+        if (user.status !== 'active') {
+            res.status(403).json({ message: '用户已被禁用。' });
             return;
         }
 
@@ -497,7 +505,7 @@ export const verifyLogin2FA = async (req: Request, res: Response): Promise<void>
 
     try {
         const db = await getDbInstance();
-        const user = await getDb<User>(db, 'SELECT id, username, two_factor_secret FROM users WHERE id = ?', [userId]);
+        const user = await getDb<User>(db, 'SELECT id, username, two_factor_secret, system_role, status FROM users WHERE id = ?', [userId]);
 
     
 
@@ -845,8 +853,8 @@ export const setupAdmin = async (req: Request, res: Response): Promise<void> => 
         const now = Math.floor(Date.now() / 1000);
 
         const result = await runDb(db,
-            `INSERT INTO users (username, hashed_password, created_at, updated_at)
-             VALUES (?, ?, ?, ?)`,
+            `INSERT INTO users (username, hashed_password, system_role, status, created_at, updated_at)
+             VALUES (?, ?, 'super_admin', 'active', ?, ?)`,
             [username, hashedPassword, now, now]
         );
 

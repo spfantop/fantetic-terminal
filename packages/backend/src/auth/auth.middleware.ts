@@ -4,22 +4,44 @@ import {
     ELECTRON_APP_USER_ID,
     isElectronAppMode,
 } from '../config/app-mode';
+import { createAuthorizationSubject } from '../access-control/authorization-subject';
+import { userRepository } from '../user/user.repository';
 
 /**
  * 认证中间件：检查用户是否已登录 (通过 session 中的 userId 判断)
  */
-export const isAuthenticated = (req: Request, res: Response, next: NextFunction): void => {
+export const isAuthenticated = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     if (isElectronAppMode()) {
         req.session.userId = ELECTRON_APP_USER_ID;
         req.session.username = ELECTRON_APP_USERNAME;
         req.session.requiresTwoFactor = false;
+        req.authorization = createAuthorizationSubject({ runtime: 'desktop' }) ?? undefined;
         next();
         return;
     }
 
     if (req.session && req.session.userId) {
-        // 用户已登录，继续处理请求
-        next();
+        try {
+            const user = await userRepository.findUserById(req.session.userId);
+            const authorization = user ? createAuthorizationSubject({
+                runtime: 'web',
+                userId: user.id,
+                username: user.username,
+                systemRole: user.system_role,
+                status: user.status,
+            }) : null;
+
+            if (!authorization) {
+                res.status(401).json({ message: '未授权：用户不存在或已被禁用。' });
+                return;
+            }
+
+            req.authorization = authorization;
+            next();
+        } catch (error) {
+            console.error('认证用户加载失败:', error);
+            res.status(500).json({ message: '服务器内部错误。' });
+        }
     } else {
         // 用户未登录，返回 401 未授权错误
         res.status(401).json({ message: '未授权：请先登录。' });
