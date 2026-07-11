@@ -64,6 +64,7 @@ import favoritePathsRouter from './favorite-paths/favorite-paths.routes';
 import aiRoutes from './ai-ops/ai.routes';
 import { initializeWebSocket } from './websocket';
 import { ipWhitelistMiddleware } from './auth/ipWhitelist.middleware';
+import { isCorsOriginAllowed, parseCorsOrigins, readForwardedHost } from './config/cors-origin';
 
 
 import './services/event.service'; 
@@ -183,21 +184,21 @@ app.set('trust proxy', true);
 app.use(ipWhitelistMiddleware as RequestHandler);
 app.use(express.json());
 
-const allowedCorsOrigins = new Set([
+const allowedCorsOrigins = parseCorsOrigins(
     process.env.RP_ORIGIN || 'http://localhost:5173',
+    process.env.CORS_ALLOWED_ORIGINS,
     'http://localhost:22457',
-]);
+);
 
-app.use(cors({
-    origin: (origin, callback) => {
-        if (!origin || allowedCorsOrigins.has(origin)) {
-            callback(null, true);
-            return;
-        }
+app.use(cors((req, callback) => {
+    const requestHost = readForwardedHost(req.get('x-forwarded-host')) || req.get('host');
+    const requestOrigin = requestHost ? `${req.protocol}://${requestHost}` : undefined;
+    const origin = req.get('origin');
 
-        callback(new Error(`CORS origin not allowed: ${origin}`));
-    },
-    credentials: true,
+    callback(null, {
+        origin: isCorsOriginAllowed(origin, allowedCorsOrigins, requestOrigin),
+        credentials: true,
+    });
 }));
 
 // --- 静态文件服务 ---

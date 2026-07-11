@@ -23,6 +23,7 @@ services:
       REMOTE_GATEWAY_WS_URL_DOCKER: "${REMOTE_GATEWAY_WS_URL_DOCKER:-ws://remote-gateway:8081}"
       RP_ID: "${RP_ID:-localhost}"
       RP_ORIGIN: "${RP_ORIGIN:-http://localhost:18111}"
+      CORS_ALLOWED_ORIGINS: "${CORS_ALLOWED_ORIGINS:-}"
     volumes:
       - ./data:/app/data
     networks:
