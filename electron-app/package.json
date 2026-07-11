@@ -1,6 +1,6 @@
 {
   "name": "fantetic-electron-app",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "Electron application for Fantetic Terminal",
   "main": "main.js",
   "scripts": {
@@ -8,7 +8,7 @@
     "dev": "electron . --dev",
     "sync:version": "node ../build-tools/sync-frontend-version.js",
     "prepare:runtime": "node build-tools/prepare-runtime.js",
-    "build": "npm run sync:version && npm run prepare:runtime && electron-builder",
+    "build": "node ../build-tools/sync-frontend-version.js && npm run prepare:runtime && electron-builder",
     "build:windows": "npm run sync:version && npm run prepare:runtime && electron-builder --win nsis --x64",
     "build:linux": "npm run sync:version && npm run prepare:runtime && electron-builder --linux AppImage deb --x64",
     "build:macos": "npm run build:macos:x64",
