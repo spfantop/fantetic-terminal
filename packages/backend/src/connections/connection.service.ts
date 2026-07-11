@@ -82,8 +82,8 @@ export const getConnectionById = async (id: number): Promise<ConnectionWithTags 
     return ConnectionRepository.findConnectionByIdWithTags(id) as Promise<ConnectionWithTags | null>;
 };
 
-export const getAllConnectionFolders = async (): Promise<ConnectionFolder[]> => {
-    return ConnectionRepository.findAllConnectionFolders() as Promise<ConnectionFolder[]>;
+export const getAllConnectionFolders = async (subject: AuthorizationSubject): Promise<ConnectionFolder[]> => {
+    return ConnectionRepository.findAllConnectionFolders(subject) as Promise<ConnectionFolder[]>;
 };
 
 const normalizeFolderParentId = (parentId: unknown): number | null => {
@@ -117,46 +117,46 @@ const validateFolderParent = (folderId: number, parentId: number | null, folders
     }
 };
 
-export const createConnectionFolder = async (name: string, parentIdInput?: number | null): Promise<ConnectionFolder> => {
+export const createConnectionFolder = async (name: string, parentIdInput: number | null | undefined, subject: AuthorizationSubject): Promise<ConnectionFolder> => {
     const folderName = name.trim();
     if (!folderName) {
         throw new Error('文件夹名称不能为空。');
     }
     const parentId = normalizeFolderParentId(parentIdInput);
     if (parentId !== null) {
-        const parentFolder = (await ConnectionRepository.findAllConnectionFolders()).find(item => item.id === parentId);
+        const parentFolder = (await ConnectionRepository.findAllConnectionFolders(subject)).find(item => item.id === parentId);
         if (!parentFolder) {
             throw new Error('父级文件夹未找到。');
         }
     }
-    const folderId = await ConnectionRepository.createConnectionFolder(folderName, parentId);
-    const folder = (await ConnectionRepository.findAllConnectionFolders()).find(item => item.id === folderId);
+    const folderId = await ConnectionRepository.createConnectionFolder(folderName, parentId, subject);
+    const folder = (await ConnectionRepository.findAllConnectionFolders(subject)).find(item => item.id === folderId);
     if (!folder) {
         throw new Error('创建文件夹后无法检索到该文件夹。');
     }
     return folder as ConnectionFolder;
 };
 
-export const updateConnectionFolder = async (id: number, name: string): Promise<ConnectionFolder | null> => {
+export const updateConnectionFolder = async (id: number, name: string, subject: AuthorizationSubject): Promise<ConnectionFolder | null> => {
     const folderName = name.trim();
     if (!folderName) {
         throw new Error('文件夹名称不能为空。');
     }
-    const updated = await ConnectionRepository.updateConnectionFolder(id, folderName);
+    const updated = await ConnectionRepository.updateConnectionFolder(id, folderName, subject);
     if (!updated) return null;
-    return (await ConnectionRepository.findAllConnectionFolders()).find(item => item.id === id) ?? null;
+    return (await ConnectionRepository.findAllConnectionFolders(subject)).find(item => item.id === id) ?? null;
 };
 
-export const deleteConnectionFolder = async (id: number): Promise<boolean> => {
-    return ConnectionRepository.deleteConnectionFolder(id);
+export const deleteConnectionFolder = async (id: number, subject: AuthorizationSubject): Promise<boolean> => {
+    return ConnectionRepository.deleteConnectionFolder(id, subject);
 };
 
-export const reorderConnectionFolders = async (items: ReorderConnectionFolderInput[]): Promise<ConnectionFolder[]> => {
+export const reorderConnectionFolders = async (items: ReorderConnectionFolderInput[], subject: AuthorizationSubject): Promise<ConnectionFolder[]> => {
     if (!Array.isArray(items)) {
         throw new Error('需要提供有效的文件夹排序列表。');
     }
 
-    const existingFolders = await ConnectionRepository.findAllConnectionFolders();
+    const existingFolders = await ConnectionRepository.findAllConnectionFolders(subject);
     const existingFolderMap = new Map(existingFolders.map(folder => [folder.id, folder]));
     const normalizedItems = items.map((item, index) => {
         const id = Number(item.id);
@@ -183,8 +183,8 @@ export const reorderConnectionFolders = async (items: ReorderConnectionFolderInp
     });
     normalizedItems.forEach(item => validateFolderParent(item.id, item.parent_id, mergedFolders));
 
-    await ConnectionRepository.updateConnectionFoldersOrder(normalizedItems);
-    return getAllConnectionFolders();
+    await ConnectionRepository.updateConnectionFoldersOrder(normalizedItems, subject);
+    return getAllConnectionFolders(subject);
 };
 
 export const reorderConnections = async (items: ReorderConnectionInput[]): Promise<ConnectionWithTags[]> => {

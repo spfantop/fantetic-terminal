@@ -58,6 +58,7 @@ export interface ConnectionFolder {
     sort_order: number;
     created_at: number;
     updated_at: number;
+    owner_user_id?: number | null;
 }
 
 export interface ConnectionOrderItem {
@@ -480,28 +481,31 @@ export const findConnectionTags = async (connectionId: number): Promise<{ id: nu
     }
 };
 
-export const findAllConnectionFolders = async (): Promise<ConnectionFolder[]> => {
-    const sql = `SELECT id, name, parent_id, sort_order, created_at, updated_at FROM connection_folders ORDER BY COALESCE(parent_id, 0) ASC, sort_order ASC, name ASC, id ASC`;
+export const findAllConnectionFolders = async (subject: AuthorizationSubject): Promise<ConnectionFolder[]> => {
+    const canReadAll = subject.runtime === 'desktop' || subject.systemRole === 'super_admin' || subject.systemRole === 'admin';
+    const sql = `SELECT id, name, parent_id, sort_order, created_at, updated_at, owner_user_id
+        FROM connection_folders WHERE ? = 1 OR owner_user_id = ?
+        ORDER BY COALESCE(parent_id, 0) ASC, sort_order ASC, name ASC, id ASC`;
     try {
         const db = await getDbInstance();
-        return allDb<ConnectionFolder>(db, sql);
+        return allDb<ConnectionFolder>(db, sql, [canReadAll ? 1 : 0, subject.userId]);
     } catch (err: any) {
         console.error('Repository: 查询连接文件夹列表时出错:', err.message);
         throw new Error('获取连接文件夹列表失败');
     }
 };
 
-export const createConnectionFolder = async (name: string, parentId: number | null = null): Promise<number> => {
+export const createConnectionFolder = async (name: string, parentId: number | null, subject: AuthorizationSubject): Promise<number> => {
     const now = Math.floor(Date.now() / 1000);
-    const sql = `INSERT INTO connection_folders (name, parent_id, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`;
+    const sql = `INSERT INTO connection_folders (name, parent_id, sort_order, owner_user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`;
     try {
         const db = await getDbInstance();
         const orderRow = await getDbRow<{ next_order: number }>(
             db,
-            `SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM connection_folders WHERE parent_id IS ?`,
-            [parentId]
+            `SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM connection_folders WHERE parent_id IS ? AND owner_user_id IS ?`,
+            [parentId, subject.runtime === 'web' ? subject.userId : null]
         );
-        const result = await runDb(db, sql, [name, parentId, orderRow?.next_order ?? 0, now, now]);
+        const result = await runDb(db, sql, [name, parentId, orderRow?.next_order ?? 0, subject.runtime === 'web' ? subject.userId : null, now, now]);
         if (typeof result.lastID !== 'number' || result.lastID <= 0) {
             throw new Error('创建连接文件夹后未能获取有效的 lastID');
         }
@@ -512,11 +516,12 @@ export const createConnectionFolder = async (name: string, parentId: number | nu
     }
 };
 
-export const updateConnectionFolder = async (id: number, name: string): Promise<boolean> => {
-    const sql = `UPDATE connection_folders SET name = ?, updated_at = ? WHERE id = ?`;
+export const updateConnectionFolder = async (id: number, name: string, subject: AuthorizationSubject): Promise<boolean> => {
+    const canWriteAll = subject.runtime === 'desktop' || subject.systemRole === 'super_admin' || subject.systemRole === 'admin';
+    const sql = `UPDATE connection_folders SET name = ?, updated_at = ? WHERE id = ? AND (? = 1 OR owner_user_id = ?)`;
     try {
         const db = await getDbInstance();
-        const result = await runDb(db, sql, [name, Math.floor(Date.now() / 1000), id]);
+        const result = await runDb(db, sql, [name, Math.floor(Date.now() / 1000), id, canWriteAll ? 1 : 0, subject.userId]);
         return result.changes > 0;
     } catch (err: any) {
         console.error(`Repository: 更新连接文件夹 ${id} 时出错:`, err.message);
@@ -524,13 +529,21 @@ export const updateConnectionFolder = async (id: number, name: string): Promise<
     }
 };
 
-export const deleteConnectionFolder = async (id: number): Promise<boolean> => {
+export const deleteConnectionFolder = async (id: number, subject: AuthorizationSubject): Promise<boolean> => {
     const db = await getDbInstance();
+    const canWriteAll = subject.runtime === 'desktop' || subject.systemRole === 'super_admin' || subject.systemRole === 'admin';
     try {
         await runDb(db, 'BEGIN TRANSACTION');
-        await runDb(db, `UPDATE connections SET folder_id = NULL WHERE folder_id = ?`, [id]);
-        await runDb(db, `UPDATE connection_folders SET parent_id = NULL WHERE parent_id = ?`, [id]);
-        const result = await runDb(db, `DELETE FROM connection_folders WHERE id = ?`, [id]);
+        const ownedFolder = await getDbRow<{ id: number }>(db, `
+            SELECT id FROM connection_folders WHERE id = ? AND (? = 1 OR owner_user_id = ?)
+        `, [id, canWriteAll ? 1 : 0, subject.userId]);
+        if (!ownedFolder) {
+            await runDb(db, 'ROLLBACK');
+            return false;
+        }
+        await runDb(db, `UPDATE connections SET folder_id = NULL WHERE folder_id = ? AND (? = 1 OR owner_user_id = ?)`, [id, canWriteAll ? 1 : 0, subject.userId]);
+        await runDb(db, `UPDATE connection_folders SET parent_id = NULL WHERE parent_id = ? AND (? = 1 OR owner_user_id = ?)`, [id, canWriteAll ? 1 : 0, subject.userId]);
+        const result = await runDb(db, `DELETE FROM connection_folders WHERE id = ? AND (? = 1 OR owner_user_id = ?)`, [id, canWriteAll ? 1 : 0, subject.userId]);
         await runDb(db, 'COMMIT');
         return result.changes > 0;
     } catch (err: any) {
@@ -544,7 +557,7 @@ export const deleteConnectionFolder = async (id: number): Promise<boolean> => {
     }
 };
 
-export const updateConnectionFoldersOrder = async (items: ConnectionFolderOrderItem[]): Promise<boolean> => {
+export const updateConnectionFoldersOrder = async (items: ConnectionFolderOrderItem[], subject: AuthorizationSubject): Promise<boolean> => {
     const db = await getDbInstance();
     const now = Math.floor(Date.now() / 1000);
     try {
@@ -552,8 +565,8 @@ export const updateConnectionFoldersOrder = async (items: ConnectionFolderOrderI
         for (const item of items) {
             await runDb(
                 db,
-                `UPDATE connection_folders SET parent_id = ?, sort_order = ?, updated_at = ? WHERE id = ?`,
-                [item.parent_id, item.sort_order, now, item.id]
+                `UPDATE connection_folders SET parent_id = ?, sort_order = ?, updated_at = ? WHERE id = ? AND (? = 1 OR owner_user_id = ?)`,
+                [item.parent_id, item.sort_order, now, item.id, subject.runtime === 'desktop' || subject.systemRole === 'super_admin' || subject.systemRole === 'admin' ? 1 : 0, subject.userId]
             );
         }
         await runDb(db, 'COMMIT');

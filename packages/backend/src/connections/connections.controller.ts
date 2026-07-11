@@ -41,7 +41,7 @@ export const getConnections = async (req: Request, res: Response): Promise<void>
 
 export const getConnectionFolders = async (req: Request, res: Response): Promise<void> => {
     try {
-        const folders = await ConnectionService.getAllConnectionFolders();
+        const folders = await ConnectionService.getAllConnectionFolders(req.authorization!);
         res.status(200).json(folders);
     } catch (error: any) {
         console.error('Controller: 获取连接文件夹列表时发生错误:', error);
@@ -56,7 +56,7 @@ export const createConnectionFolder = async (req: Request, res: Response): Promi
             res.status(400).json({ message: '需要提供有效的文件夹名称。' });
             return;
         }
-        const folder = await ConnectionService.createConnectionFolder(name, parent_id);
+        const folder = await ConnectionService.createConnectionFolder(name, parent_id, req.authorization!);
         res.status(201).json({ message: '文件夹创建成功。', folder });
     } catch (error: any) {
         console.error('Controller: 创建连接文件夹时发生错误:', error);
@@ -76,7 +76,7 @@ export const updateConnectionFolder = async (req: Request, res: Response): Promi
             res.status(400).json({ message: '需要提供有效的文件夹名称。' });
             return;
         }
-        const folder = await ConnectionService.updateConnectionFolder(folderId, name);
+        const folder = await ConnectionService.updateConnectionFolder(folderId, name, req.authorization!);
         if (!folder) {
             res.status(404).json({ message: '文件夹未找到。' });
             return;
@@ -95,7 +95,7 @@ export const deleteConnectionFolder = async (req: Request, res: Response): Promi
             res.status(400).json({ message: '无效的文件夹 ID。' });
             return;
         }
-        const deleted = await ConnectionService.deleteConnectionFolder(folderId);
+        const deleted = await ConnectionService.deleteConnectionFolder(folderId, req.authorization!);
         if (!deleted) {
             res.status(404).json({ message: '文件夹未找到。' });
             return;
@@ -110,7 +110,7 @@ export const deleteConnectionFolder = async (req: Request, res: Response): Promi
 export const reorderConnectionFolders = async (req: Request, res: Response): Promise<void> => {
     try {
         const { items } = req.body;
-        const folders = await ConnectionService.reorderConnectionFolders(items);
+        const folders = await ConnectionService.reorderConnectionFolders(items, req.authorization!);
         res.status(200).json({ message: '文件夹排序更新成功。', folders });
     } catch (error: any) {
         console.error('Controller: 更新连接文件夹排序时发生错误:', error);
