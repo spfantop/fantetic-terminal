@@ -89,6 +89,9 @@ jobs:
         run: npm run build --workspace=@fantetic-terminal/frontend
 
       - name: Package desktop application
+        env:
+          CSC_LINK: ${{ runner.os == 'Windows' && secrets.WINDOWS_CSC_LINK || runner.os == 'macOS' && secrets.MACOS_CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ runner.os == 'Windows' && secrets.WINDOWS_CSC_KEY_PASSWORD || runner.os == 'macOS' && secrets.MACOS_CSC_KEY_PASSWORD || '' }}
         run: npm run ${{ matrix.command }} --prefix electron-app
 
       - name: Upload desktop packages

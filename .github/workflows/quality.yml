@@ -1,0 +1,64 @@
+name: Quality checks
+
+on:
+  pull_request:
+  push:
+    branches:
+      - dev
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify delivery contract
+        run: npm run test:delivery
+
+      - name: Verify frontend architecture
+        run: |
+          npm run test:runtime-capabilities --workspace=@fantetic-terminal/frontend
+          npm run test:user-cache-scope --workspace=@fantetic-terminal/frontend
+          npm run test:service-worker-policy --workspace=@fantetic-terminal/frontend
+          npm run test:highlighter --workspace=@fantetic-terminal/frontend
+          npm run test:terminal-render-highlighter --workspace=@fantetic-terminal/frontend
+          npm run test:terminal-local-echo --workspace=@fantetic-terminal/frontend
+
+      - name: Verify backend architecture
+        run: |
+          npm run test:auth-session --workspace=@fantetic-terminal/backend
+          npm run test:access-policy --workspace=@fantetic-terminal/backend
+          npm run test:access-control-migration --workspace=@fantetic-terminal/backend
+          npm run test:process-lifecycle --workspace=@fantetic-terminal/backend
+          npm run test:database-runtime --workspace=@fantetic-terminal/backend
+
+      - name: Verify gateway security
+        run: |
+          npm run test:health --workspace=@fantetic-terminal/remote-gateway
+          npm run test:security --workspace=@fantetic-terminal/remote-gateway
+
+      - name: Build all runtime packages
+        run: |
+          npm run build --workspace=@fantetic-terminal/backend
+          npm run build --workspace=@fantetic-terminal/frontend
+          npm run build --workspace=@fantetic-terminal/remote-gateway
+
