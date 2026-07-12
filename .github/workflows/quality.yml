@@ -39,6 +39,7 @@ jobs:
           npm run test:runtime-capabilities --workspace=@fantetic-terminal/frontend
           npm run test:user-cache-scope --workspace=@fantetic-terminal/frontend
           npm run test:service-worker-policy --workspace=@fantetic-terminal/frontend
+          npm run test:startup-chunking --workspace=@fantetic-terminal/frontend
           npm run test:highlighter --workspace=@fantetic-terminal/frontend
           npm run test:terminal-render-highlighter --workspace=@fantetic-terminal/frontend
           npm run test:terminal-local-echo --workspace=@fantetic-terminal/frontend
@@ -61,4 +62,3 @@ jobs:
           npm run build --workspace=@fantetic-terminal/backend
           npm run build --workspace=@fantetic-terminal/frontend
           npm run build --workspace=@fantetic-terminal/remote-gateway
-

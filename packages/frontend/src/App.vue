@@ -10,10 +10,7 @@ import { useSessionStore } from './stores/session.store';
 import { useFavoritePathsStore } from './stores/favoritePaths.store';
 import { storeToRefs } from 'pinia';
 import UINotificationDisplay from './components/UINotificationDisplay.vue';
-import FileEditorOverlay from './components/FileEditorOverlay.vue';
-import FocusSwitcherConfigurator from './components/FocusSwitcherConfigurator.vue';
 import ConfirmDialog from './components/common/ConfirmDialog.vue';
-import SettingsView from './views/SettingsView.vue';
 import { useDialogStore } from './stores/dialog.store';
 import { debugLog } from './composables/useDebugLog';
 import {
@@ -25,6 +22,9 @@ import { isRemoteDesktopFeatureAvailable } from './utils/runtimeConfig';
 const { t } = useI18n();
 const remoteDesktopFeatureAvailable = isRemoteDesktopFeatureAvailable();
 const isDesktopBuild = import.meta.env.VITE_FANTETIC_APP_MODE === 'electron';
+const FileEditorOverlay = defineAsyncComponent(() => import('./components/FileEditorOverlay.vue'));
+const FocusSwitcherConfigurator = defineAsyncComponent(() => import('./components/FocusSwitcherConfigurator.vue'));
+const SettingsView = defineAsyncComponent(() => import('./views/SettingsView.vue'));
 const RemoteDesktopModal = isDesktopBuild
   ? null
   : defineAsyncComponent(() => import('./components/RemoteDesktopModal.vue'));
