@@ -29,6 +29,7 @@ export interface User {
     two_factor_secret?: string | null;
     system_role: SystemRole;
     status: 'active' | 'disabled';
+    auth_epoch: number;
 }
 
 declare module 'express-session' {
@@ -173,7 +174,7 @@ export const verifyPasskeyAuthenticationHandler = async (req: Request, res: Resp
 
         if (verification.verified && verification.userId && verification.passkey) {
             const user = await userRepository.findUserById(verification.userId);
-            if (!user) {
+            if (!user || user.status !== 'active') {
                 // This should ideally not happen if passkey verification was successful
                 console.error(`[AuthController] Passkey 认证成功但未找到用户 ID: ${verification.userId}`);
                 auditLogService.logAction('PASSKEY_AUTH_FAILURE', { credentialId: verification.passkey.credential_id, reason: 'User not found after verification' });
@@ -187,7 +188,7 @@ export const verifyPasskeyAuthenticationHandler = async (req: Request, res: Resp
             auditLogService.logAction('PASSKEY_AUTH_SUCCESS', { userId: user.id, username: user.username, credentialId: verification.passkey.credential_id, ip: clientIp });
             notificationService.sendNotification('LOGIN_SUCCESS', { userId: user.id, username: user.username, ip: clientIp, method: 'Passkey' });
 
-            await completeLogin(req, user, { rememberMe: Boolean(rememberMe) });
+            await completeLogin(req, { id: user.id, username: user.username, authEpoch: user.auth_epoch }, { rememberMe: Boolean(rememberMe) });
 
             res.status(200).json({
                 verified: true,
@@ -377,7 +378,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
 
         const db = await getDbInstance(); 
-        const user = await getDb<User>(db, 'SELECT id, username, hashed_password, two_factor_secret, system_role, status FROM users WHERE username = ?', [username]);
+        const user = await getDb<User>(db, 'SELECT id, username, hashed_password, two_factor_secret, system_role, status, auth_epoch FROM users WHERE username = ?', [username]);
 
      
 
@@ -422,7 +423,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
             ipBlacklistService.resetAttempts(clientIp);
             auditLogService.logAction('LOGIN_SUCCESS', { userId: user.id, username, ip: clientIp });
             notificationService.sendNotification('LOGIN_SUCCESS', { userId: user.id, username, ip: clientIp }); 
-            await completeLogin(req, user, { rememberMe: Boolean(rememberMe) });
+            await completeLogin(req, { id: user.id, username: user.username, authEpoch: user.auth_epoch }, { rememberMe: Boolean(rememberMe) });
 
             res.status(200).json({
                 message: '登录成功。',
@@ -505,11 +506,11 @@ export const verifyLogin2FA = async (req: Request, res: Response): Promise<void>
 
     try {
         const db = await getDbInstance();
-        const user = await getDb<User>(db, 'SELECT id, username, two_factor_secret, system_role, status FROM users WHERE id = ?', [userId]);
+        const user = await getDb<User>(db, 'SELECT id, username, two_factor_secret, system_role, status, auth_epoch FROM users WHERE id = ?', [userId]);
 
     
 
-        if (!user || !user.two_factor_secret) {
+        if (!user || user.status !== 'active' || !user.two_factor_secret) {
             console.error(`2FA 验证错误: 未找到用户 ${userId} 或未设置密钥。`);
             res.status(400).json({ message: '无法验证，请重新登录。' });
             return;
@@ -529,7 +530,7 @@ export const verifyLogin2FA = async (req: Request, res: Response): Promise<void>
             auditLogService.logAction('LOGIN_SUCCESS', { userId: user.id, username: user.username, ip: clientIp, twoFactor: true });
             notificationService.sendNotification('LOGIN_SUCCESS', { userId: user.id, username: user.username, ip: clientIp, twoFactor: true }); 
             const rememberMe = Boolean(req.session.rememberMe);
-            await completeLogin(req, user, { rememberMe });
+            await completeLogin(req, { id: user.id, username: user.username, authEpoch: user.auth_epoch }, { rememberMe });
 
             res.status(200).json({
                 message: '登录成功。',
@@ -601,7 +602,7 @@ export const changePassword = async (req: Request, res: Response): Promise<void>
 
 
         const result = await runDb(db,
-            'UPDATE users SET hashed_password = ?, updated_at = ? WHERE id = ?',
+            'UPDATE users SET hashed_password = ?, auth_epoch = auth_epoch + 1, updated_at = ? WHERE id = ?',
             [newHashedPassword, now, userId]
         );
 

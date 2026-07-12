@@ -212,3 +212,7 @@ CREATE INDEX idx_terminal_themes_owner_type
     ON terminal_themes(owner_user_id, theme_type, name);
 DROP TABLE terminal_themes_before_owner_scope;
 `;
+
+export const addUserAuthenticationEpochSQL = `
+ALTER TABLE users ADD COLUMN auth_epoch INTEGER NOT NULL DEFAULT 0;
+`;

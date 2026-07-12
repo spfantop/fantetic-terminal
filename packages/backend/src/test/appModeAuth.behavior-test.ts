@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { isAuthenticated } from '../auth/auth.middleware';
+import { isAuthenticated, sessionMatchesAuthenticationEpoch } from '../auth/auth.middleware';
 import {
   ELECTRON_APP_USERNAME,
   ELECTRON_APP_USER_ID,
@@ -7,6 +7,10 @@ import {
 } from '../config/app-mode';
 
 const originalAppMode = process.env.FANTETIC_APP_MODE;
+
+assert.equal(sessionMatchesAuthenticationEpoch(4, 4), true);
+assert.equal(sessionMatchesAuthenticationEpoch(3, 4), false);
+assert.equal(sessionMatchesAuthenticationEpoch(undefined, 0), false, 'legacy sessions must log in again');
 
 const createResponseStub = () => {
   const response = {

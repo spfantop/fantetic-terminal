@@ -1,5 +1,6 @@
 import { Database } from 'sqlite3';
 import {
+    addUserAuthenticationEpochSQL,
     migrateLegacyResourcesToAccessControlSQL,
     migrateQuickCommandTagsToOwnerScopedNamesSQL,
     migrateTerminalThemesToOwnerScopedNamesSQL,
@@ -527,6 +528,12 @@ const definedMigrations: Migration[] = [
             return !!tableSql && /name\s+TEXT[^,\n]*\bUNIQUE\b/i.test(tableSql);
         },
         sql: migrateTerminalThemesToOwnerScopedNamesSQL,
+    },
+    {
+        id: 22,
+        name: 'Add user authentication epoch for session revocation',
+        check: async (db: Database): Promise<boolean> => !(await columnExists(db, 'users', 'auth_epoch')),
+        sql: addUserAuthenticationEpochSQL,
     }
 ];
 

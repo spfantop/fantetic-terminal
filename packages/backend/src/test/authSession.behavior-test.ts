@@ -21,11 +21,12 @@ const request = {
   },
 } as any;
 
-await completeLogin(request, { id: 7, username: 'alice' }, { rememberMe: false });
+await completeLogin(request, { id: 7, username: 'alice', authEpoch: 3 }, { rememberMe: false });
 
 assert.deepEqual(events, ['regenerate', 'save']);
 assert.equal(request.session.userId, 7);
 assert.equal(request.session.username, 'alice');
+assert.equal(request.session.authEpoch, 3);
 assert.equal(request.session.requiresTwoFactor, false);
 assert.equal(request.session.cookie.maxAge, undefined);
 

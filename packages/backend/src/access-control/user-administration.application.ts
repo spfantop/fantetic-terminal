@@ -21,6 +21,7 @@ export interface UserAdministrationRepository {
     systemRole?: SystemRole;
     status?: 'active' | 'disabled';
   }): Promise<ManagedUser>;
+  updatePassword(userId: number, hashedPassword: string): Promise<void>;
   countActiveSuperAdmins(): Promise<number>;
 }
 
@@ -83,5 +84,21 @@ export class UserAdministrationApplication {
       throw new Error('The last active super administrator cannot be removed.');
     }
     return this.repository.updateUser({ userId, ...input });
+  }
+
+  async resetPassword(
+    subject: AuthorizationSubject,
+    userId: number,
+    password: string,
+  ): Promise<void> {
+    if (!isSystemAdministrator(subject)) throw new Error('A system administrator is required.');
+    if (password.length < 12) throw new Error('The password must contain at least 12 characters.');
+    const target = await this.repository.readUser(userId);
+    if (!target) throw new Error('User not found.');
+    const targetPrivileged = target.systemRole === 'super_admin' || target.systemRole === 'admin';
+    if (subject.systemRole !== 'super_admin' && targetPrivileged) {
+      throw new Error('A super administrator is required to manage administrators.');
+    }
+    await this.repository.updatePassword(userId, await this.hashPassword(password));
   }
 }

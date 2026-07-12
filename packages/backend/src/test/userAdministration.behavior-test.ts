@@ -21,6 +21,10 @@ const repository: UserAdministrationRepository = {
     users.set(input.userId, user);
     return user;
   },
+  async updatePassword(userId, hashedPassword) {
+    const current = users.get(userId);
+    users.set(userId, { ...current, hashedPassword, authEpoch: (current.authEpoch ?? 0) + 1 });
+  },
   async countActiveSuperAdmins() {
     return [...users.values()].filter((user) => user.systemRole === 'super_admin' && user.status === 'active').length;
   },
@@ -57,4 +61,18 @@ assert.equal((await application.updateUser(superAdmin, 5, { status: 'disabled' }
 await assert.rejects(
   application.updateUser(admin, alice.id, { systemRole: 'admin' }),
   /super administrator/i,
+);
+
+await application.resetPassword(admin, alice.id, 'Replacement-password-1');
+assert.equal(users.get(alice.id).hashedPassword, 'hashed:Replacement-password-1');
+assert.equal(users.get(alice.id).authEpoch, 1, 'resetting a password must revoke existing sessions');
+
+await assert.rejects(
+  application.resetPassword(admin, 1, 'Replacement-password-1'),
+  /super administrator/i,
+);
+
+await assert.rejects(
+  application.resetPassword(superAdmin, alice.id, 'too-short'),
+  /12 characters/i,
 );

@@ -3,12 +3,14 @@ import { Request } from 'express';
 declare module 'express-session' {
   interface SessionData {
     pendingTwoFactorUserId?: number;
+    authEpoch?: number;
   }
 }
 
 type AuthenticatedIdentity = {
   id: number;
   username: string;
+  authEpoch: number;
 };
 
 type SessionRequest = Pick<Request, 'session'>;
@@ -37,6 +39,7 @@ export const completeLogin = async (
   await regenerateSession(req);
   req.session.userId = identity.id;
   req.session.username = identity.username;
+  req.session.authEpoch = identity.authEpoch;
   req.session.requiresTwoFactor = false;
   req.session.cookie.maxAge = rememberMe ? REMEMBER_ME_MAX_AGE_MS : undefined;
   await saveSession(req);

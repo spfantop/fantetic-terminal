@@ -7,6 +7,11 @@ import {
 import { createAuthorizationSubject } from '../access-control/authorization-subject';
 import { userRepository } from '../user/user.repository';
 
+export const sessionMatchesAuthenticationEpoch = (
+    sessionEpoch: number | undefined,
+    userEpoch: number,
+): boolean => sessionEpoch === userEpoch;
+
 /**
  * 认证中间件：检查用户是否已登录 (通过 session 中的 userId 判断)
  */
@@ -33,6 +38,12 @@ export const isAuthenticated = async (req: Request, res: Response, next: NextFun
 
             if (!authorization) {
                 res.status(401).json({ message: '未授权：用户不存在或已被禁用。' });
+                return;
+            }
+
+            if (!sessionMatchesAuthenticationEpoch(req.session.authEpoch, user!.auth_epoch)) {
+                req.session.destroy(() => undefined);
+                res.status(401).json({ message: '登录状态已失效，请重新登录。' });
                 return;
             }
 

@@ -48,7 +48,7 @@ await runMigrations(db);
 
 assert.deepEqual(
   await get<{ currentVersion: number }>('SELECT MAX(id) AS currentVersion FROM migrations'),
-  { currentVersion: 21 },
+  { currentVersion: 22 },
 );
 assert.deepEqual(
   await get<{ system_role: string }>('SELECT system_role FROM users WHERE id = 3'),

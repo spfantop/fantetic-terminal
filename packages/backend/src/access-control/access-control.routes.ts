@@ -16,6 +16,7 @@ import {
 import {
   createUser,
   listUsers,
+  resetUserPassword,
   updateUser,
 } from './user-administration.controller';
 
@@ -25,6 +26,7 @@ router.use(isAuthenticated);
 router.get('/users', listUsers);
 router.post('/users', createUser);
 router.patch('/users/:userId', updateUser);
+router.put('/users/:userId/password', resetUserPassword);
 
 router.get('/groups', listGroups);
 router.post('/groups', createGroup);

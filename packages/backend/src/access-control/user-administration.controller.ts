@@ -52,3 +52,15 @@ export const updateUser = async (req: Request, res: Response): Promise<void> => 
   try { res.json(await application.updateUser(req.authorization!, userId, { systemRole, status })); }
   catch (error) { handleError(error, res); }
 };
+
+export const resetUserPassword = async (req: Request, res: Response): Promise<void> => {
+  const userId = Number(req.params.userId);
+  const password = typeof req.body.password === 'string' ? req.body.password : '';
+  if (!Number.isInteger(userId) || userId <= 0) {
+    res.status(400).json({ code: 'userAdministration.invalidRequest' }); return;
+  }
+  try {
+    await application.resetPassword(req.authorization!, userId, password);
+    res.status(204).send();
+  } catch (error) { handleError(error, res); }
+};

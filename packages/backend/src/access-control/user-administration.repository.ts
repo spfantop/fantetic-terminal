@@ -67,6 +67,15 @@ export class SqliteUserAdministrationRepository implements UserAdministrationRep
     return (await this.readUser(input.userId))!;
   }
 
+  async updatePassword(userId: number, hashedPassword: string): Promise<void> {
+    const result = await runDb(await this.getDatabase(), `
+      UPDATE users
+      SET hashed_password = ?, auth_epoch = auth_epoch + 1, updated_at = strftime('%s', 'now')
+      WHERE id = ?
+    `, [hashedPassword, userId]);
+    if (result.changes === 0) throw new Error('User not found.');
+  }
+
   async countActiveSuperAdmins(): Promise<number> {
     const row = await getDb<{ count: number }>(await this.getDatabase(), `
       SELECT COUNT(*) AS count FROM users

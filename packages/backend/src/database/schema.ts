@@ -58,7 +58,8 @@ CREATE TABLE IF NOT EXISTS users (
     hashed_password TEXT NOT NULL,
     two_factor_secret TEXT NULL, -- 添加 2FA 密钥列，允许为空
     created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-    updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+    updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+    auth_epoch INTEGER NOT NULL DEFAULT 0
 );
 `;
 
