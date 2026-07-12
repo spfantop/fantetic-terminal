@@ -55,7 +55,7 @@ export const settingsController = {
    */
   async getAllSettings(req: Request, res: Response): Promise<void> {
     try {
-      const settings = await settingsService.getAllSettings();
+      const settings = await settingsService.getAllSettings(req.authorization!);
       res.json(settings);
     } catch (error: any) {
       console.error('获取所有设置时出错:', error);
@@ -116,7 +116,7 @@ export const settingsController = {
       }
 
       if (Object.keys(filteredSettings).length > 0) {
-          await settingsService.setMultipleSettings(filteredSettings);
+          await settingsService.setMultipleSettings(filteredSettings, req.authorization!);
           if (Object.prototype.hasOwnProperty.call(filteredSettings, 'statusMonitorEnabled')) {
               await statusMonitorService.syncPollingWithEnabledSetting();
           }
@@ -134,7 +134,8 @@ export const settingsController = {
       res.status(200).json({ message: '设置已成功更新' });
     } catch (error: any) {
       console.error('更新设置时出错:', error);
-      res.status(500).json({ message: '更新设置失败', error: error.message });
+      const forbidden = error.message?.includes('系统管理员权限');
+      res.status(forbidden ? 403 : 500).json({ message: '更新设置失败', error: error.message });
     }
   },
 
@@ -143,7 +144,7 @@ export const settingsController = {
    */
   async getFocusSwitcherSequence(req: Request, res: Response): Promise<void> {
     try {
-      const sequence = await settingsService.getFocusSwitcherSequence();
+      const sequence = await settingsService.getFocusSwitcherSequence(req.authorization!.userId);
       res.json(sequence);
     } catch (error: any) {
       console.error('[控制器] 获取焦点切换顺序时出错:', error);
@@ -174,7 +175,7 @@ export const settingsController = {
 
       
       // +++ 传递验证后的 fullConfig 给服务层 +++
-      await settingsService.setFocusSwitcherSequence(fullConfig);
+      await settingsService.setFocusSwitcherSequence(fullConfig, req.authorization!.userId);
       
 
       
@@ -196,7 +197,7 @@ export const settingsController = {
   */
  async getNavBarVisibility(req: Request, res: Response): Promise<void> {
    try {
-     const isVisible = await settingsService.getNavBarVisibility();
+     const isVisible = await settingsService.getNavBarVisibility(req.authorization!.userId);
      res.json({ visible: isVisible });
    } catch (error: any) {
      console.error('[控制器] 获取导航栏可见性时出错:', error);
@@ -219,7 +220,7 @@ export const settingsController = {
      }
 
      
-     await settingsService.setNavBarVisibility(visible);
+     await settingsService.setNavBarVisibility(visible, req.authorization!.userId);
      
 
 
@@ -236,7 +237,7 @@ export const settingsController = {
    */
   async getLayoutTree(req: Request, res: Response): Promise<void> {
     try {
-      const layoutJson = await settingsService.getLayoutTree();
+      const layoutJson = await settingsService.getLayoutTree(req.authorization!.userId);
       if (layoutJson) {
         try {
           const layout = JSON.parse(layoutJson);
@@ -272,7 +273,7 @@ export const settingsController = {
       const layoutJson = JSON.stringify(layoutTree);
 
       
-      await settingsService.setLayoutTree(layoutJson);
+      await settingsService.setLayoutTree(layoutJson, req.authorization!.userId);
       
 
       // auditLogService.logAction('LAYOUT_TREE_UPDATED');
@@ -327,7 +328,7 @@ export const settingsController = {
    */
   async getAutoCopyOnSelect(req: Request, res: Response): Promise<void> {
     try {
-      const isEnabled = await settingsService.getAutoCopyOnSelect();
+      const isEnabled = await settingsService.getAutoCopyOnSelect(req.authorization!.userId);
       res.json({ enabled: isEnabled });
     } catch (error: any) {
       console.error('[控制器] 获取终端选中自动复制设置时出错:', error);
@@ -350,7 +351,7 @@ export const settingsController = {
       }
 
       
-      await settingsService.setAutoCopyOnSelect(enabled);
+      await settingsService.setAutoCopyOnSelect(enabled, req.authorization!.userId);
       
 
 
@@ -368,7 +369,7 @@ export const settingsController = {
   */
  async getSidebarConfig(req: Request, res: Response): Promise<void> {
      try {
-         const config = await settingsService.getSidebarConfig();
+         const config = await settingsService.getSidebarConfig(req.authorization!.userId);
          console.log('[控制器] 向客户端发送侧边栏配置:', config);
          res.json(config);
      } catch (error: any) {
@@ -394,7 +395,7 @@ export const settingsController = {
          }
 
          
-         await settingsService.setSidebarConfig(configDto);
+         await settingsService.setSidebarConfig(configDto, req.authorization!.userId);
          
 
 
@@ -469,7 +470,7 @@ async setCaptchaConfig(req: Request, res: Response): Promise<void> {
  // --- Show Connection Tags ---
  async getShowConnectionTags(req: Request, res: Response): Promise<void> {
    try {
-     const isEnabled = await settingsService.getShowConnectionTags();
+     const isEnabled = await settingsService.getShowConnectionTags(req.authorization!.userId);
      res.json({ enabled: isEnabled });
    } catch (error: any) {
      console.error('[控制器] 获取“显示连接标签”设置时出错:', error);
@@ -489,7 +490,7 @@ async setCaptchaConfig(req: Request, res: Response): Promise<void> {
      }
 
      
-     await settingsService.setShowConnectionTags(enabled);
+     await settingsService.setShowConnectionTags(enabled, req.authorization!.userId);
      
 
      auditLogService.logAction('SETTINGS_UPDATED', { updatedKeys: ['showConnectionTags'] });
@@ -506,7 +507,7 @@ async setCaptchaConfig(req: Request, res: Response): Promise<void> {
  // --- Show Quick Command Tags ---
  async getShowQuickCommandTags(req: Request, res: Response): Promise<void> {
    try {
-     const isEnabled = await settingsService.getShowQuickCommandTags();
+     const isEnabled = await settingsService.getShowQuickCommandTags(req.authorization!.userId);
      res.json({ enabled: isEnabled });
    } catch (error: any) {
      console.error('[控制器] 获取“显示快捷指令标签”设置时出错:', error);
@@ -526,7 +527,7 @@ async setCaptchaConfig(req: Request, res: Response): Promise<void> {
      }
 
      
-     await settingsService.setShowQuickCommandTags(enabled);
+     await settingsService.setShowQuickCommandTags(enabled, req.authorization!.userId);
      
 
      auditLogService.logAction('SETTINGS_UPDATED', { updatedKeys: ['showQuickCommandTags'] });
@@ -543,7 +544,7 @@ async setCaptchaConfig(req: Request, res: Response): Promise<void> {
  // --- Show Status Monitor IP Address ---
  async getShowStatusMonitorIpAddress(req: Request, res: Response): Promise<void> {
    try {
-     const isEnabled = await settingsService.getShowStatusMonitorIpAddress();
+     const isEnabled = await settingsService.getShowStatusMonitorIpAddress(req.authorization!.userId);
      res.json({ enabled: isEnabled });
    } catch (error: any) {
      console.error('[控制器] 获取“显示状态监视器IP地址”设置时出错:', error);
@@ -563,7 +564,7 @@ async setCaptchaConfig(req: Request, res: Response): Promise<void> {
      }
 
      
-     await settingsService.setShowStatusMonitorIpAddress(enabled);
+     await settingsService.setShowStatusMonitorIpAddress(enabled, req.authorization!.userId);
      
 
      auditLogService.logAction('SETTINGS_UPDATED', { updatedKeys: ['showStatusMonitorIpAddress'] });

@@ -80,28 +80,102 @@ export const settingsRepository = {
   },
 
   async setMultipleSettings(settings: Record<string, string>): Promise<void> {
-    // console.log('[仓库] 调用 setMultipleSettings，参数:', JSON.stringify(settings));
-    const promises = Object.entries(settings).map(([key, value]) =>
-      this.setSetting(key, value)
-    );
+    const db = await getDbInstance();
+    const now = Math.floor(Date.now() / 1000);
     try {
-        await Promise.all(promises);
-        // console.log('[仓库] setMultipleSettings 成功完成。');
+        await runDb(db, 'BEGIN TRANSACTION');
+        for (const [key, value] of Object.entries(settings)) {
+          await runDb(db, `INSERT INTO settings(key, value, created_at, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+          [key, value, now, now]);
+        }
+        await runDb(db, 'COMMIT');
     } catch (error) {
+        await runDb(db, 'ROLLBACK').catch(() => undefined);
         console.error('[仓库] setMultipleSettings 失败:', error);
         throw new Error('批量设置失败');
     }
   },
 };
 
+export const userSettingsRepository = {
+  async getAllSettings(userId: number): Promise<Setting[]> {
+    const db = await getDbInstance();
+    return allDb<DbSettingRow>(db, 'SELECT key, value FROM user_settings WHERE user_id = ?', [userId]);
+  },
+
+  async getSetting(userId: number, key: string): Promise<string | null> {
+    const db = await getDbInstance();
+    const row = await getDbRow<{ value: string }>(db, 'SELECT value FROM user_settings WHERE user_id = ? AND key = ?', [userId, key]);
+    return row?.value ?? null;
+  },
+
+  async setSetting(userId: number, key: string, value: string): Promise<void> {
+    const now = Math.floor(Date.now() / 1000);
+    const db = await getDbInstance();
+    await runDb(db, `INSERT INTO user_settings(user_id, key, value, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+    [userId, key, value, now, now]);
+  },
+
+  async setMultipleSettings(userId: number, settings: Record<string, string>): Promise<void> {
+    const db = await getDbInstance();
+    const now = Math.floor(Date.now() / 1000);
+    try {
+      await runDb(db, 'BEGIN TRANSACTION');
+      for (const [key, value] of Object.entries(settings)) {
+        await runDb(db, `INSERT INTO user_settings(user_id, key, value, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+        [userId, key, value, now, now]);
+      }
+      await runDb(db, 'COMMIT');
+    } catch (error) {
+      await runDb(db, 'ROLLBACK').catch(() => undefined);
+      throw error;
+    }
+  },
+};
+
+export const setScopedSettings = async (
+  userId: number,
+  personalSettings: Record<string, string>,
+  systemSettings: Record<string, string>,
+): Promise<void> => {
+  const db = await getDbInstance();
+  const now = Math.floor(Date.now() / 1000);
+  try {
+    await runDb(db, 'BEGIN TRANSACTION');
+    for (const [key, value] of Object.entries(personalSettings)) {
+      await runDb(db, `INSERT INTO user_settings(user_id, key, value, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+      [userId, key, value, now, now]);
+    }
+    for (const [key, value] of Object.entries(systemSettings)) {
+      await runDb(db, `INSERT INTO settings(key, value, created_at, updated_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+      [key, value, now, now]);
+    }
+    await runDb(db, 'COMMIT');
+  } catch (error) {
+    await runDb(db, 'ROLLBACK').catch(() => undefined);
+    throw error;
+  }
+};
+
 
 /**
  * 获取侧栏配置
  */
-export const getSidebarConfig = async (): Promise<SidebarConfig> => {
+export const getSidebarConfig = async (userId: number): Promise<SidebarConfig> => {
     const defaultValue: SidebarConfig = { left: [], right: [] };
     try {
-        const jsonString = await settingsRepository.getSetting(SIDEBAR_CONFIG_KEY);
+        const jsonString = await userSettingsRepository.getSetting(userId, SIDEBAR_CONFIG_KEY)
+            ?? await settingsRepository.getSetting(SIDEBAR_CONFIG_KEY);
         if (jsonString) {
             try {
                 const config = JSON.parse(jsonString);
@@ -122,13 +196,13 @@ export const getSidebarConfig = async (): Promise<SidebarConfig> => {
 /**
  * 设置侧栏配置
  */
-export const setSidebarConfig = async (config: SidebarConfig): Promise<void> => {
+export const setSidebarConfig = async (config: SidebarConfig, userId: number): Promise<void> => {
     try {
         if (!config || typeof config !== 'object' || !Array.isArray(config.left) || !Array.isArray(config.right)) {
              throw new Error('提供了无效的侧边栏配置对象。');
         }
         const jsonString = JSON.stringify(config);
-        await settingsRepository.setSetting(SIDEBAR_CONFIG_KEY, jsonString);
+        await userSettingsRepository.setSetting(userId, SIDEBAR_CONFIG_KEY, jsonString);
     } catch (error) {
         console.error(`[设置仓库] 设置侧边栏配置时出错 (键: ${SIDEBAR_CONFIG_KEY}):`, error);
         throw new Error('保存侧边栏配置失败。');
