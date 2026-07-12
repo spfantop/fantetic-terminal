@@ -15,12 +15,18 @@ interface RunResult {
     changes: number;
 }
 
+const describeDatabaseError = (sql: string, parameterCount: number, error: Error): string => {
+    const normalizedSql = sql.replace(/\s+/g, ' ').trim();
+    const statement = normalizedSql.slice(0, 160);
+    return `[数据库错误] SQL: ${statement}${normalizedSql.length > 160 ? '...' : ''}; 参数数量: ${parameterCount}; 错误: ${error.message}`;
+};
+
 
 export const runDb = (db: sqlite3.Database, sql: string, params: any[] = []): Promise<RunResult> => {
     return new Promise((resolve, reject) => {
         db.run(sql, params, function (err: Error | null) {
             if (err) {
-                console.error(`[数据库错误] SQL: ${sql.substring(0, 100)}... 参数: ${JSON.stringify(params)} 错误: ${err.message}`);
+                console.error(describeDatabaseError(sql, params.length, err));
                 reject(err);
             } else {
                 resolve({ lastID: this.lastID, changes: this.changes });
@@ -34,7 +40,7 @@ export const getDb = <T = any>(db: sqlite3.Database, sql: string, params: any[] 
     return new Promise((resolve, reject) => {
         db.get(sql, params, (err: Error | null, row: T) => {
             if (err) {
-                console.error(`[数据库错误] SQL: ${sql.substring(0, 100)}... 参数: ${JSON.stringify(params)} 错误: ${err.message}`);
+                console.error(describeDatabaseError(sql, params.length, err));
                 reject(err);
             } else {
                 resolve(row);
@@ -48,7 +54,7 @@ export const allDb = <T = any>(db: sqlite3.Database, sql: string, params: any[] 
     return new Promise((resolve, reject) => {
         db.all(sql, params, (err: Error | null, rows: T[]) => {
             if (err) {
-                console.error(`[数据库错误] SQL: ${sql.substring(0, 100)}... 参数: ${JSON.stringify(params)} 错误: ${err.message}`);
+                console.error(describeDatabaseError(sql, params.length, err));
                 reject(err);
             } else {
                 resolve(rows);
@@ -58,9 +64,19 @@ export const allDb = <T = any>(db: sqlite3.Database, sql: string, params: any[] 
 };
 
 
+export const configureDatabaseRuntime = async (db: sqlite3.Database): Promise<void> => {
+    await runDb(db, 'PRAGMA foreign_keys = ON');
+    await getDb(db, 'PRAGMA journal_mode = WAL');
+    await runDb(db, 'PRAGMA synchronous = NORMAL');
+    await runDb(db, 'PRAGMA busy_timeout = 5000');
+    await runDb(db, 'PRAGMA wal_autocheckpoint = 1000');
+    await runDb(db, 'PRAGMA journal_size_limit = 67108864');
+    await runDb(db, 'PRAGMA cache_size = -20000');
+};
+
 const runDatabaseInitializations = async (db: sqlite3.Database): Promise<void> => {
     try {
-        await runDb(db, 'PRAGMA foreign_keys = ON;');
+        await configureDatabaseRuntime(db);
         for (const tableDef of tableDefinitions) {
             await runDb(db, tableDef.sql);
             if (tableDef.init) {
