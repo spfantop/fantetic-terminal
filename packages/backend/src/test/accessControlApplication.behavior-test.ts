@@ -12,18 +12,23 @@ const repository: AccessControlRepository = {
     createdGroups.push({ name: input.name, createdBy: input.createdBy });
     return { id: 1, ...input };
   },
+  async readGroup(groupId) { return groupId === 1 ? { id: 1, name: 'ops', createdBy: 1 } : null; },
+  async updateGroup(groupId, input) { return groupId === 1 ? { id: 1, ...input, createdBy: 1 } : null; },
+  async deleteGroup(groupId) { return groupId === 1; },
   async readMembership(groupId, userId) {
     if (groupId === 1 && userId === 1) return { groupId, userId, role: 'owner' };
     if (groupId === 1 && userId === 3) return { groupId, userId, role: 'admin' };
     return null;
   },
   async saveMembership(input) { return input; },
+  async deleteMembership(groupId, userId) { return groupId === 1 && userId === 1; },
   async readConnectionAccess(_userId, connectionId) {
     return connectionId === 10
       ? { ownerUserId: 1, grants: [] }
       : { ownerUserId: 99, grants: [] };
   },
   async saveConnectionGrant(input) { return input; },
+  async deleteConnectionGrant(connectionId, groupId) { return connectionId === 10 && groupId === 1; },
   async listGroupsForUser() { return []; },
   async listMembers() { return []; },
   async listConnectionGrants() { return []; },
@@ -87,6 +92,11 @@ await assert.rejects(
 );
 
 await assert.rejects(
+  application.saveMember(groupAdmin, 1, { userId: 1, role: 'viewer' }),
+  /owner/i,
+);
+
+await assert.rejects(
   application.saveMember(user, 1, { userId: 3, role: 'viewer' }),
   /manage group/i,
 );
@@ -95,3 +105,10 @@ await assert.rejects(
   application.createGroup(admin, { name: '   ' }),
   /name/i,
 );
+
+assert.equal((await application.updateGroup(admin, 1, { name: 'Core Ops' })).name, 'Core Ops');
+await assert.rejects(application.updateGroup(user, 1, { name: 'Hijacked' }), /owner/i);
+await application.deleteConnectionGrant(admin, 10, 1);
+await assert.rejects(application.deleteConnectionGrant(user, 10, 1), /connection access/i);
+await application.deleteMember(admin, 1, 1);
+await assert.rejects(application.deleteMember(groupAdmin, 1, 1), /owner/i);

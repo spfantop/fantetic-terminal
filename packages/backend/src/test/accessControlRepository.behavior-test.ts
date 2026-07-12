@@ -51,4 +51,21 @@ assert.deepEqual(await repository.listConnectionGrants(10), [{
   permission: 'connect',
 }]);
 
+await assert.rejects(
+  repository.saveMembership({ groupId: group.id, userId: 1, role: 'admin' }),
+  /retain at least one owner/i,
+);
+await repository.saveMembership({ groupId: group.id, userId: 2, role: 'owner' });
+await repository.saveMembership({ groupId: group.id, userId: 1, role: 'admin' });
+await assert.rejects(repository.deleteMembership(group.id, 2), /retain at least one owner/i);
+await repository.saveMembership({ groupId: group.id, userId: 1, role: 'owner' });
+assert.equal(await repository.deleteMembership(group.id, 2), true);
+
+assert.equal((await repository.updateGroup(group.id, { name: 'platform-ops' }))?.name, 'platform-ops');
+assert.equal(await repository.deleteConnectionGrant(10, group.id), true);
+assert.deepEqual(await repository.listConnectionGrants(10), []);
+assert.equal(await repository.deleteGroup(group.id), true);
+assert.equal(await repository.readGroup(group.id), null);
+assert.deepEqual(await repository.listMembers(group.id), []);
+
 await new Promise<void>((resolve, reject) => db.close((error) => error ? reject(error) : resolve()));

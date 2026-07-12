@@ -35,6 +35,27 @@ export class SqliteAccessControlRepository implements AccessControlRepository {
     }
   }
 
+  async readGroup(groupId: number): Promise<UserGroup | null> {
+    const db = await this.getDatabase();
+    const row = await getDb<{ id: number; name: string; description: string | null; created_by: number }>(db, `
+      SELECT id, name, description, created_by FROM user_groups WHERE id = ?
+    `, [groupId]);
+    return row ? { id: row.id, name: row.name, description: row.description ?? undefined, createdBy: row.created_by } : null;
+  }
+
+  async updateGroup(groupId: number, input: { name: string; description?: string }): Promise<UserGroup | null> {
+    const db = await this.getDatabase();
+    const result = await runDb(db, `UPDATE user_groups
+      SET name = ?, description = ?, updated_at = strftime('%s', 'now') WHERE id = ?`,
+    [input.name, input.description ?? null, groupId]);
+    return result.changes > 0 ? this.readGroup(groupId) : null;
+  }
+
+  async deleteGroup(groupId: number): Promise<boolean> {
+    const db = await this.getDatabase();
+    return (await runDb(db, 'DELETE FROM user_groups WHERE id = ?', [groupId])).changes > 0;
+  }
+
   async readMembership(groupId: number, userId: number): Promise<GroupMembership | null> {
     const db = await this.getDatabase();
     const row = await getDb<{ group_id: number; user_id: number; role: GroupMembership['role'] }>(db, `
@@ -47,14 +68,54 @@ export class SqliteAccessControlRepository implements AccessControlRepository {
 
   async saveMembership(input: GroupMembership): Promise<GroupMembership> {
     const db = await this.getDatabase();
-    await runDb(db, `
-      INSERT INTO user_group_members(group_id, user_id, role)
-      VALUES (?, ?, ?)
-      ON CONFLICT(group_id, user_id) DO UPDATE SET
-        role = excluded.role,
-        updated_at = strftime('%s', 'now')
-    `, [input.groupId, input.userId, input.role]);
-    return input;
+    await runDb(db, 'BEGIN IMMEDIATE TRANSACTION');
+    try {
+      const current = await getDb<{ role: GroupMembership['role'] }>(db, `
+        SELECT role FROM user_group_members WHERE group_id = ? AND user_id = ?
+      `, [input.groupId, input.userId]);
+      if (current?.role === 'owner' && input.role !== 'owner') {
+        const owners = await getDb<{ count: number }>(db, `
+          SELECT COUNT(*) AS count FROM user_group_members WHERE group_id = ? AND role = 'owner'
+        `, [input.groupId]);
+        if ((owners?.count ?? 0) <= 1) throw new Error('A group must retain at least one owner.');
+      }
+      await runDb(db, `INSERT INTO user_group_members(group_id, user_id, role)
+        VALUES (?, ?, ?)
+        ON CONFLICT(group_id, user_id) DO UPDATE SET
+          role = excluded.role, updated_at = strftime('%s', 'now')`,
+      [input.groupId, input.userId, input.role]);
+      await runDb(db, 'COMMIT');
+      return input;
+    } catch (error) {
+      await runDb(db, 'ROLLBACK');
+      throw error;
+    }
+  }
+
+  async deleteMembership(groupId: number, userId: number): Promise<boolean> {
+    const db = await this.getDatabase();
+    await runDb(db, 'BEGIN IMMEDIATE TRANSACTION');
+    try {
+      const current = await getDb<{ role: GroupMembership['role'] }>(db, `
+        SELECT role FROM user_group_members WHERE group_id = ? AND user_id = ?
+      `, [groupId, userId]);
+      if (!current) {
+        await runDb(db, 'ROLLBACK');
+        return false;
+      }
+      if (current.role === 'owner') {
+        const owners = await getDb<{ count: number }>(db, `
+          SELECT COUNT(*) AS count FROM user_group_members WHERE group_id = ? AND role = 'owner'
+        `, [groupId]);
+        if ((owners?.count ?? 0) <= 1) throw new Error('A group must retain at least one owner.');
+      }
+      await runDb(db, 'DELETE FROM user_group_members WHERE group_id = ? AND user_id = ?', [groupId, userId]);
+      await runDb(db, 'COMMIT');
+      return true;
+    } catch (error) {
+      await runDb(db, 'ROLLBACK');
+      throw error;
+    }
   }
 
   async readConnectionAccess(userId: number, connectionId: number): Promise<{
@@ -93,6 +154,12 @@ export class SqliteAccessControlRepository implements AccessControlRepository {
         updated_at = strftime('%s', 'now')
     `, [input.connectionId, input.groupId, input.permission]);
     return input;
+  }
+
+  async deleteConnectionGrant(connectionId: number, groupId: number): Promise<boolean> {
+    const db = await this.getDatabase();
+    return (await runDb(db, `DELETE FROM connection_group_permissions
+      WHERE connection_id = ? AND group_id = ?`, [connectionId, groupId])).changes > 0;
   }
 
   async listGroupsForUser(userId: number, includeAll: boolean): Promise<Array<UserGroup & {

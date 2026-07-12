@@ -42,6 +42,26 @@ export const createGroup = async (req: Request, res: Response): Promise<void> =>
   } catch (error) { handleError(error, res); }
 };
 
+export const updateGroup = async (req: Request, res: Response): Promise<void> => {
+  const groupId = readPositiveInteger(req.params.groupId);
+  if (!groupId) { res.status(400).json({ code: 'accessControl.invalidGroupId' }); return; }
+  try {
+    res.json(await application.updateGroup(req.authorization!, groupId, {
+      name: typeof req.body.name === 'string' ? req.body.name : '',
+      description: typeof req.body.description === 'string' ? req.body.description : undefined,
+    }));
+  } catch (error) { handleError(error, res); }
+};
+
+export const deleteGroup = async (req: Request, res: Response): Promise<void> => {
+  const groupId = readPositiveInteger(req.params.groupId);
+  if (!groupId) { res.status(400).json({ code: 'accessControl.invalidGroupId' }); return; }
+  try {
+    await application.deleteGroup(req.authorization!, groupId);
+    res.status(204).send();
+  } catch (error) { handleError(error, res); }
+};
+
 export const listMembers = async (req: Request, res: Response): Promise<void> => {
   const groupId = readPositiveInteger(req.params.groupId);
   if (!groupId) { res.status(400).json({ code: 'accessControl.invalidGroupId' }); return; }
@@ -63,6 +83,16 @@ export const saveMember = async (req: Request, res: Response): Promise<void> => 
   } catch (error) { handleError(error, res); }
 };
 
+export const deleteMember = async (req: Request, res: Response): Promise<void> => {
+  const groupId = readPositiveInteger(req.params.groupId);
+  const userId = readPositiveInteger(req.params.userId);
+  if (!groupId || !userId) { res.status(400).json({ code: 'accessControl.invalidMembership' }); return; }
+  try {
+    await application.deleteMember(req.authorization!, groupId, userId);
+    res.status(204).send();
+  } catch (error) { handleError(error, res); }
+};
+
 export const listConnectionGrants = async (req: Request, res: Response): Promise<void> => {
   const connectionId = readPositiveInteger(req.params.connectionId);
   if (!connectionId) { res.status(400).json({ code: 'accessControl.invalidConnectionId' }); return; }
@@ -81,5 +111,18 @@ export const saveConnectionGrant = async (req: Request, res: Response): Promise<
   }
   try {
     res.json(await application.saveConnectionGrant(req.authorization!, connectionId, { groupId, permission }));
+  } catch (error) { handleError(error, res); }
+};
+
+export const deleteConnectionGrant = async (req: Request, res: Response): Promise<void> => {
+  const connectionId = readPositiveInteger(req.params.connectionId);
+  const groupId = readPositiveInteger(req.params.groupId);
+  if (!connectionId || !groupId) {
+    res.status(400).json({ code: 'accessControl.invalidConnectionGrant' });
+    return;
+  }
+  try {
+    await application.deleteConnectionGrant(req.authorization!, connectionId, groupId);
+    res.status(204).send();
   } catch (error) { handleError(error, res); }
 };
