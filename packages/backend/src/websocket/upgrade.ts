@@ -7,10 +7,12 @@ import {
     ELECTRON_APP_USERNAME,
     ELECTRON_APP_USER_ID,
     isElectronAppMode,
+    resolveRuntimeCapabilities,
 } from '../config/app-mode';
 import { ClientIpResolver } from '../config/client-ip';
 import { createAuthorizationSubject } from '../access-control/authorization-subject';
 import { userRepository } from '../user/user.repository';
+import { sessionMatchesAuthenticationEpoch } from '../auth/auth.middleware';
 
 export function initializeUpgradeHandler(
     server: http.Server,
@@ -42,13 +44,14 @@ export function initializeUpgradeHandler(
                 authorization = createAuthorizationSubject({ runtime: 'desktop' });
             } else if (request.session?.userId) {
                 const user = await userRepository.findUserById(request.session.userId);
-                authorization = user ? createAuthorizationSubject({
+                authorization = user && sessionMatchesAuthenticationEpoch(request.session.authEpoch, user.auth_epoch)
+                  ? createAuthorizationSubject({
                     runtime: 'web',
                     userId: user.id,
                     username: user.username,
                     systemRole: user.system_role,
                     status: user.status,
-                }) : null;
+                  }) : null;
             }
 
             // --- 认证检查 ---
@@ -63,6 +66,11 @@ export function initializeUpgradeHandler(
             // --- 根据路径处理升级 ---
             // 本地调试用/rdp-proxy，nginx反代用/ws/rdp-proxy
             if (pathname === '/rdp-proxy' || pathname === '/ws/rdp-proxy') {
+                if (!resolveRuntimeCapabilities().remoteDesktop) {
+                    socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
+                    socket.destroy();
+                    return;
+                }
                 // RDP 代理路径 - 直接处理升级，连接逻辑在 'connection' 事件中处理
                 console.log(`WebSocket: Handling RDP proxy upgrade for user ${request.session.username}`);
                 wss.handleUpgrade(request, socket, head, (ws) => {

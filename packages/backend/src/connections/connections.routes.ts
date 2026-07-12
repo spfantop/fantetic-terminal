@@ -24,8 +24,16 @@ import {
     
     addTagToConnections 
 } from './connections.controller';
+import { resolveRuntimeCapabilities } from '../config/app-mode';
 
 const router = Router();
+const requireRemoteDesktopCapability = (_req: Request, res: Response, next: NextFunction): void => {
+    if (!resolveRuntimeCapabilities().remoteDesktop) {
+        res.status(404).json({ code: 'runtimeCapability.remoteDesktopUnavailable' });
+        return;
+    }
+    next();
+};
 
 // 配置 multer 用于处理 JSON 文件上传 (存储在内存中)
 const storage = multer.memoryStorage(); // 将文件存储在内存中作为 Buffer
@@ -110,10 +118,10 @@ router.delete('/:id', requireConnectionPermission('manage'), deleteConnection);
 router.post('/:id/test', requireConnectionPermission('connect'), testConnection);
 
 // POST /api/v1/connections/:id/rdp-session - Get RDP session token via backend
-router.post('/:id/rdp-session', requireConnectionPermission('connect'), getRdpSessionToken);
+router.post('/:id/rdp-session', requireRemoteDesktopCapability, requireConnectionPermission('connect'), getRdpSessionToken);
 
 // POST /api/v1/connections/:id/vnc-session - Get VNC session token
-router.post('/:id/vnc-session', requireConnectionPermission('connect'), getVncSessionToken);
+router.post('/:id/vnc-session', requireRemoteDesktopCapability, requireConnectionPermission('connect'), getVncSessionToken);
 
 // +++ POST /api/v1/connections/:id/clone - 克隆连接 +++
 router.post('/:id/clone', requireConnectionPermission('manage'), cloneConnection);

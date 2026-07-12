@@ -20,10 +20,17 @@ import {
   shouldEnableFocusSwitcherHotkeys,
   shouldSuppressFocusSwitcherKeyDefault,
 } from './utils/focusSwitcherConfig';
+import { isRemoteDesktopFeatureAvailable } from './utils/runtimeConfig';
 
 const { t } = useI18n();
-const RemoteDesktopModal = defineAsyncComponent(() => import('./components/RemoteDesktopModal.vue'));
-const VncModal = defineAsyncComponent(() => import('./components/VncModal.vue'));
+const remoteDesktopFeatureAvailable = isRemoteDesktopFeatureAvailable();
+const isDesktopBuild = import.meta.env.VITE_FANTETIC_APP_MODE === 'electron';
+const RemoteDesktopModal = isDesktopBuild
+  ? null
+  : defineAsyncComponent(() => import('./components/RemoteDesktopModal.vue'));
+const VncModal = isDesktopBuild
+  ? null
+  : defineAsyncComponent(() => import('./components/VncModal.vue'));
 const authStore = useAuthStore();
 const settingsStore = useSettingsStore();
 const focusSwitcherStore = useFocusSwitcherStore(); // +++ 实例化焦点切换 Store +++
@@ -272,14 +279,14 @@ const handleGlobalKeyUp = async (event: KeyboardEvent) => {
 
     <!-- +++ 条件渲染 RDP 模态框 +++ -->
     <RemoteDesktopModal
-      v-if="isRdpModalOpen"
+      v-if="remoteDesktopFeatureAvailable && isRdpModalOpen"
       :connection="rdpConnectionInfo"
       @close="sessionStore.closeRdpModal()"
     />
 
     <!-- +++ 条件渲染 VNC 模态框 +++ -->
     <VncModal
-      v-if="isVncModalOpen"
+      v-if="remoteDesktopFeatureAvailable && isVncModalOpen"
       :connection="vncConnectionInfo"
       @close="sessionStore.closeVncModal()"
     />

@@ -4,6 +4,7 @@ import {
   ELECTRON_APP_USERNAME,
   ELECTRON_APP_USER_ID,
   isElectronAppMode,
+  resolveRuntimeCapabilities,
 } from '../config/app-mode';
 
 const originalAppMode = process.env.FANTETIC_APP_MODE;
@@ -32,6 +33,9 @@ const createResponseStub = () => {
 try {
   process.env.FANTETIC_APP_MODE = 'electron';
   assert.equal(isElectronAppMode(), true);
+  assert.deepEqual(resolveRuntimeCapabilities(), {
+    runtime: 'desktop', requiresAuthentication: false, remoteDesktop: false, multiUserAdministration: false,
+  });
 
   const appModeRequest = { session: {} } as any;
   const appModeResponse = createResponseStub() as any;
@@ -49,6 +53,9 @@ try {
 
   process.env.FANTETIC_APP_MODE = 'web';
   assert.equal(isElectronAppMode(), false);
+  assert.deepEqual(resolveRuntimeCapabilities(), {
+    runtime: 'web', requiresAuthentication: true, remoteDesktop: true, multiUserAdministration: true,
+  });
 
   const webRequest = { session: {} } as any;
   const webResponse = createResponseStub() as any;

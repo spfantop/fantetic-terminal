@@ -5,6 +5,13 @@ export type RuntimeConfigEnv = {
   locationHost: string;
 };
 
+export type RuntimeCapabilities = {
+  runtime: 'web' | 'desktop';
+  requiresAuthentication: boolean;
+  remoteDesktop: boolean;
+  multiUserAdministration: boolean;
+};
+
 export const ELECTRON_FRONTEND_PORT = 22457;
 export const ELECTRON_BACKEND_PORT = 22458;
 
@@ -41,14 +48,30 @@ export const resolveWebSocketBaseUrl = (env: RuntimeConfigEnv = readRuntimeConfi
 export const isRemoteDesktopFeatureAvailable = (
   env: RuntimeConfigEnv = readRuntimeConfigEnv(),
 ): boolean => {
-  return !env.isElectron;
+  return resolveRuntimeCapabilities(env).remoteDesktop;
 };
 
 export const isAccountFeatureAvailable = (
   env: RuntimeConfigEnv = readRuntimeConfigEnv(),
 ): boolean => {
-  return !env.isElectron;
+  return resolveRuntimeCapabilities(env).requiresAuthentication;
 };
+
+export const resolveRuntimeCapabilities = (
+  env: RuntimeConfigEnv = readRuntimeConfigEnv(),
+): RuntimeCapabilities => env.isElectron
+  ? {
+      runtime: 'desktop',
+      requiresAuthentication: false,
+      remoteDesktop: false,
+      multiUserAdministration: false,
+    }
+  : {
+      runtime: 'web',
+      requiresAuthentication: true,
+      remoteDesktop: true,
+      multiUserAdministration: true,
+    };
 
 export const resolveRemoteDesktopProxyWebSocketUrl = (
   token: string,

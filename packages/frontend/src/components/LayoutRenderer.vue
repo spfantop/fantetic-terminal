@@ -17,6 +17,7 @@ import { storeToRefs } from 'pinia';
 import TransferProgressModal from './TransferProgressModal.vue';
 import { isActionLayoutPane } from '../utils/layoutPanes';
 import { useDeviceDetection } from '../composables/useDeviceDetection';
+import { isRemoteDesktopFeatureAvailable } from '../utils/runtimeConfig';
 
 
 // --- Props ---
@@ -143,7 +144,10 @@ const componentMap: Partial<Record<PaneName, Component>> = {
   dockerManager: defineAsyncComponent(() => import('./DockerManager.vue')), // <--- 添加 dockerManager 映射
   transferProgress: TransferProgressModal,
 };
-const RemoteDesktopSession = defineAsyncComponent(() => import('./RemoteDesktopSession.vue'));
+const remoteDesktopFeatureAvailable = isRemoteDesktopFeatureAvailable();
+const RemoteDesktopSession = import.meta.env.VITE_FANTETIC_APP_MODE === 'electron'
+  ? null
+  : defineAsyncComponent(() => import('./RemoteDesktopSession.vue'));
 
 // --- Computed ---
 // 获取当前节点对应的组件实例 (用于主布局)
@@ -1302,7 +1306,7 @@ onBeforeUnmount(() => {
                                         @click="activateTerminalSession(sessionId)"
                                     />
                                     <RemoteDesktopSession
-                                        v-else-if="sessionState.kind === 'rdp' || sessionState.kind === 'vnc'"
+                                        v-else-if="remoteDesktopFeatureAvailable && (sessionState.kind === 'rdp' || sessionState.kind === 'vnc')"
                                         :session-id="sessionId"
                                         :connection="sessionState.connection ?? null"
                                         :is-active="isTerminalSessionActiveForLayout(sessionId)"
