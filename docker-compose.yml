@@ -16,6 +16,8 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3001
+      ENCRYPTION_KEY: "${ENCRYPTION_KEY:?Set ENCRYPTION_KEY to 64 hexadecimal characters}"
+      SESSION_SECRET: "${SESSION_SECRET:?Set SESSION_SECRET to at least 32 random characters}"
       DEPLOYMENT_MODE: "${DEPLOYMENT_MODE:-docker}"
       REMOTE_GATEWAY_API_BASE_LOCAL: "${REMOTE_GATEWAY_API_BASE_LOCAL:-http://localhost:9090}"
       REMOTE_GATEWAY_API_BASE_DOCKER: "${REMOTE_GATEWAY_API_BASE_DOCKER:-http://remote-gateway:9090}"

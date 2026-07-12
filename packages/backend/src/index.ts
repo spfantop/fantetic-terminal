@@ -1,6 +1,5 @@
 import dotenv from 'dotenv';
 import path from 'path';
-import fs from 'fs'; // fs is needed for early env loading if data/.env is checked
 
 import { ensureAndGetPathInAppData, getAppDataPath, initializeAppDataPath } from './config/app-data-path';
 
@@ -35,13 +34,12 @@ import express = require('express');
 import { Request, Response, NextFunction, RequestHandler } from 'express';
 import http from 'http';
 import cors from 'cors';
+import { WebSocketServer } from 'ws';
 
-
-import crypto from 'crypto';
 
 import session from 'express-session';
 import sessionFileStore from 'session-file-store';
-import { getDbInstance } from './database/connection';
+import { closeDbInstance, getDbInstance } from './database/connection';
 import authRouter from './auth/auth.routes';
 import connectionsRouter from './connections/connections.routes';
 import versionRouter from './version/version.routes';
@@ -68,112 +66,14 @@ import { isCorsOriginAllowed, parseCorsOrigins, readForwardedHost } from './conf
 import { resolveServerBinding } from './config/server-binding';
 import { createClientIpResolver } from './config/client-ip';
 import accessControlRouter from './access-control/access-control.routes';
+import { initializeRuntimeSecrets } from './config/runtime-secrets';
+import { installProcessLifecycle } from './config/process-lifecycle';
 
 
 import './services/event.service'; 
 import './notifications/notification.processor.service'; 
 import './notifications/notification.dispatcher.service'; 
 
-
-
-// --- 全局错误处理 ---
-// 捕获未处理的 Promise Rejection
-process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
-    console.error('---未处理的 Promise Rejection---');
-    console.error('原因:', reason);
-  });
-  
-  // 捕获未捕获的同步异常
-  process.on('uncaughtException', (error: Error) => {
-    console.error('---未捕获的异常---');
-    console.error('错误:', error);
-  });
-
-  
-
-const initializeEnvironment = async () => {
-
-    const dataEnvPath = dataEnvPathGlobal; 
-    let keysGenerated = false;
-    let keysToAppend = '';
-
-    // 检查 ENCRYPTION_KEY (process.env should be populated by early loading)
-    if (!process.env.ENCRYPTION_KEY) {
-        console.log('[ENV Init] ENCRYPTION_KEY 未设置，正在生成...');
-        const newEncryptionKey = crypto.randomBytes(32).toString('hex');
-        process.env.ENCRYPTION_KEY = newEncryptionKey; // 更新当前进程环境
-        keysToAppend += `\nENCRYPTION_KEY=${newEncryptionKey}`;
-        keysGenerated = true;
-    }
-
-    // 3. 检查 SESSION_SECRET
-    if (!process.env.SESSION_SECRET) {
-        console.log('[ENV Init] SESSION_SECRET 未设置，正在生成...');
-        const newSessionSecret = crypto.randomBytes(64).toString('hex');
-        process.env.SESSION_SECRET = newSessionSecret; // 更新当前进程环境
-        keysToAppend += `\nSESSION_SECRET=${newSessionSecret}`;
-        keysGenerated = true;
-    }
-
-    // 4. 检查 GUACD_HOST 和 GUACD_PORT
-    if (!process.env.GUACD_HOST) {
-        console.warn('[ENV Init] GUACD_HOST 未设置，将使用默认值 "localhost"');
-        process.env.GUACD_HOST = 'localhost';
-    }
-    if (!process.env.GUACD_PORT) {
-        console.warn('[ENV Init] GUACD_PORT 未设置，将使用默认值 "4822"');
-        process.env.GUACD_PORT = '4822';
-    }
-
-
-    // 5. 如果生成了新密钥或添加了默认值，则追加到 .env 文件
-    if (keysGenerated) {
-        try {
-            // 确保追加前有换行符 (如果文件非空) - Use dataEnvPath here
-            let prefix = '';
-            if (fs.existsSync(dataEnvPath)) { // Use dataEnvPath
-                const content = fs.readFileSync(dataEnvPath, 'utf-8'); // Use dataEnvPath
-                if (content.trim().length > 0 && !content.endsWith('\n')) {
-                    prefix = '\n';
-                }
-            }
-            fs.appendFileSync(dataEnvPath, prefix + keysToAppend.trim()); // Use dataEnvPath, trim() 移除开头的换行符
-            console.warn(`[ENV Init] 已自动生成密钥并保存到 ${dataEnvPath}`); // Use dataEnvPath
-            console.warn('[ENV Init] !!! 重要：请务必备份此 data/.env 文件，并在生产环境中妥善保管 !!!');
-        } catch (error) {
-            console.error(`[ENV Init] 无法写入密钥到 ${dataEnvPath}:`, error); // Use dataEnvPath
-            console.error('[ENV Init] 请检查文件权限或手动创建 data/.env 文件并添加生成的密钥。');
-            // 即使写入失败，密钥已在 process.env 中，程序可以继续运行本次
-        }
-    }
-
-    // 5. 生产环境最终检查 (虽然理论上已被覆盖，但作为保险)
-    if (process.env.NODE_ENV === 'production') {
-        if (!process.env.ENCRYPTION_KEY) {
-            console.error('错误：生产环境中 ENCRYPTION_KEY 最终未能设置！');
-            process.exit(1);
-        }
-        if (!process.env.SESSION_SECRET) {
-            console.error('错误：生产环境中 SESSION_SECRET 最终未能设置！');
-            process.exit(1);
-        }
-    }
-
-    // 6. 最终检查 (包括 Guacamole 相关)
-    if (process.env.NODE_ENV === 'production') {
-        if (!process.env.ENCRYPTION_KEY) {
-            console.error('错误：生产环境中 ENCRYPTION_KEY 最终未能设置！');
-            process.exit(1);
-        }
-        if (!process.env.SESSION_SECRET) {
-            console.error('错误：生产环境中 SESSION_SECRET 最终未能设置！');
-            process.exit(1);
-        }
-        // Guacd host/port are less critical to halt on, defaults might work
-    }
-
-};
-// --- 结束环境变量和密钥初始化 ---
 
 
 // 基础 Express 应用设置
@@ -241,19 +141,19 @@ const initializeDatabase = async () => {
     console.log(`[Index] 用户数量检查完成。找到 ${userCount} 个用户。`);
   } catch (error) {
     console.error('数据库初始化或检查失败:', error);
-    process.exit(1);
+    throw error;
   }
 };
 
 // 启动服务器
-const startServer = () => {
+const startServer = async (): Promise<WebSocketServer> => {
     // --- 会话中间件配置 ---
     const FileStore = sessionFileStore(session);
     const sessionsPath = ensureAndGetPathInAppData('sessions');
     const sessionMiddleware = session({
         store: new FileStore({
             path: sessionsPath,
-            ttl: 31536000, // 1 year
+            ttl: 30 * 24 * 60 * 60,
             // logFn: console.log // 可选：启用详细日志
         }),
         // 直接从 process.env 读取，initializeEnvironment 已确保其存在
@@ -263,6 +163,8 @@ const startServer = () => {
         proxy: true, // 信任反向代理设置的 X-Forwarded-Proto 头
         cookie: {
             httpOnly: true,
+            sameSite: 'lax',
+            secure: process.env.NODE_ENV === 'production' && process.env.FANTETIC_APP_MODE !== 'electron',
         }
     });
     app.use(sessionMiddleware);
@@ -299,21 +201,67 @@ const startServer = () => {
     // --- 结束 API 路由 ---
 
 
-    server.listen(serverBinding.port, serverBinding.host, () => {
-        console.log(`后端服务器正在监听 http://${serverBinding.host}:${serverBinding.port}`);
-        initializeWebSocket(server, sessionMiddleware as RequestHandler, clientIpResolver); // Initialize existing WebSocket
-
+    await new Promise<void>((resolve, reject) => {
+        const onError = (error: Error) => reject(error);
+        server.once('error', onError);
+        server.listen(serverBinding.port, serverBinding.host, () => {
+            server.off('error', onError);
+            resolve();
+        });
     });
+    const webSocketServer = await initializeWebSocket(server, sessionMiddleware as RequestHandler, clientIpResolver);
+    console.log(`后端服务器正在监听 http://${serverBinding.host}:${serverBinding.port}`);
+    return webSocketServer;
 };
+
+let webSocketServer: WebSocketServer | null = null;
+let shutdownPromise: Promise<void> | null = null;
+
+const closeWebSocketServer = async (): Promise<void> => {
+    if (!webSocketServer) return;
+    const current = webSocketServer;
+    webSocketServer = null;
+    current.clients.forEach(client => client.terminate());
+    await new Promise<void>((resolve, reject) => current.close(error => error ? reject(error) : resolve()));
+};
+
+const closeHttpServer = async (): Promise<void> => {
+    if (!server.listening) return;
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+};
+
+const shutdown = (reason: string): Promise<void> => {
+    if (shutdownPromise) return shutdownPromise;
+    shutdownPromise = (async () => {
+        console.log(`[Lifecycle] 正在关闭服务，原因: ${reason}`);
+        await closeWebSocketServer();
+        await closeHttpServer();
+        await closeDbInstance();
+        console.log('[Lifecycle] 服务已安全关闭。');
+    })();
+    return shutdownPromise;
+};
+
+installProcessLifecycle({
+    process,
+    shutdown,
+    logError: error => console.error('[Lifecycle] 致命错误:', error),
+});
 
 // --- 主程序启动流程 ---
 const main = async () => {
-    await initializeEnvironment(); // 首先初始化环境和密钥
+    const secrets = initializeRuntimeSecrets(dataEnvPathGlobal);
+    if (secrets.generated) {
+        console.warn(`[ENV Init] 已为当前运行模式生成并安全保存缺失密钥到 ${dataEnvPathGlobal}`);
+    }
     await initializeDatabase();   // 然后初始化数据库
-    startServer();                // 最后启动服务器
+    webSocketServer = await startServer();
 };
 
-main().catch(error => {
+main().catch(async error => {
     console.error("启动过程中发生未处理的错误:", error);
-    process.exit(1);
+    process.exitCode = 1;
+    await shutdown('startupFailure').catch(shutdownError => {
+        console.error('[Lifecycle] 启动失败后的资源清理也失败:', shutdownError);
+    });
 });
