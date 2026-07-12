@@ -48,6 +48,7 @@ jobs:
         run: |
           npm run test:auth-session --workspace=@fantetic-terminal/backend
           npm run test:access-policy --workspace=@fantetic-terminal/backend
+          npm run test:system-role-routes --workspace=@fantetic-terminal/backend
           npm run test:access-control-migration --workspace=@fantetic-terminal/backend
           npm run test:process-lifecycle --workspace=@fantetic-terminal/backend
           npm run test:database-runtime --workspace=@fantetic-terminal/backend
