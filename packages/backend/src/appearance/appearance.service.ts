@@ -1,15 +1,32 @@
 import fs from 'fs/promises'; // 使用 promises API
+import { constants as fsConstants } from 'fs';
 import path from 'path';
 import * as appearanceRepository from './appearance.repository';
 import { AppearanceSettings, UpdateAppearanceDto } from '../types/appearance.types';
 import * as terminalThemeRepository from '../terminal-themes/terminal-theme.repository';
 import axios from 'axios';
 import sanitize from 'sanitize-filename'; // 用于清理文件名
+import { getAppDataPath } from '../config/app-data-path';
+import { getDbInstance, getDb } from '../database/connection';
 
 // 预设 HTML 主题的存储路径 (作为只读预设)
-const PRESET_HTML_THEMES_DIR = path.join(__dirname, '../../html-presets/');
+const PRESET_HTML_THEMES_DIR_CANDIDATES = [
+    path.resolve(__dirname, '../../html-presets'),
+    path.resolve(process.cwd(), 'packages/backend/html-presets'),
+    path.resolve(process.cwd(), 'html-presets'),
+];
 
 const USER_CUSTOM_HTML_THEMES_DIR = path.join(__dirname, '../../data/custom_html_theme/');
+const USER_CUSTOM_HTML_THEMES_ROOT = path.join(getAppDataPath(), 'custom-html-themes', 'users');
+const BACKGROUND_FILES_DIR = path.join(__dirname, '../../data/background/');
+
+const resolveStoredBackgroundPath = (apiPath: string): string => {
+    const filename = path.basename(apiPath);
+    if (!filename || apiPath !== `/api/v1/appearance/background/file/${filename}`) {
+        throw new Error('无效的背景文件路径。');
+    }
+    return path.join(BACKGROUND_FILES_DIR, filename);
+};
 
 const validateTerminalThemeId = async (themeId: number, fieldName: string, ownerUserId: number): Promise<void> => {
   if (typeof themeId !== 'number') {
@@ -31,30 +48,54 @@ const validateTerminalThemeId = async (themeId: number, fieldName: string, owner
 
 
 // 确保预设 html-themes 目录存在
-const ensurePresetHtmlThemesDirExists = async () => { // Renamed
-    try {
-        await fs.access(PRESET_HTML_THEMES_DIR);
-    } catch (error) {
-        // 目录不存在，创建它
-        await fs.mkdir(PRESET_HTML_THEMES_DIR, { recursive: true });
-        console.log(`[AppearanceService] Created preset html-themes directory at ${PRESET_HTML_THEMES_DIR}`);
+const resolvePresetHtmlThemesDir = async (): Promise<string> => {
+    for (const candidate of PRESET_HTML_THEMES_DIR_CANDIDATES) {
+        try {
+            await fs.access(candidate);
+            return candidate;
+        } catch (error: any) {
+            if (error.code !== 'ENOENT') throw error;
+        }
     }
+    throw new Error('预设 HTML 主题目录未找到。');
 };
-// 在服务初始化时确保目录存在
-ensurePresetHtmlThemesDirExists();
 
 // 确保用户自定义 custom_html_theme 目录存在
-const ensureUserCustomHtmlThemesDirExists = async () => {
-    try {
-        await fs.access(USER_CUSTOM_HTML_THEMES_DIR);
-    } catch (error) {
-        // 目录不存在，创建它
-        await fs.mkdir(USER_CUSTOM_HTML_THEMES_DIR, { recursive: true });
-        console.log(`[AppearanceService] Created user custom_html_theme directory at ${USER_CUSTOM_HTML_THEMES_DIR}`);
-    }
+const getUserCustomHtmlThemesDir = (ownerUserId: number): string => {
+    if (!Number.isInteger(ownerUserId) || ownerUserId <= 0) throw new Error('无效的用户 ID。');
+    return path.join(USER_CUSTOM_HTML_THEMES_ROOT, String(ownerUserId));
 };
-// 在服务初始化时确保目录存在
-ensureUserCustomHtmlThemesDirExists();
+
+const ensureUserCustomHtmlThemesDirExists = async (ownerUserId: number): Promise<string> => {
+    const userDirectory = getUserCustomHtmlThemesDir(ownerUserId);
+    await fs.mkdir(userDirectory, { recursive: true });
+    const migrationMarker = path.join(USER_CUSTOM_HTML_THEMES_ROOT, `.legacy-imported-${ownerUserId}`);
+    try {
+        await fs.access(migrationMarker);
+        return userDirectory;
+    } catch (error: any) {
+        if (error.code !== 'ENOENT') throw error;
+    }
+
+    const db = await getDbInstance();
+    const firstUser = await getDb<{ id: number }>(db, 'SELECT MIN(id) AS id FROM users');
+    if (firstUser?.id === ownerUserId) {
+        const legacyFiles = await fs.readdir(USER_CUSTOM_HTML_THEMES_DIR).catch(error => (
+            error.code === 'ENOENT' ? [] : Promise.reject(error)
+        ));
+        for (const filename of legacyFiles.filter(file => file.endsWith('.html'))) {
+            await fs.copyFile(
+                path.join(USER_CUSTOM_HTML_THEMES_DIR, filename),
+                path.join(userDirectory, filename),
+                fsConstants.COPYFILE_EXCL,
+            ).catch(error => {
+                if (error.code !== 'EEXIST') throw error;
+            });
+        }
+    }
+    await fs.writeFile(migrationMarker, '', 'utf-8');
+    return userDirectory;
+};
 
 
 /**
@@ -227,7 +268,7 @@ export const removePageBackground = async (ownerUserId: number): Promise<boolean
         // 构建文件的绝对路径
         // 注意：这里的路径拼接逻辑需要与上传时的逻辑一致
         // 假设 filePath 是相对于项目根目录的 /uploads/backgrounds/xxx
-        const absolutePath = path.join(__dirname, '../../', filePath); // 调整相对路径层级
+        const absolutePath = resolveStoredBackgroundPath(filePath);
 
         try {
             await fs.unlink(absolutePath);
@@ -261,7 +302,7 @@ export const removeTerminalBackground = async (ownerUserId: number): Promise<boo
     const filePath = currentSettings.terminalBackgroundImage;
 
     if (filePath) {
-        const absolutePath = path.join(__dirname, '../../', filePath); // 调整相对路径层级
+        const absolutePath = resolveStoredBackgroundPath(filePath);
 
         try {
             await fs.unlink(absolutePath);
@@ -321,8 +362,8 @@ const sanitizeThemeNameInternal = (themeName: string): string => { // Renamed fo
  */
 export const listPresetHtmlThemes = async (): Promise<Array<{ name: string, type: 'preset' }>> => {
     try {
-        await ensurePresetHtmlThemesDirExists(); // 确保目录存在
-        const files = await fs.readdir(PRESET_HTML_THEMES_DIR);
+        const presetDirectory = await resolvePresetHtmlThemesDir();
+        const files = await fs.readdir(presetDirectory);
         return files
             .filter(file => file.endsWith('.html'))
             .map(name => ({ name, type: 'preset' as const })); // Add type
@@ -330,7 +371,6 @@ export const listPresetHtmlThemes = async (): Promise<Array<{ name: string, type
         console.error('[AppearanceService] 列出预设 HTML 主题失败:', error);
         if (error.code === 'ENOENT') {
             // 目录不存在
-             console.warn(`[AppearanceService] 预设 HTML 主题目录 (${PRESET_HTML_THEMES_DIR}) 未找到。`);
             return [];
         }
         throw new Error('无法列出预设 HTML 主题。');
@@ -344,9 +384,9 @@ export const listPresetHtmlThemes = async (): Promise<Array<{ name: string, type
  */
 export const getPresetHtmlThemeContent = async (themeName: string): Promise<string> => { // Renamed
     const safeThemeName = sanitizeThemeNameInternal(themeName); // Use internal sanitizer
-    const filePath = path.join(PRESET_HTML_THEMES_DIR, safeThemeName);
     try {
-        await ensurePresetHtmlThemesDirExists(); // 确保目录存在
+        const presetDirectory = await resolvePresetHtmlThemesDir();
+        const filePath = path.join(presetDirectory, safeThemeName);
         return await fs.readFile(filePath, 'utf-8');
     } catch (error: any) {
         console.error(`[AppearanceService] 获取预设 HTML 主题 "${safeThemeName}" 内容失败:`, error);
@@ -363,17 +403,16 @@ export const getPresetHtmlThemeContent = async (themeName: string): Promise<stri
  * 获取所有用户自定义 HTML 主题的名称列表
  * @returns Promise<Array<{ name: string, type: 'custom' }>> 主题对象列表
  */
-export const listUserCustomHtmlThemes = async (): Promise<Array<{ name: string, type: 'custom' }>> => {
+export const listUserCustomHtmlThemes = async (ownerUserId: number): Promise<Array<{ name: string, type: 'custom' }>> => {
     try {
-        await ensureUserCustomHtmlThemesDirExists();
-        const files = await fs.readdir(USER_CUSTOM_HTML_THEMES_DIR);
+        const userDirectory = await ensureUserCustomHtmlThemesDirExists(ownerUserId);
+        const files = await fs.readdir(userDirectory);
         return files
             .filter(file => file.endsWith('.html'))
             .map(name => ({ name, type: 'custom' as const })); // Add type
     } catch (error: any) {
         console.error('[AppearanceService] 列出用户自定义 HTML 主题失败:', error);
         if (error.code === 'ENOENT') {
-            console.warn(`[AppearanceService] 用户自定义 HTML 主题目录 (${USER_CUSTOM_HTML_THEMES_DIR}) 未找到。`);
             return [];
         }
         throw new Error('无法列出用户自定义 HTML 主题。');
@@ -385,17 +424,17 @@ export const listUserCustomHtmlThemes = async (): Promise<Array<{ name: string, 
  * @param themeName 主题文件名 (例如: my-custom-theme.html)
  * @returns Promise<string> 主题的 HTML 内容
  */
-export const getUserCustomHtmlThemeContent = async (themeName: string): Promise<string> => {
+export const getUserCustomHtmlThemeContent = async (themeName: string, ownerUserId: number): Promise<string> => {
     const safeThemeName = sanitizeThemeNameInternal(themeName);
-    const filePath = path.join(USER_CUSTOM_HTML_THEMES_DIR, safeThemeName);
     try {
-        await ensureUserCustomHtmlThemesDirExists();
+        const userDirectory = await ensureUserCustomHtmlThemesDirExists(ownerUserId);
+        const filePath = path.join(userDirectory, safeThemeName);
         return await fs.readFile(filePath, 'utf-8');
     } catch (error: any) {
-        console.error(`[AppearanceService] 获取用户自定义 HTML 主题 "${safeThemeName}" 内容失败:`, error);
         if (error.code === 'ENOENT') {
             throw new Error(`用户自定义 HTML 主题 "${safeThemeName}" 未找到。`);
         }
+        console.error(`[AppearanceService] 获取用户自定义 HTML 主题 "${safeThemeName}" 内容失败:`, error.message);
         throw new Error(`无法获取用户自定义 HTML 主题 "${safeThemeName}" 的内容。`);
     }
 };
@@ -406,11 +445,11 @@ export const getUserCustomHtmlThemeContent = async (themeName: string): Promise<
  * @param content HTML 内容
  * @returns Promise<void>
  */
-export const createUserCustomHtmlTheme = async (themeName: string, content: string): Promise<void> => {
+export const createUserCustomHtmlTheme = async (themeName: string, content: string, ownerUserId: number): Promise<void> => {
     const safeThemeName = sanitizeThemeNameInternal(themeName);
-    const filePath = path.join(USER_CUSTOM_HTML_THEMES_DIR, safeThemeName);
     try {
-        await ensureUserCustomHtmlThemesDirExists(); // 确保目录存在
+        const userDirectory = await ensureUserCustomHtmlThemesDirExists(ownerUserId);
+        const filePath = path.join(userDirectory, safeThemeName);
         // 检查文件是否已存在
         try {
             await fs.access(filePath);
@@ -423,7 +462,6 @@ export const createUserCustomHtmlTheme = async (themeName: string, content: stri
             }
         }
         await fs.writeFile(filePath, content, 'utf-8');
-        console.log(`[AppearanceService] 用户自定义 HTML 主题 "${safeThemeName}" 创建成功。`);
     } catch (error: any) {
         console.error(`[AppearanceService] 创建用户自定义 HTML 主题 "${safeThemeName}" 失败:`, error);
         throw error; // 重新抛出原始错误或包装后的错误
@@ -436,11 +474,11 @@ export const createUserCustomHtmlTheme = async (themeName: string, content: stri
  * @param content 新的 HTML 内容
  * @returns Promise<void>
  */
-export const updateUserCustomHtmlTheme = async (themeName: string, content: string): Promise<void> => {
+export const updateUserCustomHtmlTheme = async (themeName: string, content: string, ownerUserId: number): Promise<void> => {
     const safeThemeName = sanitizeThemeNameInternal(themeName);
-    const filePath = path.join(USER_CUSTOM_HTML_THEMES_DIR, safeThemeName);
     try {
-        await ensureUserCustomHtmlThemesDirExists(); // 确保目录存在
+        const userDirectory = await ensureUserCustomHtmlThemesDirExists(ownerUserId);
+        const filePath = path.join(userDirectory, safeThemeName);
         // 确保文件存在才能更新
         try {
             await fs.access(filePath);
@@ -451,7 +489,6 @@ export const updateUserCustomHtmlTheme = async (themeName: string, content: stri
             throw accessError;
         }
         await fs.writeFile(filePath, content, 'utf-8');
-        console.log(`[AppearanceService] 用户自定义 HTML 主题 "${safeThemeName}" 更新成功。`);
     } catch (error: any) {
         console.error(`[AppearanceService] 更新用户自定义 HTML 主题 "${safeThemeName}" 失败:`, error);
         throw error;
@@ -463,18 +500,17 @@ export const updateUserCustomHtmlTheme = async (themeName: string, content: stri
  * @param themeName 主题文件名 (例如: my-custom-theme.html)
  * @returns Promise<void>
  */
-export const deleteUserCustomHtmlTheme = async (themeName: string): Promise<void> => {
+export const deleteUserCustomHtmlTheme = async (themeName: string, ownerUserId: number): Promise<void> => {
     const safeThemeName = sanitizeThemeNameInternal(themeName);
-    const filePath = path.join(USER_CUSTOM_HTML_THEMES_DIR, safeThemeName);
     try {
-        await ensureUserCustomHtmlThemesDirExists(); // 确保目录存在
+        const userDirectory = await ensureUserCustomHtmlThemesDirExists(ownerUserId);
+        const filePath = path.join(userDirectory, safeThemeName);
         await fs.unlink(filePath);
-        console.log(`[AppearanceService] 用户自定义 HTML 主题 "${safeThemeName}" 删除成功。`);
     } catch (error: any) {
-        console.error(`[AppearanceService] 删除用户自定义 HTML 主题 "${safeThemeName}" 失败:`, error);
         if (error.code === 'ENOENT') {
             throw new Error(`用户自定义 HTML 主题 "${safeThemeName}" 未找到，无法删除。`);
         }
+        console.error(`[AppearanceService] 删除用户自定义 HTML 主题 "${safeThemeName}" 失败:`, error.message);
         throw new Error(`无法删除用户自定义 HTML 主题 "${safeThemeName}"。`);
     }
 };
@@ -485,10 +521,10 @@ export const deleteUserCustomHtmlTheme = async (themeName: string): Promise<void
  * 获取所有 HTML 主题 (预设和用户自定义)
  * @returns Promise<Array<{ name: string, type: 'preset' | 'custom' }>>
  */
-export const listAllHtmlThemes = async (): Promise<Array<{ name: string, type: 'preset' | 'custom' }>> => {
+export const listAllHtmlThemes = async (ownerUserId: number): Promise<Array<{ name: string, type: 'preset' | 'custom' }>> => {
     try {
         const presetThemes = await listPresetHtmlThemes();
-        const customThemes = await listUserCustomHtmlThemes();
+        const customThemes = await listUserCustomHtmlThemes(ownerUserId);
         return [...presetThemes, ...customThemes];
     } catch (error) {
         console.error('[AppearanceService] 列出所有 HTML 主题失败:', error);
@@ -505,27 +541,27 @@ export const listAllHtmlThemes = async (): Promise<Array<{ name: string, type: '
  * @deprecated Use createUserCustomHtmlTheme instead. This function now creates a USER CUSTOM theme.
  *             The 'local' in its name is misleading under the new system.
  */
-export const createLocalHtmlPreset = async (themeName: string, content: string): Promise<void> => {
+export const createLocalHtmlPreset = async (themeName: string, content: string, ownerUserId: number): Promise<void> => {
     console.warn("[AppearanceService] createLocalHtmlPreset is deprecated and now operates on user custom themes. Consider using createUserCustomHtmlTheme.");
-    return createUserCustomHtmlTheme(themeName, content);
+    return createUserCustomHtmlTheme(themeName, content, ownerUserId);
 };
 
 /**
  * @deprecated Use updateUserCustomHtmlTheme instead. This function now updates a USER CUSTOM theme.
  *             The 'local' in its name is misleading under the new system.
  */
-export const updateLocalHtmlPreset = async (themeName: string, content: string): Promise<void> => {
+export const updateLocalHtmlPreset = async (themeName: string, content: string, ownerUserId: number): Promise<void> => {
     console.warn("[AppearanceService] updateLocalHtmlPreset is deprecated and now operates on user custom themes. Consider using updateUserCustomHtmlTheme.");
-    return updateUserCustomHtmlTheme(themeName, content);
+    return updateUserCustomHtmlTheme(themeName, content, ownerUserId);
 };
 
 /**
  * @deprecated Use deleteUserCustomHtmlTheme instead. This function now deletes a USER CUSTOM theme.
  *             The 'local' in its name is misleading under the new system.
  */
-export const deleteLocalHtmlPreset = async (themeName: string): Promise<void> => {
+export const deleteLocalHtmlPreset = async (themeName: string, ownerUserId: number): Promise<void> => {
     console.warn("[AppearanceService] deleteLocalHtmlPreset is deprecated and now operates on user custom themes. Consider using deleteUserCustomHtmlTheme.");
-    return deleteUserCustomHtmlTheme(themeName);
+    return deleteUserCustomHtmlTheme(themeName, ownerUserId);
 };
 
 

@@ -134,6 +134,13 @@ export const getBackgroundFileController = async (req: Request, res: Response): 
     }
 
     try {
+        const ownerSettings = await appearanceService.getSettings(req.authorization!.userId);
+        const requestedApiPath = `/api/v1/appearance/background/file/${filename}`;
+        if (ownerSettings.pageBackgroundImage !== requestedApiPath
+            && ownerSettings.terminalBackgroundImage !== requestedApiPath) {
+            res.status(404).json({ message: '文件未找到' });
+            return;
+        }
         // 构建文件的绝对路径 (基于 multer 的保存位置)
         const absolutePath = path.join(__dirname, '../../data/background/', filename);
 
@@ -197,7 +204,7 @@ export const removeTerminalBackgroundController = async (req: Request, res: Resp
 export const listLocalHtmlPresetsController = async (req: Request, res: Response): Promise<void> => {
     try {
         // 现在获取所有主题，包括预设和自定义，它们将带有 type 属性
-        const allThemes = await appearanceService.listAllHtmlThemes();
+        const allThemes = await appearanceService.listAllHtmlThemes(req.authorization!.userId);
         res.status(200).json(allThemes); // 直接返回带有 type 的列表
     } catch (error: any) {
         res.status(500).json({ message: '获取 HTML 主题列表失败', error: error.message });
@@ -213,7 +220,7 @@ export const getLocalHtmlPresetContentController = async (req: Request, res: Res
 
         // 1. 尝试作为用户自定义主题获取
         try {
-            content = await appearanceService.getUserCustomHtmlThemeContent(themeName);
+            content = await appearanceService.getUserCustomHtmlThemeContent(themeName, req.authorization!.userId);
             found = true;
         } catch (customError: any) {
             if (!customError.message.includes('未找到')) {
@@ -257,7 +264,7 @@ export const createLocalHtmlPresetController = async (req: Request, res: Respons
             return;
         }
         // "本地创建" 现在总是创建用户自定义主题
-        await appearanceService.createUserCustomHtmlTheme(name, content);
+        await appearanceService.createUserCustomHtmlTheme(name, content, req.authorization!.userId);
         res.status(201).json({ message: '用户自定义 HTML 主题创建成功' });
     } catch (error: any) {
         res.status(500).json({ message: '创建用户自定义 HTML 主题失败', error: error.message });
@@ -274,7 +281,7 @@ export const updateLocalHtmlPresetController = async (req: Request, res: Respons
             return;
         }
         // "本地更新" 现在总是更新用户自定义主题
-        await appearanceService.updateUserCustomHtmlTheme(themeName, content);
+        await appearanceService.updateUserCustomHtmlTheme(themeName, content, req.authorization!.userId);
         res.status(200).json({ message: '用户自定义 HTML 主题更新成功' });
     } catch (error: any) {
         if (error.message.includes('未找到')) {
@@ -290,7 +297,7 @@ export const deleteLocalHtmlPresetController = async (req: Request, res: Respons
     try {
         const themeName = req.params.themeName;
         // "本地删除" 现在总是删除用户自定义主题
-        await appearanceService.deleteUserCustomHtmlTheme(themeName);
+        await appearanceService.deleteUserCustomHtmlTheme(themeName, req.authorization!.userId);
         res.status(200).json({ message: '用户自定义 HTML 主题删除成功' });
     } catch (error: any) {
         if (error.message.includes('未找到')) {
