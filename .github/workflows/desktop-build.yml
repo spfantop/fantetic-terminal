@@ -14,6 +14,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build-desktop:
     name: ${{ matrix.name }}
@@ -71,10 +75,17 @@ jobs:
       - name: Install Electron dependencies
         run: npm ci --prefix electron-app
 
+      - name: Validate release version
+        env:
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag }}
+        run: node build-tools/validate-release-version.js
+
       - name: Build backend
         run: npm run build --workspace=@fantetic-terminal/backend
 
       - name: Build frontend
+        env:
+          VITE_FANTETIC_APP_MODE: electron
         run: npm run build --workspace=@fantetic-terminal/frontend
 
       - name: Package desktop application

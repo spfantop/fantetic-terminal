@@ -11,8 +11,8 @@ COPY packages/backend/package.json ./packages/backend/
 COPY packages/frontend/package.json ./packages/frontend/
 COPY packages/remote-gateway/package.json ./packages/remote-gateway/
 
-# Install dependencies (using install instead of ci for potential armv7 compatibility issues)
-RUN npm install
+# The lock file is the deployable dependency contract.
+RUN npm ci
 
 COPY build-tools ./build-tools
 COPY packages/frontend/src ./packages/frontend/src
@@ -20,9 +20,6 @@ COPY packages/frontend/index.html ./packages/frontend/
 COPY packages/frontend/tsconfig.json ./packages/frontend/
 COPY packages/frontend/vite.config.ts ./packages/frontend/
 COPY packages/frontend/public ./packages/frontend/public/
-
-# Copy the root .env file into the builder stage so Vite can read it during build
-COPY .env ./.env
 
 RUN npm run build --workspace=@fantetic-terminal/frontend
 
