@@ -43,6 +43,26 @@ assert.equal(decoration?.styles[9]?.underline, true);
 const cachedDecoration = highlighter.resolveLine(line);
 assert.equal(cachedDecoration, decoration, 'unchanged lines should reuse the resolved style cache');
 
+const equivalentLine = { ...line };
+highlighter.resolveLine(equivalentLine);
+assert.equal(
+  highlighter.getStats().rangeResolutionCount,
+  1,
+  'resize/reflow lines with the same text must reuse semantic range resolution',
+);
+
+for (let index = 0; index < 1100; index += 1) {
+  const text = `INFO ERROR ${index}`;
+  highlighter.resolveLine({
+    length: text.length,
+    translateToString: () => text,
+    getTrimmedLength: () => text.length,
+    getWidth: () => 1,
+    getString: (column: number) => text[column],
+  });
+}
+assert.ok(highlighter.getStats().lineDecorationCacheSize <= 1024, 'scrolling must not retain unbounded per-cell style arrays');
+
 const legacyText = 'INFO ERROR';
 const legacyLine = {
   length: legacyText.length,
@@ -251,6 +271,26 @@ assert.equal(sourceCell.fg, 0, 'the underlying terminal cell must remain untouch
 sourceCell.fg = 0x01000001;
 assert.equal(rowFactory.createRow(renderLine).fg, 0x01000001, 'remote ANSI colors must take precedence over local highlighting');
 sourceCell.fg = 0;
+const replacementRowFactory = {
+  createRow(renderedLine: typeof renderLine) {
+    const cell = { fg: 0, bg: 0, extended: sourceCell.extended };
+    renderedLine.loadCell(5, cell);
+    return cell;
+  },
+};
+terminal._core._renderService._renderer.value._rowFactory = replacementRowFactory;
+const resolutionsBeforeRendererReplacement = highlighter.getStats().rangeResolutionCount;
+assert.equal(highlighter.ensureAttached(terminal as never), true, 'renderer replacement must be detected and patched');
+assert.equal(
+  replacementRowFactory.createRow(renderLine).fg & 0x00ffffff,
+  0xef4444,
+  'highlighting must survive xterm renderer replacement after resize',
+);
+assert.equal(
+  highlighter.getStats().rangeResolutionCount,
+  resolutionsBeforeRendererReplacement,
+  'renderer replacement must preserve semantic text caches',
+);
 highlighter.dispose();
 assert.equal(rowFactory.createRow(renderLine).fg, 0, 'disposing should restore the original xterm row factory');
 

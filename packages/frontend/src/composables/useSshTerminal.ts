@@ -47,6 +47,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
     const terminalInstance = ref<Terminal | null>(null);
     const searchAddon = ref<SearchAddon | null>(null); // Keep searchAddon ref
     let ensureSearchAddonLoaded: (() => SearchAddon | null) | null = null;
+    let terminalWriteParsedDisposable: { dispose(): void } | null = null;
     // Removed search result state refs
     // const searchResultCount = ref(0);
     // const currentSearchResultIndex = ref(-1);
@@ -546,6 +547,10 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         if (!terminalRenderHighlighter.attach(term)) {
             console.warn(`[会话 ${sessionId}][SSH终端模块] 当前 xterm 渲染器不支持行级高亮，已保留原始终端输出。`);
         }
+        terminalWriteParsedDisposable?.dispose();
+        terminalWriteParsedDisposable = term.onWriteParsed(() => {
+            terminalRenderHighlighter.ensureAttached(term);
+        });
         searchAddon.value = addon ?? null; // *** 存储 searchAddon 实例 ***
         ensureSearchAddonLoaded = payload.ensureSearchAddonLoaded ?? null;
 
@@ -600,6 +605,15 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
 
     const handleTerminalResize = (dimensions: { cols: number; rows: number }) => {
         debugLog(`[SSH ${sessionId}] handleTerminalResize called with:`, dimensions);
+        const term = terminalInstance.value;
+        if (term) {
+            const terminalWindow = getTerminalWindow(term);
+            terminalWindow.requestAnimationFrame(() => {
+                if (terminalInstance.value !== term) return;
+                terminalRenderHighlighter.ensureAttached(term);
+                term.refresh(0, Math.max(term.rows - 1, 0));
+            });
+        }
         // 只有在连接状态下才发送 resize 命令给后端
         if (isConnected.value) {
             sendMessage({
@@ -818,6 +832,8 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         pendingOutputBytes = 0;
         updateOutputFrameBudget(OUTPUT_FRAME_BUDGET_DEFAULT_BYTES);
         terminalRenderHighlighter.dispose();
+        terminalWriteParsedDisposable?.dispose();
+        terminalWriteParsedDisposable = null;
         stopTerminalHighlightWatcher();
         resetTerminalLocalEcho(terminalLocalEchoState);
         if (inputFlushTimer !== null) {

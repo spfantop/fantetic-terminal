@@ -46,7 +46,11 @@ assert.equal(resolveLocalEchoText('q', state), 'q');
 
 const escapedEchoState = createTerminalLocalEchoState();
 recordLocalEcho('abc', escapedEchoState);
-assert.equal(consumeLocalEchoFromOutput('a\x1b[?2004hbc', escapedEchoState), '');
+assert.equal(
+  consumeLocalEchoFromOutput('a\x1b[?2004hbc', escapedEchoState),
+  '\x1b[?2004h',
+  'echo de-duplication must preserve remote terminal mode sequences',
+);
 assert.equal(hasPendingLocalEcho(escapedEchoState), false);
 
 recordLocalEcho('hel', state);

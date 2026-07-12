@@ -64,9 +64,11 @@ export function consumeLocalEchoFromOutput(output: string, state: TerminalLocalE
 
   let outputOffset = 0;
   let echoOffset = 0;
+  let preservedControlSequences = '';
   while (outputOffset < output.length && echoOffset < state.pendingEcho.length) {
     const controlEnd = readTerminalControlSequenceEnd(output, outputOffset);
     if (controlEnd > outputOffset) {
+      preservedControlSequences += output.slice(outputOffset, controlEnd);
       outputOffset = controlEnd;
       continue;
     }
@@ -86,7 +88,7 @@ export function consumeLocalEchoFromOutput(output: string, state: TerminalLocalE
   }
 
   state.pendingEcho = state.pendingEcho.slice(echoOffset);
-  const remainingOutput = output.slice(outputOffset);
+  const remainingOutput = preservedControlSequences + output.slice(outputOffset);
   rememberTerminalOutputText(remainingOutput, state);
   return remainingOutput;
 }
