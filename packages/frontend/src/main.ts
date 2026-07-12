@@ -1,7 +1,6 @@
 import { debugLog } from './composables/useDebugLog';
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
-import piniaPluginPersistedstate from 'pinia-plugin-persistedstate'; 
 import App from './App.vue';
 import router from './router'; 
 import i18n from './i18n';
@@ -13,10 +12,10 @@ import '@fortawesome/fontawesome-free/css/all.min.css';
 import 'splitpanes/dist/splitpanes.css';
 import ElementPlus from 'element-plus';
 import 'element-plus/dist/index.css';
+import { readRuntimeConfigEnv } from './utils/runtimeConfig';
 
 
 const pinia = createPinia(); // 创建 Pinia 实例
-pinia.use(piniaPluginPersistedstate); // 使用持久化插件
 
 const app = createApp(App);
 
@@ -85,7 +84,7 @@ app.use(i18n); // 使用 i18n
     app.mount('#app');
   }
 // --- PWA Service Worker Registration ---
-  if ('serviceWorker' in navigator) {
+  if (!readRuntimeConfigEnv().isElectron && 'serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('/sw.js').then(registration => {
         debugLog('SW registered: ', registration);

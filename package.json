@@ -33,7 +33,6 @@
     "archiver-zip-encrypted": "^2.0.0",
     "axios": "^1.8.4",
     "element-plus": "^2.9.11",
-    "pinia-plugin-persistedstate": "^4.2.0",
     "vuedraggable": "^4.1.0",
     "ws": "^8.18.1"
   },
