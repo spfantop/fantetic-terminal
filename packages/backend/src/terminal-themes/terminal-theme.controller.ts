@@ -24,7 +24,7 @@ const upload = multer({
  */
 export const getAllThemesController = async (req: Request, res: Response): Promise<void> => {
     try {
-        const themes = await terminalThemeService.getAllThemes();
+        const themes = await terminalThemeService.getAllThemes(req.authorization!.userId);
         res.status(200).json(themes);
     } catch (error: any) {
         res.status(500).json({ message: '获取终端主题列表失败', error: error.message });
@@ -41,7 +41,7 @@ export const getThemeByIdController = async (req: Request, res: Response): Promi
             res.status(400).json({ message: '无效的主题 ID' });
             return;
         }
-        const theme = await terminalThemeService.getThemeById(id);
+        const theme = await terminalThemeService.getThemeById(id, req.authorization!.userId);
         if (theme) {
             res.status(200).json(theme);
         } else {
@@ -63,7 +63,7 @@ export const createThemeController = async (req: Request, res: Response): Promis
              res.status(400).json({ message: '缺少主题名称或主题数据' });
              return;
         }
-        const newTheme = await terminalThemeService.createNewTheme(themeDto);
+        const newTheme = await terminalThemeService.createNewTheme(themeDto, req.authorization!.userId);
         res.status(201).json(newTheme);
     } catch (error: any) {
         // 检查是否是名称重复错误
@@ -91,7 +91,7 @@ export const updateThemeController = async (req: Request, res: Response): Promis
              res.status(400).json({ message: '缺少主题名称或主题数据' });
              return;
         }
-        const success = await terminalThemeService.updateExistingTheme(id, themeDto);
+        const success = await terminalThemeService.updateExistingTheme(id, themeDto, req.authorization!.userId);
         if (success) {
             res.status(200).json({ message: '主题更新成功' });
         } else {
@@ -117,7 +117,7 @@ export const deleteThemeController = async (req: Request, res: Response): Promis
             res.status(400).json({ message: '无效的主题 ID' });
             return;
         }
-        const success = await terminalThemeService.deleteExistingTheme(id);
+        const success = await terminalThemeService.deleteExistingTheme(id, req.authorization!.userId);
         if (success) {
             res.status(200).json({ message: '主题删除成功' });
         } else {
@@ -150,7 +150,7 @@ export const importThemeController = async (req: Request, res: Response): Promis
         const themeData: ITheme = JSON.parse(fileContent);
 
         // 调用 service 进行导入
-        const importedTheme = await terminalThemeService.importTheme(themeData, themeName);
+        const importedTheme = await terminalThemeService.importTheme(themeData, themeName, req.authorization!.userId);
 
         // 删除临时文件
         await fs.promises.unlink(filePath);
@@ -183,7 +183,7 @@ export const exportThemeController = async (req: Request, res: Response): Promis
             res.status(400).json({ message: '无效的主题 ID' });
             return;
         }
-        const theme = await terminalThemeService.getThemeById(id);
+        const theme = await terminalThemeService.getThemeById(id, req.authorization!.userId);
         if (theme) {
             const themeJson = JSON.stringify(theme.themeData, null, 2); // 格式化 JSON 输出
             const fileName = `${theme.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.json`; // 创建安全的文件名

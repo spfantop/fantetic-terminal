@@ -177,3 +177,38 @@ SELECT quick_command_id, tag_id FROM quick_command_tag_associations_before_owner
 DROP TABLE quick_command_tag_associations_before_owner_scope;
 DROP TABLE quick_command_tags_before_owner_scope;
 `;
+
+export const migrateTerminalThemesToOwnerScopedNamesSQL = `
+ALTER TABLE terminal_themes RENAME TO terminal_themes_before_owner_scope;
+CREATE TABLE terminal_themes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    theme_type TEXT NOT NULL CHECK(theme_type IN ('preset', 'user')),
+    foreground TEXT, background TEXT, cursor TEXT, cursor_accent TEXT,
+    selection_background TEXT, black TEXT, red TEXT, green TEXT, yellow TEXT,
+    blue TEXT, magenta TEXT, cyan TEXT, white TEXT, bright_black TEXT,
+    bright_red TEXT, bright_green TEXT, bright_yellow TEXT, bright_blue TEXT,
+    bright_magenta TEXT, bright_cyan TEXT, bright_white TEXT,
+    owner_user_id INTEGER NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+    updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+);
+INSERT INTO terminal_themes(
+    id, name, theme_type, foreground, background, cursor, cursor_accent,
+    selection_background, black, red, green, yellow, blue, magenta, cyan, white,
+    bright_black, bright_red, bright_green, bright_yellow, bright_blue,
+    bright_magenta, bright_cyan, bright_white, owner_user_id, created_at, updated_at
+)
+SELECT id, name, theme_type, foreground, background, cursor, cursor_accent,
+    selection_background, black, red, green, yellow, blue, magenta, cyan, white,
+    bright_black, bright_red, bright_green, bright_yellow, bright_blue,
+    bright_magenta, bright_cyan, bright_white, owner_user_id, created_at, updated_at
+FROM terminal_themes_before_owner_scope;
+CREATE UNIQUE INDEX ux_terminal_themes_preset_name
+    ON terminal_themes(name) WHERE theme_type = 'preset';
+CREATE UNIQUE INDEX ux_terminal_themes_user_owner_name
+    ON terminal_themes(owner_user_id, name) WHERE theme_type = 'user';
+CREATE INDEX idx_terminal_themes_owner_type
+    ON terminal_themes(owner_user_id, theme_type, name);
+DROP TABLE terminal_themes_before_owner_scope;
+`;

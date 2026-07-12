@@ -28,7 +28,15 @@ await exec(`
   CREATE TABLE quick_command_tags (id INTEGER PRIMARY KEY, name TEXT UNIQUE, created_at INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL DEFAULT 0);
   CREATE TABLE quick_command_tag_associations (quick_command_id INTEGER NOT NULL, tag_id INTEGER NOT NULL, PRIMARY KEY(quick_command_id, tag_id));
   CREATE TABLE favorite_paths (id INTEGER PRIMARY KEY, path TEXT);
-  CREATE TABLE terminal_themes (id INTEGER PRIMARY KEY, name TEXT, theme_type TEXT);
+  CREATE TABLE terminal_themes (
+    id INTEGER PRIMARY KEY, name TEXT UNIQUE, theme_type TEXT,
+    foreground TEXT, background TEXT, cursor TEXT, cursor_accent TEXT,
+    selection_background TEXT, black TEXT, red TEXT, green TEXT, yellow TEXT,
+    blue TEXT, magenta TEXT, cyan TEXT, white TEXT, bright_black TEXT,
+    bright_red TEXT, bright_green TEXT, bright_yellow TEXT, bright_blue TEXT,
+    bright_magenta TEXT, bright_cyan TEXT, bright_white TEXT,
+    created_at INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL DEFAULT 0
+  );
   CREATE TABLE audit_logs (id INTEGER PRIMARY KEY, details TEXT, timestamp INTEGER);
   CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, created_at INTEGER, updated_at INTEGER);
   CREATE TABLE appearance_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, created_at INTEGER, updated_at INTEGER);
@@ -40,7 +48,7 @@ await runMigrations(db);
 
 assert.deepEqual(
   await get<{ currentVersion: number }>('SELECT MAX(id) AS currentVersion FROM migrations'),
-  { currentVersion: 20 },
+  { currentVersion: 21 },
 );
 assert.deepEqual(
   await get<{ system_role: string }>('SELECT system_role FROM users WHERE id = 3'),

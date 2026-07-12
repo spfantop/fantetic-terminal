@@ -6,8 +6,8 @@ import type { ITheme } from 'xterm';
  * 获取所有终端主题
  * @returns Promise<TerminalTheme[]>
  */
-export const getAllThemes = async (): Promise<TerminalTheme[]> => {
-  return terminalThemeRepository.findAllThemes();
+export const getAllThemes = async (ownerUserId: number): Promise<TerminalTheme[]> => {
+  return terminalThemeRepository.findAllThemes(ownerUserId);
 };
 
 /**
@@ -15,11 +15,11 @@ export const getAllThemes = async (): Promise<TerminalTheme[]> => {
  * @param id 主题 ID (SQLite 数字 ID)
  * @returns Promise<TerminalTheme | null>
  */
-export const getThemeById = async (id: number): Promise<TerminalTheme | null> => {
+export const getThemeById = async (id: number, ownerUserId: number): Promise<TerminalTheme | null> => {
   if (isNaN(id)) {
     throw new Error('无效的主题 ID');
   }
-  return terminalThemeRepository.findThemeById(id);
+  return terminalThemeRepository.findThemeById(id, ownerUserId);
 };
 
 /**
@@ -27,14 +27,14 @@ export const getThemeById = async (id: number): Promise<TerminalTheme | null> =>
  * @param themeDto 创建数据
  * @returns Promise<TerminalTheme>
  */
-export const createNewTheme = async (themeDto: CreateTerminalThemeDto): Promise<TerminalTheme> => {
+export const createNewTheme = async (themeDto: CreateTerminalThemeDto, ownerUserId: number): Promise<TerminalTheme> => {
   // 移除验证相关的注释
   // 简单验证 themeData 结构 (确保基本字段存在)
   if (!themeDto.themeData || typeof themeDto.themeData.background !== 'string' || typeof themeDto.themeData.foreground !== 'string') {
       throw new Error('无效的主题数据格式');
   }
 
-  return terminalThemeRepository.createTheme(themeDto);
+  return terminalThemeRepository.createTheme(themeDto, ownerUserId);
 };
 
 /**
@@ -43,7 +43,7 @@ export const createNewTheme = async (themeDto: CreateTerminalThemeDto): Promise<
  * @param themeDto 更新数据
  * @returns Promise<boolean> 是否成功更新
  */
-export const updateExistingTheme = async (id: number, themeDto: UpdateTerminalThemeDto): Promise<boolean> => {
+export const updateExistingTheme = async (id: number, themeDto: UpdateTerminalThemeDto, ownerUserId: number): Promise<boolean> => {
   if (isNaN(id)) {
     throw new Error('无效的主题 ID');
   }
@@ -51,7 +51,7 @@ export const updateExistingTheme = async (id: number, themeDto: UpdateTerminalTh
   if (!themeDto.name || !themeDto.themeData || typeof themeDto.themeData.background !== 'string' || typeof themeDto.themeData.foreground !== 'string') {
       throw new Error('无效的主题更新数据');
   }
-  return terminalThemeRepository.updateTheme(id, themeDto);
+  return terminalThemeRepository.updateTheme(id, themeDto, ownerUserId);
 };
 
 /**
@@ -59,11 +59,11 @@ export const updateExistingTheme = async (id: number, themeDto: UpdateTerminalTh
  * @param id 主题 ID (SQLite 数字 ID)
  * @returns Promise<boolean> 是否成功删除
  */
-export const deleteExistingTheme = async (id: number): Promise<boolean> => {
+export const deleteExistingTheme = async (id: number, ownerUserId: number): Promise<boolean> => {
   if (isNaN(id)) {
     throw new Error('无效的主题 ID');
   }
-  return terminalThemeRepository.deleteTheme(id);
+  return terminalThemeRepository.deleteTheme(id, ownerUserId);
 };
 
 /**
@@ -72,7 +72,7 @@ export const deleteExistingTheme = async (id: number): Promise<boolean> => {
  * @param name 主题名称
  * @returns Promise<TerminalTheme>
  */
-export const importTheme = async (themeData: ITheme, name: string): Promise<TerminalTheme> => {
+export const importTheme = async (themeData: ITheme, name: string, ownerUserId: number): Promise<TerminalTheme> => {
     if (!name) {
         throw new Error('导入主题时必须提供名称');
     }
@@ -81,6 +81,6 @@ export const importTheme = async (themeData: ITheme, name: string): Promise<Term
         throw new Error('导入的主题数据格式无效');
     }
     const dto: CreateTerminalThemeDto = { name, themeData };
-    return createNewTheme(dto);
+    return createNewTheme(dto, ownerUserId);
 };
 

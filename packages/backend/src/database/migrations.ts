@@ -2,6 +2,7 @@ import { Database } from 'sqlite3';
 import {
     migrateLegacyResourcesToAccessControlSQL,
     migrateQuickCommandTagsToOwnerScopedNamesSQL,
+    migrateTerminalThemesToOwnerScopedNamesSQL,
     migrateTagsToOwnerScopedNamesSQL,
     migrateUserPrivateResourcesSQL,
 } from '../access-control/access-control.schema';
@@ -517,6 +518,15 @@ const definedMigrations: Migration[] = [
             return !!tableSql && /name\s+TEXT[^,\n]*\bUNIQUE\b/i.test(tableSql);
         },
         sql: migrateQuickCommandTagsToOwnerScopedNamesSQL,
+    },
+    {
+        id: 21,
+        name: 'Scope terminal theme names to their owning user',
+        check: async (db: Database): Promise<boolean> => {
+            const tableSql = await getTableCreateSQL(db, 'terminal_themes');
+            return !!tableSql && /name\s+TEXT[^,\n]*\bUNIQUE\b/i.test(tableSql);
+        },
+        sql: migrateTerminalThemesToOwnerScopedNamesSQL,
     }
 ];
 

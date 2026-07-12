@@ -19,7 +19,7 @@ export const settingsController = {
    */
   async getAppearanceSettings(req: Request, res: Response): Promise<void> {
     try {
-      const settings = await getAppearanceSettings();
+      const settings = await getAppearanceSettings(req.authorization!.userId);
       res.json(settings);
     } catch (error: any) {
       console.error('获取外观设置时出错:', error);
@@ -38,7 +38,7 @@ export const settingsController = {
         return;
       }
 
-      const result = await updateAppearanceSettingsInRepo(settingsDto);
+      const result = await updateAppearanceSettingsInRepo(settingsDto, req.authorization!.userId);
       if (result) {
         res.status(200).json({ message: '外观设置已成功更新' });
       } else {

@@ -11,13 +11,13 @@ const PRESET_HTML_THEMES_DIR = path.join(__dirname, '../../html-presets/');
 
 const USER_CUSTOM_HTML_THEMES_DIR = path.join(__dirname, '../../data/custom_html_theme/');
 
-const validateTerminalThemeId = async (themeId: number, fieldName: string): Promise<void> => {
+const validateTerminalThemeId = async (themeId: number, fieldName: string, ownerUserId: number): Promise<void> => {
   if (typeof themeId !== 'number') {
        console.error(`[AppearanceService] 收到的 ${fieldName} 不是有效的数字: ${themeId}`);
        throw new Error(`无效的终端主题 ID 类型，应为数字。`);
   }
   try {
-      const themeExists = await terminalThemeRepository.findThemeById(themeId);
+      const themeExists = await terminalThemeRepository.findThemeById(themeId, ownerUserId);
       if (!themeExists) {
           console.warn(`[AppearanceService] 尝试更新为不存在的终端主题数字 ID: ${themeId}`);
           throw new Error(`指定的终端主题 ID 不存在: ${themeId}`);
@@ -61,8 +61,8 @@ ensureUserCustomHtmlThemesDirExists();
  * 获取外观设置
  * @returns Promise<AppearanceSettings>
  */
-export const getSettings = async (): Promise<AppearanceSettings> => {
-  const settings = await appearanceRepository.getAppearanceSettings();
+export const getSettings = async (ownerUserId: number): Promise<AppearanceSettings> => {
+  const settings = await appearanceRepository.getAppearanceSettings(ownerUserId);
   // 为 terminalBackgroundOverlayOpacity 提供默认值
   if (settings.terminalBackgroundOverlayOpacity === undefined || settings.terminalBackgroundOverlayOpacity === null) {
     settings.terminalBackgroundOverlayOpacity = 0;
@@ -75,7 +75,7 @@ export const getSettings = async (): Promise<AppearanceSettings> => {
  * @param settingsDto 更新数据
  * @returns Promise<boolean> 是否成功更新
  */
-export const updateSettings = async (settingsDto: UpdateAppearanceDto): Promise<boolean> => {
+export const updateSettings = async (settingsDto: UpdateAppearanceDto, ownerUserId: number): Promise<boolean> => {
   if (
     settingsDto.uiThemeMode !== undefined
     && settingsDto.uiThemeMode !== 'default'
@@ -87,7 +87,7 @@ export const updateSettings = async (settingsDto: UpdateAppearanceDto): Promise<
   // 验证 activeTerminalThemeId (如果提供了)
   if (settingsDto.activeTerminalThemeId !== undefined && settingsDto.activeTerminalThemeId !== null) {
       const themeIdNum = settingsDto.activeTerminalThemeId; // ID is now number | null
-      await validateTerminalThemeId(themeIdNum, 'activeTerminalThemeId');
+      await validateTerminalThemeId(themeIdNum, 'activeTerminalThemeId', ownerUserId);
   } else if (settingsDto.hasOwnProperty('activeTerminalThemeId') && settingsDto.activeTerminalThemeId === null) {
       // 处理显式设置为 null (表示重置为默认/无用户主题)
       console.log(`[AppearanceService] 接收到将 activeTerminalThemeId 设置为 null 的请求。`);
@@ -95,11 +95,11 @@ export const updateSettings = async (settingsDto: UpdateAppearanceDto): Promise<
   }
 
   if (settingsDto.activeDefaultTerminalThemeId !== undefined && settingsDto.activeDefaultTerminalThemeId !== null) {
-      await validateTerminalThemeId(settingsDto.activeDefaultTerminalThemeId, 'activeDefaultTerminalThemeId');
+      await validateTerminalThemeId(settingsDto.activeDefaultTerminalThemeId, 'activeDefaultTerminalThemeId', ownerUserId);
   }
 
   if (settingsDto.activeDarkTerminalThemeId !== undefined && settingsDto.activeDarkTerminalThemeId !== null) {
-      await validateTerminalThemeId(settingsDto.activeDarkTerminalThemeId, 'activeDarkTerminalThemeId');
+      await validateTerminalThemeId(settingsDto.activeDarkTerminalThemeId, 'activeDarkTerminalThemeId', ownerUserId);
   }
 
   // 验证 terminalFontSize (如果提供了)
@@ -211,7 +211,7 @@ export const updateSettings = async (settingsDto: UpdateAppearanceDto): Promise<
     }
   }
 
-  return appearanceRepository.updateAppearanceSettings(settingsDto);
+  return appearanceRepository.updateAppearanceSettings(settingsDto, ownerUserId);
 };
 /**
  * 移除页面背景图片
@@ -219,8 +219,8 @@ export const updateSettings = async (settingsDto: UpdateAppearanceDto): Promise<
  * 2. 如果路径存在，删除文件系统中的文件
  * 3. 更新数据库中的路径为空字符串
  */
-export const removePageBackground = async (): Promise<boolean> => {
-    const currentSettings = await getSettings();
+export const removePageBackground = async (ownerUserId: number): Promise<boolean> => {
+    const currentSettings = await getSettings(ownerUserId);
     const filePath = currentSettings.pageBackgroundImage;
 
     if (filePath) {
@@ -247,7 +247,7 @@ export const removePageBackground = async (): Promise<boolean> => {
     }
 
     // 无论文件删除是否成功（或文件是否存在），都尝试清空数据库记录
-    return updateSettings({ pageBackgroundImage: '' });
+    return updateSettings({ pageBackgroundImage: '' }, ownerUserId);
 };
 
 /**
@@ -256,8 +256,8 @@ export const removePageBackground = async (): Promise<boolean> => {
  * 2. 如果路径存在，删除文件系统中的文件
  * 3. 更新数据库中的路径为空字符串
  */
-export const removeTerminalBackground = async (): Promise<boolean> => {
-    const currentSettings = await getSettings();
+export const removeTerminalBackground = async (ownerUserId: number): Promise<boolean> => {
+    const currentSettings = await getSettings(ownerUserId);
     const filePath = currentSettings.terminalBackgroundImage;
 
     if (filePath) {
@@ -279,7 +279,7 @@ export const removeTerminalBackground = async (): Promise<boolean> => {
     }
 
     // 无论文件删除是否成功（或文件是否存在），都尝试清空数据库记录
-    return updateSettings({ terminalBackgroundImage: '' });
+    return updateSettings({ terminalBackgroundImage: '' }, ownerUserId);
 };
 
 
@@ -535,9 +535,9 @@ export const deleteLocalHtmlPreset = async (themeName: string): Promise<void> =>
  * 获取当前存储的远程仓库链接
  * @returns Promise<string | null> 远程仓库 URL 或 null
  */
-export const getRemoteHtmlPresetsRepositoryUrl = async (): Promise<string | null> => {
+export const getRemoteHtmlPresetsRepositoryUrl = async (ownerUserId: number): Promise<string | null> => {
     try {
-        const settings = await getSettings();
+        const settings = await getSettings(ownerUserId);
         return settings.remoteHtmlPresetsUrl !== undefined ? settings.remoteHtmlPresetsUrl : null;
     } catch (error: any) {
         console.error('[AppearanceService] 获取远程 HTML 主题仓库链接失败:', error);
@@ -550,7 +550,7 @@ export const getRemoteHtmlPresetsRepositoryUrl = async (): Promise<string | null
  * @param url 新的远程仓库 URL (可以是 null 或空字符串来清除)
  * @returns Promise<void>
  */
-export const updateRemoteHtmlPresetsRepositoryUrl = async (url: string | null): Promise<void> => {
+export const updateRemoteHtmlPresetsRepositoryUrl = async (url: string | null, ownerUserId: number): Promise<void> => {
     try {
         // 验证 URL 格式 (可选, 但推荐)
         if (url && typeof url === 'string' && url.trim() !== '') {
@@ -566,7 +566,7 @@ export const updateRemoteHtmlPresetsRepositoryUrl = async (url: string | null): 
             throw new Error('无效的 URL 值。');
         }
 
-        await updateSettings({ remoteHtmlPresetsUrl: url });
+        await updateSettings({ remoteHtmlPresetsUrl: url }, ownerUserId);
         console.log(`[AppearanceService] 远程 HTML 主题仓库链接更新为: ${url}`);
     } catch (error: any) {
         console.error('[AppearanceService] 更新远程 HTML 主题仓库链接失败:', error);
@@ -614,10 +614,10 @@ const parseGitHubRepoUrl = (repoUrl: string): { user: string; repo: string; repo
  * @param repoUrl 可选的仓库 URL。如果不提供，则使用已保存的链接。
  * @returns Promise<Array<{ name: string, downloadUrl: string | null }>> 主题对象列表
  */
-export const listRemoteHtmlPresets = async (repoUrl?: string): Promise<Array<{ name: string, downloadUrl: string | null }>> => {
+export const listRemoteHtmlPresets = async (ownerUserId: number, repoUrl?: string): Promise<Array<{ name: string, downloadUrl: string | null }>> => {
     let urlToFetch = repoUrl;
     if (!urlToFetch) {
-        const savedUrl = await getRemoteHtmlPresetsRepositoryUrl();
+        const savedUrl = await getRemoteHtmlPresetsRepositoryUrl(ownerUserId);
         if (!savedUrl) {
             throw new Error('未提供远程仓库链接，且未找到已保存的链接。');
         }

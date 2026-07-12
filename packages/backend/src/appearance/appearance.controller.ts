@@ -40,7 +40,7 @@ const backgroundUpload = multer({
  */
 export const getAppearanceSettingsController = async (req: Request, res: Response): Promise<void> => {
     try {
-        const settings = await appearanceService.getSettings();
+        const settings = await appearanceService.getSettings(req.authorization!.userId);
         res.status(200).json(settings);
     } catch (error: any) {
         res.status(500).json({ message: '获取外观设置失败', error: error.message });
@@ -53,9 +53,10 @@ export const getAppearanceSettingsController = async (req: Request, res: Respons
 export const updateAppearanceSettingsController = async (req: Request, res: Response): Promise<void> => {
     try {
         const settingsDto: UpdateAppearanceDto = req.body;
-        const success = await appearanceService.updateSettings(settingsDto);
+        const ownerUserId = req.authorization!.userId;
+        const success = await appearanceService.updateSettings(settingsDto, ownerUserId);
         if (success) {
-            const updatedSettings = await appearanceService.getSettings();
+            const updatedSettings = await appearanceService.getSettings(ownerUserId);
             res.status(200).json(updatedSettings);
         } else {
             res.status(500).json({ message: '更新外观设置似乎失败了' });
@@ -79,7 +80,7 @@ export const uploadPageBackgroundController = async (req: Request, res: Response
         const apiPath = `/api/v1/appearance/background/file/${req.file.filename}`;
 
         // 更新数据库中的设置，保存 API 路径
-        await appearanceService.updateSettings({ pageBackgroundImage: apiPath });
+        await appearanceService.updateSettings({ pageBackgroundImage: apiPath }, req.authorization!.userId);
 
         // 返回新的 API 路径给前端
         res.status(200).json({ message: '页面背景上传成功', filePath: apiPath });
@@ -106,7 +107,7 @@ export const uploadTerminalBackgroundController = async (req: Request, res: Resp
         const apiPath = `/api/v1/appearance/background/file/${req.file.filename}`;
 
         // 更新数据库中的设置，保存 API 路径
-        await appearanceService.updateSettings({ terminalBackgroundImage: apiPath });
+        await appearanceService.updateSettings({ terminalBackgroundImage: apiPath }, req.authorization!.userId);
 
         // 返回新的 API 路径给前端
         res.status(200).json({ message: '终端背景上传成功', filePath: apiPath });
@@ -171,7 +172,7 @@ export const uploadTerminalBackgroundMiddleware = backgroundUpload.single('termi
  */
 export const removePageBackgroundController = async (req: Request, res: Response): Promise<void> => {
     try {
-        await appearanceService.removePageBackground();
+        await appearanceService.removePageBackground(req.authorization!.userId);
         res.status(200).json({ message: '页面背景已移除' });
     } catch (error: any) {
         res.status(500).json({ message: '移除页面背景失败', error: error.message });
@@ -183,7 +184,7 @@ export const removePageBackgroundController = async (req: Request, res: Response
  */
 export const removeTerminalBackgroundController = async (req: Request, res: Response): Promise<void> => {
     try {
-        await appearanceService.removeTerminalBackground();
+        await appearanceService.removeTerminalBackground(req.authorization!.userId);
         res.status(200).json({ message: '终端背景已移除' });
     } catch (error: any) {
         res.status(500).json({ message: '移除终端背景失败', error: error.message });
@@ -303,7 +304,7 @@ export const deleteLocalHtmlPresetController = async (req: Request, res: Respons
 // GET /api/v1/appearance/html-presets/remote/repository-url
 export const getRemoteHtmlPresetsRepositoryUrlController = async (req: Request, res: Response): Promise<void> => {
     try {
-        const url = await appearanceService.getRemoteHtmlPresetsRepositoryUrl();
+        const url = await appearanceService.getRemoteHtmlPresetsRepositoryUrl(req.authorization!.userId);
         res.status(200).json({ url });
     } catch (error: any) {
         res.status(500).json({ message: '获取远程 HTML 主题仓库链接失败', error: error.message });
@@ -319,7 +320,7 @@ export const updateRemoteHtmlPresetsRepositoryUrlController = async (req: Reques
             res.status(400).json({ message: 'URL 不能为空或 undefined' });
             return;
         }
-        await appearanceService.updateRemoteHtmlPresetsRepositoryUrl(url);
+        await appearanceService.updateRemoteHtmlPresetsRepositoryUrl(url, req.authorization!.userId);
         res.status(200).json({ message: '远程 HTML 主题仓库链接更新成功' });
     } catch (error: any) {
         res.status(500).json({ message: '更新远程 HTML 主题仓库链接失败', error: error.message });
@@ -330,7 +331,7 @@ export const updateRemoteHtmlPresetsRepositoryUrlController = async (req: Reques
 export const listRemoteHtmlPresetsController = async (req: Request, res: Response): Promise<void> => {
     try {
         const repoUrl = req.query.repoUrl as string | undefined;
-        const presets = await appearanceService.listRemoteHtmlPresets(repoUrl);
+        const presets = await appearanceService.listRemoteHtmlPresets(req.authorization!.userId, repoUrl);
         res.status(200).json(presets);
     } catch (error: any) {
         res.status(500).json({ message: '获取远程 HTML 主题列表失败', error: error.message });
