@@ -7,6 +7,7 @@ export type RuntimeSecretInput = {
   appMode?: string;
   encryptionKey?: string;
   sessionSecret?: string;
+  gatewaySharedSecret?: string;
   randomHex?: (bytes: number) => string;
 };
 
@@ -25,6 +26,9 @@ export const resolveRuntimeSecrets = (input: RuntimeSecretInput): ResolvedRuntim
   const missingOrInvalid: string[] = [];
   if (!isValidEncryptionKey(input.encryptionKey)) missingOrInvalid.push('ENCRYPTION_KEY');
   if (!isValidSessionSecret(input.sessionSecret)) missingOrInvalid.push('SESSION_SECRET');
+  if (productionWeb && !isValidSessionSecret(input.gatewaySharedSecret)) {
+    missingOrInvalid.push('REMOTE_GATEWAY_SHARED_SECRET');
+  }
 
   if (productionWeb && missingOrInvalid.length > 0) {
     throw new Error(`Missing or invalid production secrets: ${missingOrInvalid.join(', ')}.`);
@@ -87,6 +91,7 @@ export const initializeRuntimeSecrets = (envFilePath: string): ResolvedRuntimeSe
     appMode: process.env.FANTETIC_APP_MODE,
     encryptionKey: process.env.ENCRYPTION_KEY,
     sessionSecret: process.env.SESSION_SECRET,
+    gatewaySharedSecret: process.env.REMOTE_GATEWAY_SHARED_SECRET,
   });
   persistRuntimeSecrets(envFilePath, resolved.generatedValues);
   process.env.ENCRYPTION_KEY = resolved.encryptionKey;

@@ -5,6 +5,7 @@
   "scripts": {
     "test": "npm run test:health",
     "test:health": "esbuild src/test/health.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/gateway-health.behavior-test.mjs && node ../../.vite-codex-cache/gateway-health.behavior-test.mjs",
+    "test:security": "esbuild src/test/security.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/gateway-security.behavior-test.mjs && node ../../.vite-codex-cache/gateway-security.behavior-test.mjs",
     "build": "tsc",
     "start": "node dist/server.js",
     "dev": "nodemon --exec \"ts-node --files src/server.ts\""

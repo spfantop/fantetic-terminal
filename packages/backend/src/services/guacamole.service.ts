@@ -39,6 +39,10 @@ export const getRemoteDesktopToken = async (
     dpi?: string, // DPI 主要用于 RDP
     displayOptions: RemoteDesktopDisplayOptions = {}
 ): Promise<string> => {
+    const gatewaySharedSecret = process.env.REMOTE_GATEWAY_SHARED_SECRET;
+    if (!gatewaySharedSecret || gatewaySharedSecret.length < 32) {
+        throw new Error('REMOTE_GATEWAY_SHARED_SECRET 未配置或长度不足。');
+    }
     if ((protocol === 'rdp' || protocol === 'vnc') && connection.auth_method === 'password' && !decryptedPassword) {
         console.warn(`[GuacamoleService:getRemoteDesktopToken] ${protocol.toUpperCase()} connection ${connection.id} uses password auth but password decryption failed or password not provided.`);
         throw new Error(`${protocol.toUpperCase()} 连接使用密码认证，但密码解密失败或未提供密码。`);
@@ -87,7 +91,8 @@ export const getRemoteDesktopToken = async (
 
     try {
         const response = await axios.post<TokenResponse>(tokenUrl, requestBody, {
-            timeout: 10000 // 10 秒超时
+            timeout: 10000,
+            headers: { 'x-fantetic-gateway-secret': gatewaySharedSecret },
         });
 
         if (response.status !== 200 || !response.data?.token) {

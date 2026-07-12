@@ -21,6 +21,14 @@ assert.throws(() => resolveRuntimeSecrets({
   nodeEnv: 'production', appMode: 'web', encryptionKey: 'short', sessionSecret: 'also-short',
 }), /ENCRYPTION_KEY/);
 
+assert.throws(() => resolveRuntimeSecrets({
+  nodeEnv: 'production',
+  appMode: 'web',
+  encryptionKey: 'a'.repeat(64),
+  sessionSecret: 'b'.repeat(64),
+  gatewaySharedSecret: undefined,
+}), /REMOTE_GATEWAY_SHARED_SECRET/);
+
 const updated = updateEnvDocument(
   '# existing\nENCRYPTION_KEY=old\nOTHER=value\nENCRYPTION_KEY=duplicate\n',
   { ENCRYPTION_KEY: 'new-key', SESSION_SECRET: 'new-secret' },
