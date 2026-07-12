@@ -25,6 +25,11 @@ const repository: UserAdministrationRepository = {
     const current = users.get(userId);
     users.set(userId, { ...current, hashedPassword, authEpoch: (current.authEpoch ?? 0) + 1 });
   },
+  async deleteUser(userId, transferToUserId) {
+    const transferred = users.get(transferToUserId);
+    users.set(transferToUserId, { ...transferred, receivedFrom: userId });
+    users.delete(userId);
+  },
   async countActiveSuperAdmins() {
     return [...users.values()].filter((user) => user.systemRole === 'super_admin' && user.status === 'active').length;
   },
@@ -76,3 +81,12 @@ await assert.rejects(
   application.resetPassword(superAdmin, alice.id, 'too-short'),
   /12 characters/i,
 );
+
+users.set(8, { id: 8, username: 'receiver', systemRole: 'user', status: 'active' });
+await application.deleteUser(superAdmin, alice.id, 8);
+assert.equal(users.has(alice.id), false);
+assert.equal(users.get(8).receivedFrom, alice.id);
+
+await assert.rejects(application.deleteUser(admin, 8, 5), /super administrator/i);
+await assert.rejects(application.deleteUser(superAdmin, 8, 8), /different/i);
+await assert.rejects(application.deleteUser(superAdmin, 1, 8), /yourself/i);

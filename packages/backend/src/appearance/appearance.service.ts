@@ -20,6 +20,10 @@ const USER_CUSTOM_HTML_THEMES_DIR = path.join(__dirname, '../../data/custom_html
 const USER_CUSTOM_HTML_THEMES_ROOT = path.join(getAppDataPath(), 'custom-html-themes', 'users');
 const BACKGROUND_FILES_DIR = path.join(__dirname, '../../data/background/');
 
+export const deleteUserCustomHtmlThemes = async (ownerUserId: number): Promise<void> => {
+    await fs.rm(path.join(USER_CUSTOM_HTML_THEMES_ROOT, String(ownerUserId)), { recursive: true, force: true });
+};
+
 const resolveStoredBackgroundPath = (apiPath: string): string => {
     const filename = path.basename(apiPath);
     if (!filename || apiPath !== `/api/v1/appearance/background/file/${filename}`) {

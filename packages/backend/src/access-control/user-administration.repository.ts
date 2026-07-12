@@ -76,6 +76,44 @@ export class SqliteUserAdministrationRepository implements UserAdministrationRep
     if (result.changes === 0) throw new Error('User not found.');
   }
 
+  async deleteUser(userId: number, transferToUserId: number): Promise<void> {
+    const db = await this.getDatabase();
+    await runDb(db, 'BEGIN IMMEDIATE TRANSACTION');
+    try {
+      await runDb(db, `
+        INSERT INTO user_group_members(group_id, user_id, role)
+        SELECT group_id, ?, 'owner' FROM user_group_members
+        WHERE user_id = ? AND role = 'owner'
+        ON CONFLICT(group_id, user_id) DO UPDATE SET role = 'owner', updated_at = strftime('%s', 'now')
+      `, [transferToUserId, userId]);
+      await runDb(db, `
+        INSERT OR IGNORE INTO connection_tags(connection_id, tag_id)
+        SELECT connection_tags.connection_id, receiver_tag.id
+        FROM connection_tags
+        JOIN tags source_tag ON source_tag.id = connection_tags.tag_id
+        JOIN tags receiver_tag
+          ON receiver_tag.owner_user_id = ? AND receiver_tag.name = source_tag.name
+        WHERE source_tag.owner_user_id = ?
+      `, [transferToUserId, userId]);
+      await runDb(db, `
+        DELETE FROM tags
+        WHERE owner_user_id = ? AND EXISTS (
+          SELECT 1 FROM tags receiver_tag
+          WHERE receiver_tag.owner_user_id = ? AND receiver_tag.name = tags.name
+        )
+      `, [userId, transferToUserId]);
+      for (const table of ['connections', 'proxies', 'ssh_keys', 'connection_folders', 'tags']) {
+        await runDb(db, `UPDATE ${table} SET owner_user_id = ? WHERE owner_user_id = ?`, [transferToUserId, userId]);
+      }
+      const result = await runDb(db, 'DELETE FROM users WHERE id = ?', [userId]);
+      if (result.changes === 0) throw new Error('User not found.');
+      await runDb(db, 'COMMIT');
+    } catch (error) {
+      await runDb(db, 'ROLLBACK').catch(() => undefined);
+      throw error;
+    }
+  }
+
   async countActiveSuperAdmins(): Promise<number> {
     const row = await getDb<{ count: number }>(await this.getDatabase(), `
       SELECT COUNT(*) AS count FROM users

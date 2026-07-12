@@ -5,6 +5,8 @@ export type AuditLogActionType =
   | 'LOGIN_FAILURE'
   | 'LOGOUT'
   | 'PASSWORD_CHANGED'
+  | 'USER_PASSWORD_RESET'
+  | 'USER_DELETED'
   | '2FA_ENABLED'
   | '2FA_DISABLED'
   // Passkey Events

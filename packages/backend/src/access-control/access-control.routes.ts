@@ -15,6 +15,7 @@ import {
 } from './access-control.controller';
 import {
   createUser,
+  deleteUser,
   listUsers,
   resetUserPassword,
   updateUser,
@@ -27,6 +28,7 @@ router.get('/users', listUsers);
 router.post('/users', createUser);
 router.patch('/users/:userId', updateUser);
 router.put('/users/:userId/password', resetUserPassword);
+router.delete('/users/:userId', deleteUser);
 
 router.get('/groups', listGroups);
 router.post('/groups', createGroup);

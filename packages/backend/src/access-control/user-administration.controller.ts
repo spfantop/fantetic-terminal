@@ -4,11 +4,14 @@ import { Request, Response } from 'express';
 import { SystemRole } from './access-policy';
 import { UserAdministrationApplication } from './user-administration.application';
 import { userAdministrationRepository } from './user-administration.repository';
+import { AuditLogService } from '../audit/audit.service';
+import { deleteUserCustomHtmlThemes } from '../appearance/appearance.service';
 
 const application = new UserAdministrationApplication(
   userAdministrationRepository,
   (password) => bcrypt.hash(password, 12),
 );
+const auditLogService = new AuditLogService();
 const SYSTEM_ROLE_SET = new Set<SystemRole>(['super_admin', 'admin', 'user', 'auditor']);
 const STATUS_SET = new Set(['active', 'disabled'] as const);
 
@@ -61,6 +64,33 @@ export const resetUserPassword = async (req: Request, res: Response): Promise<vo
   }
   try {
     await application.resetPassword(req.authorization!, userId, password);
+    await auditLogService.logAction('USER_PASSWORD_RESET', {
+      actorUserId: req.authorization!.userId,
+      targetUserId: userId,
+    });
+    res.status(204).send();
+  } catch (error) { handleError(error, res); }
+};
+
+export const deleteUser = async (req: Request, res: Response): Promise<void> => {
+  const userId = Number(req.params.userId);
+  const transferToUserId = Number(req.query.transferToUserId ?? req.body?.transferToUserId);
+  if (!Number.isInteger(userId) || userId <= 0
+    || !Number.isInteger(transferToUserId) || transferToUserId <= 0) {
+    res.status(400).json({ code: 'userAdministration.invalidRequest' }); return;
+  }
+  try {
+    await application.deleteUser(req.authorization!, userId, transferToUserId);
+    try {
+      await deleteUserCustomHtmlThemes(userId);
+    } catch (error) {
+      console.error(`[UserAdministration] 清理用户 ${userId} 的自定义 HTML 主题失败:`, error);
+    }
+    await auditLogService.logAction('USER_DELETED', {
+      actorUserId: req.authorization!.userId,
+      targetUserId: userId,
+      transferToUserId,
+    });
     res.status(204).send();
   } catch (error) { handleError(error, res); }
 };

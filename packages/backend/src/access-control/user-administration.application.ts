@@ -22,6 +22,7 @@ export interface UserAdministrationRepository {
     status?: 'active' | 'disabled';
   }): Promise<ManagedUser>;
   updatePassword(userId: number, hashedPassword: string): Promise<void>;
+  deleteUser(userId: number, transferToUserId: number): Promise<void>;
   countActiveSuperAdmins(): Promise<number>;
 }
 
@@ -100,5 +101,26 @@ export class UserAdministrationApplication {
       throw new Error('A super administrator is required to manage administrators.');
     }
     await this.repository.updatePassword(userId, await this.hashPassword(password));
+  }
+
+  async deleteUser(
+    subject: AuthorizationSubject,
+    userId: number,
+    transferToUserId: number,
+  ): Promise<void> {
+    if (subject.systemRole !== 'super_admin') throw new Error('A super administrator is required.');
+    if (subject.userId === userId) throw new Error('You cannot delete yourself.');
+    if (userId === transferToUserId) throw new Error('A different transfer user is required.');
+    const [target, receiver] = await Promise.all([
+      this.repository.readUser(userId),
+      this.repository.readUser(transferToUserId),
+    ]);
+    if (!target || !receiver) throw new Error('User not found.');
+    if (receiver.status !== 'active') throw new Error('The transfer user must be active.');
+    if (target.systemRole === 'super_admin' && target.status === 'active'
+      && await this.repository.countActiveSuperAdmins() <= 1) {
+      throw new Error('The last active super administrator cannot be removed.');
+    }
+    await this.repository.deleteUser(userId, transferToUserId);
   }
 }
