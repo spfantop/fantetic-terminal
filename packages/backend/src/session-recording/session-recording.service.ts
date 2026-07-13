@@ -11,6 +11,7 @@ import {
   SessionRecordingRow,
 } from './session-recording.repository';
 import { createLogger } from '../logging/logger';
+import type { SessionRecordingListQuery } from '@fantetic-terminal/contracts';
 
 const logger = createLogger('SessionRecordingService');
 
@@ -85,10 +86,11 @@ export const canReadRecording = (
 
 export const listReadableRecordings = async (
   subject: { runtime: string; systemRole: string; userId?: number },
-): Promise<SessionRecordingRow[]> => (
+  query: SessionRecordingListQuery = {},
+) => (
   subject.runtime === 'desktop' || ['super_admin', 'admin', 'auditor'].includes(subject.systemRole)
-    ? listSessionRecordings()
-    : listSessionRecordings(subject.userId)
+    ? listSessionRecordings(query)
+    : listSessionRecordings({ ...query, userId: subject.userId })
 );
 
 export const readRecordingForSubject = async (

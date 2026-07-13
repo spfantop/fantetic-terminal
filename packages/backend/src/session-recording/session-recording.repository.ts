@@ -1,5 +1,5 @@
 import { allDb, getDb, getDbInstance, runDb } from '../database/connection';
-import type { SessionRecordingMetadata } from '@fantetic-terminal/contracts';
+import type { SessionRecordingListQuery, SessionRecordingMetadata } from '@fantetic-terminal/contracts';
 
 export type SessionRecordingRow = SessionRecordingMetadata;
 
@@ -27,11 +27,27 @@ export const completeSessionRecording = async (
   [endedAt, status, eventCount, byteCount, id]);
 };
 
-export const listSessionRecordings = async (userId?: number): Promise<SessionRecordingRow[]> => {
+export const listSessionRecordings = async (query: SessionRecordingListQuery & { userId?: number } = {}) => {
   const db = await getDbInstance();
-  const where = userId === undefined ? '' : 'WHERE user_id = ?';
-  return allDb(db, `SELECT * FROM session_recordings ${where} ORDER BY started_at DESC LIMIT 500`,
-    userId === undefined ? [] : [userId]);
+  const clauses: string[] = [];
+  const params: Array<string | number> = [];
+  if (query.userId !== undefined) { clauses.push('user_id = ?'); params.push(query.userId); }
+  if (query.query?.trim()) {
+    clauses.push('(LOWER(connection_name) LIKE ? OR LOWER(COALESCE(username, \'\')) LIKE ?)');
+    const search = `%${query.query.trim().toLocaleLowerCase()}%`;
+    params.push(search, search);
+  }
+  if (query.status) { clauses.push('status = ?'); params.push(query.status); }
+  if (query.startedAfter !== undefined) { clauses.push('started_at >= ?'); params.push(query.startedAfter); }
+  if (query.startedBefore !== undefined) { clauses.push('started_at <= ?'); params.push(query.startedBefore); }
+  const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+  const limit = Math.min(100, Math.max(1, query.limit ?? 25));
+  const offset = Math.max(0, query.offset ?? 0);
+  const [itemList, count] = await Promise.all([
+    allDb<SessionRecordingRow>(db, `SELECT * FROM session_recordings ${where} ORDER BY started_at DESC LIMIT ? OFFSET ?`, [...params, limit, offset]),
+    getDb<{ total: number }>(db, `SELECT COUNT(*) AS total FROM session_recordings ${where}`, params),
+  ]);
+  return { itemList, total: count?.total ?? 0, limit, offset };
 };
 
 export const readSessionRecording = async (id: string): Promise<SessionRecordingRow | undefined> => {

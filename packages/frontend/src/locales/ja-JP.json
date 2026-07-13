@@ -2023,7 +2023,7 @@
     "play": "再生",
     "stop": "停止",
     "speed": "速度",
-    "player": "端末セッションプレーヤー",
+    "player": "端末セッションプレーヤー", "searchPlaceholder": "接続名またはユーザー名", "startedAfter": "開始日時", "total": "全 {count} 件", "duration": "時間", "events": "イベント", "size": "サイズ", "preparing": "再生を準備中…", "timeline": "再生タイムライン", "selectHint": "録画を選択して詳細を確認し、再生します。",
     "status": { "active": "進行中", "completed": "完了", "incomplete": "不完全", "failed": "失敗" }
   }
 }

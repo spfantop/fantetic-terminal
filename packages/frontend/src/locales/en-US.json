@@ -2042,7 +2042,7 @@
     "play": "Replay",
     "stop": "Stop",
     "speed": "Speed",
-    "player": "Terminal session player",
+    "player": "Terminal session player", "searchPlaceholder": "Connection or username", "startedAfter": "Started after", "total": "{count} total", "duration": "Duration", "events": "Events", "size": "Size", "preparing": "Preparing replay…", "timeline": "Replay timeline", "selectHint": "Select a recording to inspect and replay.",
     "status": { "active": "Active", "completed": "Completed", "incomplete": "Incomplete", "failed": "Failed" }
   }
 }

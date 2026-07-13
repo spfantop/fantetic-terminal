@@ -26,6 +26,22 @@ export interface SessionRecordingPage {
   nextCursor: number | null;
 }
 
+export interface SessionRecordingListQuery {
+  query?: string;
+  status?: SessionRecordingStatus;
+  startedAfter?: number;
+  startedBefore?: number;
+  limit?: number;
+  offset?: number;
+}
+
+export interface SessionRecordingListPage {
+  itemList: SessionRecordingMetadata[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export interface TerminalServerCapabilities {
   sshBinaryInput: boolean;
   sshBinaryOutput: boolean;

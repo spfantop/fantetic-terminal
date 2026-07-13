@@ -2047,7 +2047,7 @@
     "play": "回放",
     "stop": "停止",
     "speed": "速度",
-    "player": "终端会话回放器",
+    "player": "终端会话回放器", "searchPlaceholder": "连接或用户名", "startedAfter": "开始时间", "total": "共 {count} 条", "duration": "时长", "events": "事件", "size": "大小", "preparing": "正在准备回放…", "timeline": "回放时间轴", "selectHint": "选择一条录像查看详情并回放。",
     "status": { "active": "进行中", "completed": "已完成", "incomplete": "不完整", "failed": "失败" }
   }
 }

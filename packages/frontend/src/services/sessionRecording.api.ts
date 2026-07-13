@@ -3,14 +3,16 @@ import type {
   SessionRecordingEvent,
   SessionRecordingMetadata,
   SessionRecordingPage,
+  SessionRecordingListPage,
+  SessionRecordingListQuery,
 } from '@fantetic-terminal/contracts';
 
 export type SessionRecording = SessionRecordingMetadata;
-export type { SessionRecordingEvent, SessionRecordingPage };
+export type { SessionRecordingEvent, SessionRecordingPage, SessionRecordingListPage, SessionRecordingListQuery };
 
 export const sessionRecordingApi = {
-  async list(): Promise<SessionRecording[]> {
-    return (await apiClient.get<SessionRecording[]>('/session-recordings')).data;
+  async list(query: SessionRecordingListQuery = {}): Promise<SessionRecordingListPage> {
+    return (await apiClient.get<SessionRecordingListPage>('/session-recordings', { params: query })).data;
   },
   async read(id: string, cursor = 0): Promise<SessionRecordingPage> {
     return (await apiClient.get<SessionRecordingPage>(`/session-recordings/${id}`, {
