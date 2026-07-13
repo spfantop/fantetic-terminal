@@ -54,6 +54,8 @@ const {
 const { connections, folders, isLoading: isLoadingConnections, isFoldersLoading } = storeToRefs(connectionsStore);
 const { tags } = storeToRefs(tagsStore);
 const { isAuthenticated } = storeToRefs(authStore);
+const canOpenAdminCenter = computed(() => accountFeatureAvailable
+  && ['super_admin', 'admin', 'auditor'].includes(authStore.user?.systemRole ?? ''));
 
 const LS_FILTER_FOLDER_KEY = 'connections_view_filter_folder';
 const LS_FILTER_TAGS_KEY = 'connections_view_filter_tags';
@@ -2101,6 +2103,15 @@ const handleOpenAllTargetConnections = async () => {
                 >
                   <i class="fas fa-gear"></i>
                   <span>{{ t('nav.settings') }}</span>
+                </RouterLink>
+                <RouterLink
+                  v-if="canOpenAdminCenter"
+                  :to="{ name: 'AdminCenter' }"
+                  class="server-actions-menu-item"
+                  @click="closeServerActionMenu"
+                >
+                  <i class="fas fa-users-gear"></i>
+                  <span>{{ t('adminCenter.title', '管理中心') }}</span>
                 </RouterLink>
                 <RouterLink
                   v-if="accountFeatureAvailable && !isAuthenticated"

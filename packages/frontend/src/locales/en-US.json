@@ -12,8 +12,15 @@
     "notifications": "Notifications",
     "auditLogs": "Audit Logs",
     "settings": "Settings",
+    "adminCenter": "Admin Center",
     "customizeStyle": "Customize Style",
     "mainNavigation": "Main navigation"
+  },
+  "adminCenter": {
+    "eyebrow": "PLATFORM GOVERNANCE", "title": "Admin Center", "description": "Manage identities, asset permissions, audit records, and system data in one place.", "back": "Back to workspace", "navigation": "Admin center navigation",
+    "groups": { "workspace": "Overview", "identity": "Identity & assets", "audit": "Audit & compliance", "system": "System operations" },
+    "sections": { "overview": "Overview" },
+    "descriptions": { "overview": "Open management tools based on your responsibilities.", "accessControl": "Manage users, groups, and connection asset permissions.", "auditLogs": "Search critical operations and trace responsible actors.", "sessionRecordings": "Review and replay terminal sessions.", "dataManagement": "Import, export, back up, and restore system data." }
   },
   "accessControl": {
     "title": "Access control", "users": "Users", "groups": "Groups", "username": "Username",

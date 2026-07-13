@@ -151,6 +151,7 @@
         "saved": "保存済み",
         "search": "検索",
         "settings": "設定",
+        "adminCenter": "管理センター",
         "sortAscending": "昇順",
         "sortDescending": "降順",
         "testing": "テスト中...",
@@ -772,6 +773,12 @@
         "terminal": "ターミナル",
     "mainNavigation": "メインナビゲーション"
   },
+    "adminCenter": {
+      "eyebrow": "プラットフォーム管理", "title": "管理センター", "description": "ID、資産権限、監査記録、システムデータを一元管理します。", "back": "ワークスペースに戻る", "navigation": "管理センターナビゲーション",
+      "groups": { "workspace": "概要", "identity": "IDと資産", "audit": "監査とコンプライアンス", "system": "システム運用" },
+      "sections": { "overview": "概要" },
+      "descriptions": { "overview": "担当範囲に応じた管理機能を開きます。", "accessControl": "ユーザー、グループ、接続資産の権限を管理します。", "auditLogs": "重要な操作を検索し、実行者を追跡します。", "sessionRecordings": "ターミナルセッションを確認、再生します。", "dataManagement": "システムデータのインポート、エクスポート、バックアップ、復元を行います。" }
+    },
     "accessControl": {
     "title": "アクセス制御", "users": "ユーザー管理", "groups": "グループ管理", "username": "ユーザー名",
     "initialPassword": "初期パスワード（12文字以上）", "systemRole": "システムロール", "status": "状態",

@@ -8,10 +8,6 @@ export type SettingsTabKey =
   | 'ai'
   | 'notifications'
   | 'proxies'
-  | 'dataManagement'
-  | 'auditLogs'
-  | 'sessionRecordings'
-  | 'accessControl'
   | 'about';
 
 export interface SettingsTab {
@@ -32,9 +28,5 @@ export const createSettingsTabs = (t: TranslateFn): SettingsTab[] => [
   { key: 'ai', label: t('settings.tabs.ai', 'AI 助手'), icon: 'fas fa-wand-magic-sparkles' },
   { key: 'notifications', label: t('settings.tabs.notifications', '通知管理'), icon: 'fas fa-bell' },
   { key: 'proxies', label: t('settings.tabs.proxies', '代理管理'), icon: 'fas fa-route' },
-  { key: 'dataManagement', label: t('settings.tabs.dataManagement', '数据管理'), icon: 'fas fa-database' },
-  { key: 'auditLogs', label: t('nav.auditLogs', '审计日志'), icon: 'fas fa-shield-halved' },
-  { key: 'sessionRecordings', label: t('sessionRecording.title', '会话录像'), icon: 'fas fa-video' },
-  { key: 'accessControl', label: t('accessControl.title', '访问控制'), icon: 'fas fa-users-gear' },
   { key: 'about', label: t('settings.tabs.about', '关于'), icon: 'fas fa-circle-info' },
 ];

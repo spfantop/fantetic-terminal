@@ -26,11 +26,8 @@ assert.deepEqual(
   'dashboard should be the first settings tab',
 );
 
-assert.equal(
-  tabKeys[tabKeys.indexOf('dataManagement') + 1],
-  'auditLogs',
-  'audit logs should appear directly below data management in settings',
-);
+assert.equal(tabKeys.includes('dataManagement'), false, 'data management should live in the admin center');
+assert.equal(tabKeys.includes('auditLogs'), false, 'audit logs should live in the admin center');
 
 assert.equal(
   appVue.includes('class="app-dock"') || appVue.includes("'app-dock'"),

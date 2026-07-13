@@ -1,6 +1,7 @@
 import { debugLog } from '../composables/useDebugLog';
 import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router';
 import { useAuthStore } from '../stores/auth.store'; // 导入 Auth Store
+import type { SystemRole } from '../stores/auth.store';
 import { isAccountFeatureAvailable } from '../utils/runtimeConfig';
 
 // 路由配置
@@ -52,17 +53,23 @@ const routes: Array<RouteRecordRaw> = [
     name: 'Settings',
     redirect: { name: 'Connections', query: { settings: '1' } }
   },
+  {
+    path: '/admin',
+    name: 'AdminCenter',
+    component: () => import('../views/AdminCenterView.vue'),
+    meta: { allowedRoles: ['super_admin', 'admin', 'auditor'] },
+  },
   // 通知管理页面
   {
     path: '/notifications',
     name: 'Notifications',
     component: () => import('../views/NotificationsView.vue')
   },
-  // 审计日志页面
+  // 兼容旧审计日志入口。
   {
     path: '/audit-logs',
     name: 'AuditLogs',
-    redirect: { name: 'Connections', query: { settings: '1', tab: 'auditLogs' } }
+    redirect: { name: 'AdminCenter', query: { section: 'auditLogs' } }
   },
   // 初始设置页面
   {
@@ -91,6 +98,7 @@ router.beforeEach((to, from, next) => {
 
   // 在守卫内部获取 store 实例，确保 Pinia 已初始化
   const authStore = useAuthStore();
+  const allowedRoles = to.meta.allowedRoles as SystemRole[] | undefined;
 
   // 定义不需要认证的路由名称列表
   // 定义不需要认证的路由名称列表 (现在包括 Setup)
@@ -116,6 +124,8 @@ router.beforeEach((to, from, next) => {
   } else if (to.name === 'Login' && authStore.isAuthenticated && !needsSetup) {
     // 如果用户已登录、不需要设置且尝试访问登录页，重定向到服务器页
     debugLog('路由守卫：已登录，从 /login 重定向到 /');
+    next({ name: 'Connections' });
+  } else if (allowedRoles && (!authStore.user || !allowedRoles.includes(authStore.user.systemRole))) {
     next({ name: 'Connections' });
   } else {
     // 其他情况（例如访问公共页面，或已登录访问需认证页面）允许导航

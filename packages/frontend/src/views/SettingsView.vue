@@ -117,25 +117,6 @@
           <div v-else class="p-4 text-center text-muted-foreground">{{ $t('settings.loading', '加载中...') }}</div>
         </div>
 
-        <!-- Data Management Tab Content -->
-        <div v-if="activeTab === 'dataManagement'">
-          <DataManagementSection v-if="settings" />
-          <div v-else class="p-4 text-center text-muted-foreground">{{ $t('settings.loading', '加载中...') }}</div>
-        </div>
-
-        <!-- Audit Logs Tab Content -->
-        <div v-if="activeTab === 'auditLogs'">
-          <AuditLogView />
-        </div>
-
-        <div v-if="activeTab === 'sessionRecordings'">
-          <SessionRecordingSettings />
-        </div>
-
-        <div v-if="activeTab === 'accessControl'">
-          <AccessControlSettings />
-        </div>
-        
         <!-- Appearance Tab Content -->
         <div v-if="activeTab === 'appearance'">
           <AppearanceSection v-if="settings" />
@@ -178,14 +159,10 @@ import AboutSection from '../components/settings/AboutSection.vue';
 import WorkspaceSettingsSection from '../components/settings/WorkspaceSettingsSection.vue';
 import AISettingsSection from '../components/settings/AISettingsSection.vue';
 import SystemSettingsSection from '../components/settings/SystemSettingsSection.vue';
-import DataManagementSection from '../components/settings/DataManagementSection.vue';
 import AppearanceSection from '../components/settings/AppearanceSection.vue';
 import ProxiesView from './ProxiesView.vue';
 import NotificationsView from './NotificationsView.vue';
 import DashboardView from './DashboardView.vue';
-import AuditLogView from './AuditLogView.vue';
-import AccessControlSettings from '../components/settings/AccessControlSettings.vue';
-import SessionRecordingSettings from '../components/settings/SessionRecordingSettings.vue';
 import { createSettingsTabs, type SettingsTabKey } from '../utils/settingsTabs';
 import { useResizable } from '../composables/useResizable';
 import { isAccountFeatureAvailable } from '../utils/runtimeConfig';
@@ -212,11 +189,9 @@ const authStore = useAuthStore();
 const tabs = computed(() => {
   const role = authStore.user?.systemRole;
   const administrator = !accountFeatureAvailable || role === 'super_admin' || role === 'admin';
-  const auditReader = administrator || role === 'auditor';
   return createSettingsTabs(t).filter(tab => {
     if (!accountFeatureAvailable && tab.key === 'security') return false;
-    if (['notifications', 'ipControl', 'accessControl'].includes(tab.key)) return administrator;
-    if (tab.key === 'auditLogs') return auditReader;
+    if (['notifications', 'ipControl'].includes(tab.key)) return administrator;
     return true;
   });
 });
