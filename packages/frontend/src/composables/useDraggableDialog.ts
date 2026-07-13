@@ -65,6 +65,7 @@ export function useDraggableDialog(options: DraggableDialogOptions) {
     dialog.style.margin = '0';
     dialog.style.left = `${nextPosition.left}px`;
     dialog.style.top = `${nextPosition.top}px`;
+    dialog.style.transform = 'none';
   };
 
   const ensurePositioned = () => {

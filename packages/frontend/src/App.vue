@@ -25,6 +25,7 @@ const isDesktopBuild = import.meta.env.VITE_FANTETIC_APP_MODE === 'electron';
 const FileEditorOverlay = defineAsyncComponent(() => import('./components/FileEditorOverlay.vue'));
 const FocusSwitcherConfigurator = defineAsyncComponent(() => import('./components/FocusSwitcherConfigurator.vue'));
 const SettingsView = defineAsyncComponent(() => import('./views/SettingsView.vue'));
+const AdminCenterView = defineAsyncComponent(() => import('./views/AdminCenterView.vue'));
 const RemoteDesktopModal = isDesktopBuild
   ? null
   : defineAsyncComponent(() => import('./components/RemoteDesktopModal.vue'));
@@ -100,12 +101,17 @@ const normalizedRoutePath = computed(() => {
 
 const isFocusSwitcherHotkeyRoute = computed(() => shouldEnableFocusSwitcherHotkeys(normalizedRoutePath.value));
 const isSettingsOverlayVisible = computed(() => route.name === 'Connections' && route.query.settings === '1');
+const isAdminCenterOverlayVisible = computed(() => route.name === 'Connections' && route.query.admin === '1');
 const shouldShowMainFocusSwitcherConfigurator = computed(() => (
   isFocusSwitcherVisible.value
   && (focusSwitcherConfiguratorSourceDocument.value === null || focusSwitcherConfiguratorSourceDocument.value === document)
 ));
 
 const closeSettingsOverlay = () => {
+  void router.push({ name: 'Connections' });
+};
+
+const closeAdminCenterOverlay = () => {
   void router.push({ name: 'Connections' });
 };
 
@@ -268,6 +274,12 @@ const handleGlobalKeyUp = async (event: KeyboardEvent) => {
       v-if="isSettingsOverlayVisible"
       is-dialog
       @close="closeSettingsOverlay"
+    />
+
+    <AdminCenterView
+      v-if="isAdminCenterOverlayVisible"
+      is-dialog
+      @close="closeAdminCenterOverlay"
     />
 
     <!-- +++ 条件渲染焦点切换配置器 (使用 v-show 保持实例) +++ -->

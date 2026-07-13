@@ -35,7 +35,8 @@
       "test:telnet-connection-ui": "esbuild test/telnetConnectionUi.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/telnetConnectionUi.behavior-test.mjs && node ../../.vite-codex-cache/telnetConnectionUi.behavior-test.mjs",
       "test:sftp-upload-backpressure": "esbuild test/sftpUploadBackpressure.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/sftpUploadBackpressure.behavior-test.mjs && node ../../.vite-codex-cache/sftpUploadBackpressure.behavior-test.mjs",
       "test:file-manager-open-interaction": "esbuild test/fileManagerOpenInteraction.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/fileManagerOpenInteraction.behavior-test.mjs && node ../../.vite-codex-cache/fileManagerOpenInteraction.behavior-test.mjs",
-      "test:connection-filtering": "esbuild test/connectionFiltering.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/connectionFiltering.behavior-test.mjs && node ../../.vite-codex-cache/connectionFiltering.behavior-test.mjs"
+      "test:connection-filtering": "esbuild test/connectionFiltering.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/connectionFiltering.behavior-test.mjs && node ../../.vite-codex-cache/connectionFiltering.behavior-test.mjs",
+      "test:connection-permissions": "esbuild test/connectionPermissions.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/connectionPermissions.behavior-test.mjs && node ../../.vite-codex-cache/connectionPermissions.behavior-test.mjs"
    },
    "dependencies": {
       "@codemirror/commands": "^6.8.1",

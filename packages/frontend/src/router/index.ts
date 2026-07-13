@@ -56,7 +56,7 @@ const routes: Array<RouteRecordRaw> = [
   {
     path: '/admin',
     name: 'AdminCenter',
-    component: () => import('../views/AdminCenterView.vue'),
+    redirect: to => ({ name: 'Connections', query: { ...to.query, admin: '1' } }),
     meta: { allowedRoles: ['super_admin', 'admin', 'auditor'] },
   },
   // 通知管理页面
@@ -98,7 +98,10 @@ router.beforeEach((to, from, next) => {
 
   // 在守卫内部获取 store 实例，确保 Pinia 已初始化
   const authStore = useAuthStore();
-  const allowedRoles = to.meta.allowedRoles as SystemRole[] | undefined;
+  const adminOverlayRoles: SystemRole[] = ['super_admin', 'admin', 'auditor'];
+  const allowedRoles = to.name === 'Connections' && to.query.admin === '1'
+    ? adminOverlayRoles
+    : to.meta.allowedRoles as SystemRole[] | undefined;
 
   // 定义不需要认证的路由名称列表
   // 定义不需要认证的路由名称列表 (现在包括 Setup)

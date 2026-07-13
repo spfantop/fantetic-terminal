@@ -27,7 +27,8 @@ export interface GroupMember {
 }
 
 export type ConnectionPermission = 'view' | 'connect' | 'manage';
-export interface AssetConnection { id: number; name: string; host: string; type: string }
+export interface AssetConnection { id: number; name: string; host: string; type: string; folder_id?: number | null; effective_permission?: ConnectionPermission }
+export interface AssetFolder { id: number; name: string; parent_id: number | null }
 export interface ConnectionGroupGrant {
   connectionId: number;
   groupId: number;
@@ -76,6 +77,9 @@ export const accessControlApi = {
   },
   async listConnections(): Promise<AssetConnection[]> {
     return (await apiClient.get<AssetConnection[]>('/connections')).data;
+  },
+  async listFolders(): Promise<AssetFolder[]> {
+    return (await apiClient.get<AssetFolder[]>('/connections/folders')).data;
   },
   async listConnectionGrants(connectionId: number): Promise<ConnectionGroupGrant[]> {
     return (await apiClient.get<ConnectionGroupGrant[]>(`${base}/connections/${connectionId}/groups`)).data;

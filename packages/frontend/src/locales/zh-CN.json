@@ -22,10 +22,12 @@
     "sections": { "overview": "概览" },
     "descriptions": { "overview": "按职责快速进入各项管理能力。", "accessControl": "管理用户、用户组和连接资产授权。", "auditLogs": "检索关键操作并追踪责任主体。", "sessionRecordings": "查看终端会话记录和回放。", "dataManagement": "执行导入、导出、备份和恢复。" }
   },
+  "adminDateRange": { "range": "日期范围", "start": "开始日期", "end": "结束日期", "selectDate": "选择日期", "calendar": "日历", "previousMonth": "上个月", "nextMonth": "下个月", "quickSelect": "快捷日期范围", "today": "今天", "last7Days": "近 7 天", "last30Days": "近 30 天", "invalidRange": "结束日期不能早于开始日期。" },
   "accessControl": {
+    "rootFolder": "根目录",
     "title": "访问控制", "users": "用户管理", "groups": "分组管理", "username": "用户名",
     "initialPassword": "初始密码（至少 12 位）", "systemRole": "系统角色", "status": "状态",
-    "password": "密码", "createUser": "创建用户", "reset": "重置", "transferTarget": "资产接收人",
+    "password": "密码", "createUser": "创建用户", "reset": "重置", "resetPassword": "重置密码", "newPassword": "新密码（至少 12 位）", "confirmResetPassword": "确认重置", "deleteUser": "删除用户", "confirmDeleteAndTransfer": "删除并转移资产", "transferTarget": "资产接收人",
     "createGroup": "创建分组", "groupName": "分组名称", "description": "描述", "selectGroup": "选择分组",
     "selectUser": "选择用户", "addMember": "添加成员", "passwordRequirement": "用户名不能为空，密码至少需要 12 位。",
     "transferRequired": "删除用户前必须选择资产接收人。", "groupNameRequired": "分组名称不能为空。",
@@ -36,7 +38,8 @@
     "selectConnection": "选择连接资产", "permission": "权限", "addGrant": "添加授权",
     "grantSaved": "连接授权已保存。", "grantDeleted": "连接授权已撤销。", "error": "访问控制操作失败。", "groupUpdated": "分组信息已更新。",
     "usersHint": "创建账号并维护系统角色、状态和凭据。", "groupsHint": "用分组组织成员角色和资产权限。", "assetsHint": "按连接资产向用户组授予查看、连接或管理权限。", "searchUsers": "搜索用户", "searchAssets": "搜索资产", "noUsers": "没有匹配的用户",
-    "selectAssets": "选择资产", "selectGroups": "选择用户组", "batchGrant": "批量授权", "batchSummary": "将为 {assets} 个资产与 {groups} 个用户组设置权限。", "applyBatch": "应用到所选项", "singleAssetDetail": "单个资产授权详情", "batchSelectionRequired": "请至少选择一个资产和一个用户组。", "batchSaved": "已保存 {count} 项资产授权。"
+    "selectAssets": "选择资产", "selectGroups": "选择用户组", "clearSelection": "清空", "batchGrant": "批量授权", "batchSummary": "将为 {assets} 个资产与 {groups} 个用户组设置权限。", "applyBatch": "应用到所选项", "singleAssetDetail": "单个资产授权详情", "batchSelectionRequired": "请至少选择一个资产和一个用户组。", "batchSaved": "已保存 {count} 项资产授权。",
+    "roles": { "user": "普通用户", "auditor": "审计员", "admin": "管理员", "superAdmin": "超级管理员" }, "statuses": { "active": "正常", "disabled": "已禁用" }, "groupRoles": { "viewer": "查看者", "operator": "操作员", "admin": "管理员", "owner": "所有者" }, "permissions": { "view": "查看", "connect": "连接", "manage": "管理" }, "permissionActions": { "view": "可见资产与连接信息", "connect": "显示终端、远程桌面和测试入口", "manage": "包含编辑、删除及批量管理操作" }
   },
   "backup": {
     "title": "系统备份与恢复", "description": "创建 SQLite 一致性快照并校验用户文件。恢复将在下次服务启动、数据库打开前执行。",
@@ -1326,6 +1329,9 @@
       "testMessageUnsaved": "为未保存的 {channelType} 配置触发的测试"
     },
   "common": {
+    "reset": "重置",
+    "actions": "操作",
+    "refresh": "刷新",
     "apply": "应用",
     "loading": "加载中...",
     "cancel": "取消",
@@ -1399,8 +1405,9 @@
     "table": {
       "timestamp": "时间戳",
       "actionType": "操作类型",
-      "details": "详细信息", "actor": "操作主体", "result": "结果", "sourceIp": "来源 IP", "requestId": "请求 ID"
+      "details": "详细信息", "actor": "操作主体", "result": "结果", "sourceIp": "来源 IP", "requestId": "请求 ID", "sessionId": "会话 ID", "assetId": "资产 ID"
     },
+    "results": { "success": "成功", "failure": "失败", "denied": "已拒绝" },
     "paginationInfo": "第 {currentPage} 页 / 共 {totalPages} 页 (总计 {totalLogs} 条记录)",
     "actions": {
         "LOGIN_SUCCESS": "登录成功",
@@ -2045,10 +2052,10 @@
     "empty": "暂无会话录像。",
     "loadFailed": "加载会话录像失败。",
     "playFailed": "读取或回放会话录像失败。",
-    "play": "回放",
+    "play": "回放", "delete": "删除录像", "confirmDelete": "确定删除“{name}”的会话录像吗？此操作不可恢复。", "deleteFailed": "删除会话录像失败。",
     "stop": "停止",
     "speed": "速度",
-    "player": "终端会话回放器", "searchPlaceholder": "连接或用户名", "startedAfter": "开始时间", "total": "共 {count} 条", "duration": "时长", "events": "事件", "size": "大小", "preparing": "正在准备回放…", "timeline": "回放时间轴", "selectHint": "选择一条录像查看详情并回放。",
+    "player": "终端会话回放器", "searchPlaceholder": "连接或用户名", "startedAfter": "开始时间", "total": "共 {count} 条", "duration": "时长", "events": "事件", "eventCount": "{count} 个事件", "size": "大小", "preparing": "正在准备回放…", "timeline": "回放时间轴", "selectHint": "选择一条录像查看详情并回放。",
     "status": { "active": "进行中", "completed": "已完成", "incomplete": "不完整", "failed": "失败" }
   }
 }

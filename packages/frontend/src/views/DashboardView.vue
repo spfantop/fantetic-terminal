@@ -15,6 +15,7 @@ import type { TagInfo } from '../stores/tags.store';
 import type { SortField, SortOrder } from '../stores/settings.store';
 import type { ConnectionInfo } from '../stores/connections.store';
 import type { AuditLogEntry } from '../types/server.types';
+import { canConnectConnection } from '../features/connections/connection-permissions';
 
 type DashboardTone = 'neutral' | 'success' | 'warning' | 'danger';
 
@@ -342,6 +343,7 @@ const refreshDashboard = async () => {
 };
 
 const connectTo = (connection: ConnectionInfo) => {
+  if (!canConnectConnection(connection)) return;
   sessionStore.handleConnectRequest(connection);
 };
 
@@ -568,6 +570,7 @@ const formatAuditDetails = (details: AuditLogEntry['details']) => {
                 </div>
               </div>
               <button
+                v-if="canConnectConnection(row.connection)"
                 class="connection-row__action"
                 :title="t('connections.actions.connect')"
                 :aria-label="t('connections.actions.connect')"

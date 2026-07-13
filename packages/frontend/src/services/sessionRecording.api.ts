@@ -19,4 +19,7 @@ export const sessionRecordingApi = {
       params: { cursor, limit: 100 },
     })).data;
   },
+  async delete(id: string): Promise<void> {
+    await apiClient.delete(`/session-recordings/${id}`);
+  },
 };

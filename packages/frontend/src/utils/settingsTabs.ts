@@ -1,5 +1,4 @@
 export type SettingsTabKey =
-  | 'dashboard'
   | 'system'
   | 'security'
   | 'appearance'
@@ -19,7 +18,6 @@ export interface SettingsTab {
 type TranslateFn = (key: string, fallback?: string) => string;
 
 export const createSettingsTabs = (t: TranslateFn): SettingsTab[] => [
-  { key: 'dashboard', label: t('nav.dashboard', '仪表盘'), icon: 'fas fa-chart-line' },
   { key: 'system', label: t('settings.tabs.system', '系统'), icon: 'fas fa-sliders' },
   { key: 'security', label: t('settings.tabs.security', '安全'), icon: 'fas fa-shield-halved' },
   { key: 'appearance', label: t('settings.tabs.appearance', '外观'), icon: 'fas fa-palette' },

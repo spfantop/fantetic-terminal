@@ -22,10 +22,12 @@
     "sections": { "overview": "Overview" },
     "descriptions": { "overview": "Open management tools based on your responsibilities.", "accessControl": "Manage users, groups, and connection asset permissions.", "auditLogs": "Search critical operations and trace responsible actors.", "sessionRecordings": "Review and replay terminal sessions.", "dataManagement": "Import, export, back up, and restore system data." }
   },
+  "adminDateRange": { "range": "Date range", "start": "Start date", "end": "End date", "selectDate": "Select date", "calendar": "Calendar", "previousMonth": "Previous month", "nextMonth": "Next month", "quickSelect": "Quick date range", "today": "Today", "last7Days": "Last 7 days", "last30Days": "Last 30 days", "invalidRange": "The end date cannot be earlier than the start date." },
   "accessControl": {
+    "rootFolder": "Root",
     "title": "Access control", "users": "Users", "groups": "Groups", "username": "Username",
     "initialPassword": "Initial password (12+ characters)", "systemRole": "System role", "status": "Status",
-    "password": "Password", "createUser": "Create user", "reset": "Reset", "transferTarget": "Asset recipient",
+    "password": "Password", "createUser": "Create user", "reset": "Reset", "resetPassword": "Reset password", "newPassword": "New password (12+ characters)", "confirmResetPassword": "Confirm reset", "deleteUser": "Delete user", "confirmDeleteAndTransfer": "Delete and transfer assets", "transferTarget": "Asset recipient",
     "createGroup": "Create group", "groupName": "Group name", "description": "Description", "selectGroup": "Select group",
     "selectUser": "Select user", "addMember": "Add member", "passwordRequirement": "Username is required and password must contain at least 12 characters.",
     "transferRequired": "Select an asset recipient before deleting the user.", "groupNameRequired": "Group name is required.",
@@ -36,7 +38,8 @@
     "selectConnection": "Select connection asset", "permission": "Permission", "addGrant": "Add grant",
     "grantSaved": "Connection grant saved.", "grantDeleted": "Connection grant revoked.", "error": "Access control operation failed.", "groupUpdated": "Group details updated.",
     "usersHint": "Create accounts and maintain system roles, status, and credentials.", "groupsHint": "Organize member roles and asset permissions with groups.", "assetsHint": "Grant view, connect, or manage access to groups by connection asset.", "searchUsers": "Search users", "searchAssets": "Search assets", "noUsers": "No matching users",
-    "selectAssets": "Select assets", "selectGroups": "Select groups", "batchGrant": "Bulk grant", "batchSummary": "Set permissions for {assets} assets and {groups} groups.", "applyBatch": "Apply to selection", "singleAssetDetail": "Single asset grant details", "batchSelectionRequired": "Select at least one asset and one group.", "batchSaved": "Saved {count} asset grants."
+    "selectAssets": "Select assets", "selectGroups": "Select groups", "clearSelection": "Clear", "batchGrant": "Bulk grant", "batchSummary": "Set permissions for {assets} assets and {groups} groups.", "applyBatch": "Apply to selection", "singleAssetDetail": "Single asset grant details", "batchSelectionRequired": "Select at least one asset and one group.", "batchSaved": "Saved {count} asset grants.",
+    "roles": { "user": "User", "auditor": "Auditor", "admin": "Administrator", "superAdmin": "Super administrator" }, "statuses": { "active": "Active", "disabled": "Disabled" }, "groupRoles": { "viewer": "Viewer", "operator": "Operator", "admin": "Administrator", "owner": "Owner" }, "permissions": { "view": "View", "connect": "Connect", "manage": "Manage" }, "permissionActions": { "view": "See the asset and connection details", "connect": "Show terminal, remote desktop, and test actions", "manage": "Includes edit, delete, and bulk management actions" }
   },
   "backup": {
     "title": "System backup and restore", "description": "Create a consistent SQLite snapshot with verified user files. Restore runs before the database opens on the next service start.",
@@ -1324,6 +1327,9 @@
       "testMessageUnsaved": "Test triggered for unsaved {channelType} configuration"
     },
   "common": {
+    "reset": "Reset",
+    "actions": "Actions",
+    "refresh": "Refresh",
     "confirm": "Confirm",
     "ok": "OK",
     "success": "Success",
@@ -1395,8 +1401,9 @@
     "table": {
       "timestamp": "Timestamp",
       "actionType": "Action Type",
-      "details": "Details", "actor": "Actor", "result": "Result", "sourceIp": "Source IP", "requestId": "Request ID"
+      "details": "Details", "actor": "Actor", "result": "Result", "sourceIp": "Source IP", "requestId": "Request ID", "sessionId": "Session ID", "assetId": "Asset ID"
     },
+    "results": { "success": "Success", "failure": "Failure", "denied": "Denied" },
     "paginationInfo": "Page {currentPage} of {totalPages} ({totalLogs} total logs)",
     "actions": {
         "LOGIN_SUCCESS": "Login Success",
@@ -2040,10 +2047,10 @@
     "empty": "No session recordings.",
     "loadFailed": "Failed to load session recordings.",
     "playFailed": "Failed to read or replay the session recording.",
-    "play": "Replay",
+    "play": "Replay", "delete": "Delete recording", "confirmDelete": "Delete the session recording for {name}? This cannot be undone.", "deleteFailed": "Failed to delete the session recording.",
     "stop": "Stop",
     "speed": "Speed",
-    "player": "Terminal session player", "searchPlaceholder": "Connection or username", "startedAfter": "Started after", "total": "{count} total", "duration": "Duration", "events": "Events", "size": "Size", "preparing": "Preparing replay…", "timeline": "Replay timeline", "selectHint": "Select a recording to inspect and replay.",
+    "player": "Terminal session player", "searchPlaceholder": "Connection or username", "startedAfter": "Started after", "total": "{count} total", "duration": "Duration", "events": "Events", "eventCount": "{count} events", "size": "Size", "preparing": "Preparing replay…", "timeline": "Replay timeline", "selectHint": "Select a recording to inspect and replay.",
     "status": { "active": "Active", "completed": "Completed", "incomplete": "Incomplete", "failed": "Failed" }
   }
 }

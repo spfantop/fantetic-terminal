@@ -1,6 +1,7 @@
 {
 
     "appName": "Fantetic Terminal",
+    "adminDateRange": { "range": "日付範囲", "start": "開始日", "end": "終了日", "selectDate": "日付を選択", "calendar": "カレンダー", "previousMonth": "前月", "nextMonth": "翌月", "quickSelect": "日付範囲のクイック選択", "today": "今日", "last7Days": "過去7日間", "last30Days": "過去30日間", "invalidRange": "終了日は開始日より前に設定できません。" },
     "auditLog": {
         "actions": {
             "2FA_DISABLED": "2段階認証無効",
@@ -55,8 +56,9 @@
             "actor": "操作主体",
             "result": "結果",
             "sourceIp": "送信元 IP",
-            "requestId": "リクエスト ID"
+            "requestId": "リクエスト ID", "sessionId": "セッション ID", "assetId": "資産 ID"
         },
+        "results": { "success": "成功", "failure": "失敗", "denied": "拒否" },
         "title": "監査ログ"
     },
     "commandHistory": {
@@ -125,6 +127,9 @@
         }
     },
     "common": {
+        "reset": "リセット",
+        "actions": "操作",
+        "refresh": "更新",
         "confirm": "確認",
         "ok": "確認",
         "success": "成功",
@@ -781,9 +786,10 @@
       "descriptions": { "overview": "担当範囲に応じた管理機能を開きます。", "accessControl": "ユーザー、グループ、接続資産の権限を管理します。", "auditLogs": "重要な操作を検索し、実行者を追跡します。", "sessionRecordings": "ターミナルセッションを確認、再生します。", "dataManagement": "システムデータのインポート、エクスポート、バックアップ、復元を行います。" }
     },
     "accessControl": {
+    "rootFolder": "ルート",
     "title": "アクセス制御", "users": "ユーザー管理", "groups": "グループ管理", "username": "ユーザー名",
     "initialPassword": "初期パスワード（12文字以上）", "systemRole": "システムロール", "status": "状態",
-    "password": "パスワード", "createUser": "ユーザー作成", "reset": "リセット", "transferTarget": "資産の引受先",
+    "password": "パスワード", "createUser": "ユーザー作成", "reset": "リセット", "resetPassword": "パスワードをリセット", "newPassword": "新しいパスワード（12文字以上）", "confirmResetPassword": "リセットを確定", "deleteUser": "ユーザーを削除", "confirmDeleteAndTransfer": "削除して資産を移管", "transferTarget": "資産の引受先",
     "createGroup": "グループ作成", "groupName": "グループ名", "description": "説明", "selectGroup": "グループを選択",
     "selectUser": "ユーザーを選択", "addMember": "メンバー追加", "passwordRequirement": "ユーザー名を入力し、パスワードは12文字以上にしてください。",
     "transferRequired": "削除前に資産の引受先を選択してください。", "groupNameRequired": "グループ名は必須です。",
@@ -794,7 +800,8 @@
     "selectConnection": "接続資産を選択", "permission": "権限", "addGrant": "権限を追加",
     "grantSaved": "接続権限を保存しました。", "grantDeleted": "接続権限を取り消しました。", "error": "アクセス制御操作に失敗しました。", "groupUpdated": "グループ情報を更新しました。",
     "usersHint": "アカウントを作成し、システムロール、状態、認証情報を管理します。", "groupsHint": "グループでメンバーのロールと資産権限を整理します。", "assetsHint": "接続資産ごとにグループへ閲覧、接続、管理権限を付与します。", "searchUsers": "ユーザーを検索", "searchAssets": "資産を検索", "noUsers": "一致するユーザーがありません",
-    "selectAssets": "資産を選択", "selectGroups": "グループを選択", "batchGrant": "一括権限付与", "batchSummary": "{assets} 件の資産と {groups} 件のグループに権限を設定します。", "applyBatch": "選択項目に適用", "singleAssetDetail": "単一資産の権限詳細", "batchSelectionRequired": "資産とグループを1件以上選択してください。", "batchSaved": "{count} 件の資産権限を保存しました。"
+    "selectAssets": "資産を選択", "selectGroups": "グループを選択", "clearSelection": "選択を解除", "batchGrant": "一括権限付与", "batchSummary": "{assets} 件の資産と {groups} 件のグループに権限を設定します。", "applyBatch": "選択項目に適用", "singleAssetDetail": "単一資産の権限詳細", "batchSelectionRequired": "資産とグループを1件以上選択してください。", "batchSaved": "{count} 件の資産権限を保存しました。",
+    "roles": { "user": "一般ユーザー", "auditor": "監査担当者", "admin": "管理者", "superAdmin": "スーパー管理者" }, "statuses": { "active": "有効", "disabled": "無効" }, "groupRoles": { "viewer": "閲覧者", "operator": "オペレーター", "admin": "管理者", "owner": "所有者" }, "permissions": { "view": "閲覧", "connect": "接続", "manage": "管理" }, "permissionActions": { "view": "資産と接続情報を表示", "connect": "ターミナル、リモートデスクトップ、テスト操作を表示", "manage": "編集、削除、一括管理操作を含む" }
   },
     "dock": {
         "hide": "ナビゲーションを非表示",
@@ -2021,10 +2028,10 @@
     "empty": "セッション録画はありません。",
     "loadFailed": "セッション録画の読み込みに失敗しました。",
     "playFailed": "セッション録画の読み込みまたは再生に失敗しました。",
-    "play": "再生",
+    "play": "再生", "delete": "録画を削除", "confirmDelete": "{name} のセッション録画を削除しますか？この操作は元に戻せません。", "deleteFailed": "セッション録画の削除に失敗しました。",
     "stop": "停止",
     "speed": "速度",
-    "player": "端末セッションプレーヤー", "searchPlaceholder": "接続名またはユーザー名", "startedAfter": "開始日時", "total": "全 {count} 件", "duration": "時間", "events": "イベント", "size": "サイズ", "preparing": "再生を準備中…", "timeline": "再生タイムライン", "selectHint": "録画を選択して詳細を確認し、再生します。",
+    "player": "端末セッションプレーヤー", "searchPlaceholder": "接続名またはユーザー名", "startedAfter": "開始日時", "total": "全 {count} 件", "duration": "時間", "events": "イベント", "eventCount": "{count} 件のイベント", "size": "サイズ", "preparing": "再生を準備中…", "timeline": "再生タイムライン", "selectHint": "録画を選択して詳細を確認し、再生します。",
     "status": { "active": "進行中", "completed": "完了", "incomplete": "不完全", "failed": "失敗" }
   }
 }

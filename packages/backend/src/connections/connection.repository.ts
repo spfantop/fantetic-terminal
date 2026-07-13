@@ -31,12 +31,14 @@ notes?: string | null;
 interface ConnectionWithTagsRow extends ConnectionBase { // This will no longer cause error if ConnectionBase has no jump_chain
     tag_ids_str: string | null;
     jump_chain: string | null; // Stored as JSON string in DB
+    effective_permission?: 'view' | 'connect' | 'manage';
 }
 
 // ConnectionWithTags implicitly includes 'type' and 'ssh_key_id' via ConnectionBase
 export interface ConnectionWithTags extends ConnectionBase {
     tag_ids: number[];
     jump_chain: number[] | null; // Explicitly add for service layer type
+    effective_permission?: 'view' | 'connect' | 'manage';
 }
 
 // 包含加密字段的完整类型，用于插入/更新
@@ -127,7 +129,11 @@ export const findAccessibleConnectionsWithTags = async (
         || subject.systemRole === 'super_admin'
         || subject.systemRole === 'admin'
         || subject.systemRole === 'auditor') {
-        return findAllConnectionsWithTags();
+        const effectivePermission = subject.systemRole === 'auditor' ? 'view' : 'manage';
+        return (await findAllConnectionsWithTags()).map(connection => ({
+            ...connection,
+            effective_permission: effectivePermission,
+        }));
     }
 
     const sql = `
@@ -136,6 +142,25 @@ export const findAccessibleConnectionsWithTags = async (
             c.proxy_id, c.proxy_type, c.folder_id, c.icon, c.sort_order,
             c.ssh_key_id, c.notes, c.jump_chain, c.owner_user_id,
             c.created_at, c.updated_at, c.last_connected_at,
+            CASE
+                WHEN c.owner_user_id = ? THEN 'manage'
+                ELSE CASE COALESCE((
+                    SELECT MAX(CASE
+                        WHEN membership.role = 'viewer' THEN 1
+                        WHEN membership.role = 'operator' AND permission.permission IN ('connect', 'manage') THEN 2
+                        WHEN membership.role IN ('admin', 'owner') AND permission.permission = 'manage' THEN 3
+                        WHEN permission.permission = 'connect' THEN 2
+                        ELSE 1
+                    END)
+                    FROM connection_group_permissions permission
+                    JOIN user_group_members membership ON membership.group_id = permission.group_id
+                    WHERE permission.connection_id = c.id AND membership.user_id = ?
+                ), 0)
+                    WHEN 3 THEN 'manage'
+                    WHEN 2 THEN 'connect'
+                    ELSE 'view'
+                END
+            END AS effective_permission,
             GROUP_CONCAT(DISTINCT ct.tag_id) as tag_ids_str
         FROM connections c
         LEFT JOIN connection_tags ct ON c.id = ct.connection_id
@@ -147,7 +172,12 @@ export const findAccessibleConnectionsWithTags = async (
         )
         GROUP BY c.id
         ORDER BY COALESCE(c.folder_id, 0), c.sort_order, c.name, c.id`;
-    const rows = await allDb<ConnectionWithTagsRow>(await getDbInstance(), sql, [subject.userId, subject.userId]);
+    const rows = await allDb<ConnectionWithTagsRow>(await getDbInstance(), sql, [
+        subject.userId,
+        subject.userId,
+        subject.userId,
+        subject.userId,
+    ]);
     return rows.map((row) => {
         const { jump_chain: jumpChain, ...rest } = row;
         return {
@@ -482,13 +512,38 @@ export const findConnectionTags = async (connectionId: number): Promise<{ id: nu
 };
 
 export const findAllConnectionFolders = async (subject: AuthorizationSubject): Promise<ConnectionFolder[]> => {
-    const canReadAll = subject.runtime === 'desktop' || subject.systemRole === 'super_admin' || subject.systemRole === 'admin';
-    const sql = `SELECT id, name, parent_id, sort_order, created_at, updated_at, owner_user_id
-        FROM connection_folders WHERE ? = 1 OR owner_user_id = ?
+    const canReadAll = subject.runtime === 'desktop'
+        || subject.systemRole === 'super_admin'
+        || subject.systemRole === 'admin'
+        || subject.systemRole === 'auditor';
+    const sql = `WITH RECURSIVE visible_folders(id) AS (
+            SELECT DISTINCT c.folder_id
+            FROM connections c
+            WHERE c.folder_id IS NOT NULL AND (
+                c.owner_user_id = ? OR EXISTS (
+                    SELECT 1
+                    FROM connection_group_permissions permission
+                    JOIN user_group_members membership ON membership.group_id = permission.group_id
+                    WHERE permission.connection_id = c.id AND membership.user_id = ?
+                )
+            )
+            UNION
+            SELECT folder.parent_id
+            FROM connection_folders folder
+            JOIN visible_folders visible ON visible.id = folder.id
+            WHERE folder.parent_id IS NOT NULL
+        )
+        SELECT id, name, parent_id, sort_order, created_at, updated_at, owner_user_id
+        FROM connection_folders WHERE ? = 1 OR owner_user_id = ? OR id IN (SELECT id FROM visible_folders)
         ORDER BY COALESCE(parent_id, 0) ASC, sort_order ASC, name ASC, id ASC`;
     try {
         const db = await getDbInstance();
-        return allDb<ConnectionFolder>(db, sql, [canReadAll ? 1 : 0, subject.userId]);
+        return allDb<ConnectionFolder>(db, sql, [
+            subject.userId,
+            subject.userId,
+            canReadAll ? 1 : 0,
+            subject.userId,
+        ]);
     } catch (err: any) {
         console.error('Repository: 查询连接文件夹列表时出错:', err.message);
         throw new Error('获取连接文件夹列表失败');

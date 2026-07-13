@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { listReadableRecordings, readRecordingForSubject } from './session-recording.service';
+import { deleteRecordingForSubject, listReadableRecordings, readRecordingForSubject } from './session-recording.service';
 
 export const listRecordings = async (req: Request, res: Response): Promise<void> => {
   const limit = Number(req.query.limit ?? 25);
@@ -25,4 +25,12 @@ export const readRecording = async (req: Request, res: Response): Promise<void> 
     return;
   }
   res.json(recording);
+};
+
+export const deleteRecording = async (req: Request, res: Response): Promise<void> => {
+  const result = await deleteRecordingForSubject(req.params.recordingId, req.authorization!);
+  if (result === 'not_found') { res.status(404).json({ code: 'sessionRecording.notFound' }); return; }
+  if (result === 'forbidden') { res.status(403).json({ code: 'sessionRecording.deleteForbidden' }); return; }
+  if (result === 'active') { res.status(409).json({ code: 'sessionRecording.deleteActive' }); return; }
+  res.status(204).end();
 };

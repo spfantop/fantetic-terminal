@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -5,6 +6,7 @@ import { getAppDataPath } from '../config/app-data-path';
 import { createSessionRecorder, readRecordingEventPage } from './session-recorder';
 import {
   completeSessionRecording,
+  deleteSessionRecording,
   insertSessionRecording,
   listSessionRecordings,
   readSessionRecording,
@@ -102,4 +104,20 @@ export const readRecordingForSubject = async (
   const row = await readSessionRecording(id);
   if (!row || !canReadRecording(row, subject)) return undefined;
   return { metadata: row, ...await readRecordingEventPage(recordingRoot, row.relative_path, cursor, limit) };
+};
+
+export const deleteRecordingForSubject = async (
+  id: string,
+  subject: { runtime: string; systemRole: string; userId?: number },
+): Promise<'deleted' | 'not_found' | 'active' | 'forbidden'> => {
+  const row = await readSessionRecording(id);
+  if (!row) return 'not_found';
+  if (subject.runtime !== 'desktop' && !['super_admin', 'admin'].includes(subject.systemRole)) return 'forbidden';
+  if (row.status === 'active') return 'active';
+  const root = path.resolve(recordingRoot);
+  const target = path.resolve(root, row.relative_path);
+  if (target !== root && !target.startsWith(`${root}${path.sep}`)) return 'forbidden';
+  await fs.promises.rm(target, { force: true });
+  await deleteSessionRecording(id);
+  return 'deleted';
 };

@@ -21,6 +21,7 @@ notes?: string | null;
 
 export interface ConnectionWithTags extends ConnectionBase {
     tag_ids: number[];
+    effective_permission?: 'view' | 'connect' | 'manage';
 }
 
 

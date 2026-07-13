@@ -65,11 +65,6 @@
         </div>
 
         <div v-else class="settings-content-body">
-        <!-- Dashboard Tab Content -->
-        <div v-if="activeTab === 'dashboard'">
-          <DashboardView />
-        </div>
-
         <!-- Security Tab Content -->
         <div v-if="activeTab === 'security'">
           <div v-if="settings" class="p-4 bg-background text-foreground">
@@ -162,7 +157,6 @@ import SystemSettingsSection from '../components/settings/SystemSettingsSection.
 import AppearanceSection from '../components/settings/AppearanceSection.vue';
 import ProxiesView from './ProxiesView.vue';
 import NotificationsView from './NotificationsView.vue';
-import DashboardView from './DashboardView.vue';
 import { createSettingsTabs, type SettingsTabKey } from '../utils/settingsTabs';
 import { useResizable } from '../composables/useResizable';
 import { isAccountFeatureAvailable } from '../utils/runtimeConfig';

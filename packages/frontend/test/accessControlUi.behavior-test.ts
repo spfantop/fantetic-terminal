@@ -6,6 +6,7 @@ const source = (relativePath: string) => fs.readFileSync(path.resolve(process.cw
 const adminCenter = source('views/AdminCenterView.vue');
 const component = source('components/settings/AccessControlSettings.vue');
 const api = source('services/accessControl.api.ts');
+const connectionsView = source('views/ConnectionsView.vue');
 
 assert.match(adminCenter, /administratorRoles: SystemRole\[\] = \['super_admin', 'admin'\]/);
 assert.match(adminCenter, /'auditor'/);
@@ -28,5 +29,22 @@ assert.match(component, /assetPermissions/);
 assert.match(component, /saveConnectionGrant/);
 assert.match(component, /deleteConnectionGrant/);
 assert.match(api, /\/connections\/\$\{connectionId\}\/groups\/\$\{groupId\}/);
+assert.match(api, /listFolders/);
+assert.match(component, /folderPath/);
+assert.match(component, /user-action-panel/);
+assert.doesNotMatch(component, /class="permission-guide"/);
+assert.match(component, /permissionDescriptions/);
+assert.match(component, /permission-selector/);
+assert.match(component, /:aria-pressed="batchPermission === item\.permission"/);
+assert.match(component, /\.access-control \.batch-panel \.permission-selector button\{[^}]*background:var\(--background\);color:var\(--foreground\)/);
+assert.match(component, /\.permission-selector button\.active\{[^}]*background:var\(--accent\)/);
+assert.match(component, /user-action-modal/);
+assert.doesNotMatch(component, /<td><div class="inline"><input v-model="resetPasswords\[user\.id\]"/);
+assert.match(api, /effective_permission/);
+assert.match(connectionsView, /canConnectConnection/);
+assert.match(connectionsView, /canManageConnection/);
+assert.match(connectionsView, /server-entry-connect/);
+assert.match(connectionsView, /knownFolderIds/);
+assert.match(connectionsView, /width: 1\.45rem/);
 
 console.log('access control UI behavior ok');
