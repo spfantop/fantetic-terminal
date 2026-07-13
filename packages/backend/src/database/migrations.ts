@@ -577,6 +577,33 @@ const definedMigrations: Migration[] = [
             CREATE INDEX IF NOT EXISTS idx_session_recordings_asset_time
                 ON session_recordings(connection_id, started_at DESC);
         `,
+    },
+    {
+        id: 25,
+        name: 'Repair user-private settings tables after partial migration',
+        check: async (db: Database): Promise<boolean> => (
+            !(await tableExists(db, 'user_settings')) || !(await tableExists(db, 'user_appearance_settings'))
+        ),
+        sql: `
+            CREATE TABLE IF NOT EXISTS user_settings (
+                user_id INTEGER NOT NULL,
+                key TEXT NOT NULL,
+                value TEXT NOT NULL,
+                created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                PRIMARY KEY (user_id, key),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS user_appearance_settings (
+                user_id INTEGER NOT NULL,
+                key TEXT NOT NULL,
+                value TEXT NOT NULL,
+                created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                PRIMARY KEY (user_id, key),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+        `,
     }
 ];
 
