@@ -20,7 +20,7 @@
     </div>
 
     <div v-else class="backup-pane">
-      <header><div><h3>{{ t('backup.title') }}</h3><p>{{ t('backup.description') }}</p></div><div><button type="button" class="secondary" :disabled="backupLoading" @click="loadBackups"><i class="fas fa-rotate"></i>{{ t('common.refresh') }}</button><button type="button" :disabled="backupLoading" @click="createBackup"><i class="fas fa-plus"></i>{{ t('backup.create') }}</button></div></header>
+      <header><h3>{{ t('backup.title') }}</h3><div><button type="button" class="secondary" :disabled="backupLoading" @click="loadBackups"><i class="fas fa-rotate"></i>{{ t('common.refresh') }}</button><button type="button" :disabled="backupLoading" @click="createBackup"><i class="fas fa-plus"></i>{{ t('backup.create') }}</button></div></header>
       <p v-if="backupMessage" :class="backupError ? 'notice error' : 'notice success'">{{ backupMessage }}</p>
       <div class="backup-list"><article v-for="backup in backups" :key="backup.id"><div class="backup-icon"><i class="fas fa-box-archive"></i></div><div><strong>{{ formatDate(backup.createdAt) }}</strong><span>{{ t('backup.backupSummary', { schema: backup.schemaVersion, files: backup.files.length, size: formatBytes(totalSize(backup)) }) }}</span><small class="mono">{{ backup.id }}</small></div><button type="button" class="secondary" @click="verifyBackup(backup.id)">{{ t('backup.verify') }}</button><button type="button" class="danger" @click="beginRestore(backup)">{{ t('backup.restore') }}</button></article><p v-if="!backupLoading && !backups.length" class="empty-state">{{ t('backup.empty') }}</p></div>
     </div>

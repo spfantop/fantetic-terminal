@@ -269,7 +269,7 @@ onMounted(load);
     <p v-if="loading">{{ t('common.loading') }}</p>
 
     <div v-if="activePane === 'users'" class="card">
-      <div class="card-heading"><div><h2>{{ t('accessControl.users') }}</h2><p>{{ t('accessControl.usersHint', '创建账号并维护系统角色、状态和凭据。') }}</p></div><label class="search-field"><i class="fas fa-search"></i><input v-model="userSearch" :placeholder="t('accessControl.searchUsers', '搜索用户')"></label></div>
+      <div class="card-heading"><h2>{{ t('accessControl.users') }}</h2><label class="search-field"><i class="fas fa-search"></i><input v-model="userSearch" :placeholder="t('accessControl.searchUsers', '搜索用户')"></label></div>
       <form class="form-grid" @submit.prevent="createUser">
         <input v-model="newUser.username" :placeholder="t('accessControl.username')" autocomplete="off">
         <input v-model="newUser.password" type="password" :placeholder="t('accessControl.initialPassword')" autocomplete="new-password">
@@ -293,7 +293,7 @@ onMounted(load);
     </div>
 
     <div v-if="activePane === 'groups'" class="card">
-      <div class="card-heading"><div><h2>{{ t('accessControl.groups') }}</h2><p>{{ t('accessControl.groupsHint', '用分组组织成员角色和资产权限。') }}</p></div></div>
+      <div class="card-heading"><h2>{{ t('accessControl.groups') }}</h2></div>
       <form class="form-grid" @submit.prevent="createGroup"><input v-model="newGroup.name" :placeholder="t('accessControl.groupName')"><input v-model="newGroup.description" :placeholder="t('accessControl.description')"><button type="submit">{{ t('accessControl.createGroup') }}</button></form>
       <div class="group-toolbar"><select v-model="selectedGroupId" @change="loadMembers"><option :value="null">{{ t('accessControl.selectGroup') }}</option><option v-for="group in groups" :key="group.id" :value="group.id">{{ group.name }}</option></select><button v-if="selectedGroup" type="button" class="danger" @click="deleteGroup">{{ t('common.delete') }}</button></div>
       <template v-if="selectedGroup">
@@ -304,7 +304,7 @@ onMounted(load);
     </div>
 
     <div v-if="activePane === 'assets'" class="card">
-      <div class="card-heading"><div><h2>{{ t('accessControl.assetPermissions') }}</h2><p>{{ t('accessControl.assetsHint', '按连接资产向用户组授予查看、连接或管理权限。') }}</p></div><label class="search-field"><i class="fas fa-search"></i><input v-model="connectionSearch" :placeholder="t('accessControl.searchAssets', '搜索资产')"></label></div>
+      <div class="card-heading"><h2>{{ t('accessControl.assetPermissions') }}</h2><label class="search-field"><i class="fas fa-search"></i><input v-model="connectionSearch" :placeholder="t('accessControl.searchAssets', '搜索资产')"></label></div>
       <div class="grant-matrix">
         <section>
           <div class="matrix-heading"><strong>{{ t('accessControl.selectAssets', '选择资产') }}</strong><button type="button" class="text-button" @click="selectedConnectionIds = filteredConnections.map(item => item.id)">{{ t('common.selectAll', '全选') }}</button></div>

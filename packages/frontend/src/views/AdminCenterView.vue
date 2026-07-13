@@ -1,11 +1,7 @@
 <template>
   <main class="admin-center">
     <header class="admin-center-header">
-      <div>
-        <p class="admin-center-eyebrow">{{ t('adminCenter.eyebrow', '平台治理') }}</p>
-        <h1>{{ t('adminCenter.title', '管理中心') }}</h1>
-        <p>{{ t('adminCenter.description', '集中管理身份、资产权限、审计记录与系统数据。') }}</p>
-      </div>
+      <h1>{{ t('adminCenter.title', '管理中心') }}</h1>
       <RouterLink :to="{ name: 'Connections' }" class="admin-center-back">
         <i class="fas fa-arrow-left" aria-hidden="true"></i>
         {{ t('adminCenter.back', '返回工作区') }}
@@ -32,32 +28,13 @@
 
       <section class="admin-center-content" :aria-labelledby="`admin-section-${activeSection}`">
         <header class="admin-section-header">
-          <div>
-            <h2 :id="`admin-section-${activeSection}`">{{ activeItem.label }}</h2>
-            <p>{{ activeItem.description }}</p>
-          </div>
+          <i :class="activeItem.icon" aria-hidden="true"></i>
+          <h2 :id="`admin-section-${activeSection}`">{{ activeItem.label }}</h2>
         </header>
 
         <div v-if="activeSection === 'overview'" class="admin-overview">
-          <div class="admin-overview-context"><span>{{ t('adminCenter.signedInAs', { username: authStore.user?.username || '-' }) }}</span><strong>{{ authStore.user?.systemRole }}</strong></div>
           <div class="admin-overview-stats" :aria-busy="overviewLoading">
-            <article v-for="stat in visibleStats" :key="stat.key"><i :class="stat.icon"></i><span>{{ stat.label }}</span><strong v-if="overviewStats[stat.key] !== null">{{ overviewStats[stat.key] }}</strong><i v-else-if="overviewLoading" class="fas fa-spinner fa-spin overview-loading"></i><em v-else>—</em></article>
-          </div>
-          <div class="admin-overview-grid">
-          <button
-            v-for="item in overviewItems"
-            :key="item.key"
-            type="button"
-            class="admin-overview-card"
-            @click="selectSection(item.key)"
-          >
-            <i :class="item.icon" aria-hidden="true"></i>
-            <span>
-              <strong>{{ item.label }}</strong>
-              <small>{{ item.description }}</small>
-            </span>
-            <i class="fas fa-chevron-right" aria-hidden="true"></i>
-          </button>
+            <button v-for="stat in visibleStats" :key="stat.key" type="button" @click="selectSection(stat.section)"><i :class="stat.icon"></i><span>{{ stat.label }}</span><strong v-if="overviewStats[stat.key] !== null">{{ overviewStats[stat.key] }}</strong><i v-else-if="overviewLoading" class="fas fa-spinner fa-spin overview-loading"></i><em v-else>—</em></button>
           </div>
         </div>
         <AccessControlSettings v-else-if="activeSection === 'accessControl'" />
@@ -87,7 +64,6 @@ type AdminSection = 'overview' | 'accessControl' | 'auditLogs' | 'sessionRecordi
 interface AdminNavigationItem {
   key: AdminSection;
   label: string;
-  description: string;
   icon: string;
   roles: SystemRole[];
 }
@@ -103,25 +79,25 @@ const overviewLoading = ref(false);
 const overviewStats = ref<Record<OverviewStatKey, number | null>>({ users:null,groups:null,assets:null,auditLogs:null,recordings:null,backups:null });
 const visibleStats = computed(() => {
   const common = [
-    { key:'auditLogs' as const,label:t('nav.auditLogs'),icon:'fas fa-shield-halved' },
-    { key:'recordings' as const,label:t('sessionRecording.title'),icon:'fas fa-video' },
+    { key:'auditLogs' as const,section:'auditLogs' as const,label:t('nav.auditLogs'),icon:'fas fa-shield-halved' },
+    { key:'recordings' as const,section:'sessionRecordings' as const,label:t('sessionRecording.title'),icon:'fas fa-video' },
   ];
   if (!administratorRoles.includes(authStore.user?.systemRole ?? 'user')) return common;
   return [
-    { key:'users' as const,label:t('accessControl.users'),icon:'fas fa-user-shield' },
-    { key:'groups' as const,label:t('accessControl.groups'),icon:'fas fa-users' },
-    { key:'assets' as const,label:t('accessControl.assetPermissions'),icon:'fas fa-server' },
+    { key:'users' as const,section:'accessControl' as const,label:t('accessControl.users'),icon:'fas fa-user-shield' },
+    { key:'groups' as const,section:'accessControl' as const,label:t('accessControl.groups'),icon:'fas fa-users' },
+    { key:'assets' as const,section:'accessControl' as const,label:t('accessControl.assetPermissions'),icon:'fas fa-server' },
     ...common,
-    { key:'backups' as const,label:t('backup.title'),icon:'fas fa-box-archive' },
+    { key:'backups' as const,section:'dataManagement' as const,label:t('backup.title'),icon:'fas fa-box-archive' },
   ];
 });
 
 const allItems = computed<AdminNavigationItem[]>(() => [
-  { key: 'overview', label: t('adminCenter.sections.overview', '概览'), description: t('adminCenter.descriptions.overview', '按职责快速进入各项管理能力。'), icon: 'fas fa-grid-2', roles: auditRoles },
-  { key: 'accessControl', label: t('accessControl.title', '访问控制'), description: t('adminCenter.descriptions.accessControl', '管理用户、用户组和连接资产授权。'), icon: 'fas fa-users-gear', roles: administratorRoles },
-  { key: 'auditLogs', label: t('nav.auditLogs', '审计日志'), description: t('adminCenter.descriptions.auditLogs', '检索关键操作并追踪责任主体。'), icon: 'fas fa-shield-halved', roles: auditRoles },
-  { key: 'sessionRecordings', label: t('sessionRecording.title', '会话录像'), description: t('adminCenter.descriptions.sessionRecordings', '查看终端会话记录和回放。'), icon: 'fas fa-video', roles: auditRoles },
-  { key: 'dataManagement', label: t('settings.tabs.dataManagement', '数据管理'), description: t('adminCenter.descriptions.dataManagement', '执行导入、导出、备份和恢复。'), icon: 'fas fa-database', roles: administratorRoles },
+  { key: 'overview', label: t('adminCenter.sections.overview', '概览'), icon: 'fas fa-grid-2', roles: auditRoles },
+  { key: 'accessControl', label: t('accessControl.title', '访问控制'), icon: 'fas fa-users-gear', roles: administratorRoles },
+  { key: 'auditLogs', label: t('nav.auditLogs', '审计日志'), icon: 'fas fa-shield-halved', roles: auditRoles },
+  { key: 'sessionRecordings', label: t('sessionRecording.title', '会话录像'), icon: 'fas fa-video', roles: auditRoles },
+  { key: 'dataManagement', label: t('settings.tabs.dataManagement', '数据管理'), icon: 'fas fa-database', roles: administratorRoles },
 ]);
 const allowedItems = computed(() => {
   const role = authStore.user?.systemRole;
@@ -133,7 +109,6 @@ const requestedSection = computed(() => {
 });
 const activeSection = computed(() => requestedSection.value);
 const activeItem = computed(() => allowedItems.value.find(item => item.key === activeSection.value) ?? allItems.value[0]!);
-const overviewItems = computed(() => allowedItems.value.filter(item => item.key !== 'overview'));
 const navigationGroups = computed(() => [
   { label: t('adminCenter.groups.workspace', '管理概览'), items: allowedItems.value.filter(item => item.key === 'overview') },
   { label: t('adminCenter.groups.identity', '身份与资产'), items: allowedItems.value.filter(item => item.key === 'accessControl') },
@@ -170,40 +145,21 @@ onMounted(loadOverviewStats);
 </script>
 
 <style scoped>
-.admin-center { min-height: 100vh; padding: 28px; color: hsl(var(--foreground)); background: hsl(var(--background)); }
-.admin-center-header { max-width: 1500px; margin: 0 auto 22px; display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; }
-.admin-center-eyebrow { margin: 0 0 5px; color: hsl(var(--primary)); font-size: 12px; font-weight: 700; letter-spacing: .12em; }
-.admin-center-header h1 { margin: 0; font-size: clamp(24px, 3vw, 34px); }
-.admin-center-header p:not(.admin-center-eyebrow) { margin: 8px 0 0; color: hsl(var(--muted-foreground)); }
-.admin-center-back { display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid hsl(var(--border)); border-radius: 10px; color: inherit; text-decoration: none; }
-.admin-center-layout { max-width: 1500px; min-height: calc(100vh - 140px); margin: 0 auto; display: grid; grid-template-columns: 230px minmax(0, 1fr); border: 1px solid hsl(var(--border)); border-radius: 16px; overflow: hidden; background: hsl(var(--card)); }
-.admin-center-navigation { padding: 18px 12px; border-right: 1px solid hsl(var(--border)); background: hsl(var(--muted) / .28); }
-.admin-nav-group + .admin-nav-group { margin-top: 22px; }
-.admin-nav-group h2 { margin: 0 10px 7px; color: hsl(var(--muted-foreground)); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
-.admin-nav-item { width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 0; border-radius: 9px; color: hsl(var(--muted-foreground)); background: transparent; text-align: left; cursor: pointer; }
-.admin-nav-item:hover, .admin-nav-item:focus-visible { color: hsl(var(--foreground)); background: hsl(var(--accent)); outline: none; }
-.admin-nav-item.active { color: hsl(var(--primary-foreground)); background: hsl(var(--primary)); }
-.admin-center-content { min-width: 0; padding: 24px; overflow: auto; }
-.admin-section-header { padding-bottom: 18px; margin-bottom: 20px; border-bottom: 1px solid hsl(var(--border)); }
-.admin-section-header h2 { margin: 0; font-size: 22px; }
-.admin-section-header p { margin: 6px 0 0; color: hsl(var(--muted-foreground)); }
-.admin-overview{display:grid;gap:18px}.admin-overview-context{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border:1px solid hsl(var(--border));border-radius:10px;color:hsl(var(--muted-foreground));background:hsl(var(--muted)/.2)}.admin-overview-context strong{padding:3px 8px;border-radius:999px;color:hsl(var(--primary));background:hsl(var(--primary)/.1);font-size:12px}.admin-overview-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.admin-overview-stats article{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;padding:14px;border:1px solid hsl(var(--border));border-radius:10px;background:hsl(var(--background))}.admin-overview-stats article>i:first-child{color:hsl(var(--primary))}.admin-overview-stats article span{font-size:12px;color:hsl(var(--muted-foreground))}.admin-overview-stats article strong{font-size:20px}.admin-overview-stats article em{font-style:normal;color:hsl(var(--muted-foreground))}.admin-overview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-.admin-overview-card { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 20px; border: 1px solid hsl(var(--border)); border-radius: 12px; color: inherit; background: hsl(var(--background)); text-align: left; cursor: pointer; }
-.admin-overview-card:hover, .admin-overview-card:focus-visible { border-color: hsl(var(--primary)); box-shadow: 0 8px 24px hsl(var(--foreground) / .07); outline: none; }
-.admin-overview-card > i:first-child { font-size: 22px; color: hsl(var(--primary)); }
-.admin-overview-card span { display: grid; gap: 5px; }
-.admin-overview-card small { color: hsl(var(--muted-foreground)); line-height: 1.45; }
+.admin-center{--background:var(--app-bg-color);--foreground:var(--text-color);--border:var(--border-color);--card:var(--app-bg-color);--muted:var(--header-bg-color);--muted-foreground:var(--text-color-secondary);--primary:var(--link-active-color);--primary-foreground:var(--button-text-color);--accent:var(--nav-item-active-bg-color);--destructive:var(--color-error);--destructive-foreground:var(--color-error-text);--success:var(--color-success);--warning:var(--color-warning);min-height:100vh;padding:1rem;color:var(--text-color);background:var(--app-bg-color)}
+.admin-center-header{max-width:82rem;margin:0 auto .75rem;display:flex;align-items:center;justify-content:space-between;gap:1rem}.admin-center-header h1{margin:0;font-size:1.45rem;line-height:1.2}.admin-center-back{display:inline-flex;align-items:center;gap:.5rem;padding:.5rem .7rem;border:1px solid var(--border-color);border-radius:.5rem;color:var(--text-color);font-size:.85rem;text-decoration:none}.admin-center-back:hover,.admin-center-back:focus-visible{background:var(--nav-item-active-bg-color);color:var(--link-active-color);outline:none}
+.admin-center-layout{max-width:82rem;height:calc(100dvh - 4.5rem);min-height:30rem;margin:0 auto;display:grid;grid-template-columns:16rem minmax(0,1fr);border:1px solid var(--border-color);border-radius:.75rem;overflow:hidden;background:var(--app-bg-color)}
+.admin-center-navigation{padding:.75rem;border-right:1px solid var(--border-color);background:var(--header-bg-color);overflow-y:auto}.admin-nav-group+.admin-nav-group{margin-top:1rem}.admin-nav-group h2{margin:0 .75rem .35rem;color:var(--text-color-secondary);font-size:.72rem;font-weight:600}.admin-nav-item{width:100%;display:flex;align-items:center;gap:.75rem;padding:.6rem .85rem;border:1px solid transparent;border-radius:.6rem;color:var(--text-color);background:transparent;text-align:left;cursor:pointer}.admin-nav-item i{width:1.2rem;color:currentColor;text-align:center}.admin-nav-item:hover,.admin-nav-item:focus-visible{border-color:var(--border-color);color:var(--link-hover-color);outline:none}.admin-nav-item.active{border-color:color-mix(in srgb,var(--link-active-color) 42%,var(--border-color));background:var(--nav-item-active-bg-color);color:var(--link-active-color)}
+.admin-center-content{min-width:0;overflow:auto;background:var(--app-bg-color)}.admin-section-header{display:flex;align-items:center;gap:.75rem;padding:1rem 1.25rem;border-bottom:1px solid var(--border-color);background:var(--app-bg-color)}.admin-section-header i{display:grid;place-content:center;width:2rem;height:2rem;border-radius:.55rem;background:var(--nav-item-active-bg-color);color:var(--link-active-color)}.admin-section-header h2{margin:0;font-size:1.25rem}.admin-center-content>:not(.admin-section-header){margin:1rem 1.25rem 1.25rem}
+.admin-overview{display:grid;gap:.75rem}.admin-overview-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.65rem}.admin-overview-stats button{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:.65rem;padding:.8rem;border:1px solid var(--border-color);border-radius:.55rem;background:var(--app-bg-color);color:var(--text-color);text-align:left;cursor:pointer}.admin-overview-stats button:hover,.admin-overview-stats button:focus-visible{border-color:color-mix(in srgb,var(--link-active-color) 42%,var(--border-color));background:var(--nav-item-active-bg-color);color:var(--link-active-color);outline:none}.admin-overview-stats button>i:first-child{color:currentColor}.admin-overview-stats button span{font-size:.78rem;color:currentColor}.admin-overview-stats button strong{font-size:1.15rem}.admin-overview-stats button em{font-style:normal;color:var(--text-color-secondary)}
 @media (max-width: 760px) {
-  .admin-center { padding: 12px; }
-  .admin-center-header { align-items: stretch; flex-direction: column; }
-  .admin-center-back { align-self: flex-start; }
-  .admin-center-layout { display: block; }
-  .admin-center-navigation { display: flex; gap: 8px; overflow-x: auto; border-right: 0; border-bottom: 1px solid hsl(var(--border)); }
+  .admin-center { padding: .5rem; }
+  .admin-center-header { align-items: center; }
+  .admin-center-layout { display: block; height:calc(100dvh - 3.75rem); }
+  .admin-center-navigation { display: flex; gap: .35rem; padding:.5rem; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--border-color); }
   .admin-nav-group { display: contents; }
   .admin-nav-group h2 { display: none; }
   .admin-nav-item { width: auto; white-space: nowrap; }
-  .admin-center-content { padding: 16px; }
-  .admin-overview-grid { grid-template-columns: 1fr; }
+  .admin-center-content { height:calc(100% - 3.3rem); }
   .admin-overview-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 </style>
