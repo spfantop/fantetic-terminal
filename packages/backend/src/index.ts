@@ -69,6 +69,8 @@ import accessControlRouter from './access-control/access-control.routes';
 import { initializeRuntimeSecrets } from './config/runtime-secrets';
 import { installProcessLifecycle } from './config/process-lifecycle';
 import { auditContextMiddleware } from './audit/audit-context';
+import backupRouter from './backup/backup.routes';
+import { applyScheduledRestore } from './backup/backup.service';
 
 
 import './services/event.service'; 
@@ -195,6 +197,7 @@ const startServer = async (): Promise<WebSocketServer> => {
     app.use('/api/v1/favorite-paths', favoritePathsRouter);
     app.use('/api/v1/ai', aiRoutes);
     app.use('/api/v1/access-control', accessControlRouter);
+    app.use('/api/v1/backups', backupRouter);
     
     // 状态检查接口
     app.get('/api/v1/status', (req: Request, res: Response) => {
@@ -256,6 +259,8 @@ const main = async () => {
     if (secrets.generated) {
         console.warn(`[ENV Init] 已为当前运行模式生成并安全保存缺失密钥到 ${dataEnvPathGlobal}`);
     }
+    const restoredBackupId = await applyScheduledRestore(getAppDataPath());
+    if (restoredBackupId) console.warn(`[Backup] 已在数据库启动前恢复备份 ${restoredBackupId}。`);
     await initializeDatabase();   // 然后初始化数据库
     webSocketServer = await startServer();
 };

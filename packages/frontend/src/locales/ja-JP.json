@@ -22,6 +22,7 @@
             "GROUP_CREATED": "グループ作成", "GROUP_UPDATED": "グループ更新", "GROUP_DELETED": "グループ削除",
             "GROUP_MEMBER_SAVED": "グループメンバー保存", "GROUP_MEMBER_DELETED": "グループメンバー削除",
             "CONNECTION_GRANT_SAVED": "接続権限保存", "CONNECTION_GRANT_DELETED": "接続権限取消",
+            "BACKUP_CREATED": "システムバックアップ作成", "BACKUP_RESTORE_SCHEDULED": "バックアップ復元予約",
             "PROXY_CREATED": "プロキシ作成",
             "PROXY_DELETED": "プロキシ削除",
             "PROXY_UPDATED": "プロキシ更新",
@@ -771,7 +772,7 @@
         "terminal": "ターミナル",
     "mainNavigation": "メインナビゲーション"
   },
-  "accessControl": {
+    "accessControl": {
     "title": "アクセス制御", "users": "ユーザー管理", "groups": "グループ管理", "username": "ユーザー名",
     "initialPassword": "初期パスワード（12文字以上）", "systemRole": "システムロール", "status": "状態",
     "password": "パスワード", "createUser": "ユーザー作成", "reset": "リセット", "transferTarget": "資産の引受先",
@@ -794,6 +795,13 @@
         "themeToDark": "ダークモード",
         "defaultThemeApplied": "デフォルトモードに切り替えました",
         "darkThemeApplied": "ダークモードに切り替えました"
+    },
+    "backup": {
+        "title": "システムのバックアップと復元", "description": "SQLite の整合性スナップショットとユーザーファイルのハッシュを作成します。復元は次回起動時、DB を開く前に実行されます。",
+        "create": "バックアップ作成", "created": "バックアップを作成しました。", "createdAt": "作成日時", "schemaVersion": "スキーマ版", "fileCount": "ファイル数",
+        "verify": "検証", "restore": "復元を予約", "empty": "バックアップなし", "valid": "バックアップの整合性を確認しました。",
+        "invalid": "バックアップ検証失敗: {errors}", "confirmRestore": "この復元を予約しますか？サービス再起動時に現在のデータが置換されます。",
+        "restoreScheduled": "復元を予約しました。サービスを再起動してください。", "operationFailed": "バックアップ操作に失敗しました。"
     },
     "notificationController": {
         "errorCreateSetting": "通知設定の作成に失敗しました",

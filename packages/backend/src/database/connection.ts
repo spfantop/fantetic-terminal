@@ -15,6 +15,14 @@ interface RunResult {
     changes: number;
 }
 
+type BackupCapableDatabase = sqlite3.Database & {
+    // sqlite3 exposes this API at runtime, but the bundled legacy typings omit it.
+    backup(filename: string): {
+        step(pages: number, callback: (error: Error | null) => void): void;
+        finish(callback: (error: Error | null) => void): void;
+    };
+};
+
 const describeDatabaseError = (sql: string, parameterCount: number, error: Error): string => {
     const normalizedSql = sql.replace(/\s+/g, ' ').trim();
     const statement = normalizedSql.slice(0, 160);
@@ -137,6 +145,26 @@ export const closeDbInstance = async (): Promise<void> => {
         db.close((error) => error ? reject(error) : resolve());
     });
     if (dbInstancePromise === currentPromise) dbInstancePromise = null;
+};
+
+export const backupDatabaseTo = async (targetPath: string): Promise<void> => {
+    const db = await getDbInstance();
+    await new Promise<void>((resolve, reject) => {
+        const backup = (db as BackupCapableDatabase).backup(targetPath);
+        backup.step(-1, stepError => {
+            if (stepError) {
+                backup.finish(() => reject(stepError));
+                return;
+            }
+            backup.finish(finishError => finishError ? reject(finishError) : resolve());
+        });
+    });
+};
+
+export const readDatabaseSchemaVersion = async (): Promise<number> => {
+    const db = await getDbInstance();
+    const row = await getDb<{ version: number | null }>(db, 'SELECT MAX(id) AS version FROM migrations');
+    return row?.version ?? 0;
 };
 
 

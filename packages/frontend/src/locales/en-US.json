@@ -29,6 +29,13 @@
     "selectConnection": "Select connection asset", "permission": "Permission", "addGrant": "Add grant",
     "grantSaved": "Connection grant saved.", "grantDeleted": "Connection grant revoked.", "error": "Access control operation failed."
   },
+  "backup": {
+    "title": "System backup and restore", "description": "Create a consistent SQLite snapshot with verified user files. Restore runs before the database opens on the next service start.",
+    "create": "Create backup", "created": "Backup created.", "createdAt": "Created at", "schemaVersion": "Schema version", "fileCount": "Files",
+    "verify": "Verify", "restore": "Schedule restore", "empty": "No backups", "valid": "Backup integrity verified.",
+    "invalid": "Backup verification failed: {errors}", "confirmRestore": "Schedule this restore? The service must restart and current data will be replaced.",
+    "restoreScheduled": "Restore scheduled. Restart the service to apply it.", "operationFailed": "Backup operation failed."
+  },
   "dock": {
     "hide": "Hide navigation",
     "show": "Show navigation",
@@ -1003,6 +1010,7 @@
         "GROUP_CREATED": "Group Created", "GROUP_UPDATED": "Group Updated", "GROUP_DELETED": "Group Deleted",
         "GROUP_MEMBER_SAVED": "Group Member Saved", "GROUP_MEMBER_DELETED": "Group Member Removed",
         "CONNECTION_GRANT_SAVED": "Connection Grant Saved", "CONNECTION_GRANT_DELETED": "Connection Grant Revoked",
+        "BACKUP_CREATED": "System Backup Created", "BACKUP_RESTORE_SCHEDULED": "Backup Restore Scheduled",
         "2FA_ENABLED": "2FA Enabled",
         "2FA_DISABLED": "2FA Disabled",
         "PASSKEY_REGISTERED": "Passkey Registered",

@@ -5,6 +5,24 @@
         {{ t('settings.category.dataManagement', '数据管理') }}
       </h2>
       <div class="space-y-6">
+      <div v-if="isAdministrator" class="settings-section-content">
+        <h3 class="text-base font-semibold text-foreground mb-3">{{ t('backup.title') }}</h3>
+        <p class="text-sm text-text-secondary mb-4">{{ t('backup.description') }}</p>
+        <div class="flex flex-wrap items-center gap-3 mb-4">
+          <button type="button" :disabled="backupLoading" class="px-4 py-2 bg-button text-button-text rounded-md disabled:opacity-50" @click="createBackup">
+            {{ backupLoading ? t('common.loading') : t('backup.create') }}
+          </button>
+          <button type="button" :disabled="backupLoading" class="px-4 py-2 border border-border rounded-md" @click="loadBackups">{{ t('common.refresh') }}</button>
+          <span v-if="backupMessage" :class="backupError ? 'text-error' : 'text-success'">{{ backupMessage }}</span>
+        </div>
+        <div class="overflow-x-auto border border-border rounded-md">
+          <table class="min-w-full text-sm"><thead class="bg-header"><tr><th class="p-3 text-left">{{ t('backup.createdAt') }}</th><th class="p-3 text-left">{{ t('backup.schemaVersion') }}</th><th class="p-3 text-left">{{ t('backup.fileCount') }}</th><th class="p-3 text-left">{{ t('common.actions') }}</th></tr></thead>
+            <tbody><tr v-for="backup in backups" :key="backup.id" class="border-t border-border"><td class="p-3">{{ backup.createdAt }}</td><td class="p-3">{{ backup.schemaVersion }}</td><td class="p-3">{{ backup.files.length }}</td><td class="p-3 flex gap-2"><button type="button" class="px-3 py-1 border border-border rounded" @click="verifyBackup(backup.id)">{{ t('backup.verify') }}</button><button type="button" class="px-3 py-1 bg-error text-white rounded" @click="scheduleRestore(backup.id)">{{ t('backup.restore') }}</button></td></tr>
+              <tr v-if="backups.length === 0"><td colspan="4" class="p-4 text-center text-text-secondary">{{ t('backup.empty') }}</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
       <!-- Export Connections Section -->
       <div class="settings-section-content">
          <h3 class="text-base font-semibold text-foreground mb-3">{{ t('settings.exportConnections.title', '导出连接数据') }}</h3>
@@ -79,15 +97,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useSettingsStore } from '../../stores/settings.store';
 import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
 import { useDataManagement } from '../../composables/settings/useDataManagement';
+import { useAuthStore } from '../../stores/auth.store';
+import { backupApi, type BackupManifest } from '../../services/backup.api';
 
 const settingsStore = useSettingsStore();
 const { settings } = storeToRefs(settingsStore);
 const { t } = useI18n();
+const authStore = useAuthStore();
+const isAdministrator = computed(() => ['super_admin', 'admin'].includes(authStore.user?.systemRole ?? ''));
+const backups = ref<BackupManifest[]>([]);
+const backupLoading = ref(false);
+const backupMessage = ref('');
+const backupError = ref(false);
 const selectedImportFile = ref<File | null>(null);
 const importFileInputRef = ref<HTMLInputElement | null>(null);
 
@@ -115,4 +141,30 @@ const submitImportConnections = async () => {
     selectedImportFile.value = null;
   }
 };
+
+const loadBackups = async () => {
+  if (!isAdministrator.value) return;
+  backupLoading.value = true;
+  try { backups.value = await backupApi.list(); backupError.value = false; }
+  catch { backupError.value = true; backupMessage.value = t('backup.operationFailed'); }
+  finally { backupLoading.value = false; }
+};
+const createBackup = async () => {
+  backupLoading.value = true;
+  try { await backupApi.create(); backupMessage.value = t('backup.created'); backupError.value = false; await loadBackups(); }
+  catch { backupError.value = true; backupMessage.value = t('backup.operationFailed'); backupLoading.value = false; }
+};
+const verifyBackup = async (backupId: string) => {
+  try {
+    const result = await backupApi.verify(backupId);
+    backupError.value = !result.valid;
+    backupMessage.value = result.valid ? t('backup.valid') : t('backup.invalid', { errors: result.errors.join('; ') });
+  } catch { backupError.value = true; backupMessage.value = t('backup.operationFailed'); }
+};
+const scheduleRestore = async (backupId: string) => {
+  if (!window.confirm(t('backup.confirmRestore'))) return;
+  try { await backupApi.scheduleRestore(backupId); backupError.value = false; backupMessage.value = t('backup.restoreScheduled'); }
+  catch { backupError.value = true; backupMessage.value = t('backup.operationFailed'); }
+};
+onMounted(loadBackups);
 </script>

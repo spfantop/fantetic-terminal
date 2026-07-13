@@ -41,6 +41,7 @@ jobs:
           npm run test:service-worker-policy --workspace=@fantetic-terminal/frontend
           npm run test:startup-chunking --workspace=@fantetic-terminal/frontend
           npm run test:access-control-ui --workspace=@fantetic-terminal/frontend
+          npm run test:backup-management --workspace=@fantetic-terminal/frontend
           npm run test:highlighter --workspace=@fantetic-terminal/frontend
           npm run test:terminal-render-highlighter --workspace=@fantetic-terminal/frontend
           npm run test:terminal-local-echo --workspace=@fantetic-terminal/frontend
@@ -53,6 +54,8 @@ jobs:
           npm run test:system-role-routes --workspace=@fantetic-terminal/backend
           npm run test:notification-config-encryption --workspace=@fantetic-terminal/backend
           npm run test:audit-context --workspace=@fantetic-terminal/backend
+          npm run test:backup-service --workspace=@fantetic-terminal/backend
+          npm run test:database-backup --workspace=@fantetic-terminal/backend
           npm run test:access-control-migration --workspace=@fantetic-terminal/backend
           npm run test:process-lifecycle --workspace=@fantetic-terminal/backend
           npm run test:database-runtime --workspace=@fantetic-terminal/backend

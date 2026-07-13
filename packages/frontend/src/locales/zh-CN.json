@@ -29,6 +29,13 @@
     "selectConnection": "选择连接资产", "permission": "权限", "addGrant": "添加授权",
     "grantSaved": "连接授权已保存。", "grantDeleted": "连接授权已撤销。", "error": "访问控制操作失败。"
   },
+  "backup": {
+    "title": "系统备份与恢复", "description": "创建 SQLite 一致性快照并校验用户文件。恢复将在下次服务启动、数据库打开前执行。",
+    "create": "创建备份", "created": "备份已创建。", "createdAt": "创建时间", "schemaVersion": "数据库版本", "fileCount": "文件数",
+    "verify": "校验", "restore": "安排恢复", "empty": "暂无备份", "valid": "备份完整性校验通过。",
+    "invalid": "备份校验失败：{errors}", "confirmRestore": "确定安排恢复此备份吗？服务必须重启，当前数据会被替换。",
+    "restoreScheduled": "恢复已安排，请重启服务以应用。", "operationFailed": "备份操作失败。"
+  },
   "dock": {
     "hide": "隐藏导航栏",
     "show": "显示导航栏",
@@ -987,6 +994,7 @@
         "GROUP_CREATED": "分组已创建", "GROUP_UPDATED": "分组已更新", "GROUP_DELETED": "分组已删除",
         "GROUP_MEMBER_SAVED": "分组成员已保存", "GROUP_MEMBER_DELETED": "分组成员已移除",
         "CONNECTION_GRANT_SAVED": "连接授权已保存", "CONNECTION_GRANT_DELETED": "连接授权已撤销",
+        "BACKUP_CREATED": "系统备份已创建", "BACKUP_RESTORE_SCHEDULED": "备份恢复已安排",
         "2FA_ENABLED": "两步验证已启用",
         "2FA_DISABLED": "两步验证已禁用",
         "PASSKEY_REGISTERED": "Passkey 已注册",
