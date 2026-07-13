@@ -811,7 +811,7 @@
         "create": "バックアップ作成", "created": "バックアップを作成しました。", "createdAt": "作成日時", "schemaVersion": "スキーマ版", "fileCount": "ファイル数",
         "verify": "検証", "restore": "復元を予約", "empty": "バックアップなし", "valid": "バックアップの整合性を確認しました。",
         "invalid": "バックアップ検証失敗: {errors}", "confirmRestore": "この復元を予約しますか？サービス再起動時に現在のデータが置換されます。",
-        "restoreScheduled": "復元を予約しました。サービスを再起動してください。", "operationFailed": "バックアップ操作に失敗しました。"
+        "restoreScheduled": "復元を予約しました。サービスを再起動してください。", "operationFailed": "バックアップ操作に失敗しました。", "dataNavigation": "データ管理ナビゲーション", "transferTitle": "インポートとエクスポート", "backupSummary": "スキーマ {schema}・{files} ファイル・{size}", "restoreWizard": "復元ウィザード", "restoreStep": "{current}/{total} ステップ", "review": "バックアップ確認", "integrity": "整合性検証", "confirmImpact": "影響の確認", "totalSize": "合計サイズ", "verifying": "バックアップを検証中…", "verifyBeforeRestore": "復元前に整合性検証に合格する必要があります。", "restartRequired": "復元はサービス再起動後に適用されます", "restoreImpact": "現在のデータベースとユーザーファイルは選択したバックアップに置き換わります。予約後、メンテナンス時間にサービスを再起動してください。", "acknowledgeImpact": "現在のデータが置換されることを理解し、サービス再起動を計画しました。"
     },
     "notificationController": {
         "errorCreateSetting": "通知設定の作成に失敗しました",

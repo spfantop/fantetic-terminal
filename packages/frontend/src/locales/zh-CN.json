@@ -43,7 +43,7 @@
     "create": "创建备份", "created": "备份已创建。", "createdAt": "创建时间", "schemaVersion": "数据库版本", "fileCount": "文件数",
     "verify": "校验", "restore": "安排恢复", "empty": "暂无备份", "valid": "备份完整性校验通过。",
     "invalid": "备份校验失败：{errors}", "confirmRestore": "确定安排恢复此备份吗？服务必须重启，当前数据会被替换。",
-    "restoreScheduled": "恢复已安排，请重启服务以应用。", "operationFailed": "备份操作失败。"
+    "restoreScheduled": "恢复已安排，请重启服务以应用。", "operationFailed": "备份操作失败。", "dataNavigation": "数据管理导航", "transferTitle": "导入与导出", "backupSummary": "数据库版本 {schema} · {files} 个文件 · {size}", "restoreWizard": "恢复向导", "restoreStep": "第 {current}/{total} 步", "review": "检查备份", "integrity": "完整性校验", "confirmImpact": "确认影响", "totalSize": "总大小", "verifying": "正在校验备份…", "verifyBeforeRestore": "恢复前必须通过完整性校验。", "restartRequired": "服务重启后才会应用恢复", "restoreImpact": "当前数据库和用户文件将被所选备份替换。安排恢复后，请在维护窗口重启服务。", "acknowledgeImpact": "我已了解当前数据会被替换，并已安排服务重启。"
   },
   "dock": {
     "hide": "隐藏导航栏",

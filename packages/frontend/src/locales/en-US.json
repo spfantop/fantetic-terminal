@@ -43,7 +43,7 @@
     "create": "Create backup", "created": "Backup created.", "createdAt": "Created at", "schemaVersion": "Schema version", "fileCount": "Files",
     "verify": "Verify", "restore": "Schedule restore", "empty": "No backups", "valid": "Backup integrity verified.",
     "invalid": "Backup verification failed: {errors}", "confirmRestore": "Schedule this restore? The service must restart and current data will be replaced.",
-    "restoreScheduled": "Restore scheduled. Restart the service to apply it.", "operationFailed": "Backup operation failed."
+    "restoreScheduled": "Restore scheduled. Restart the service to apply it.", "operationFailed": "Backup operation failed.", "dataNavigation": "Data management navigation", "transferTitle": "Import & export", "backupSummary": "Schema {schema} · {files} files · {size}", "restoreWizard": "Restore wizard", "restoreStep": "Step {current} of {total}", "review": "Review backup", "integrity": "Integrity check", "confirmImpact": "Confirm impact", "totalSize": "Total size", "verifying": "Verifying backup…", "verifyBeforeRestore": "The backup must pass integrity verification before restore.", "restartRequired": "Restore applies after a service restart", "restoreImpact": "The selected backup will replace the current database and user files. Restart the service during a maintenance window after scheduling.", "acknowledgeImpact": "I understand current data will be replaced and have planned the service restart."
   },
   "dock": {
     "hide": "Hide navigation",
