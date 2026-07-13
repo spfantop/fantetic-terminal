@@ -1,107 +1,117 @@
-![banner.png](./doc/imgs/banner.png)
+![Fantetic Terminal 横幅](./doc/imgs/banner.png)
 
 ---
 
 <div align="center">
 
-[![Docker](https://img.shields.io/badge/-Docker-2496ED?style=flat-square&logo=docker&logoColor=white)][docker-url] [![License: GPL-3.0](https://img.shields.io/badge/License-GPL%203.0-4CAF50?style=flat-square)](https://github.com/spfantop/fantetic-terminal/blob/main/LICENSE)
+[![Docker](https://img.shields.io/badge/-Docker-2496ED?style=flat-square&logo=docker&logoColor=white)][docker-url] [![License: GPL-3.0](https://img.shields.io/badge/license-GNU%20GPLv3-green)](https://github.com/spfantop/fantetic-terminal/blob/main/LICENSE)
+
+[English](./README.md) | [中文](./README_EN.md)
 
 [docker-url]: https://hub.docker.com/r/spfantop/fantetic-terminal-frontend
 
 </div>
 
+## 📖 概述
 
+**Fantetic Terminal** 是一个现代化的 Web 与桌面远程访问工作台，支持 SSH、Telnet、RDP 和 VNC，并将终端会话、SFTP 文件管理、在线编辑、管理控制、审计、加密录像及校验备份恢复整合到可高度定制的界面中。
 
-## 📖 Overview
+本项目基于 [Heavrnl/nexus-terminal](https://github.com/Heavrnl/nexus-terminal) 开发，感谢原作者。
 
-**Fantetic Terminal** is a modern, feature-rich web-based SSH / RDP / VNC client dedicated to providing a highly customizable remote connection experience.
+- 当前维护仓库：[spfantop/fantetic-terminal](https://github.com/spfantop/fantetic-terminal)
+- 源项目：[Heavrnl/nexus-terminal](https://github.com/Heavrnl/nexus-terminal)
 
-Developed based on the [Heavrnl/nexus-terminal](https://github.com/Heavrnl/nexus-terminal) project. Thanks to the original author.
+## ✨ 功能特性
 
-Current maintained repository: [spfantop/fantetic-terminal](https://github.com/spfantop/fantetic-terminal)
+### 远程工作台
 
-Original project: [Heavrnl/nexus-terminal](https://github.com/Heavrnl/nexus-terminal)
+- SSH 与 Telnet 终端，支持多标签页、分屏、弹出窗口、自动重连、心跳保活和会话挂起。
+- SFTP 文件管理，支持拖拽上传、多选、重命名、权限修改、复制/移动、压缩及在线编辑。
+- 通过隔离的 Remote Gateway 信任边界支持 RDP/VNC。
+- Monaco Editor 与移动端 CodeMirror 编辑器，仅在真实编辑请求出现时按需加载。
+- 快捷指令、命令历史、路径历史、收藏路径、Docker 工具、状态监控及自定义布局。
+- 支持 PWA 和独立 Electron 桌面客户端。
 
-## ✨ Features
+### 管理与安全
 
-*   Page refactoring
-*   Manage SSH and SFTP connections with multiple tabs, split panes, and pop-up windows
-*   Support remote access to desktops via RDP/VNC protocol
-*   Utilizes Monaco Editor for online file editing
-*   Integrated multi-factor login security mechanisms, including human verification (hCaptcha, Google reCAPTCHA) and two-factor authentication (2FA)
-*   Highly customizable interface themes and layout styles
-*   Built-in simple Docker container management panel for easy container operations
-*   Supports IP whitelisting and blacklisting, with automatic banning for abnormal access
-*   Notification system (e.g., login reminders, anomaly alerts)
-*   Audit logs for comprehensive recording of user behavior and system changes
-*   Lightweight Node.js-based backend with low resource consumption
-*   Built-in heartbeat keep-alive mechanism to ensure stable connections
-*   Focus Switcher: Allows switching between input components on the page, supporting customizable switching order and hotkeys.
+- 多用户账户体系，提供 `super_admin`、`admin`、`auditor`、`user` 系统角色。
+- 用户组提供 owner/admin/operator/viewer 角色，并支持连接的查看/连接/管理权限。
+- 支持批量资产授权、私有资源隔离，以及删除用户时转移资产。
+- 支持 Passkey、验证码、2FA、IP 白名单/黑名单、认证纪元会话撤销和通知凭证加密。
+- 凭证感知的结构化日志；密码、私钥、passphrase、token 和 SQL 参数不会写入日志。
+- 严格的 HTTP/WebSocket Origin、路径白名单、用户级限流、有界消息队列和一次性 RDP/VNC grant。
+- Electron 启用 sandbox、导航/窗口限制、IPC sender 校验和每次启动随机后端 nonce。
 
-## 📸 Screenshots
+### 审计、录像与恢复
 
+- 结构化审计上下文，可关联操作者、请求、IP、资产、会话和执行结果。
+- 基于角色的管理中心，统一提供访问控制、审计调查、录像和数据管理。
+- SSH/Telnet 加密会话录像，支持筛选、流式回放、取消请求和有界事件缓存。
+- 支持创建校验备份、完整性验证、引导式恢复计划和异常中断录像恢复。
 
-|                  Terminal Interface (Light)                   |
-|:-------------------------------------------------------------:|
-| ![workspace\_light.png](./doc/imgs/en-US/workspace_light.png) |
+### 可靠性与性能
 
----
+- SQLite WAL/运行参数优化、可控启停、运行期密钥生成和幂等资源清理。
+- 有界终端输出缓冲及 SSH 流 pause/resume 背压。
+- 编辑器、设置页和管理页按需加载，不再打包 Element Plus 全量 CSS。
+- 可复现的前后端/桌面端构建，以及交付与安全行为测试。
 
-|                   Terminal Interface (Dark)                   |
-| :-----------------------------------------------------------: |
-| ![workspace\_darker.png](./doc/imgs/en-US/workspace_dark.png) |
+更多设计背景和后续工作请参阅：[架构审计](./docs/ARCHITECTURE_AUDIT.md)、[发布指南](./docs/RELEASE.md) 和 [部署安全](./docs/deployment-security.md)。
 
----
+## 📸 截图
 
-|                 Split Pane Interface                 |
-|:----------------------------------------------------:|
-| ![setting.png](./doc/imgs/zh-CN/workspace_split.png) |
+| 终端界面（Light） |
+|:--:|
+| ![浅色终端工作台](./doc/imgs/zh-CN/workspace_light.png) |
 
----
+| 终端界面（Dark） |
+|:--:|
+| ![深色终端工作台](./doc/imgs/zh-CN/workspace_dark.png) |
 
-|           Settings Interface (Dark)          |
-| :------------------------------------------: |
-| ![setting.png](./doc/imgs/en-US/setting.png) |
+| 分屏界面 |
+|:--:|
+| ![分屏工作台](./doc/imgs/zh-CN/workspace_split.png) |
 
+| 设置界面（Dark） |
+|:--:|
+| ![设置界面](./doc/imgs/zh-CN/setting.png) |
 
-## 🖥️ Desktop Client
+## 🖥️ 桌面客户端
 
-> Removed web-specific features such as various login verifications and session suspension.
+桌面端安装包可在[最新 Release](https://github.com/spfantop/fantetic-terminal/releases/latest)中下载。
 
-https://github.com/spfantop/fantetic-terminal/releases/latest
+桌面运行时以本地使用为主，不开放 Web 多用户管理或内置 RDP/VNC Gateway 能力。它通过每次启动随机 nonce 和受限 Electron Renderer 权限保护 loopback 后端。
 
-## 🚀 Quick Start
+## 🚀 快速开始
 
-### 1️⃣ Configure Environment
+### 1️⃣ 准备配置
 
-Create a new folder
 ```bash
 mkdir ./fantetic-terminal && cd ./fantetic-terminal
-```
-
----
-
-Download the [**docker-compose.yml**](https://raw.githubusercontent.com/spfantop/fantetic-terminal/refs/heads/main/docker-compose.yml) file from the repository to your current directory.
-
-
-```bash
 wget https://raw.githubusercontent.com/spfantop/fantetic-terminal/refs/heads/main/docker-compose.yml -O docker-compose.yml
+wget https://raw.githubusercontent.com/spfantop/fantetic-terminal/refs/heads/main/.env.example -O .env
 ```
 
-If you need to override Passkey domains, RDP/VNC remote-gateway addresses, or other environment settings, optionally download [**.env**](https://raw.githubusercontent.com/spfantop/fantetic-terminal/refs/heads/main/.env) and edit it. Docker Compose prefers values from your current environment or `.env` when the same variable is set.
+生成相互独立的密钥并填写到 `.env`：
 
 ```bash
-wget https://raw.githubusercontent.com/spfantop/fantetic-terminal/refs/heads/main/.env -O .env
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
 ```
 
+必需配置：
 
-> ⚠️ **Note:**
->
-> * For **arm64** users, replace `guacamole/guacd:latest` with `guacamole/guacd:1.6.0-RC1` in the `docker-compose.yml` file.
-> * For **armv7** users, please refer to the additional notes below.
+- `ENCRYPTION_KEY`：64 位十六进制字符。
+- `SESSION_SECRET`：至少 32 位随机字符。
+- `REMOTE_GATEWAY_SHARED_SECRET`：至少 32 位随机字符，Backend 与 Remote Gateway 必须一致。
+- `RP_ID` / `RP_ORIGIN`：Passkey 使用的公开域名与 Origin。
+- `CORS_ALLOWED_ORIGINS`：需要额外信任的前端 Origin，使用逗号分隔。
 
-Configure nginx
-```conf
+> ⚠️ **arm64 用户**在部署 guacd 时，请按环境将 `guacamole/guacd:latest` 替换为 `guacamole/guacd:1.6.0-RC1`。**armv7 用户**请使用[专用 Compose 文件](./doc/arm/docker-compose.yml)；由于 guacd 没有 ARMv7 镜像，RDP/VNC 会被禁用。
+
+### 2️⃣ 配置反向代理
+
+```nginx
 location / {
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
@@ -117,98 +127,68 @@ location / {
 }
 ```
 
-Configure IPv6 for Docker (optional — you can skip this if you don't use IPv6 to connect to the server).
+生产环境请使用 HTTPS。除 localhost 外，非 HTTPS Origin 可能无法使用剪贴板、Passkey、安全 Cookie 等浏览器能力。
 
-Add the following content to `/etc/docker/daemon.json`:
-```json
-{
-  "ipv6": true,
-  "fixed-cidr-v6": "fd00::/80",
-  "ip6tables": true,
-  "experimental": true
-}
-```
-Then restart the Docker service:
-```
-sudo systemctl restart docker
-```
-
-### 2️⃣ Start the Service
+### 3️⃣ 启动与更新
 
 ```bash
 docker compose up -d
 ```
 
-### 3️⃣ Update
-Note: Running with docker-compose does not require pulling the source code unless you plan to build it yourself. Simply execute the following commands in the project directory to update.
 ```bash
 docker compose down
-```
-```bash
 docker compose pull
-```
-```bash
 docker compose up -d
 ```
-## 📚 Usage Guide
 
-### Suspend Session Component
+仅使用已发布镜像时，不需要拉取仓库源码。
 
-You can right-click in the SSH tab to select "Suspend Session" (long-press on mobile). Once suspended, even if the web connection is lost, the backend will automatically take over and keep the SSH connection active. You can resume the session at any time via the panel. This ensures that tasks such as compilation or long-running processes won’t be interrupted due to network issues.
+## 📚 使用指南
 
+### 挂起会话
 
-### Command Input Component
+在 SSH 标签页上右键选择“挂起会话”，移动端可长按标签。后端会接管 SSH 连接，使编译等长任务在浏览器断开后继续运行；之后可在挂起会话面板中恢复。
 
-1.  **Tab Switching**: When the command input box has focus, use `Alt + ↑/↓` to switch between SSH session tabs, and `Alt + ←/→` to switch between text editor tabs.
-2.  **Command Sync** (needs to be enabled in settings): When enabled, text entered in the command input box will be synchronized in real-time to the selected target input source. Use the `↑/↓` keys to select menu command items, then press `Enter` to send the selected command.
+### 命令输入框
 
-### File Manager Component
+1. 输入框聚焦时，使用 `Alt + ↑/↓` 切换 SSH 标签，使用 `Alt + ←/→` 切换编辑器标签。
+2. 开启命令同步后，输入内容会同步到选定终端；使用 `↑/↓` 和 `Enter` 选择并发送建议命令。
 
-1.  **Quick File Selection**: When the file search box has focus, you can use the `↑/↓` keys to quickly select files.
-2.  **Drag and Drop Upload**: Supports dragging files or folders from outside the browser for uploading. **Note:** When uploading a large number of files or deeply nested folders, it is recommended to compress them first to avoid browser freezes.
-3.  **Internal Drag and Drop**: You can directly drag and drop files or folders within the file manager to move them.
-4.  **Multiple Selection**: Hold down the `Ctrl` or `Shift` key to select multiple files or folders.
-5.  **Context Menu**: Provides common file operations such as copy, paste, cut, delete, rename, and modify permissions.
+### 文件管理器
 
-### Command History Component
+1. 在搜索框内使用 `↑/↓` 快速选择文件。
+2. 从系统拖入文件或文件夹即可上传；大量或深层目录建议先压缩。
+3. 在文件管理器内部拖拽条目可执行移动。
+4. 按住 `Ctrl` 或 `Shift` 可多选。
+5. 右键菜单提供复制、剪切、粘贴、删除、重命名和权限修改。
 
-1.  **View Full Command**: When a historical command is too long and truncated, hover the mouse over the command to view the complete instruction content.
+### 终端与工作区
 
-### Terminal Component
+1. `Ctrl + Shift + C` 复制，`Ctrl + Shift + V` 粘贴。
+2. 在终端、文件管理器、编辑器和快捷指令视图中使用 `Ctrl + 鼠标滚轮` 缩放。
+3. 展开的侧栏可拖拽调整宽度。
+4. SSH 与文件管理器标签支持关闭左侧/其他/右侧标签页。
+5. 连接断开后，在终端或命令输入框按回车，或再次点击同一连接，可触发重连。
+6. 移动端可通过双指手势调整终端字体。
 
-1. Press **Ctrl + Shift + C** to copy, and **Ctrl + Shift + V** to paste.
+### 管理中心
 
+- 系统管理员可在管理中心维护用户、用户组、授权、备份和恢复请求。
+- 审计员可调查结构化审计事件和关联录像，但不会获得配置管理权限。
+- 恢复前会校验备份完整性。仍建议额外备份挂载的 `data` 目录，作为灾难恢复保障。
 
-### General Operations
+## ⚠️ 注意事项
 
-1.  **Zoom**: In the terminal, file manager, text editor components, and quick command view, you can use `Ctrl + mouse wheel` to zoom.
-2. **Sidebar**: The expanded sidebar can have its width adjusted by dragging.
-3. **Tab Bar**: Right-clicking on the SSH tab bar or the file manager tab bar will open a context menu with the following options: Close, Close Tabs to the Left, Close Other Tabs, and Close Tabs to the Right.
-4. **Tab Group Fold Bar**: You can directly click on the tab name in the view to rename the tab.
-5. **Automatic Reconnection**: When the connection is lost, you can press Enter in the command input box or terminal, or click the same SSH connection in the connection list to trigger automatic reconnection.
+1. 双文件管理器布局仍属于实验性功能。
+2. 同一布局暂不支持多个相互独立的文本编辑器。
+3. 会话录像可能包含终端输入；开启 `SESSION_RECORD_INPUT` 前请确认法律与组织策略。
+4. RDP/VNC 需要正确配置 guacd 和 Remote Gateway。
+5. 内置备份流程不能替代对 `data` 目录的外部备份。
 
-### Others
+## 💐 致谢
 
+- 终端配色预设来源于 [iTerm2-Color-Schemes](https://github.com/mbadolato/iTerm2-Color-Schemes)。
 
-1. **On mobile devices, you can zoom in or out on the terminal font using a two-finger gesture.**
-2. To enable Passkey login, set the `RP_ID` and `RP_ORIGIN` environment variables in the `.env` file.
+## 📄 开源协议
 
-
-
-## ⚠️ Notes
-
-1.  **Dual File Managers**: You can add two file manager components in the layout (experimental feature, may be unstable).
-2.  **Multiple Text Editors**: The functionality to add multiple text editors in the same layout has not yet been implemented.
-3. For **ARMv7** users, please use the [docker-compose.yml](https://github.com/spfantop/fantetic-terminal/blob/main/doc/arm/docker-compose.yml) provided here.
-Since Apache Guacamole does not provide an ARMv7-compatible image for `guacd`, the RDP/VNC feature has been disabled, and related images will not be pulled for now.
-4. Since I don't have an ARM machine on hand, I haven't conducted actual testing, so unexpected bugs may occur during runtime.
-5. For data backup, please back up the **data** folder in the directory yourself. This project does not provide any backup functionality.
-
-
-## 💐 Acknowledgements
-
-* The preset theme schemes are based on the excellent [iTerm2-Color-Schemes](https://github.com/mbadolato/iTerm2-Color-Schemes) project.
-
-## 📄 License
-
-This project is licensed under the [GPL-3.0](LICENSE) license. See the [LICENSE](LICENSE) file for details.
+Fantetic Terminal 使用 [GPL-3.0](LICENSE) 开源协议。
