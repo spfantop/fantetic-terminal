@@ -7,6 +7,7 @@ import {
 import { AuthorizationSubject } from '../access-control/authorization-subject';
 
 const createdGroups: Array<{ name: string; createdBy: number }> = [];
+const savedGrantBatches: Array<Array<{ connectionId: number; groupId: number; permission: 'view' | 'connect' | 'manage' }>> = [];
 const repository: AccessControlRepository = {
   async createGroup(input) {
     createdGroups.push({ name: input.name, createdBy: input.createdBy });
@@ -28,6 +29,7 @@ const repository: AccessControlRepository = {
       : { ownerUserId: 99, grants: [] };
   },
   async saveConnectionGrant(input) { return input; },
+  async saveConnectionGrants(input) { savedGrantBatches.push(input); return input; },
   async deleteConnectionGrant(connectionId, groupId) { return connectionId === 10 && groupId === 1; },
   async listGroupsForUser() { return []; },
   async listMembers() { return []; },
@@ -69,6 +71,20 @@ await assert.rejects(
   application.saveConnectionGrant(user, 10, { groupId: 1, permission: 'view' }),
   /manage connection/i,
 );
+
+assert.equal((await application.saveConnectionGrants(admin, {
+  connectionIds: [10, 11], groupIds: [1, 2], permission: 'connect',
+})).length, 4);
+assert.deepEqual(savedGrantBatches[0], [
+  { connectionId: 10, groupId: 1, permission: 'connect' },
+  { connectionId: 10, groupId: 2, permission: 'connect' },
+  { connectionId: 11, groupId: 1, permission: 'connect' },
+  { connectionId: 11, groupId: 2, permission: 'connect' },
+]);
+await assert.rejects(application.saveConnectionGrants(admin, {
+  connectionIds: Array.from({ length: 101 }, (_, index) => index + 1),
+  groupIds: Array.from({ length: 51 }, (_, index) => index + 1), permission: 'view',
+}), /5,000/);
 
 assert.equal(await application.requireConnectionPermission(admin, 10, 'manage'), 'manage');
 await assert.rejects(

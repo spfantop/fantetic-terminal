@@ -21,6 +21,9 @@ type AccessPane = 'users' | 'groups' | 'assets';
 const activePane = ref<AccessPane>('users');
 const userSearch = ref('');
 const connectionSearch = ref('');
+const selectedConnectionIds = ref<number[]>([]);
+const selectedGrantGroupIds = ref<number[]>([]);
+const batchPermission = ref<ConnectionPermission>('view');
 const users = ref<ManagedUser[]>([]);
 const groups = ref<UserGroup[]>([]);
 const connections = ref<AssetConnection[]>([]);
@@ -232,6 +235,25 @@ const deleteGrant = async (grant: ConnectionGroupGrant) => {
   } catch (cause) { report(errorMessage(cause), true); }
 };
 
+const saveGrantBatch = async () => {
+  if (!selectedConnectionIds.value.length || !selectedGrantGroupIds.value.length) {
+    report(t('accessControl.batchSelectionRequired', '请至少选择一个资产和一个用户组。'), true); return;
+  }
+  saving.value = true;
+  try {
+    const grants = await accessControlApi.saveConnectionGrants({
+      connectionIds: selectedConnectionIds.value,
+      groupIds: selectedGrantGroupIds.value,
+      permission: batchPermission.value,
+    });
+    report(t('accessControl.batchSaved', { count: grants.length }));
+    if (selectedConnectionId.value && selectedConnectionIds.value.includes(selectedConnectionId.value)) {
+      await loadConnectionGrants();
+    }
+  } catch (cause) { report(errorMessage(cause), true); }
+  finally { saving.value = false; }
+};
+
 onMounted(load);
 </script>
 
@@ -283,6 +305,18 @@ onMounted(load);
 
     <div v-if="activePane === 'assets'" class="card">
       <div class="card-heading"><div><h2>{{ t('accessControl.assetPermissions') }}</h2><p>{{ t('accessControl.assetsHint', '按连接资产向用户组授予查看、连接或管理权限。') }}</p></div><label class="search-field"><i class="fas fa-search"></i><input v-model="connectionSearch" :placeholder="t('accessControl.searchAssets', '搜索资产')"></label></div>
+      <div class="grant-matrix">
+        <section>
+          <div class="matrix-heading"><strong>{{ t('accessControl.selectAssets', '选择资产') }}</strong><button type="button" class="text-button" @click="selectedConnectionIds = filteredConnections.map(item => item.id)">{{ t('common.selectAll', '全选') }}</button></div>
+          <label v-for="connection in filteredConnections" :key="connection.id" class="matrix-option"><input v-model="selectedConnectionIds" type="checkbox" :value="connection.id"><span>{{ connection.name }}<small>{{ connection.host }}</small></span></label>
+        </section>
+        <section>
+          <div class="matrix-heading"><strong>{{ t('accessControl.selectGroups', '选择用户组') }}</strong><button type="button" class="text-button" @click="selectedGrantGroupIds = groups.map(item => item.id)">{{ t('common.selectAll', '全选') }}</button></div>
+          <label v-for="group in groups" :key="group.id" class="matrix-option"><input v-model="selectedGrantGroupIds" type="checkbox" :value="group.id"><span>{{ group.name }}<small>{{ group.description }}</small></span></label>
+        </section>
+        <aside class="batch-panel"><strong>{{ t('accessControl.batchGrant', '批量授权') }}</strong><p>{{ t('accessControl.batchSummary', { assets: selectedConnectionIds.length, groups: selectedGrantGroupIds.length }) }}</p><select v-model="batchPermission"><option value="view">view</option><option value="connect">connect</option><option value="manage">manage</option></select><button type="button" :disabled="saving || !selectedConnectionIds.length || !selectedGrantGroupIds.length" @click="saveGrantBatch">{{ t('accessControl.applyBatch', '应用到所选项') }}</button></aside>
+      </div>
+      <h3 class="detail-title">{{ t('accessControl.singleAssetDetail', '单个资产授权详情') }}</h3>
       <div class="group-toolbar">
         <select v-model="selectedConnectionId" :aria-label="t('accessControl.selectConnection')" @change="loadConnectionGrants">
           <option :value="null">{{ t('accessControl.selectConnection') }}</option>
@@ -317,5 +351,5 @@ onMounted(load);
 </template>
 
 <style scoped>
-.access-control{padding:0}.access-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.75rem}.access-summary button{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:.7rem;padding:.9rem 1rem;text-align:left;background:var(--background);color:var(--foreground)}.access-summary button i{color:var(--primary)}.access-summary button.active{border-color:var(--primary);box-shadow:inset 0 0 0 1px var(--primary)}.access-summary strong{font-size:1.15rem}.card{padding:1rem;border:1px solid var(--border);border-radius:.75rem;background:var(--card)}.card-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem}.card-heading h2,h2{font-size:1.1rem;font-weight:600;margin:0}.card-heading p{margin:.25rem 0 0;color:var(--muted-foreground);font-size:.86rem}.search-field{display:flex;align-items:center;gap:.45rem;min-width:15rem;border:1px solid var(--border);border-radius:.5rem;padding:0 .65rem;background:var(--background)}.search-field input{border:0;min-width:0;width:100%;padding:.55rem 0}.search-field input:focus{outline:none}.form-grid{display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem}.form-grid>*{min-width:10rem}.form-grid input{flex:1}input,select,button{border:1px solid var(--border);border-radius:.4rem;padding:.5rem .65rem;background:var(--background);color:var(--foreground)}button{cursor:pointer;background:var(--primary);color:var(--primary-foreground)}button:disabled{opacity:.5}.danger{background:var(--destructive);color:var(--destructive-foreground)}.message{padding:.65rem;border-radius:.4rem}.error{color:var(--destructive);background:color-mix(in srgb,var(--destructive) 12%,transparent)}.success{color:var(--primary);background:color-mix(in srgb,var(--primary) 12%,transparent)}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:.6rem;border-bottom:1px solid var(--border);white-space:nowrap}.empty-state{text-align:center;color:var(--muted-foreground);padding:2rem}.inline,.group-toolbar{display:flex;gap:.4rem}.group-toolbar{margin-bottom:1rem}.group-toolbar select{flex:1}.group-profile{padding:.8rem;border-radius:.6rem;background:color-mix(in srgb,var(--muted) 45%,transparent)}.member-list{display:grid;gap:.5rem}.member-list li{display:grid;grid-template-columns:1fr auto auto;gap:.5rem;align-items:center;padding:.5rem;border-bottom:1px solid var(--border)}@media(max-width:760px){.access-summary{grid-template-columns:1fr}.card-heading{flex-direction:column}.search-field{width:100%;min-width:0}.inline{min-width:24rem}}
+.access-control{padding:0}.access-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.75rem}.access-summary button{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:.7rem;padding:.9rem 1rem;text-align:left;background:var(--background);color:var(--foreground)}.access-summary button i{color:var(--primary)}.access-summary button.active{border-color:var(--primary);box-shadow:inset 0 0 0 1px var(--primary)}.access-summary strong{font-size:1.15rem}.card{padding:1rem;border:1px solid var(--border);border-radius:.75rem;background:var(--card)}.card-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem}.card-heading h2,h2{font-size:1.1rem;font-weight:600;margin:0}.card-heading p{margin:.25rem 0 0;color:var(--muted-foreground);font-size:.86rem}.search-field{display:flex;align-items:center;gap:.45rem;min-width:15rem;border:1px solid var(--border);border-radius:.5rem;padding:0 .65rem;background:var(--background)}.search-field input{border:0;min-width:0;width:100%;padding:.55rem 0}.search-field input:focus{outline:none}.form-grid{display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem}.form-grid>*{min-width:10rem}.form-grid input{flex:1}input,select,button{border:1px solid var(--border);border-radius:.4rem;padding:.5rem .65rem;background:var(--background);color:var(--foreground)}button{cursor:pointer;background:var(--primary);color:var(--primary-foreground)}button:disabled{opacity:.5}.danger{background:var(--destructive);color:var(--destructive-foreground)}.message{padding:.65rem;border-radius:.4rem}.error{color:var(--destructive);background:color-mix(in srgb,var(--destructive) 12%,transparent)}.success{color:var(--primary);background:color-mix(in srgb,var(--primary) 12%,transparent)}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:.6rem;border-bottom:1px solid var(--border);white-space:nowrap}.empty-state{text-align:center;color:var(--muted-foreground);padding:2rem}.inline,.group-toolbar{display:flex;gap:.4rem}.group-toolbar{margin-bottom:1rem}.group-toolbar select{flex:1}.group-profile{padding:.8rem;border-radius:.6rem;background:color-mix(in srgb,var(--muted) 45%,transparent)}.member-list{display:grid;gap:.5rem}.member-list li{display:grid;grid-template-columns:1fr auto auto;gap:.5rem;align-items:center;padding:.5rem;border-bottom:1px solid var(--border)}.grant-matrix{display:grid;grid-template-columns:minmax(12rem,1fr) minmax(12rem,1fr) minmax(13rem,.7fr);gap:.8rem;margin-bottom:1.5rem}.grant-matrix>section,.batch-panel{min-height:13rem;max-height:18rem;overflow:auto;padding:.75rem;border:1px solid var(--border);border-radius:.6rem;background:var(--background)}.matrix-heading{position:sticky;top:-.75rem;display:flex;align-items:center;justify-content:space-between;padding:.5rem 0;background:var(--background);z-index:1}.matrix-option{display:flex;align-items:center;gap:.55rem;padding:.5rem;border-radius:.4rem;cursor:pointer}.matrix-option:hover{background:var(--muted)}.matrix-option span{display:grid}.matrix-option small{color:var(--muted-foreground)}.text-button{padding:.25rem;border:0;background:transparent;color:var(--primary)}.batch-panel{display:flex;flex-direction:column;gap:.75rem;overflow:visible}.batch-panel p{margin:0;color:var(--muted-foreground)}.detail-title{margin:0 0 .75rem;font-size:.95rem}@media(max-width:900px){.grant-matrix{grid-template-columns:1fr 1fr}.batch-panel{grid-column:1/-1;min-height:auto}}@media(max-width:760px){.access-summary,.grant-matrix{grid-template-columns:1fr}.batch-panel{grid-column:auto}.card-heading{flex-direction:column}.search-field{width:100%;min-width:0}.inline{min-width:24rem}}
 </style>

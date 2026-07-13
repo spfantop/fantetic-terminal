@@ -40,6 +40,7 @@ export interface AccessControlRepository {
     grants: ConnectionGrant[];
   } | null>;
   saveConnectionGrant(input: ConnectionGroupGrant): Promise<ConnectionGroupGrant>;
+  saveConnectionGrants(input: ConnectionGroupGrant[]): Promise<ConnectionGroupGrant[]>;
   deleteConnectionGrant(connectionId: number, groupId: number): Promise<boolean>;
   listGroupsForUser(userId: number, includeAll: boolean): Promise<Array<UserGroup & {
     memberRole: GroupRole | null;
@@ -217,6 +218,29 @@ export class AccessControlApplication {
       groupId: input.groupId,
       permission: input.permission,
     });
+  }
+
+  async saveConnectionGrants(subject: AuthorizationSubject, input: {
+    connectionIds: number[];
+    groupIds: number[];
+    permission: ConnectionGroupGrant['permission'];
+  }): Promise<ConnectionGroupGrant[]> {
+    const connectionIds = [...new Set(input.connectionIds)];
+    const groupIds = [...new Set(input.groupIds)];
+    if (!connectionIds.length || !groupIds.length) throw new Error('Connections and groups are required.');
+    if (connectionIds.some(id => !Number.isInteger(id) || id <= 0)
+      || groupIds.some(id => !Number.isInteger(id) || id <= 0)) {
+      throw new Error('Connection and group identifiers must be positive integers.');
+    }
+    if (connectionIds.length * groupIds.length > 5000) {
+      throw new Error('A batch cannot contain more than 5,000 connection group grants.');
+    }
+    for (const connectionId of connectionIds) {
+      await this.requireConnectionPermission(subject, connectionId, 'manage');
+    }
+    return this.repository.saveConnectionGrants(connectionIds.flatMap(connectionId =>
+      groupIds.map(groupId => ({ connectionId, groupId, permission: input.permission })),
+    ));
   }
 
   async deleteConnectionGrant(subject: AuthorizationSubject, connectionId: number, groupId: number): Promise<void> {

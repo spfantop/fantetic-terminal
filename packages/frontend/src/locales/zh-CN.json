@@ -35,7 +35,8 @@
     "memberSaved": "成员权限已保存。", "memberDeleted": "成员已移除。", "assetPermissions": "连接资产授权",
     "selectConnection": "选择连接资产", "permission": "权限", "addGrant": "添加授权",
     "grantSaved": "连接授权已保存。", "grantDeleted": "连接授权已撤销。", "error": "访问控制操作失败。", "groupUpdated": "分组信息已更新。",
-    "usersHint": "创建账号并维护系统角色、状态和凭据。", "groupsHint": "用分组组织成员角色和资产权限。", "assetsHint": "按连接资产向用户组授予查看、连接或管理权限。", "searchUsers": "搜索用户", "searchAssets": "搜索资产", "noUsers": "没有匹配的用户"
+    "usersHint": "创建账号并维护系统角色、状态和凭据。", "groupsHint": "用分组组织成员角色和资产权限。", "assetsHint": "按连接资产向用户组授予查看、连接或管理权限。", "searchUsers": "搜索用户", "searchAssets": "搜索资产", "noUsers": "没有匹配的用户",
+    "selectAssets": "选择资产", "selectGroups": "选择用户组", "batchGrant": "批量授权", "batchSummary": "将为 {assets} 个资产与 {groups} 个用户组设置权限。", "applyBatch": "应用到所选项", "singleAssetDetail": "单个资产授权详情", "batchSelectionRequired": "请至少选择一个资产和一个用户组。", "batchSaved": "已保存 {count} 项资产授权。"
   },
   "backup": {
     "title": "系统备份与恢复", "description": "创建 SQLite 一致性快照并校验用户文件。恢复将在下次服务启动、数据库打开前执行。",
@@ -1001,7 +1002,7 @@
         "USER_CREATED": "用户已创建", "USER_UPDATED": "用户已更新", "USER_PASSWORD_RESET": "用户密码已重置", "USER_DELETED": "用户已删除",
         "GROUP_CREATED": "分组已创建", "GROUP_UPDATED": "分组已更新", "GROUP_DELETED": "分组已删除",
         "GROUP_MEMBER_SAVED": "分组成员已保存", "GROUP_MEMBER_DELETED": "分组成员已移除",
-        "CONNECTION_GRANT_SAVED": "连接授权已保存", "CONNECTION_GRANT_DELETED": "连接授权已撤销",
+        "CONNECTION_GRANT_SAVED": "连接授权已保存", "CONNECTION_GRANTS_BATCH_SAVED": "连接授权已批量保存", "CONNECTION_GRANT_DELETED": "连接授权已撤销",
         "BACKUP_CREATED": "系统备份已创建", "BACKUP_RESTORE_SCHEDULED": "备份恢复已安排",
         "2FA_ENABLED": "两步验证已启用",
         "2FA_DISABLED": "两步验证已禁用",

@@ -125,6 +125,22 @@ export const saveConnectionGrant = async (req: Request, res: Response): Promise<
   } catch (error) { handleError(error, res); }
 };
 
+export const saveConnectionGrants = async (req: Request, res: Response): Promise<void> => {
+  const connectionIds = Array.isArray(req.body.connectionIds) ? req.body.connectionIds.map(Number) : [];
+  const groupIds = Array.isArray(req.body.groupIds) ? req.body.groupIds.map(Number) : [];
+  const permission = req.body.permission as 'view' | 'connect' | 'manage';
+  if (!CONNECTION_PERMISSION_SET.has(permission)) {
+    res.status(400).json({ code: 'accessControl.invalidConnectionGrant' }); return;
+  }
+  try {
+    const grants = await application.saveConnectionGrants(req.authorization!, { connectionIds, groupIds, permission });
+    await auditLogService.logAction('CONNECTION_GRANTS_BATCH_SAVED', {
+      connectionIds, groupIds, permission, grantCount: grants.length,
+    });
+    res.json(grants);
+  } catch (error) { handleError(error, res); }
+};
+
 export const deleteConnectionGrant = async (req: Request, res: Response): Promise<void> => {
   const connectionId = readPositiveInteger(req.params.connectionId);
   const groupId = readPositiveInteger(req.params.groupId);

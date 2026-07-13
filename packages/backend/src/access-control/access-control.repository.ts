@@ -156,6 +156,27 @@ export class SqliteAccessControlRepository implements AccessControlRepository {
     return input;
   }
 
+  async saveConnectionGrants(input: ConnectionGroupGrant[]): Promise<ConnectionGroupGrant[]> {
+    const db = await this.getDatabase();
+    await runDb(db, 'BEGIN IMMEDIATE TRANSACTION');
+    try {
+      for (const grant of input) {
+        await runDb(db, `
+          INSERT INTO connection_group_permissions(connection_id, group_id, permission)
+          VALUES (?, ?, ?)
+          ON CONFLICT(connection_id, group_id) DO UPDATE SET
+            permission = excluded.permission,
+            updated_at = strftime('%s', 'now')
+        `, [grant.connectionId, grant.groupId, grant.permission]);
+      }
+      await runDb(db, 'COMMIT');
+      return input;
+    } catch (error) {
+      await runDb(db, 'ROLLBACK');
+      throw error;
+    }
+  }
+
   async deleteConnectionGrant(connectionId: number, groupId: number): Promise<boolean> {
     const db = await this.getDatabase();
     return (await runDb(db, `DELETE FROM connection_group_permissions

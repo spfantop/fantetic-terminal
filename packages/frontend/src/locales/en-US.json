@@ -35,7 +35,8 @@
     "memberSaved": "Membership saved.", "memberDeleted": "Member removed.", "assetPermissions": "Connection asset grants",
     "selectConnection": "Select connection asset", "permission": "Permission", "addGrant": "Add grant",
     "grantSaved": "Connection grant saved.", "grantDeleted": "Connection grant revoked.", "error": "Access control operation failed.", "groupUpdated": "Group details updated.",
-    "usersHint": "Create accounts and maintain system roles, status, and credentials.", "groupsHint": "Organize member roles and asset permissions with groups.", "assetsHint": "Grant view, connect, or manage access to groups by connection asset.", "searchUsers": "Search users", "searchAssets": "Search assets", "noUsers": "No matching users"
+    "usersHint": "Create accounts and maintain system roles, status, and credentials.", "groupsHint": "Organize member roles and asset permissions with groups.", "assetsHint": "Grant view, connect, or manage access to groups by connection asset.", "searchUsers": "Search users", "searchAssets": "Search assets", "noUsers": "No matching users",
+    "selectAssets": "Select assets", "selectGroups": "Select groups", "batchGrant": "Bulk grant", "batchSummary": "Set permissions for {assets} assets and {groups} groups.", "applyBatch": "Apply to selection", "singleAssetDetail": "Single asset grant details", "batchSelectionRequired": "Select at least one asset and one group.", "batchSaved": "Saved {count} asset grants."
   },
   "backup": {
     "title": "System backup and restore", "description": "Create a consistent SQLite snapshot with verified user files. Restore runs before the database opens on the next service start.",
@@ -1017,7 +1018,7 @@
         "USER_CREATED": "User Created", "USER_UPDATED": "User Updated", "USER_PASSWORD_RESET": "User Password Reset", "USER_DELETED": "User Deleted",
         "GROUP_CREATED": "Group Created", "GROUP_UPDATED": "Group Updated", "GROUP_DELETED": "Group Deleted",
         "GROUP_MEMBER_SAVED": "Group Member Saved", "GROUP_MEMBER_DELETED": "Group Member Removed",
-        "CONNECTION_GRANT_SAVED": "Connection Grant Saved", "CONNECTION_GRANT_DELETED": "Connection Grant Revoked",
+        "CONNECTION_GRANT_SAVED": "Connection Grant Saved", "CONNECTION_GRANTS_BATCH_SAVED": "Connection Grants Saved in Bulk", "CONNECTION_GRANT_DELETED": "Connection Grant Revoked",
         "BACKUP_CREATED": "System Backup Created", "BACKUP_RESTORE_SCHEDULED": "Backup Restore Scheduled",
         "2FA_ENABLED": "2FA Enabled",
         "2FA_DISABLED": "2FA Disabled",

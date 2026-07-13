@@ -10,6 +10,7 @@ import {
   listGroups,
   listMembers,
   saveConnectionGrant,
+  saveConnectionGrants,
   saveMember,
   updateGroup,
 } from './access-control.controller';
@@ -38,6 +39,7 @@ router.get('/groups/:groupId/members', listMembers);
 router.put('/groups/:groupId/members/:userId', saveMember);
 router.delete('/groups/:groupId/members/:userId', deleteMember);
 router.get('/connections/:connectionId/groups', listConnectionGrants);
+router.put('/connections/groups/batch', saveConnectionGrants);
 router.put('/connections/:connectionId/groups/:groupId', saveConnectionGrant);
 router.delete('/connections/:connectionId/groups/:groupId', deleteConnectionGrant);
 

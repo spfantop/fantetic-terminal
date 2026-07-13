@@ -83,6 +83,9 @@ export const accessControlApi = {
   async saveConnectionGrant(connectionId: number, groupId: number, permission: ConnectionPermission): Promise<ConnectionGroupGrant> {
     return (await apiClient.put<ConnectionGroupGrant>(`${base}/connections/${connectionId}/groups/${groupId}`, { permission })).data;
   },
+  async saveConnectionGrants(input: { connectionIds: number[]; groupIds: number[]; permission: ConnectionPermission }): Promise<ConnectionGroupGrant[]> {
+    return (await apiClient.put<ConnectionGroupGrant[]>(`${base}/connections/groups/batch`, input)).data;
+  },
   async deleteConnectionGrant(connectionId: number, groupId: number): Promise<void> {
     await apiClient.delete(`${base}/connections/${connectionId}/groups/${groupId}`);
   },

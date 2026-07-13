@@ -21,7 +21,7 @@
             "USER_CREATED": "ユーザー作成", "USER_UPDATED": "ユーザー更新", "USER_PASSWORD_RESET": "ユーザーパスワードリセット", "USER_DELETED": "ユーザー削除",
             "GROUP_CREATED": "グループ作成", "GROUP_UPDATED": "グループ更新", "GROUP_DELETED": "グループ削除",
             "GROUP_MEMBER_SAVED": "グループメンバー保存", "GROUP_MEMBER_DELETED": "グループメンバー削除",
-            "CONNECTION_GRANT_SAVED": "接続権限保存", "CONNECTION_GRANT_DELETED": "接続権限取消",
+            "CONNECTION_GRANT_SAVED": "接続権限保存", "CONNECTION_GRANTS_BATCH_SAVED": "接続権限一括保存", "CONNECTION_GRANT_DELETED": "接続権限取消",
             "BACKUP_CREATED": "システムバックアップ作成", "BACKUP_RESTORE_SCHEDULED": "バックアップ復元予約",
             "PROXY_CREATED": "プロキシ作成",
             "PROXY_DELETED": "プロキシ削除",
@@ -792,7 +792,8 @@
     "memberSaved": "メンバー権限を保存しました。", "memberDeleted": "メンバーを削除しました。", "assetPermissions": "接続資産の権限",
     "selectConnection": "接続資産を選択", "permission": "権限", "addGrant": "権限を追加",
     "grantSaved": "接続権限を保存しました。", "grantDeleted": "接続権限を取り消しました。", "error": "アクセス制御操作に失敗しました。", "groupUpdated": "グループ情報を更新しました。",
-    "usersHint": "アカウントを作成し、システムロール、状態、認証情報を管理します。", "groupsHint": "グループでメンバーのロールと資産権限を整理します。", "assetsHint": "接続資産ごとにグループへ閲覧、接続、管理権限を付与します。", "searchUsers": "ユーザーを検索", "searchAssets": "資産を検索", "noUsers": "一致するユーザーがありません"
+    "usersHint": "アカウントを作成し、システムロール、状態、認証情報を管理します。", "groupsHint": "グループでメンバーのロールと資産権限を整理します。", "assetsHint": "接続資産ごとにグループへ閲覧、接続、管理権限を付与します。", "searchUsers": "ユーザーを検索", "searchAssets": "資産を検索", "noUsers": "一致するユーザーがありません",
+    "selectAssets": "資産を選択", "selectGroups": "グループを選択", "batchGrant": "一括権限付与", "batchSummary": "{assets} 件の資産と {groups} 件のグループに権限を設定します。", "applyBatch": "選択項目に適用", "singleAssetDetail": "単一資産の権限詳細", "batchSelectionRequired": "資産とグループを1件以上選択してください。", "batchSaved": "{count} 件の資産権限を保存しました。"
   },
     "dock": {
         "hide": "ナビゲーションを非表示",
