@@ -18,6 +18,9 @@ export const useAuditLogStore = defineStore('auditLog', () => {
         limit?: number;
         searchTerm?: string;
         actionType?: AuditLogActionType | '';
+        startDate?: number;
+        endDate?: number;
+        result?: AuditLogEntry['result'] | '';
         sortOrder?: 'asc' | 'desc';
         // 新增一个标志，明确指示是否为仪表盘调用，以启用缓存
         isDashboardRequest?: boolean;
@@ -27,6 +30,9 @@ export const useAuditLogStore = defineStore('auditLog', () => {
             limit = logsPerPage.value,
             searchTerm,
             actionType,
+            startDate,
+            endDate,
+            result,
             sortOrder,
             isDashboardRequest = false // 默认为 false
         } = options;
@@ -61,11 +67,14 @@ export const useAuditLogStore = defineStore('auditLog', () => {
         isLoading.value = true; // 标记正在获取（或后台获取）
         const offset = (page - 1) * limit;
         try {
-            const params: Record<string, any> = {
+            const params: Record<string, string | number> = {
                 limit: limit,
                 offset: offset,
                 ...(searchTerm && { search: searchTerm }),
                 ...(actionType && { action_type: actionType }),
+                ...(startDate !== undefined && { startDate }),
+                ...(endDate !== undefined && { endDate }),
+                ...(result && { result }),
                 ...(sortOrder && { sort_order: sortOrder }),
             };
 

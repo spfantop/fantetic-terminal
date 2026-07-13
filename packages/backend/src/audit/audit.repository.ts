@@ -111,7 +111,8 @@ export class AuditLogRepository {
         actionType?: AuditLogActionType,
         startDate?: number,
         endDate?: number,
-        searchTerm?: string // 添加 searchTerm 参数
+        searchTerm?: string,
+        result?: AuditLogEntry['result'],
     ): Promise<{ logs: AuditLogEntry[], total: number }> {
     
         let baseSql = 'SELECT * FROM audit_logs';
@@ -124,6 +125,15 @@ export class AuditLogRepository {
             whereClauses.push('action_type = ?');
             params.push(actionType);
             countParams.push(actionType);
+        }
+        if (startDate !== undefined) {
+            whereClauses.push('timestamp >= ?'); params.push(startDate); countParams.push(startDate);
+        }
+        if (endDate !== undefined) {
+            whereClauses.push('timestamp <= ?'); params.push(endDate); countParams.push(endDate);
+        }
+        if (result) {
+            whereClauses.push('result = ?'); params.push(result); countParams.push(result);
         }
         // 添加 searchTerm 的过滤逻辑
         if (searchTerm) {

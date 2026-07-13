@@ -45,6 +45,7 @@
             "PASSKEY_NAME_UPDATE_UNAUTHORIZED": "パスキー名更新権限なし"
         },
         "noLogs": "監査ログが見つかりませんでした。",
+        "startDate": "開始日時", "endDate": "終了日時", "total": "全 {count} 件", "detailTitle": "監査詳細", "openRelatedRecordings": "同じ実行者の近接録画を表示", "correlationHint": "録画とセッション ID には直接キーがないため、実行者とイベント時刻の範囲で絞り込みます。", "selectHint": "ログを選択して完全なコンテキストを確認します。",
         "paginationInfo": "{currentPage} ページ / 全 {totalPages} ページ ({totalLogs} 件のログ)",
         "searchPlaceholder": "詳細を",
         "table": {

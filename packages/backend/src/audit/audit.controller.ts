@@ -20,6 +20,7 @@ export class AuditController {
             const endDate = req.query.endDate ? parseInt(req.query.endDate as string, 10) : undefined;
             // 解析 searchTerm 参数
             const searchTerm = req.query.search as string | undefined;
+            const resultFilter = typeof req.query.result === 'string' ? req.query.result as 'success' | 'failure' | 'denied' : undefined;
 
 
             // 输入验证 (基本)
@@ -41,7 +42,7 @@ export class AuditController {
             }
 
             // 将 searchTerm 传递给 service
-            const result = await auditLogService.getLogs(limit, offset, actionType, startDate, endDate, searchTerm);
+            const result = await auditLogService.getLogs(limit, offset, actionType, startDate, endDate, searchTerm, resultFilter);
 
             // 解析 details 字段从 JSON 字符串到对象（如果需要）
             const logsWithParsedDetails = result.logs.map(log => {

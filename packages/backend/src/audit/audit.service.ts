@@ -61,9 +61,10 @@ export class AuditLogService {
         actionType?: AuditLogActionType,
         startDate?: number,
         endDate?: number,
-        searchTerm?: string // 添加 searchTerm 参数
+        searchTerm?: string,
+        result?: AuditLogEntry['result'],
     ): Promise<{ logs: AuditLogEntry[], total: number }> {
         // 将 searchTerm 传递给 repository
-        return this.repository.getLogs(limit, offset, actionType, startDate, endDate, searchTerm);
+        return this.repository.getLogs(limit, offset, actionType, startDate, endDate, searchTerm, result);
     }
 }

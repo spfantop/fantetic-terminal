@@ -37,12 +37,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useRoute } from 'vue-router';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { sessionRecordingApi, type SessionRecording, type SessionRecordingEvent, type SessionRecordingListQuery } from '../../services/sessionRecording.api';
 
 const { t } = useI18n();
+const route = useRoute();
 const PAGE_SIZE = 25;
 const recordingList = ref<SessionRecording[]>([]);
 const total = ref(0);
@@ -110,7 +112,17 @@ const play = async () => {
   finally { if (generation === playGeneration) playing.value = false; }
 };
 const stop = () => { playGeneration += 1; playing.value = false; };
-onMounted(loadList);
+onMounted(() => {
+  const routeQuery = Array.isArray(route.query.recordingQuery) ? route.query.recordingQuery[0] : route.query.recordingQuery;
+  const routeStart = Array.isArray(route.query.recordingStartedAfter) ? route.query.recordingStartedAfter[0] : route.query.recordingStartedAfter;
+  filterQuery.value = routeQuery || '';
+  if (routeStart) {
+    const date = new Date(routeStart);
+    const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+    filterStartedAfter.value = local.toISOString().slice(0, 16);
+  }
+  void loadList();
+});
 onBeforeUnmount(() => { stop(); resizeObserver?.disconnect(); terminal?.dispose(); });
 </script>
 

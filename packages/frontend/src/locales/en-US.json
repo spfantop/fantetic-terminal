@@ -1391,6 +1391,7 @@
     "title": "Audit Logs",
     "searchPlaceholder": "Search details...",
     "noLogs": "No audit logs found.",
+    "startDate": "Start time", "endDate": "End time", "total": "{count} total", "detailTitle": "Audit details", "openRelatedRecordings": "View recordings near this actor", "correlationHint": "Recordings and session IDs do not yet share a direct key; results are filtered by actor and event time window.", "selectHint": "Select a log entry to inspect its full context.",
     "table": {
       "timestamp": "Timestamp",
       "actionType": "Action Type",

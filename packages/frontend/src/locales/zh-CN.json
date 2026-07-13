@@ -1395,6 +1395,7 @@
     "title": "审计日志",
     "searchPlaceholder": "搜索详细信息...",
     "noLogs": "未找到审计日志记录。",
+    "startDate": "开始时间", "endDate": "结束时间", "total": "共 {count} 条", "detailTitle": "审计详情", "openRelatedRecordings": "查看同一操作者附近的录像", "correlationHint": "录像与会话 ID 尚无直接键关联，将按操作者和事件时间窗口筛选。", "selectHint": "选择一条日志查看完整上下文。",
     "table": {
       "timestamp": "时间戳",
       "actionType": "操作类型",
