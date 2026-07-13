@@ -25,7 +25,7 @@
             </tbody>
           </table>
         </div>
-        <footer><span>{{ t('auditLog.paginationInfo', { currentPage, totalPages, totalLogs }) }}</span><div><button type="button" :disabled="currentPage <= 1" @click="changePage(currentPage - 1)"><i class="fas fa-chevron-left"></i></button><button type="button" :disabled="currentPage >= totalPages" @click="changePage(currentPage + 1)"><i class="fas fa-chevron-right"></i></button></div></footer>
+        <AdminPagination :page="currentPage" :page-count="totalPages" :total="totalLogs" :disabled="store.isLoading" @update:page="changePage" />
       </div>
 
       <aside class="audit-detail" :aria-label="t('auditLog.detailTitle', '审计详情')">
@@ -50,6 +50,7 @@ import { useAuditLogStore } from '../stores/audit.store';
 import { useSettingsStore } from '../stores/settings.store';
 import type { AuditLogActionType, AuditLogEntry } from '../types/server.types';
 import { formatDateTimeWithSettings } from '../utils/dateTimeFormat';
+import AdminPagination from '../components/admin/AdminPagination.vue';
 
 const store = useAuditLogStore(); const settingsStore = useSettingsStore(); const router = useRouter();
 const { t, locale } = useI18n();

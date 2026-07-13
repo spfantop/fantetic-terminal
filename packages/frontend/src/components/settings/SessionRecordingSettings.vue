@@ -18,7 +18,7 @@
           <small><i :class="`status-dot ${recording.status}`"></i>{{ t(`sessionRecording.status.${recording.status}`) }} · {{ recording.event_count }} events</small>
         </button>
         <p v-if="!loading && !recordingList.length" class="empty-state">{{ t('sessionRecording.empty') }}</p>
-        <footer><button type="button" :disabled="currentPage <= 1 || loading" @click="changePage(-1)"><i class="fas fa-chevron-left"></i></button><span>{{ currentPage }} / {{ pageCount }}</span><button type="button" :disabled="currentPage >= pageCount || loading" @click="changePage(1)"><i class="fas fa-chevron-right"></i></button></footer>
+        <AdminPagination :page="currentPage" :page-count="pageCount" :total="total" :disabled="loading" @update:page="setPage" />
       </aside>
 
       <article class="recording-player">
@@ -42,6 +42,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { sessionRecordingApi, type SessionRecording, type SessionRecordingEvent, type SessionRecordingListQuery } from '../../services/sessionRecording.api';
+import AdminPagination from '../admin/AdminPagination.vue';
 
 const { t } = useI18n();
 const route = useRoute();
@@ -86,7 +87,7 @@ const loadList = async () => {
 };
 const applyFilters = () => { currentPage.value = 1; void loadList(); };
 const resetFilters = () => { filterQuery.value = ''; filterStatus.value = ''; filterStartedAfter.value = ''; applyFilters(); };
-const changePage = (delta: number) => { currentPage.value += delta; void loadList(); };
+const setPage = (page: number) => { currentPage.value = page; void loadList(); };
 
 const ensureTerminal = async () => {
   if (terminal || !terminalHost.value) return;

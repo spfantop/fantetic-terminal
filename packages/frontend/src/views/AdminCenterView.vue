@@ -38,7 +38,12 @@
           </div>
         </header>
 
-        <div v-if="activeSection === 'overview'" class="admin-overview-grid">
+        <div v-if="activeSection === 'overview'" class="admin-overview">
+          <div class="admin-overview-context"><span>{{ t('adminCenter.signedInAs', { username: authStore.user?.username || '-' }) }}</span><strong>{{ authStore.user?.systemRole }}</strong></div>
+          <div class="admin-overview-stats" :aria-busy="overviewLoading">
+            <article v-for="stat in visibleStats" :key="stat.key"><i :class="stat.icon"></i><span>{{ stat.label }}</span><strong v-if="overviewStats[stat.key] !== null">{{ overviewStats[stat.key] }}</strong><i v-else-if="overviewLoading" class="fas fa-spinner fa-spin overview-loading"></i><em v-else>—</em></article>
+          </div>
+          <div class="admin-overview-grid">
           <button
             v-for="item in overviewItems"
             :key="item.key"
@@ -53,6 +58,7 @@
             </span>
             <i class="fas fa-chevron-right" aria-hidden="true"></i>
           </button>
+          </div>
         </div>
         <AccessControlSettings v-else-if="activeSection === 'accessControl'" />
         <AuditLogView v-else-if="activeSection === 'auditLogs'" />
@@ -64,7 +70,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { RouterLink, useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { useAuthStore, type SystemRole } from '../stores/auth.store';
@@ -72,6 +78,10 @@ import AccessControlSettings from '../components/settings/AccessControlSettings.
 import SessionRecordingSettings from '../components/settings/SessionRecordingSettings.vue';
 import DataManagementSection from '../components/settings/DataManagementSection.vue';
 import AuditLogView from './AuditLogView.vue';
+import { accessControlApi } from '../services/accessControl.api';
+import { sessionRecordingApi } from '../services/sessionRecording.api';
+import { backupApi } from '../services/backup.api';
+import apiClient from '../utils/apiClient';
 
 type AdminSection = 'overview' | 'accessControl' | 'auditLogs' | 'sessionRecordings' | 'dataManagement';
 interface AdminNavigationItem {
@@ -88,6 +98,23 @@ const router = useRouter();
 const authStore = useAuthStore();
 const administratorRoles: SystemRole[] = ['super_admin', 'admin'];
 const auditRoles: SystemRole[] = [...administratorRoles, 'auditor'];
+type OverviewStatKey = 'users' | 'groups' | 'assets' | 'auditLogs' | 'recordings' | 'backups';
+const overviewLoading = ref(false);
+const overviewStats = ref<Record<OverviewStatKey, number | null>>({ users:null,groups:null,assets:null,auditLogs:null,recordings:null,backups:null });
+const visibleStats = computed(() => {
+  const common = [
+    { key:'auditLogs' as const,label:t('nav.auditLogs'),icon:'fas fa-shield-halved' },
+    { key:'recordings' as const,label:t('sessionRecording.title'),icon:'fas fa-video' },
+  ];
+  if (!administratorRoles.includes(authStore.user?.systemRole ?? 'user')) return common;
+  return [
+    { key:'users' as const,label:t('accessControl.users'),icon:'fas fa-user-shield' },
+    { key:'groups' as const,label:t('accessControl.groups'),icon:'fas fa-users' },
+    { key:'assets' as const,label:t('accessControl.assetPermissions'),icon:'fas fa-server' },
+    ...common,
+    { key:'backups' as const,label:t('backup.title'),icon:'fas fa-box-archive' },
+  ];
+});
 
 const allItems = computed<AdminNavigationItem[]>(() => [
   { key: 'overview', label: t('adminCenter.sections.overview', '概览'), description: t('adminCenter.descriptions.overview', '按职责快速进入各项管理能力。'), icon: 'fas fa-grid-2', roles: auditRoles },
@@ -118,10 +145,28 @@ const selectSection = (section: AdminSection) => {
   void router.replace({ name: 'AdminCenter', query: section === 'overview' ? {} : { section } });
 };
 
+const loadOverviewStats = async () => {
+  overviewLoading.value = true;
+  const jobs: Array<{key:OverviewStatKey;load:()=>Promise<number>}> = [
+    { key:'auditLogs',load:async()=>Number((await apiClient.get<{total:number}>('/audit-logs',{params:{limit:1,offset:0}})).data.total) },
+    { key:'recordings',load:async()=>Number((await sessionRecordingApi.list({limit:1,offset:0})).total) },
+  ];
+  if (administratorRoles.includes(authStore.user?.systemRole ?? 'user')) jobs.push(
+    {key:'users',load:async()=>(await accessControlApi.listUsers()).length},
+    {key:'groups',load:async()=>(await accessControlApi.listGroups()).length},
+    {key:'assets',load:async()=>(await accessControlApi.listConnections()).length},
+    {key:'backups',load:async()=>(await backupApi.list()).length},
+  );
+  const results=await Promise.allSettled(jobs.map(job=>job.load()));
+  results.forEach((result,index)=>{overviewStats.value[jobs[index]!.key]=result.status==='fulfilled'?result.value:null;});
+  overviewLoading.value=false;
+};
+
 watch(requestedSection, section => {
   const raw = Array.isArray(route.query.section) ? route.query.section[0] : route.query.section;
   if (raw && raw !== section) selectSection(section);
 }, { immediate: true });
+onMounted(loadOverviewStats);
 </script>
 
 <style scoped>
@@ -142,7 +187,7 @@ watch(requestedSection, section => {
 .admin-section-header { padding-bottom: 18px; margin-bottom: 20px; border-bottom: 1px solid hsl(var(--border)); }
 .admin-section-header h2 { margin: 0; font-size: 22px; }
 .admin-section-header p { margin: 6px 0 0; color: hsl(var(--muted-foreground)); }
-.admin-overview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.admin-overview{display:grid;gap:18px}.admin-overview-context{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border:1px solid hsl(var(--border));border-radius:10px;color:hsl(var(--muted-foreground));background:hsl(var(--muted)/.2)}.admin-overview-context strong{padding:3px 8px;border-radius:999px;color:hsl(var(--primary));background:hsl(var(--primary)/.1);font-size:12px}.admin-overview-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.admin-overview-stats article{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;padding:14px;border:1px solid hsl(var(--border));border-radius:10px;background:hsl(var(--background))}.admin-overview-stats article>i:first-child{color:hsl(var(--primary))}.admin-overview-stats article span{font-size:12px;color:hsl(var(--muted-foreground))}.admin-overview-stats article strong{font-size:20px}.admin-overview-stats article em{font-style:normal;color:hsl(var(--muted-foreground))}.admin-overview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .admin-overview-card { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 20px; border: 1px solid hsl(var(--border)); border-radius: 12px; color: inherit; background: hsl(var(--background)); text-align: left; cursor: pointer; }
 .admin-overview-card:hover, .admin-overview-card:focus-visible { border-color: hsl(var(--primary)); box-shadow: 0 8px 24px hsl(var(--foreground) / .07); outline: none; }
 .admin-overview-card > i:first-child { font-size: 22px; color: hsl(var(--primary)); }
@@ -159,5 +204,6 @@ watch(requestedSection, section => {
   .admin-nav-item { width: auto; white-space: nowrap; }
   .admin-center-content { padding: 16px; }
   .admin-overview-grid { grid-template-columns: 1fr; }
+  .admin-overview-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 </style>
