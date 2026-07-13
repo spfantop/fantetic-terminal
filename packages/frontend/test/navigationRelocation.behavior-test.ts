@@ -215,7 +215,8 @@ assert.ok(
 );
 
 assert.ok(
-  quickCommandsView.includes('<Teleport to="body">')
+  quickCommandsView.includes('<Teleport :to="quickCommandTeleportTarget">')
+    && quickCommandsView.includes('ownerDocument.body')
     && quickCommandsView.includes('<AddEditQuickCommandForm')
     && quickCommandsView.includes('</Teleport>'),
   'quick command add/edit form should teleport to body so it is not clipped by the sidebar or quick command popup',
