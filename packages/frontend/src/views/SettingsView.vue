@@ -127,6 +127,10 @@
         <div v-if="activeTab === 'auditLogs'">
           <AuditLogView />
         </div>
+
+        <div v-if="activeTab === 'accessControl'">
+          <AccessControlSettings />
+        </div>
         
         <!-- Appearance Tab Content -->
         <div v-if="activeTab === 'appearance'">
@@ -176,9 +180,11 @@ import ProxiesView from './ProxiesView.vue';
 import NotificationsView from './NotificationsView.vue';
 import DashboardView from './DashboardView.vue';
 import AuditLogView from './AuditLogView.vue';
+import AccessControlSettings from '../components/settings/AccessControlSettings.vue';
 import { createSettingsTabs, type SettingsTabKey } from '../utils/settingsTabs';
 import { useResizable } from '../composables/useResizable';
 import { isAccountFeatureAvailable } from '../utils/runtimeConfig';
+import { useAuthStore } from '../stores/auth.store';
 
 const props = withDefaults(defineProps<{
   isDialog?: boolean;
@@ -195,9 +201,20 @@ const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const accountFeatureAvailable = isAccountFeatureAvailable();
+const authStore = useAuthStore();
 
 // Define tabs for settings sections
-const tabs = ref(createSettingsTabs(t).filter(tab => accountFeatureAvailable || tab.key !== 'security'));
+const tabs = computed(() => {
+  const role = authStore.user?.systemRole;
+  const administrator = !accountFeatureAvailable || role === 'super_admin' || role === 'admin';
+  const auditReader = administrator || role === 'auditor';
+  return createSettingsTabs(t).filter(tab => {
+    if (!accountFeatureAvailable && tab.key === 'security') return false;
+    if (['notifications', 'ipControl', 'accessControl'].includes(tab.key)) return administrator;
+    if (tab.key === 'auditLogs') return auditReader;
+    return true;
+  });
+});
 const isSettingsTabKey = (value: unknown): value is SettingsTabKey => (
   typeof value === 'string' && tabs.value.some(tab => tab.key === value)
 );

@@ -40,6 +40,7 @@ jobs:
           npm run test:user-cache-scope --workspace=@fantetic-terminal/frontend
           npm run test:service-worker-policy --workspace=@fantetic-terminal/frontend
           npm run test:startup-chunking --workspace=@fantetic-terminal/frontend
+          npm run test:access-control-ui --workspace=@fantetic-terminal/frontend
           npm run test:highlighter --workspace=@fantetic-terminal/frontend
           npm run test:terminal-render-highlighter --workspace=@fantetic-terminal/frontend
           npm run test:terminal-local-echo --workspace=@fantetic-terminal/frontend
@@ -47,6 +48,7 @@ jobs:
       - name: Verify backend architecture
         run: |
           npm run test:auth-session --workspace=@fantetic-terminal/backend
+          npm run test:auth-public-role --workspace=@fantetic-terminal/backend
           npm run test:access-policy --workspace=@fantetic-terminal/backend
           npm run test:system-role-routes --workspace=@fantetic-terminal/backend
           npm run test:notification-config-encryption --workspace=@fantetic-terminal/backend

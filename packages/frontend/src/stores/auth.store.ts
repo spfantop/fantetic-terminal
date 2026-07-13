@@ -6,9 +6,12 @@ import { isAccountFeatureAvailable } from '../utils/runtimeConfig';
 import { activateUserCacheScope, clearUserCacheScope } from '../utils/userCacheScope';
 
 // 扩展的用户信息接口，包含 2FA 状态和语言偏好
-interface UserInfo {
+export type SystemRole = 'super_admin' | 'admin' | 'user' | 'auditor';
+
+export interface UserInfo {
     id: number;
     username: string;
+    systemRole: SystemRole;
     isTwoFactorEnabled?: boolean; // 后端 /status 接口会返回这个
     language?: string; // 历史字段，界面语言以系统设置为准
 }
@@ -16,6 +19,7 @@ interface UserInfo {
 const APP_LOCAL_USER: UserInfo = {
     id: 1,
     username: 'local-app',
+    systemRole: 'super_admin',
     isTwoFactorEnabled: false,
 };
 

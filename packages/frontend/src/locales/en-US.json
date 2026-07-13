@@ -15,6 +15,18 @@
     "customizeStyle": "Customize Style",
     "mainNavigation": "Main navigation"
   },
+  "accessControl": {
+    "title": "Access control", "users": "Users", "groups": "Groups", "username": "Username",
+    "initialPassword": "Initial password (12+ characters)", "systemRole": "System role", "status": "Status",
+    "password": "Password", "createUser": "Create user", "reset": "Reset", "transferTarget": "Asset recipient",
+    "createGroup": "Create group", "groupName": "Group name", "description": "Description", "selectGroup": "Select group",
+    "selectUser": "Select user", "addMember": "Add member", "passwordRequirement": "Username is required and password must contain at least 12 characters.",
+    "transferRequired": "Select an asset recipient before deleting the user.", "groupNameRequired": "Group name is required.",
+    "confirmDeleteUser": "Delete {username} and transfer their assets?", "confirmDeleteGroup": "Delete group {name}?",
+    "userCreated": "User created.", "userUpdated": "User updated.", "passwordReset": "Password reset; previous sessions were revoked.",
+    "userDeleted": "User deleted and assets transferred.", "groupCreated": "Group created.", "groupDeleted": "Group deleted.",
+    "memberSaved": "Membership saved.", "memberDeleted": "Member removed.", "error": "Access control operation failed."
+  },
   "dock": {
     "hide": "Hide navigation",
     "show": "Show navigation",

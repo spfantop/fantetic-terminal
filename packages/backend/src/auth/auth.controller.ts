@@ -32,6 +32,12 @@ export interface User {
     auth_epoch: number;
 }
 
+const toPublicUser = (user: Pick<User, 'id' | 'username' | 'system_role'>) => ({
+    id: user.id,
+    username: user.username,
+    systemRole: user.system_role,
+});
+
 declare module 'express-session' {
     interface SessionData {
         userId?: number;
@@ -193,7 +199,7 @@ export const verifyPasskeyAuthenticationHandler = async (req: Request, res: Resp
             res.status(200).json({
                 verified: true,
                 message: 'Passkey 认证成功。',
-                user: { id: user.id, username: user.username }
+                user: toPublicUser(user)
             });
 
         } else {
@@ -427,7 +433,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
             res.status(200).json({
                 message: '登录成功。',
-                user: { id: user.id, username: user.username }
+                user: toPublicUser(user)
             });
         }
 
@@ -450,6 +456,7 @@ export const getAuthStatus = async (req: Request, res: Response): Promise<void> 
             user: {
                 id: ELECTRON_APP_USER_ID,
                 username: ELECTRON_APP_USERNAME,
+                systemRole: 'super_admin',
                 isTwoFactorEnabled: false
             }
         });
@@ -466,7 +473,7 @@ export const getAuthStatus = async (req: Request, res: Response): Promise<void> 
 
     try {
         const db = await getDbInstance(); 
-        const user = await getDb<{ two_factor_secret: string | null }>(db, 'SELECT two_factor_secret FROM users WHERE id = ?', [userId]);
+        const user = await getDb<{ two_factor_secret: string | null; system_role: SystemRole }>(db, 'SELECT two_factor_secret, system_role FROM users WHERE id = ?', [userId]);
 
         if (!user) {
              res.status(401).json({ isAuthenticated: false });
@@ -478,6 +485,7 @@ export const getAuthStatus = async (req: Request, res: Response): Promise<void> 
             user: {
                 id: userId,
                 username: username,
+                systemRole: user.system_role,
                 isTwoFactorEnabled: !!user.two_factor_secret 
             }
         });
@@ -534,7 +542,7 @@ export const verifyLogin2FA = async (req: Request, res: Response): Promise<void>
 
             res.status(200).json({
                 message: '登录成功。',
-                user: { id: user.id, username: user.username }
+                user: toPublicUser(user)
             });
         } else {
             console.log(`用户 ${user.username} 2FA 验证失败: 验证码错误。`);
