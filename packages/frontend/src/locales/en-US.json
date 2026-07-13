@@ -34,7 +34,8 @@
     "userDeleted": "User deleted and assets transferred.", "groupCreated": "Group created.", "groupDeleted": "Group deleted.",
     "memberSaved": "Membership saved.", "memberDeleted": "Member removed.", "assetPermissions": "Connection asset grants",
     "selectConnection": "Select connection asset", "permission": "Permission", "addGrant": "Add grant",
-    "grantSaved": "Connection grant saved.", "grantDeleted": "Connection grant revoked.", "error": "Access control operation failed."
+    "grantSaved": "Connection grant saved.", "grantDeleted": "Connection grant revoked.", "error": "Access control operation failed.", "groupUpdated": "Group details updated.",
+    "usersHint": "Create accounts and maintain system roles, status, and credentials.", "groupsHint": "Organize member roles and asset permissions with groups.", "assetsHint": "Grant view, connect, or manage access to groups by connection asset.", "searchUsers": "Search users", "searchAssets": "Search assets", "noUsers": "No matching users"
   },
   "backup": {
     "title": "System backup and restore", "description": "Create a consistent SQLite snapshot with verified user files. Restore runs before the database opens on the next service start.",

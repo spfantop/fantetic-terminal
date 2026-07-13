@@ -791,7 +791,8 @@
     "userDeleted": "ユーザーを削除し、資産を移管しました。", "groupCreated": "グループを作成しました。", "groupDeleted": "グループを削除しました。",
     "memberSaved": "メンバー権限を保存しました。", "memberDeleted": "メンバーを削除しました。", "assetPermissions": "接続資産の権限",
     "selectConnection": "接続資産を選択", "permission": "権限", "addGrant": "権限を追加",
-    "grantSaved": "接続権限を保存しました。", "grantDeleted": "接続権限を取り消しました。", "error": "アクセス制御操作に失敗しました。"
+    "grantSaved": "接続権限を保存しました。", "grantDeleted": "接続権限を取り消しました。", "error": "アクセス制御操作に失敗しました。", "groupUpdated": "グループ情報を更新しました。",
+    "usersHint": "アカウントを作成し、システムロール、状態、認証情報を管理します。", "groupsHint": "グループでメンバーのロールと資産権限を整理します。", "assetsHint": "接続資産ごとにグループへ閲覧、接続、管理権限を付与します。", "searchUsers": "ユーザーを検索", "searchAssets": "資産を検索", "noUsers": "一致するユーザーがありません"
   },
     "dock": {
         "hide": "ナビゲーションを非表示",

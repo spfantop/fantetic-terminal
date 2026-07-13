@@ -34,7 +34,8 @@
     "userDeleted": "用户已删除，资产已转移。", "groupCreated": "分组已创建。", "groupDeleted": "分组已删除。",
     "memberSaved": "成员权限已保存。", "memberDeleted": "成员已移除。", "assetPermissions": "连接资产授权",
     "selectConnection": "选择连接资产", "permission": "权限", "addGrant": "添加授权",
-    "grantSaved": "连接授权已保存。", "grantDeleted": "连接授权已撤销。", "error": "访问控制操作失败。"
+    "grantSaved": "连接授权已保存。", "grantDeleted": "连接授权已撤销。", "error": "访问控制操作失败。", "groupUpdated": "分组信息已更新。",
+    "usersHint": "创建账号并维护系统角色、状态和凭据。", "groupsHint": "用分组组织成员角色和资产权限。", "assetsHint": "按连接资产向用户组授予查看、连接或管理权限。", "searchUsers": "搜索用户", "searchAssets": "搜索资产", "noUsers": "没有匹配的用户"
   },
   "backup": {
     "title": "系统备份与恢复", "description": "创建 SQLite 一致性快照并校验用户文件。恢复将在下次服务启动、数据库打开前执行。",

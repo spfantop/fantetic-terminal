@@ -11,6 +11,12 @@ assert.match(adminCenter, /administratorRoles: SystemRole\[\] = \['super_admin',
 assert.match(adminCenter, /'auditor'/);
 assert.match(adminCenter, /activeSection === 'accessControl'/);
 assert.match(component, /transferToUserId/);
+assert.match(component, /activePane/);
+assert.match(component, /filteredUsers/);
+assert.match(component, /filteredConnections/);
+assert.match(component, /updateGroup/);
+assert.match(component, /showConfirmDialog/);
+assert.doesNotMatch(component, /window\.confirm/);
 assert.match(component, /password\.length < 12/);
 assert.match(component, /saveMember/);
 assert.match(api, /\/access-control/);
