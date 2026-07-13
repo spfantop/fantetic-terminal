@@ -6,8 +6,10 @@ import { TelnetService } from './telnet.service';
 import { AccessControlApplication } from '../access-control/access-control.application';
 import { accessControlRepository } from '../access-control/access-control.repository';
 import { finishSessionRecording, startSessionRecording } from '../session-recording/session-recording.service';
+import { createLogger } from '../logging/logger';
 
 const accessControlApplication = new AccessControlApplication(accessControlRepository);
+const logger = createLogger('TelnetHandler');
 
 interface TelnetConnectPayload {
   connectionId: number;
@@ -96,7 +98,7 @@ export async function handleTelnetConnect(ws: AuthenticatedWebSocket, payload: T
       protocol: 'TELNET',
     });
   } catch (error) {
-    console.error(`[SessionRecording] Telnet 会话 ${sessionId} 启动录像失败:`, error);
+    logger.error('Telnet 会话启动录像失败', { sessionId, connectionId, error });
   }
 
   clientStates.set(sessionId, clientState);

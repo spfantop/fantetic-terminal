@@ -10,6 +10,9 @@ import {
   readSessionRecording,
   SessionRecordingRow,
 } from './session-recording.repository';
+import { createLogger } from '../logging/logger';
+
+const logger = createLogger('SessionRecordingService');
 
 export interface SessionRecordingIdentity {
   userId?: number;
@@ -69,7 +72,7 @@ export const startSessionRecording = async (
 export const finishSessionRecording = async (recorder?: ActiveSessionRecorder): Promise<void> => {
   if (!recorder) return;
   try { await recorder.finish(Date.now()); } catch (error) {
-    console.error('[SessionRecording] 结束录像失败:', error);
+    logger.error('结束录像失败', { error });
   }
 };
 

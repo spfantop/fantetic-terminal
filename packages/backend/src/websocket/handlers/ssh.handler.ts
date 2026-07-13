@@ -12,8 +12,10 @@ import { appendSuspendLogBatch, createSuspendLogBatcher, flushSuspendLogBatcher 
 import { AccessControlApplication } from '../../access-control/access-control.application';
 import { accessControlRepository } from '../../access-control/access-control.repository';
 import { startSessionRecording } from '../../session-recording/session-recording.service';
+import { createLogger } from '../../logging/logger';
 
 const accessControlApplication = new AccessControlApplication(accessControlRepository);
+const logger = createLogger('SshHandler');
 
 export async function handleSshConnect(
     ws: AuthenticatedWebSocket,
@@ -95,7 +97,7 @@ export async function handleSshConnect(
                 protocol: 'SSH',
             });
         } catch (error) {
-            console.error(`[SessionRecording] SSH 会话 ${newSessionId} 启动录像失败:`, error);
+            logger.error('SSH 会话启动录像失败', { sessionId: newSessionId, connectionId: dbConnectionIdAsNumber, error });
             await auditLogService.logAction('SESSION_RECORDING_FAILURE', {
                 userId: ws.userId,
                 username: ws.username,

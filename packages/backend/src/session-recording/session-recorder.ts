@@ -4,6 +4,9 @@ import readline from 'node:readline';
 import type { SessionRecordingEvent } from '@fantetic-terminal/contracts';
 
 import { decrypt, encrypt } from '../utils/crypto';
+import { createLogger } from '../logging/logger';
+
+const logger = createLogger('SessionRecorder');
 
 export type RecordingEvent = SessionRecordingEvent;
 
@@ -58,7 +61,7 @@ export const createSessionRecorder = (options: RecorderOptions) => {
   let writeChain = Promise.resolve();
   stream.on('error', error => {
     incomplete = true;
-    console.error('[SessionRecording] 录像文件流错误:', error);
+    logger.error('录像文件流错误', { error });
   });
 
   const flush = (): void => {
@@ -77,7 +80,7 @@ export const createSessionRecorder = (options: RecorderOptions) => {
       stream.write(line, error => error ? reject(error) : resolve());
     })).catch(error => {
       incomplete = true;
-      console.error('[SessionRecording] 写入录像失败:', error);
+      logger.error('写入录像失败', { error });
     });
   };
 

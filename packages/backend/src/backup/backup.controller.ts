@@ -4,6 +4,7 @@ import { createBackupService } from './backup.service';
 import { getAppDataPath } from '../config/app-data-path';
 import { backupDatabaseTo, readDatabaseSchemaVersion } from '../database/connection';
 import { AuditLogService } from '../audit/audit.service';
+import { createLogger } from '../logging/logger';
 
 const service = createBackupService({
   appDataPath: getAppDataPath(),
@@ -11,9 +12,10 @@ const service = createBackupService({
   readSchemaVersion: readDatabaseSchemaVersion,
 });
 const audit = new AuditLogService();
+const logger = createLogger('BackupController');
 
 const fail = (res: Response, error: unknown): void => {
-  console.error('[Backup] 操作失败:', error);
+  logger.error('备份操作失败', { error });
   res.status(400).json({ code: 'backup.operationFailed' });
 };
 

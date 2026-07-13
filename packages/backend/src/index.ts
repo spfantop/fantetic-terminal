@@ -73,12 +73,15 @@ import { installProcessLifecycle } from './config/process-lifecycle';
 import { auditContextMiddleware } from './audit/audit-context';
 import backupRouter from './backup/backup.routes';
 import { applyScheduledRestore } from './backup/backup.service';
+import { createLogger } from './logging/logger';
 import { apiErrorHandler, securityHeaders, validateJsonComplexity, validateMutationOrigin } from './security/web-security.middleware';
 
 
 import './services/event.service'; 
 import './notifications/notification.processor.service'; 
 import './notifications/notification.dispatcher.service'; 
+
+const logger = createLogger('Application');
 
 
 
@@ -273,7 +276,7 @@ const main = async () => {
     await initializeDatabase();   // 然后初始化数据库
     const interruptedRecordingCount = await markInterruptedSessionRecordings();
     if (interruptedRecordingCount > 0) {
-        console.warn(`[SessionRecording] 已将 ${interruptedRecordingCount} 个异常中断的录像标记为不完整。`);
+        logger.warn('检测到异常中断的会话录像', { interruptedRecordingCount });
     }
     webSocketServer = await startServer();
 };
