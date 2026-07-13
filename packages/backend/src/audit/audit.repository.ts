@@ -1,9 +1,16 @@
 import { Database } from 'sqlite3';
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
 import { AuditLogEntry, AuditLogActionType } from '../types/audit.types';
+import type { AuditContext } from './audit-context';
 
 
 type DbAuditLogRow = AuditLogEntry;
+let lastAuditCleanupAt = 0;
+const AUDIT_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+const readMaxAuditEntries = (): number => {
+    const value = Number(process.env.AUDIT_MAX_ENTRIES ?? 50000);
+    return Number.isInteger(value) && value >= 1000 && value <= 10_000_000 ? value : 50000;
+};
 
 export class AuditLogRepository {
 
@@ -13,7 +20,11 @@ export class AuditLogRepository {
      * @param actionType 操作类型。
      * @param details 可选的详细信息（对象或字符串）。
      */
-    async addLog(actionType: AuditLogActionType, details?: Record<string, any> | string | null): Promise<void> {
+    async addLog(
+        actionType: AuditLogActionType,
+        details?: Record<string, any> | string | null,
+        metadata: Partial<AuditContext> & { assetId?: number; sessionId?: string; result?: AuditLogEntry['result'] } = {},
+    ): Promise<void> {
         const timestamp = Math.floor(Date.now() / 1000); 
         let detailsString: string | null = null;
 
@@ -26,8 +37,15 @@ export class AuditLogRepository {
             }
         }
 
-        const sql = 'INSERT INTO audit_logs (timestamp, action_type, details) VALUES (?, ?, ?)';
-        const params = [timestamp, actionType, detailsString];
+        const sql = `INSERT INTO audit_logs (
+            timestamp, action_type, details, request_id, actor_user_id, actor_username,
+            actor_role, source_ip, asset_id, session_id, result
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+        const params = [
+            timestamp, actionType, detailsString, metadata.requestId ?? null, metadata.actorUserId ?? null,
+            metadata.actorUsername ?? null, metadata.actorRole ?? null, metadata.sourceIp ?? null,
+            metadata.assetId ?? null, metadata.sessionId ?? null, metadata.result ?? 'success',
+        ];
 
         try {
             const db = await getDbInstance();
@@ -48,7 +66,10 @@ export class AuditLogRepository {
      * @param db - 数据库实例。
      */
     private async cleanupOldLogs(db: Database): Promise<void> {
-        const MAX_LOG_ENTRIES = 50000; // 设置最大日志条数
+        const now = Date.now();
+        if (now - lastAuditCleanupAt < AUDIT_CLEANUP_INTERVAL_MS) return;
+        lastAuditCleanupAt = now;
+        const maxLogEntries = readMaxAuditEntries();
         const countSql = 'SELECT COUNT(*) as total FROM audit_logs';
         const deleteSql = `
             DELETE FROM audit_logs
@@ -64,9 +85,9 @@ export class AuditLogRepository {
             const countRow = await getDbRow<{ total: number }>(db, countSql);
             const total = countRow?.total ?? 0;
 
-            if (total > MAX_LOG_ENTRIES) {
-                const logsToDelete = total - MAX_LOG_ENTRIES;
-                console.log(`[审计日志] 日志数量 (${total}) 超过限制 (${MAX_LOG_ENTRIES})。正在删除 ${logsToDelete} 条最旧的记录。`);
+            if (total > maxLogEntries) {
+                const logsToDelete = total - maxLogEntries;
+                console.log(`[审计日志] 日志数量 (${total}) 超过限制 (${maxLogEntries})。正在删除 ${logsToDelete} 条最旧的记录。`);
                 await runDb(db, deleteSql, [logsToDelete]);
             }
         } catch (err: any) {
@@ -90,7 +111,8 @@ export class AuditLogRepository {
         actionType?: AuditLogActionType,
         startDate?: number,
         endDate?: number,
-        searchTerm?: string // 添加 searchTerm 参数
+        searchTerm?: string,
+        result?: AuditLogEntry['result'],
     ): Promise<{ logs: AuditLogEntry[], total: number }> {
     
         let baseSql = 'SELECT * FROM audit_logs';
@@ -104,13 +126,22 @@ export class AuditLogRepository {
             params.push(actionType);
             countParams.push(actionType);
         }
+        if (startDate !== undefined) {
+            whereClauses.push('timestamp >= ?'); params.push(startDate); countParams.push(startDate);
+        }
+        if (endDate !== undefined) {
+            whereClauses.push('timestamp <= ?'); params.push(endDate); countParams.push(endDate);
+        }
+        if (result) {
+            whereClauses.push('result = ?'); params.push(result); countParams.push(result);
+        }
         // 添加 searchTerm 的过滤逻辑
         if (searchTerm) {
-            // 搜索 details 字段，使用 LIKE 进行模糊匹配
-            whereClauses.push('details LIKE ?');
+            whereClauses.push(`(details LIKE ? OR actor_username LIKE ? OR source_ip LIKE ?
+                OR request_id LIKE ? OR session_id LIKE ?)`);
             const searchTermLike = `%${searchTerm}%`;
-            params.push(searchTermLike);
-            countParams.push(searchTermLike);
+            params.push(searchTermLike, searchTermLike, searchTermLike, searchTermLike, searchTermLike);
+            countParams.push(searchTermLike, searchTermLike, searchTermLike, searchTermLike, searchTermLike);
         }
 
 

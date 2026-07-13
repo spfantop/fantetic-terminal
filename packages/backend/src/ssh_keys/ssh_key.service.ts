@@ -1,6 +1,7 @@
 import * as SshKeyRepository from '../ssh_keys/ssh_key.repository';
 import { encrypt, decrypt } from '../utils/crypto';
 import { SshKeyDbRow, CreateSshKeyData, UpdateSshKeyData } from '../ssh_keys/ssh_key.repository';
+import { AuthorizationSubject } from '../access-control/authorization-subject';
 
 // 定义 Service 层返回给 Controller 的基本密钥信息 (不含加密内容)
 export interface SshKeyBasicInfo {
@@ -34,7 +35,7 @@ export interface DecryptedSshKeyDetails extends SshKeyBasicInfo {
  * @param input 包含名称和明文凭证的对象
  * @returns Promise<SshKeyBasicInfo> 新创建密钥的基本信息
  */
-export const createSshKey = async (input: CreateSshKeyInput): Promise<SshKeyBasicInfo> => {
+export const createSshKey = async (input: CreateSshKeyInput, ownerUserId: number | null): Promise<SshKeyBasicInfo> => {
     // 1. 验证输入
     if (!input.name || !input.private_key) {
         throw new Error('必须提供密钥名称和私钥内容。');
@@ -50,6 +51,7 @@ export const createSshKey = async (input: CreateSshKeyInput): Promise<SshKeyBasi
         name: input.name,
         encrypted_private_key,
         encrypted_passphrase,
+        owner_user_id: ownerUserId,
     };
 
     // 4. 调用仓库创建记录
@@ -69,8 +71,8 @@ export const createSshKey = async (input: CreateSshKeyInput): Promise<SshKeyBasi
  * 获取所有 SSH 密钥的基本信息 (ID 和 Name)
  * @returns Promise<SshKeyBasicInfo[]> 密钥列表
  */
-export const getAllSshKeyNames = async (): Promise<SshKeyBasicInfo[]> => {
-    return SshKeyRepository.findAllSshKeyNames();
+export const getAllSshKeyNames = async (subject: AuthorizationSubject): Promise<SshKeyBasicInfo[]> => {
+    return SshKeyRepository.findVisibleSshKeyNames(subject);
 };
 
 /**
@@ -185,8 +187,9 @@ export const deleteSshKey = async (id: number): Promise<boolean> => {
  * 获取所有解密后的 SSH 密钥详情
  * @returns Promise<DecryptedSshKeyDetails[]> 解密后的密钥详情列表
  */
-export const getAllDecryptedSshKeys = async (): Promise<DecryptedSshKeyDetails[]> => {
-    const dbRows = await SshKeyRepository.findAllSshKeys();
+export const getAllDecryptedSshKeys = async (subject: AuthorizationSubject): Promise<DecryptedSshKeyDetails[]> => {
+    const visibleIds = new Set((await SshKeyRepository.findVisibleSshKeyNames(subject)).map(key => key.id));
+    const dbRows = (await SshKeyRepository.findAllSshKeys()).filter(key => visibleIds.has(key.id));
     const decryptedKeys: DecryptedSshKeyDetails[] = [];
     
     for (const dbRow of dbRows) {

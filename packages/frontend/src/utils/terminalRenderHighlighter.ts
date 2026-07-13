@@ -124,15 +124,49 @@ interface CachedLineDecoration extends TerminalRenderLineDecoration {
  * reflow and scrollback ownership entirely inside xterm.
  */
 export function createTerminalRenderHighlighter(getOptions: () => TerminalRenderHighlightOptions) {
-  // BufferLine objects naturally disappear when xterm trims scrollback.  A
-  // WeakMap therefore preserves already-coloured history without an arbitrary
-  // LRU eviction/recompute cycle and without retaining discarded lines.
-  let cache = new WeakMap<XtermBufferLine, CachedLineDecoration>();
-  let detach: (() => void) | undefined;
+  // xterm retains BufferLine objects for the entire scrollback lifetime, so a
+  // WeakMap would also retain every per-cell style array the user ever viewed.
+  // Keep only a bounded working set; semantic ranges have their own text LRU.
+  let cache = new Map<XtermBufferLine, CachedLineDecoration>();
+  let detach: ((preserveTextCache?: boolean) => void) | undefined;
   let sourceRules: TerminalHighlightRule[] | undefined;
   let renderRules: TerminalHighlightRule[] = [];
   let jsonStyles: JsonHighlightStyles = createJsonHighlightStyles([]);
   let resolveRanges: ReturnType<typeof createTerminalHighlightRangeResolver> = () => [];
+  let resolvedTextRanges = new Map<string, TerminalHighlightRange[]>();
+  let rangeResolutionCount = 0;
+  let attachedTerminal: Terminal | undefined;
+  let attachedRowFactory: XtermRowFactory | undefined;
+  let attachedCreateRow: XtermRowFactory['createRow'] | undefined;
+  const MAX_RESOLVED_TEXT_CACHE_ENTRIES = 4096;
+  const MAX_LINE_DECORATION_CACHE_ENTRIES = 1024;
+
+  const clearResolvedCaches = () => {
+    cache = new Map();
+    resolvedTextRanges = new Map();
+  };
+
+  const resolveTextRanges = (text: string): TerminalHighlightRange[] => {
+    const cached = resolvedTextRanges.get(text);
+    if (cached) {
+      // Refresh insertion order so frequently rendered history stays hot.
+      resolvedTextRanges.delete(text);
+      resolvedTextRanges.set(text, cached);
+      return cached;
+    }
+
+    rangeResolutionCount += 1;
+    const ranges = [
+      ...resolveRanges(text),
+      ...resolveJsonRanges(text, jsonStyles),
+    ];
+    resolvedTextRanges.set(text, ranges);
+    if (resolvedTextRanges.size > MAX_RESOLVED_TEXT_CACHE_ENTRIES) {
+      const oldest = resolvedTextRanges.keys().next().value;
+      if (oldest !== undefined) resolvedTextRanges.delete(oldest);
+    }
+    return ranges;
+  };
 
   const resolveLine = (
     line: Pick<XtermBufferLine, 'length' | 'translateToString'>,
@@ -144,7 +178,7 @@ export function createTerminalRenderHighlighter(getOptions: () => TerminalRender
       renderRules = sourceRules.filter(rule => !DENSE_RENDER_PRESET_IDS.has(rule.id));
       jsonStyles = createJsonHighlightStyles(sourceRules);
       resolveRanges = createTerminalHighlightRangeResolver({ ...sourceOptions, rules: renderRules });
-      cache = new WeakMap();
+      clearResolvedCaches();
     }
     const options = { ...sourceOptions, rules: renderRules };
     if (!options.enabled || sourceOptions.rules.length === 0) {
@@ -161,18 +195,16 @@ export function createTerminalRenderHighlighter(getOptions: () => TerminalRender
       && cached.logicalText === logicalContext?.text
       && cached.rowTextOffset === (logicalContext?.rowTextOffset ?? 0)
       && cached.rules === options.rules && cached.enabled === options.enabled) {
+      cache.delete(line as XtermBufferLine);
+      cache.set(line as XtermBufferLine, cached);
       return cached.hasStyles ? cached : undefined;
     }
 
     const styles: Array<ResolvedCellStyle | undefined> = new Array(line.length);
     const highlightText = logicalContext?.text ?? text;
     const rowTextOffset = logicalContext?.rowTextOffset ?? 0;
-    const ranges = [
-      ...resolveRanges(highlightText),
-      // JSON semantic tokens deliberately come last so a broad generic quoted
-      // string rule cannot recolour keys and punctuation inconsistently.
-      ...resolveJsonRanges(highlightText, jsonStyles),
-    ].filter(range => range.end > rowTextOffset && range.start < rowTextOffset + text.length)
+    const ranges = resolveTextRanges(highlightText)
+      .filter(range => range.end > rowTextOffset && range.start < rowTextOffset + text.length)
       .map(range => ({
         ...range,
         start: Math.max(0, range.start - rowTextOffset),
@@ -202,11 +234,15 @@ export function createTerminalRenderHighlighter(getOptions: () => TerminalRender
       hasStyles: styles.some(Boolean),
     };
     cache.set(line as XtermBufferLine, decoration);
+    if (cache.size > MAX_LINE_DECORATION_CACHE_ENTRIES) {
+      const oldest = cache.keys().next().value;
+      if (oldest !== undefined) cache.delete(oldest);
+    }
     return decoration.hasStyles ? decoration : undefined;
   };
 
   const attach = (terminal: Terminal): boolean => {
-    detach?.();
+    detach?.(true);
 
     const rendererSlot = (terminal as Terminal & XtermTerminalInternals)._core?._renderService?._renderer;
     // xterm 5.3 stores the active renderer in MutableDisposable.value. Keep
@@ -264,13 +300,20 @@ export function createTerminalRenderHighlighter(getOptions: () => TerminalRender
       return originalCreateRow.apply(this, args);
     };
     rowFactory.createRow = createHighlightedRow;
+    attachedTerminal = terminal;
+    attachedRowFactory = rowFactory;
+    attachedCreateRow = createHighlightedRow;
 
-    detach = () => {
+    detach = (preserveTextCache = false) => {
       if (rowFactory.createRow === createHighlightedRow) {
         rowFactory.createRow = originalCreateRow;
       }
       detach = undefined;
-      cache = new WeakMap();
+      attachedTerminal = undefined;
+      attachedRowFactory = undefined;
+      attachedCreateRow = undefined;
+      cache = new Map();
+      if (!preserveTextCache) resolvedTextRanges = new Map();
     };
     return true;
   };
@@ -278,7 +321,19 @@ export function createTerminalRenderHighlighter(getOptions: () => TerminalRender
   return {
     attach,
     dispose: () => detach?.(),
-    invalidate: () => { cache = new WeakMap(); sourceRules = undefined; },
+    ensureAttached: (terminal: Terminal = attachedTerminal!) => {
+      if (!terminal) return false;
+      const rendererSlot = (terminal as Terminal & XtermTerminalInternals)._core?._renderService?._renderer;
+      const currentRowFactory = rendererSlot?.value?._rowFactory ?? rendererSlot?._rowFactory;
+      if (currentRowFactory === attachedRowFactory && currentRowFactory?.createRow === attachedCreateRow) return true;
+      return attach(terminal);
+    },
+    getStats: () => ({
+      rangeResolutionCount,
+      resolvedTextCacheSize: resolvedTextRanges.size,
+      lineDecorationCacheSize: cache.size,
+    }),
+    invalidate: () => { clearResolvedCaches(); sourceRules = undefined; },
     resolveLine,
   };
 }

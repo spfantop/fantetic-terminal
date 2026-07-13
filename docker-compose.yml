@@ -16,6 +16,9 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3001
+      ENCRYPTION_KEY: "${ENCRYPTION_KEY:?Set ENCRYPTION_KEY to 64 hexadecimal characters}"
+      SESSION_SECRET: "${SESSION_SECRET:?Set SESSION_SECRET to at least 32 random characters}"
+      REMOTE_GATEWAY_SHARED_SECRET: "${REMOTE_GATEWAY_SHARED_SECRET:?Set REMOTE_GATEWAY_SHARED_SECRET to at least 32 random characters}"
       DEPLOYMENT_MODE: "${DEPLOYMENT_MODE:-docker}"
       REMOTE_GATEWAY_API_BASE_LOCAL: "${REMOTE_GATEWAY_API_BASE_LOCAL:-http://localhost:9090}"
       REMOTE_GATEWAY_API_BASE_DOCKER: "${REMOTE_GATEWAY_API_BASE_DOCKER:-http://remote-gateway:9090}"
@@ -24,6 +27,7 @@ services:
       RP_ID: "${RP_ID:-localhost}"
       RP_ORIGIN: "${RP_ORIGIN:-http://localhost:18111}"
       CORS_ALLOWED_ORIGINS: "${CORS_ALLOWED_ORIGINS:-}"
+      TRUSTED_PROXY_CIDRS: "${TRUSTED_PROXY_CIDRS:-127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7,fe80::/10}"
     volumes:
       - ./data:/app/data
     networks:
@@ -37,9 +41,8 @@ services:
       GUACD_PORT: 4822
       REMOTE_GATEWAY_API_PORT: 9090
       REMOTE_GATEWAY_WS_PORT: 8081
-      FRONTEND_URL: http://frontend
-      MAIN_BACKEND_URL: http://backend:3001
       NODE_ENV: production
+      REMOTE_GATEWAY_SHARED_SECRET: "${REMOTE_GATEWAY_SHARED_SECRET:?Set REMOTE_GATEWAY_SHARED_SECRET to at least 32 random characters}"
     networks:
       - fantetic-terminal-network
     depends_on:

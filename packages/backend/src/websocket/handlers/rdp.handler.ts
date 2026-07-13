@@ -71,7 +71,15 @@ export function handleRdpProxyConnection(
 
     console.log(`WebSocket: Remote Desktop Proxy for ${ws.username} attempting to connect to ${safeRemoteDesktopTargetUrl}`);
 
-    const rdpWs = new WebSocket(remoteDesktopTargetUrl);
+    const gatewaySharedSecret = process.env.REMOTE_GATEWAY_SHARED_SECRET;
+    if (!gatewaySharedSecret || gatewaySharedSecret.length < 32) {
+        ws.send(JSON.stringify({ type: 'rdp:error', payload: 'Remote desktop gateway authentication is not configured.' }));
+        ws.close(1011, 'Remote desktop gateway authentication is not configured.');
+        return;
+    }
+    const rdpWs = new WebSocket(remoteDesktopTargetUrl, {
+        headers: { 'x-fantetic-gateway-secret': gatewaySharedSecret },
+    });
     let clientWsClosed = false;
     let rdpWsClosed = false;
 

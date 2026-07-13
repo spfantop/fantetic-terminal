@@ -1,9 +1,10 @@
 const { spawn } = require('node:child_process');
 const http = require('node:http');
 const path = require('node:path');
+const { randomBytes } = require('node:crypto');
 
 const DEV_FRONTEND_PORT = 22457;
-const DEV_BACKEND_PORT = 3001;
+const DEV_BACKEND_PORT = 22458;
 
 const getNpmCommand = () => (process.platform === 'win32' ? 'npm.cmd' : 'npm');
 
@@ -52,6 +53,7 @@ const createSpawnConfig = (spec, {
 const createDevProcessSpecs = ({
   rootDir = path.resolve(__dirname, '..'),
   npmCommand = getNpmCommand(),
+  electronNonce = randomBytes(32).toString('hex'),
 } = {}) => [
   {
     name: 'backend',
@@ -60,6 +62,9 @@ const createDevProcessSpecs = ({
     cwd: rootDir,
     env: {
       FANTETIC_APP_MODE: 'electron',
+      FANTETIC_ELECTRON_NONCE: electronNonce,
+      HOST: '127.0.0.1',
+      PORT: String(DEV_BACKEND_PORT),
     },
   },
   {
@@ -72,7 +77,7 @@ const createDevProcessSpecs = ({
       'dev',
       '--',
       '--host',
-      '0.0.0.0',
+      '127.0.0.1',
       '--port',
       String(DEV_FRONTEND_PORT),
       '--strictPort',
@@ -87,6 +92,9 @@ const createDevProcessSpecs = ({
     command: npmCommand,
     args: ['--prefix', 'electron-app', 'run', 'dev'],
     cwd: rootDir,
+    env: {
+      FANTETIC_ELECTRON_NONCE: electronNonce,
+    },
   },
 ];
 

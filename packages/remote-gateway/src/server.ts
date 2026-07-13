@@ -3,15 +3,18 @@ import GuacamoleLite from 'guacamole-lite';
 import express, { Request, Response } from 'express';
 import http from 'http';
 import crypto from 'crypto';
-import cors from 'cors';
+import { createHealthSnapshot } from './health';
+import { createGatewayTokenClaims, GatewayTokenReplayGuard, isAuthorizedGatewayRequest } from './security';
 
 // --- 配置 ---
 const REMOTE_GATEWAY_WS_PORT = process.env.REMOTE_GATEWAY_WS_PORT || 8080; // 统一端口，或按需分开
 const REMOTE_GATEWAY_API_PORT = process.env.REMOTE_GATEWAY_API_PORT || 9090;
 const GUACD_HOST = process.env.GUACD_HOST || 'localhost';
 const GUACD_PORT = parseInt(process.env.GUACD_PORT || '4822', 10);
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
-const MAIN_BACKEND_URL = process.env.MAIN_BACKEND_URL || 'http://localhost:3000';
+const GATEWAY_SHARED_SECRET = process.env.REMOTE_GATEWAY_SHARED_SECRET || '';
+if (GATEWAY_SHARED_SECRET.length < 32) {
+    throw new Error('REMOTE_GATEWAY_SHARED_SECRET must contain at least 32 characters.');
+}
 
 // --- 启动时生成内存加密密钥 ---
 console.log("[Remote Gateway] 正在为此会话生成新的内存加密密钥...");
@@ -21,15 +24,8 @@ console.log("[Remote Gateway] 内存加密密钥已生成。");
 
 // --- Express 应用设置 ---
 const app = express();
-app.use(express.json()); // 用于解析请求体中的 JSON
+app.use(express.json({ limit: '32kb' }));
 const apiServer = http.createServer(app);
-
-const allowedOrigins = [
-    FRONTEND_URL,
-    MAIN_BACKEND_URL
-];
-console.log(`[Remote Gateway] CORS 允许的来源: ${allowedOrigins.join(', ')}`);
-app.use(cors({ origin: allowedOrigins }));
 
 
 const guacdOptions = {
@@ -40,6 +36,12 @@ const guacdOptions = {
 const websocketOptions = {
     port: REMOTE_GATEWAY_WS_PORT,
     host: '0.0.0.0', // 监听所有接口
+    verifyClient: ({ req }: { req: http.IncomingMessage }) => isAuthorizedGatewayRequest(
+        typeof req.headers['x-fantetic-gateway-secret'] === 'string'
+            ? req.headers['x-fantetic-gateway-secret']
+            : undefined,
+        GATEWAY_SHARED_SECRET,
+    ),
 };
 
 const clientOptions = {
@@ -52,6 +54,8 @@ const clientOptions = {
 };
 
 let guacServer: any;
+let guacamoleReady = false;
+const tokenReplayGuard = new GatewayTokenReplayGuard();
 
 type RemoteDesktopConnectionConfig = Record<string, string | number | boolean | null | undefined>;
 
@@ -79,7 +83,19 @@ const logRemoteDesktopSettingsSnapshot = (protocol: 'rdp' | 'vnc', settings: Rec
 
 try {
     console.log(`[Remote Gateway] 正在使用选项初始化 GuacamoleLite: WS 端口=${websocketOptions.port}, Guacd=${guacdOptions.host}:${guacdOptions.port}`);
-    guacServer = new GuacamoleLite(websocketOptions, guacdOptions, clientOptions);
+    guacServer = new GuacamoleLite(websocketOptions, guacdOptions, clientOptions, {
+        processConnectionSettings: (settings: any, callback: (error?: Error, value?: any) => void) => {
+            try {
+                tokenReplayGuard.consume({ expiresAt: settings.expiresAt, nonce: settings.nonce });
+                delete settings.expiresAt;
+                delete settings.nonce;
+                callback(undefined, settings);
+            } catch (error) {
+                callback(error instanceof Error ? error : new Error('Invalid gateway token.'));
+            }
+        },
+    });
+    guacamoleReady = true;
     console.log(`[Remote Gateway] GuacamoleLite 初始化成功。`);
 
     if (guacServer.on) {
@@ -105,6 +121,24 @@ try {
    process.exit(1);
 }
 
+app.get('/health/live', (_req: Request, res: Response): void => {
+    res.status(200).json({ status: 'alive' });
+});
+
+app.get(['/health', '/health/ready'], (_req: Request, res: Response): void => {
+    const snapshot = createHealthSnapshot({ guacamoleReady });
+    res.status(guacamoleReady ? 200 : 503).json(snapshot);
+});
+
+const requireBackendAuthentication = (req: Request, res: Response, next: () => void): void => {
+    const provided = req.get('x-fantetic-gateway-secret');
+    if (!isAuthorizedGatewayRequest(provided, GATEWAY_SHARED_SECRET)) {
+        res.status(401).json({ error: 'Unauthorized gateway request.' });
+        return;
+    }
+    next();
+};
+
 const encryptToken = (data: string, keyBuffer: Buffer): string => {
     try {
         const iv = crypto.randomBytes(16);
@@ -123,7 +157,7 @@ const encryptToken = (data: string, keyBuffer: Buffer): string => {
     }
 };
 
-app.post('/api/remote-desktop/token', (req: Request, res: Response): void => {
+app.post('/api/remote-desktop/token', requireBackendAuthentication, (req: Request, res: Response): void => {
     const { protocol, connectionConfig } = req.body;
 
     if (!protocol || !connectionConfig) {
@@ -184,6 +218,7 @@ app.post('/api/remote-desktop/token', (req: Request, res: Response): void => {
     logRemoteDesktopSettingsSnapshot(protocol, settings);
 
     const connectionParams = {
+        ...createGatewayTokenClaims(),
         connection: {
             type: protocol, // 'rdp' or 'vnc'
             settings: settings
@@ -208,6 +243,7 @@ apiServer.listen(REMOTE_GATEWAY_API_PORT, () => {
 const gracefulShutdown = (signal: string) => {
     console.log(`[Remote Gateway] 收到 ${signal} 信号。正在优雅地关闭...`);
 
+  guacamoleReady = false;
   let guacClosed = false;
   let apiClosed = false;
 

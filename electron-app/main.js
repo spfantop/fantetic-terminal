@@ -1,9 +1,15 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, session } = require('electron');
 const path = require('path');
+const { randomBytes } = require('crypto');
 const express = require('express');
 const http = require('http');
 const { spawn } = require('child_process');
 const fs = require('fs');
+const {
+  addElectronNonceHeader,
+  isAllowedPopupUrl,
+  isTrustedRendererUrl,
+} = require('./security');
 
 const PROD_FRONTEND_PORT = 22457;
 const PROD_BACKEND_PORT = 22458;
@@ -11,6 +17,7 @@ const PROD_BACKEND_PORT = 22458;
 let mainWindow;
 let frontendServer;
 let backendProcess;
+const electronRuntimeNonce = process.env.FANTETIC_ELECTRON_NONCE || randomBytes(32).toString('hex');
 
 const isDevMode = () => process.argv.includes('--dev');
 
@@ -27,6 +34,51 @@ const ensureDirectory = (targetPath) => {
   }
 };
 
+const installBackendNonceInjection = () => {
+  session.defaultSession.webRequest.onBeforeSendHeaders({
+    urls: [
+      `http://localhost:${PROD_BACKEND_PORT}/*`,
+      `ws://localhost:${PROD_BACKEND_PORT}/*`,
+    ],
+  }, (details, callback) => {
+    callback({ requestHeaders: addElectronNonceHeader(details, electronRuntimeNonce) });
+  });
+};
+
+const installWindowTrustSeam = (browserWindow, frontendUrl, { allowAboutBlank = false } = {}) => {
+  browserWindow.webContents.on('will-navigate', (event, navigationUrl) => {
+    if (isTrustedRendererUrl(navigationUrl, frontendUrl)) return;
+    if (allowAboutBlank && navigationUrl === 'about:blank') return;
+    event.preventDefault();
+  });
+
+  browserWindow.webContents.setWindowOpenHandler(({ url: popupUrl }) => {
+    if (!isAllowedPopupUrl(popupUrl, frontendUrl)) return { action: 'deny' };
+    return {
+      action: 'allow',
+      overrideBrowserWindowOptions: {
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true,
+          sandbox: true,
+        },
+      },
+    };
+  });
+
+  browserWindow.webContents.on('did-create-window', (childWindow) => {
+    installWindowTrustSeam(childWindow, frontendUrl, { allowAboutBlank: true });
+  });
+};
+
+const isTrustedIpcSender = (event) => Boolean(
+  mainWindow
+  && !mainWindow.isDestroyed()
+  && event.sender === mainWindow.webContents
+  && event.senderFrame === mainWindow.webContents.mainFrame
+  && isTrustedRendererUrl(event.senderFrame.url, mainWindow.getURL()),
+);
+
 const createMainWindow = async () => {
   const Store = (await import('electron-store')).default;
   const store = new Store();
@@ -42,6 +94,7 @@ const createMainWindow = async () => {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: true,
     },
   });
 
@@ -49,6 +102,8 @@ const createMainWindow = async () => {
     ? `http://localhost:${PROD_FRONTEND_PORT}`
     : await startProductionServices();
 
+  installBackendNonceInjection();
+  installWindowTrustSeam(mainWindow, frontendUrl);
   mainWindow.loadURL(frontendUrl);
 
   mainWindow.on('close', () => {
@@ -97,6 +152,8 @@ const startBackendProcess = (backendDataPath) => {
       APP_BACKEND_DATA_PATH: backendDataPath,
       ELECTRON_RUN_AS_NODE: '1',
       FANTETIC_APP_MODE: 'electron',
+      FANTETIC_ELECTRON_NONCE: electronRuntimeNonce,
+      HOST: '127.0.0.1',
       PORT: String(PROD_BACKEND_PORT),
       RP_ORIGIN: `http://localhost:${PROD_FRONTEND_PORT}`,
       NODE_ENV: 'production',
@@ -129,7 +186,7 @@ const startFrontendServer = async () => {
 
   await new Promise((resolve, reject) => {
     frontendServer
-      .listen(PROD_FRONTEND_PORT, resolve)
+      .listen(PROD_FRONTEND_PORT, '127.0.0.1', resolve)
       .on('error', reject);
   });
 };
@@ -154,8 +211,6 @@ const stopProductionServices = () => {
 
 };
 
-app.commandLine.appendSwitch('disable-features', 'OutOfBlinkCors');
-
 app.on('ready', () => {
   createMainWindow().catch((error) => {
     console.error('Error during createMainWindow:', error);
@@ -177,23 +232,27 @@ app.on('activate', () => {
   }
 });
 
-ipcMain.on('toMain', (_event, args) => {
+ipcMain.on('toMain', (event, args) => {
+  if (!isTrustedIpcSender(event)) return;
   console.log('Message from renderer:', args);
 });
 
-ipcMain.on('minimize-window', () => {
+ipcMain.on('minimize-window', (event) => {
+  if (!isTrustedIpcSender(event)) return;
   if (mainWindow) {
     mainWindow.minimize();
   }
 });
 
-ipcMain.on('close-window', () => {
+ipcMain.on('close-window', (event) => {
+  if (!isTrustedIpcSender(event)) return;
   if (mainWindow) {
     mainWindow.close();
   }
 });
 
-ipcMain.on('toggle-maximize-window', () => {
+ipcMain.on('toggle-maximize-window', (event) => {
+  if (!isTrustedIpcSender(event)) return;
   if (!mainWindow) return;
 
   if (mainWindow.isMaximized()) {

@@ -1,118 +1,69 @@
 <template>
-  <div v-if="settings" class="p-4 bg-background text-foreground">
-    <div class="max-w-6xl mx-auto">
-      <h2 class="text-xl font-semibold text-foreground mb-4 pb-2 border-b border-border">
-        {{ t('settings.category.dataManagement', '数据管理') }}
-      </h2>
-      <div class="space-y-6">
-      <!-- Export Connections Section -->
-      <div class="settings-section-content">
-         <h3 class="text-base font-semibold text-foreground mb-3">{{ t('settings.exportConnections.title', '导出连接数据') }}</h3>
-         <p class="text-sm text-text-secondary mb-4">
-           <span class="font-semibold text-warning">{{ t('settings.exportConnections.decryptKeyInfo', '解压密码为您的 data/.env 文件中的 ENCRYPTION_KEY。请妥善保管此文件。') }}</span>
-         </p>
-         <form @submit.prevent="handleExportConnections" class="space-y-4">
-           <div class="flex items-center justify-between">
-              <button type="submit" :disabled="exportConnectionsLoading"
-                      class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 ease-in-out text-sm font-medium inline-flex items-center">
-                <svg v-if="exportConnectionsLoading" class="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                {{ exportConnectionsLoading ? t('common.loading') : t('settings.exportConnections.buttonText', '开始导出') }}
-              </button>
-              <p v-if="exportConnectionsMessage" :class="['text-sm', exportConnectionsSuccess ? 'text-success' : 'text-error']">{{ exportConnectionsMessage }}</p>
-           </div>
-         </form>
-      </div>
-      <!-- Import Connections Section -->
-      <div class="settings-section-content">
-         <h3 class="text-base font-semibold text-foreground mb-3">{{ t('settings.importConnections.title', '导入连接数据') }}</h3>
-         <p class="text-sm text-text-secondary mb-4">
-           {{ t('settings.importConnections.description', '上传从本系统导出的加密 ZIP 文件，将自动按当前 ENCRYPTION_KEY 解压并导入连接、标签和 SSH 密钥。') }}
-         </p>
-         <form @submit.prevent="submitImportConnections" class="space-y-4">
-           <div class="flex flex-wrap items-center gap-3">
-              <input
-                ref="importFileInputRef"
-                type="file"
-                accept=".zip,application/zip,application/x-zip-compressed"
-                class="block max-w-md text-sm text-text-secondary file:mr-3 file:rounded-md file:border-0 file:bg-button file:px-3 file:py-2 file:text-sm file:font-medium file:text-button-text hover:file:bg-button-hover"
-                @change="handleImportFileChange"
-              />
-              <button type="submit" :disabled="importConnectionsLoading || !selectedImportFile"
-                      class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 ease-in-out text-sm font-medium inline-flex items-center">
-                <svg v-if="importConnectionsLoading" class="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                {{ importConnectionsLoading ? t('common.loading') : t('settings.importConnections.buttonText', '开始导入') }}
-              </button>
-              <p v-if="importConnectionsMessage" :class="['text-sm', importConnectionsSuccess ? 'text-success' : 'text-error']">{{ importConnectionsMessage }}</p>
-           </div>
-           <div v-if="importConnectionsResult" class="rounded-md border border-border bg-background/60 p-3 text-sm text-text-secondary">
-             <p>
-               {{ t('settings.importConnections.summary', {
-                 successCount: importConnectionsResult.successCount,
-                 skippedCount: importConnectionsResult.skippedCount,
-                 failureCount: importConnectionsResult.failureCount,
-                 importedSshKeyCount: importConnectionsResult.importedSshKeyCount,
-                 skippedSshKeyCount: importConnectionsResult.skippedSshKeyCount,
-               }, `连接导入 ${importConnectionsResult.successCount} 条，跳过 ${importConnectionsResult.skippedCount} 条，失败 ${importConnectionsResult.failureCount} 条；SSH 密钥导入 ${importConnectionsResult.importedSshKeyCount} 个，跳过 ${importConnectionsResult.skippedSshKeyCount} 个。`) }}
-             </p>
-             <ul v-if="importConnectionsResult.errors?.length" class="mt-2 list-disc pl-5 text-error">
-               <li v-for="(error, index) in importConnectionsResult.errors.slice(0, 5)" :key="index">
-                 {{ error.connectionName ? `${error.connectionName}: ` : '' }}{{ error.message }}
-               </li>
-             </ul>
-             <ul v-if="importConnectionsResult.warnings?.length" class="mt-2 list-disc pl-5 text-warning">
-               <li v-for="(warning, index) in importConnectionsResult.warnings.slice(0, 5)" :key="index">
-                 {{ warning }}
-               </li>
-             </ul>
-           </div>
-         </form>
-      </div>
-      </div>
+  <section class="data-workspace">
+    <nav class="data-navigation" :aria-label="t('backup.dataNavigation', '数据管理导航')">
+      <button type="button" :class="{ active: dataPane === 'transfer' }" @click="dataPane='transfer'"><i class="fas fa-arrow-right-arrow-left"></i><span>{{ t('backup.transferTitle', '导入与导出') }}</span></button>
+      <button type="button" :class="{ active: dataPane === 'backup' }" @click="dataPane='backup'"><i class="fas fa-box-archive"></i><span>{{ t('backup.title') }}</span><strong>{{ backups.length }}</strong></button>
+    </nav>
+
+    <div v-if="dataPane === 'transfer'" class="data-grid">
+      <article class="data-card">
+        <i class="fas fa-file-export card-icon"></i><div><h3>{{ t('settings.exportConnections.title', '导出连接数据') }}</h3><p>{{ t('settings.exportConnections.decryptKeyInfo', '解压密码为您的 data/.env 文件中的 ENCRYPTION_KEY。请妥善保管此文件。') }}</p></div>
+        <button type="button" :disabled="exportConnectionsLoading" @click="handleExportConnections"><i class="fas fa-download"></i>{{ exportConnectionsLoading ? t('common.loading') : t('settings.exportConnections.buttonText', '开始导出') }}</button>
+        <p v-if="exportConnectionsMessage" :class="exportConnectionsSuccess ? 'success' : 'error'">{{ exportConnectionsMessage }}</p>
+      </article>
+      <article class="data-card">
+        <i class="fas fa-file-import card-icon"></i><div><h3>{{ t('settings.importConnections.title', '导入连接数据') }}</h3><p>{{ t('settings.importConnections.description', '上传从本系统导出的加密 ZIP 文件，将自动按当前 ENCRYPTION_KEY 解压并导入连接、标签和 SSH 密钥。') }}</p></div>
+        <form @submit.prevent="submitImportConnections"><input ref="importFileInputRef" type="file" accept=".zip,application/zip,application/x-zip-compressed" @change="handleImportFileChange"><button type="submit" :disabled="importConnectionsLoading || !selectedImportFile"><i class="fas fa-upload"></i>{{ importConnectionsLoading ? t('common.loading') : t('settings.importConnections.buttonText', '开始导入') }}</button></form>
+        <p v-if="importConnectionsMessage" :class="importConnectionsSuccess ? 'success' : 'error'">{{ importConnectionsMessage }}</p>
+        <div v-if="importConnectionsResult" class="import-result"><strong>{{ t('settings.importConnections.summary', { successCount: importConnectionsResult.successCount, skippedCount: importConnectionsResult.skippedCount, failureCount: importConnectionsResult.failureCount, importedSshKeyCount: importConnectionsResult.importedSshKeyCount, skippedSshKeyCount: importConnectionsResult.skippedSshKeyCount }) }}</strong><ul v-if="importConnectionsResult.errors?.length"><li v-for="(item,index) in importConnectionsResult.errors.slice(0,5)" :key="index">{{ item.connectionName ? `${item.connectionName}: ` : '' }}{{ item.message }}</li></ul></div>
+      </article>
     </div>
-  </div>
+
+    <div v-else class="backup-pane">
+      <header><h3>{{ t('backup.title') }}</h3><div><button type="button" class="secondary" :disabled="backupLoading" @click="loadBackups"><i class="fas fa-rotate"></i>{{ t('common.refresh') }}</button><button type="button" class="primary" :disabled="backupLoading" @click="createBackup"><i class="fas fa-plus"></i>{{ t('backup.create') }}</button></div></header>
+      <p v-if="backupMessage" :class="backupError ? 'notice error' : 'notice success'">{{ backupMessage }}</p>
+      <div class="backup-list"><article v-for="backup in backups" :key="backup.id"><div class="backup-icon"><i class="fas fa-box-archive"></i></div><div><strong>{{ formatDate(backup.createdAt) }}</strong><span>{{ t('backup.backupSummary', { schema: backup.schemaVersion, files: backup.files.length, size: formatBytes(totalSize(backup)) }) }}</span><small class="mono">{{ backup.id }}</small></div><button type="button" class="secondary" @click="verifyBackup(backup.id)">{{ t('backup.verify') }}</button><button type="button" class="danger" @click="beginRestore(backup)">{{ t('backup.restore') }}</button></article><p v-if="!backupLoading && !backups.length" class="empty-state">{{ t('backup.empty') }}</p></div>
+    </div>
+
+    <div v-if="selectedRestoreBackup" class="restore-overlay" role="dialog" aria-modal="true" :aria-label="t('backup.restoreWizard', '恢复向导')" @click.self="closeRestoreWizard">
+      <section class="restore-dialog">
+        <header><div><span>{{ t('backup.restoreStep', { current: restoreStep, total: 3 }) }}</span><h3>{{ t('backup.restoreWizard', '恢复向导') }}</h3></div><button type="button" class="icon-button secondary" :aria-label="t('common.close')" @click="closeRestoreWizard"><i class="fas fa-xmark"></i></button></header>
+        <ol class="restore-progress"><li :class="{active:restoreStep>=1}">{{ t('backup.review', '检查备份') }}</li><li :class="{active:restoreStep>=2}">{{ t('backup.integrity', '完整性校验') }}</li><li :class="{active:restoreStep>=3}">{{ t('backup.confirmImpact', '确认影响') }}</li></ol>
+        <div v-if="restoreStep===1" class="restore-content"><dl><div><dt>{{ t('backup.createdAt') }}</dt><dd>{{ formatDate(selectedRestoreBackup.createdAt) }}</dd></div><div><dt>{{ t('backup.schemaVersion') }}</dt><dd>{{ selectedRestoreBackup.schemaVersion }}</dd></div><div><dt>{{ t('backup.fileCount') }}</dt><dd>{{ selectedRestoreBackup.files.length }}</dd></div><div><dt>{{ t('backup.totalSize', '总大小') }}</dt><dd>{{ formatBytes(totalSize(selectedRestoreBackup)) }}</dd></div></dl><ul class="file-list"><li v-for="file in selectedRestoreBackup.files" :key="file.path"><span>{{ file.path }}</span><small>{{ formatBytes(file.size) }}</small></li></ul></div>
+        <div v-else-if="restoreStep===2" class="restore-content verification"><i :class="restoreVerifying ? 'fas fa-spinner fa-spin' : restoreVerified ? 'fas fa-circle-check' : 'fas fa-shield-halved'"></i><h4>{{ restoreVerifying ? t('backup.verifying', '正在校验备份…') : restoreVerified ? t('backup.valid') : t('backup.verifyBeforeRestore', '恢复前必须通过完整性校验。') }}</h4><ul v-if="restoreErrors.length"><li v-for="item in restoreErrors" :key="item">{{ item }}</li></ul></div>
+        <div v-else class="restore-content impact"><i class="fas fa-triangle-exclamation"></i><h4>{{ t('backup.restartRequired', '服务重启后才会应用恢复') }}</h4><p>{{ t('backup.restoreImpact', '当前数据库和用户文件将被所选备份替换。安排恢复后，请在维护窗口重启服务。') }}</p><label><input v-model="impactAcknowledged" type="checkbox">{{ t('backup.acknowledgeImpact', '我已了解当前数据会被替换，并已安排服务重启。') }}</label></div>
+        <footer><button type="button" class="secondary" @click="restoreStep===1 ? closeRestoreWizard() : restoreStep--">{{ restoreStep===1 ? t('common.cancel') : t('common.previous', '上一步') }}</button><button v-if="restoreStep===1" type="button" @click="restoreStep=2; verifySelectedBackup()">{{ t('backup.verify') }}</button><button v-else-if="restoreStep===2" type="button" :disabled="restoreVerifying || !restoreVerified" @click="restoreStep=3">{{ t('common.next', '下一步') }}</button><button v-else type="button" class="danger" :disabled="!impactAcknowledged" @click="confirmRestore">{{ t('backup.restore') }}</button></footer>
+      </section>
+    </div>
+  </section>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
-import { useSettingsStore } from '../../stores/settings.store';
+import { onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { storeToRefs } from 'pinia';
 import { useDataManagement } from '../../composables/settings/useDataManagement';
+import { backupApi, type BackupManifest } from '../../services/backup.api';
+import { useConfirmDialog } from '../../composables/useConfirmDialog';
 
-const settingsStore = useSettingsStore();
-const { settings } = storeToRefs(settingsStore);
-const { t } = useI18n();
-const selectedImportFile = ref<File | null>(null);
-const importFileInputRef = ref<HTMLInputElement | null>(null);
-
-const {
-  exportConnectionsLoading,
-  exportConnectionsMessage,
-  exportConnectionsSuccess,
-  handleExportConnections,
-  importConnectionsLoading,
-  importConnectionsMessage,
-  importConnectionsSuccess,
-  importConnectionsResult,
-  handleImportConnections,
-} = useDataManagement();
-
-const handleImportFileChange = (event: Event) => {
-  const input = event.target as HTMLInputElement;
-  selectedImportFile.value = input.files?.[0] ?? null;
-};
-
-const submitImportConnections = async () => {
-  await handleImportConnections(selectedImportFile.value);
-  if (importConnectionsSuccess.value && importFileInputRef.value) {
-    importFileInputRef.value.value = '';
-    selectedImportFile.value = null;
-  }
-};
+const { t }=useI18n(); const { showConfirmDialog }=useConfirmDialog();
+const dataPane=ref<'transfer'|'backup'>('transfer'); const backups=ref<BackupManifest[]>([]); const backupLoading=ref(false); const backupMessage=ref(''); const backupError=ref(false);
+const selectedImportFile=ref<File|null>(null); const importFileInputRef=ref<HTMLInputElement|null>(null);
+const selectedRestoreBackup=ref<BackupManifest|null>(null); const restoreStep=ref(1); const restoreVerifying=ref(false); const restoreVerified=ref(false); const restoreErrors=ref<string[]>([]); const impactAcknowledged=ref(false);
+const { exportConnectionsLoading,exportConnectionsMessage,exportConnectionsSuccess,handleExportConnections,importConnectionsLoading,importConnectionsMessage,importConnectionsSuccess,importConnectionsResult,handleImportConnections }=useDataManagement();
+const formatDate=(value:string)=>new Date(value).toLocaleString(); const totalSize=(backup:BackupManifest)=>backup.files.reduce((sum,file)=>sum+file.size,0); const formatBytes=(value:number)=>value<1024?`${value} B`:value<1048576?`${(value/1024).toFixed(1)} KB`:`${(value/1048576).toFixed(1)} MB`;
+const handleImportFileChange=(event:Event)=>{ selectedImportFile.value=(event.target as HTMLInputElement).files?.[0]??null; };
+const submitImportConnections=async()=>{ await handleImportConnections(selectedImportFile.value); if(importConnectionsSuccess.value&&importFileInputRef.value){importFileInputRef.value.value='';selectedImportFile.value=null;} };
+const loadBackups=async()=>{backupLoading.value=true;try{backups.value=await backupApi.list();backupError.value=false;}catch{backupError.value=true;backupMessage.value=t('backup.operationFailed');}finally{backupLoading.value=false;}};
+const createBackup=async()=>{backupLoading.value=true;try{await backupApi.create();backupMessage.value=t('backup.created');backupError.value=false;await loadBackups();}catch{backupError.value=true;backupMessage.value=t('backup.operationFailed');backupLoading.value=false;}};
+const verifyBackup=async(id:string)=>{try{const result=await backupApi.verify(id);backupError.value=!result.valid;backupMessage.value=result.valid?t('backup.valid'):t('backup.invalid',{errors:result.errors.join('; ')});}catch{backupError.value=true;backupMessage.value=t('backup.operationFailed');}};
+const beginRestore=(backup:BackupManifest)=>{selectedRestoreBackup.value=backup;restoreStep.value=1;restoreVerified.value=false;restoreErrors.value=[];impactAcknowledged.value=false;};
+const closeRestoreWizard=()=>{if(!restoreVerifying.value)selectedRestoreBackup.value=null;};
+const verifySelectedBackup=async()=>{if(!selectedRestoreBackup.value)return;restoreVerifying.value=true;restoreVerified.value=false;restoreErrors.value=[];try{const result=await backupApi.verify(selectedRestoreBackup.value.id);restoreVerified.value=result.valid;restoreErrors.value=result.errors;}catch{restoreErrors.value=[t('backup.operationFailed')];}finally{restoreVerifying.value=false;}};
+const confirmRestore=async()=>{if(!selectedRestoreBackup.value||!restoreVerified.value||!impactAcknowledged.value)return;const confirmed=await showConfirmDialog({message:t('backup.confirmRestore')});if(!confirmed)return;try{await backupApi.scheduleRestore(selectedRestoreBackup.value.id);backupError.value=false;backupMessage.value=t('backup.restoreScheduled');selectedRestoreBackup.value=null;}catch{backupError.value=true;backupMessage.value=t('backup.operationFailed');}};
+onMounted(loadBackups);
 </script>
+
+<style scoped>
+.data-workspace button{background:var(--background);color:var(--foreground)}.data-workspace form button[type="submit"],.data-workspace button.primary{background:var(--primary);color:var(--primary-foreground)}.data-workspace button.danger{background:var(--destructive);color:var(--destructive-foreground)}
+.data-workspace{display:grid;gap:1rem}.data-navigation{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.7rem}.data-navigation button{display:grid;grid-template-columns:auto 1fr auto;gap:.7rem;align-items:center;text-align:left}.data-navigation button.active{border-color:var(--primary);box-shadow:inset 0 0 0 1px var(--primary)}.data-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.data-card,.backup-pane{padding:1.2rem;border:1px solid var(--border);border-radius:.75rem;background:var(--card)}.data-card{display:grid;gap:1rem}.card-icon{font-size:1.7rem;color:var(--primary)}h3,h4,p{margin:0}.data-card p,.backup-pane header p{color:var(--muted-foreground);line-height:1.5}.data-card form{display:flex;gap:.6rem;flex-wrap:wrap}.data-card input{flex:1;min-width:12rem}.import-result{padding:.7rem;border-radius:.5rem;background:var(--background)}.import-result ul,.verification ul{color:var(--destructive)}input,button{border:1px solid var(--border);border-radius:.45rem;padding:.55rem .7rem;background:var(--background);color:var(--foreground)}button{display:inline-flex;align-items:center;justify-content:center;gap:.4rem;background:var(--primary);color:var(--primary-foreground);cursor:pointer}.secondary{background:var(--background);color:var(--foreground)}.danger{background:var(--destructive);color:var(--destructive-foreground)}button:disabled{opacity:.5}.success{color:var(--success)}.error{color:var(--destructive)}.backup-pane>header{display:flex;justify-content:space-between;gap:1rem}.backup-pane>header>div:last-child{display:flex;gap:.5rem}.notice{padding:.7rem;border:1px solid currentColor;border-radius:.5rem;margin-top:1rem}.backup-list{display:grid;gap:.6rem;margin-top:1rem}.backup-list article{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:.8rem;padding:.8rem;border:1px solid var(--border);border-radius:.6rem;background:var(--background)}.backup-list article>div:nth-child(2){display:grid;gap:.2rem}.backup-list span,.backup-list small{color:var(--muted-foreground)}.backup-icon{display:grid;place-content:center;width:2.5rem;height:2.5rem;border-radius:.55rem;background:var(--accent);color:var(--primary)}.mono{font-family:ui-monospace,monospace}.empty-state{text-align:center;padding:2rem}.restore-overlay{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:1rem;background:rgba(0,0,0,.6)}.restore-dialog{width:min(42rem,100%);max-height:90vh;overflow:auto;border:1px solid var(--border);border-radius:.8rem;background:var(--card);box-shadow:0 25px 70px rgba(0,0,0,.35)}.restore-dialog>header,.restore-dialog>footer{display:flex;justify-content:space-between;align-items:center;padding:1rem;border-bottom:1px solid var(--border)}.restore-dialog>header span{font-size:.75rem;color:var(--muted-foreground)}.restore-dialog>footer{border-top:1px solid var(--border);border-bottom:0}.restore-progress{display:grid;grid-template-columns:repeat(3,1fr);gap:.3rem;margin:0;padding:1rem;list-style:none}.restore-progress li{padding:.5rem;border-bottom:3px solid var(--border);font-size:.78rem;color:var(--muted-foreground)}.restore-progress li.active{border-color:var(--primary);color:var(--foreground)}.restore-content{padding:0 1rem 1rem}.restore-content dl{display:grid;grid-template-columns:repeat(2,1fr);gap:.7rem}.restore-content dl div{display:grid;padding:.7rem;border-radius:.5rem;background:var(--background)}.restore-content dt{font-size:.7rem;color:var(--muted-foreground)}.restore-content dd{margin:0}.file-list{max-height:12rem;overflow:auto;padding:0;list-style:none}.file-list li{display:flex;justify-content:space-between;padding:.45rem;border-bottom:1px solid var(--border)}.verification,.impact{text-align:center;padding:2rem}.verification>i,.impact>i{font-size:2.5rem;color:var(--primary)}.impact>i{color:var(--destructive)}.impact label{display:flex;align-items:flex-start;gap:.5rem;margin-top:1rem;padding:.8rem;text-align:left;border:1px solid var(--border);border-radius:.5rem}@media(max-width:760px){.data-grid,.data-navigation{grid-template-columns:1fr}.backup-pane>header{flex-direction:column}.backup-list article{grid-template-columns:auto 1fr}.backup-list article button{grid-column:auto}.restore-content dl{grid-template-columns:1fr}}
+</style>

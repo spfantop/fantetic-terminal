@@ -1,6 +1,8 @@
 import WebSocket from 'ws';
 import { Client, ClientChannel, SFTPWrapper } from 'ssh2';
 import type { TelnetService } from '../telnet/telnet.service';
+import type { AuthorizationSubject } from '../access-control/authorization-subject';
+import type { ActiveSessionRecorder } from '../session-recording/session-recording.service';
 
 // 扩展 WebSocket 类型以包含会话 ID
 export interface AuthenticatedWebSocket extends WebSocket {
@@ -9,6 +11,7 @@ export interface AuthenticatedWebSocket extends WebSocket {
     username?: string;
     sessionId?: string; 
     missedHeartbeatCount?: number;
+    authorization?: AuthorizationSubject;
 }
 
 // 中心化的客户端状态接口 (统一版本)
@@ -41,6 +44,7 @@ export interface ClientState { // 导出以便 Service 可以导入
     telnetService?: TelnetService;
     telnetSessionId?: string;
     connectedAt?: number;
+    sessionRecorder?: ActiveSessionRecorder;
     // suspendLogWritableStream?: NodeJS.WritableStream; // 移除，将直接使用 temporaryLogStorageService.writeToLog
 }
 

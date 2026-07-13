@@ -5,6 +5,7 @@ import { findThemeById as findTerminalThemeById } from '../terminal-themes/termi
 import * as sqlite3 from 'sqlite3'; 
 
 const TABLE_NAME = 'appearance_settings';
+const USER_TABLE_NAME = 'user_appearance_settings';
 
 const isTerminalThemeSettingKey = (key: keyof Omit<AppearanceSettings, '_id' | 'updatedAt'>): boolean => (
     key === 'activeTerminalThemeId'
@@ -383,13 +384,12 @@ const findAndSetModeTerminalThemeDefaultsIfNull = async (db: sqlite3.Database): 
  * @returns {Promise<AppearanceSettings>} 返回包含当前外观设置的对象。
  * @throws {Error} 如果从数据库获取设置失败。
  */
-export const getAppearanceSettings = async (): Promise<AppearanceSettings> => {
+export const getAppearanceSettings = async (ownerUserId: number): Promise<AppearanceSettings> => {
   try {
     const db = await getDbInstance();
     // 从键值表中获取所有行
-    const rows = await allDb<DbAppearanceSettingsRow>(db, `SELECT key, value, updated_at FROM ${TABLE_NAME}`);
+    const rows = await allDb<DbAppearanceSettingsRow>(db, `SELECT key, value, updated_at FROM ${USER_TABLE_NAME} WHERE user_id = ?`, [ownerUserId]);
     const mappedSettings = mapRowsToAppearanceSettings(rows); // 将键值对映射到设置对象
-    console.log(`[AppearanceRepo LOG] 映射后的 terminalBackgroundEnabled 值: ${mappedSettings.terminalBackgroundEnabled}`); // 添加映射后值的日志
     return mappedSettings;
   } catch (err: any) {
     console.error('[AppearanceRepo] 获取外观设置失败:', err.message);
@@ -404,24 +404,26 @@ export const getAppearanceSettings = async (): Promise<AppearanceSettings> => {
  * @returns {Promise<boolean>} 如果至少有一个设置被成功更新或插入，则返回 true，否则返回 false。
  * @throws {Error} 如果验证失败或内部更新过程中发生错误。
  */
-export const updateAppearanceSettings = async (settingsDto: UpdateAppearanceDto): Promise<boolean> => {
+export const updateAppearanceSettings = async (settingsDto: UpdateAppearanceDto, ownerUserId: number): Promise<boolean> => {
     const db = await getDbInstance();
-    // 在调用内部更新之前，如果需要，执行验证或复杂逻辑
-    // 验证示例（已存在于服务中，但也可以在这里）：
-    if (settingsDto.activeTerminalThemeId !== undefined && settingsDto.activeTerminalThemeId !== null) {
+    const themeIdList = [
+        settingsDto.activeTerminalThemeId,
+        settingsDto.activeDefaultTerminalThemeId,
+        settingsDto.activeDarkTerminalThemeId,
+    ].filter((themeId): themeId is number => themeId !== undefined && themeId !== null);
+    for (const themeId of themeIdList) {
         try {
-            const themeExists = await findTerminalThemeById(settingsDto.activeTerminalThemeId);
+            const themeExists = await findTerminalThemeById(themeId, ownerUserId);
             if (!themeExists) {
-                throw new Error(`指定的终端主题 ID 不存在: ${settingsDto.activeTerminalThemeId}`);
+                throw new Error(`指定的终端主题 ID 不存在或无权使用: ${themeId}`);
             }
         } catch (validationError: any) {
-             console.error(`[AppearanceRepo] 验证主题 ID ${settingsDto.activeTerminalThemeId} 时出错:`, validationError.message);
+             console.error(`[AppearanceRepo] 验证主题 ID ${themeId} 时出错:`, validationError.message);
              throw new Error(`验证主题 ID 失败: ${validationError.message}`);
         }
     }
-    // ... 其他验证 ...
 
-    return updateAppearanceSettingsInternal(db, settingsDto);
+    return updateAppearanceSettingsInternal(db, settingsDto, ownerUserId);
 };
 
 /**
@@ -433,9 +435,11 @@ export const updateAppearanceSettings = async (settingsDto: UpdateAppearanceDto)
  * @throws {Error} 如果在数据库操作期间发生错误。
  */
 // 在键值表中更新设置的内部函数
-const updateAppearanceSettingsInternal = async (db: sqlite3.Database, settingsDto: UpdateAppearanceDto): Promise<boolean> => {
+const updateAppearanceSettingsInternal = async (db: sqlite3.Database, settingsDto: UpdateAppearanceDto, ownerUserId: number): Promise<boolean> => {
   const nowSeconds = Math.floor(Date.now() / 1000);
-  const sqlReplace = `INSERT OR REPLACE INTO ${TABLE_NAME} (key, value, updated_at) VALUES (?, ?, ?)`;
+  const sqlReplace = `INSERT INTO ${USER_TABLE_NAME} (user_id, key, value, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`;
   let changesMade = false;
 
   try {
@@ -479,10 +483,8 @@ const updateAppearanceSettingsInternal = async (db: sqlite3.Database, settingsDt
           }
 
           // 对每个键值对执行 INSERT OR REPLACE，使用映射后的 dbKey
-          console.log(`[AppearanceRepo LOG] 准备更新/插入数据库键: '${dbKey}', 值: '${dbValue}' (来自 DTO 键: '${dtoKey}')`);
-          const result = await runDb(db, sqlReplace, [dbKey, dbValue, nowSeconds]);
+          const result = await runDb(db, sqlReplace, [ownerUserId, dbKey, dbValue, nowSeconds, nowSeconds]);
           if (result.changes > 0) {
-              console.log(`[AppearanceRepo LOG] 数据库键 '${dbKey}' 更新成功。`); // 添加成功日志
               changesMade = true;
           }
       }

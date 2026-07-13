@@ -2,6 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import { settingsController } from './settings.controller';
 import { isAuthenticated } from '../auth/auth.middleware';
+import { requireSystemAdministrator } from '../access-control/system-administrator.middleware';
 
 const router = express.Router();
 
@@ -54,10 +55,10 @@ router.put('/layout', settingsController.setLayoutTree);
 
 // --- IP 黑名单管理路由 ---
 // GET /api/v1/settings/ip-blacklist - 获取 IP 黑名单列表 (需要认证)
-router.get('/ip-blacklist', settingsController.getIpBlacklist);
+router.get('/ip-blacklist', requireSystemAdministrator, settingsController.getIpBlacklist);
 
 // DELETE /api/v1/settings/ip-blacklist/:ip - 从黑名单中删除指定 IP (需要认证)
-router.delete('/ip-blacklist/:ip', settingsController.deleteIpFromBlacklist);
+router.delete('/ip-blacklist/:ip', requireSystemAdministrator, settingsController.deleteIpFromBlacklist);
 
 
 // +++ 终端选中自动复制路由 +++
@@ -109,13 +110,7 @@ router.post('/import-connections', (req, res, next) => {
 router.get('/show-status-monitor-ip-address', settingsController.getShowStatusMonitorIpAddress);
 // PUT /api/v1/settings/show-status-monitor-ip-address - 更新设置
 router.put('/show-status-monitor-ip-address', settingsController.setShowStatusMonitorIpAddress);
- 
-export default router;
 
-// +++ CAPTCHA 配置路由 (需要认证更新) +++
-// PUT /api/v1/settings/captcha - 更新 CAPTCHA 配置
-// 注意：这个路由定义在 `export default router` 之后，这是不正确的。
-// 我会将它移到 `export default router` 之前，并确保它也在 `isAuthenticated` 中间件的作用域内。
-// 然而，既然它已经存在，并且在 `isAuthenticated` 之后（通过 router.use(isAuthenticated)），
-// 我们只需要确保导出路由也在正确的位置。
-router.put('/captcha', settingsController.setCaptchaConfig);
+router.put('/captcha', requireSystemAdministrator, settingsController.setCaptchaConfig);
+
+export default router;

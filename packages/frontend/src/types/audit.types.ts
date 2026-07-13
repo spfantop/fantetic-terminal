@@ -7,6 +7,10 @@ export type AuditLogActionType =
   | 'LOGIN_FAILURE'
   | 'LOGOUT'
   | 'PASSWORD_CHANGED'
+  | 'USER_CREATED' | 'USER_UPDATED' | 'USER_PASSWORD_RESET' | 'USER_DELETED'
+  | 'GROUP_CREATED' | 'GROUP_UPDATED' | 'GROUP_DELETED' | 'GROUP_MEMBER_SAVED' | 'GROUP_MEMBER_DELETED'
+  | 'CONNECTION_GRANT_SAVED' | 'CONNECTION_GRANTS_BATCH_SAVED' | 'CONNECTION_GRANT_DELETED'
+  | 'BACKUP_CREATED' | 'BACKUP_RESTORE_SCHEDULED'
   | '2FA_ENABLED'
   | '2FA_DISABLED'
   // Connections
@@ -42,4 +46,12 @@ export interface AuditLogEntry {
     timestamp: number; // Unix timestamp (seconds)
     action_type: AuditLogActionType;
     details: string | null; // JSON string or null (前端可能需要解析)
+    request_id: string | null;
+    actor_user_id: number | null;
+    actor_username: string | null;
+    actor_role: string | null;
+    source_ip: string | null;
+    asset_id: number | null;
+    session_id: string | null;
+    result: 'success' | 'failure' | 'denied';
 }

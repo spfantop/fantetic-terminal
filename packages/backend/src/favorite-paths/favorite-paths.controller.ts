@@ -18,8 +18,9 @@ export const createFavoritePath = async (req: Request, res: Response): Promise<v
     }
 
     try {
-        const newId = await FavoritePathsService.addFavoritePath(name, path);
-        const newFavoritePath = await FavoritePathsService.getFavoritePathById(newId);
+        const ownerUserId = req.authorization!.userId;
+        const newId = await FavoritePathsService.addFavoritePath(name, path, ownerUserId);
+        const newFavoritePath = await FavoritePathsService.getFavoritePathById(newId, ownerUserId);
         if (newFavoritePath) {
             res.status(201).json({ message: '收藏路径已添加', favoritePath: newFavoritePath });
         } else {
@@ -41,7 +42,7 @@ export const getAllFavoritePaths = async (req: Request, res: Response): Promise<
     const validSortBy: FavoritePathSortBy = sortBy && validSortByOptions.includes(sortBy) ? sortBy : 'name';
 
     try {
-        const favoritePaths = await FavoritePathsService.getAllFavoritePaths(validSortBy);
+        const favoritePaths = await FavoritePathsService.getAllFavoritePaths(validSortBy, req.authorization!.userId);
         res.status(200).json(favoritePaths);
     } catch (error: any) {
         console.error('获取收藏路径控制器出错:', error);
@@ -61,7 +62,7 @@ export const getFavoritePathById = async (req: Request, res: Response): Promise<
     }
 
     try {
-        const favoritePath = await FavoritePathsService.getFavoritePathById(id);
+        const favoritePath = await FavoritePathsService.getFavoritePathById(id, req.authorization!.userId);
         if (favoritePath) {
             res.status(200).json(favoritePath);
         } else {
@@ -95,9 +96,10 @@ export const updateFavoritePath = async (req: Request, res: Response): Promise<v
     }
 
     try {
-        const success = await FavoritePathsService.updateFavoritePath(id, name, path);
+        const ownerUserId = req.authorization!.userId;
+        const success = await FavoritePathsService.updateFavoritePath(id, name, path, ownerUserId);
         if (success) {
-            const updatedFavoritePath = await FavoritePathsService.getFavoritePathById(id);
+            const updatedFavoritePath = await FavoritePathsService.getFavoritePathById(id, ownerUserId);
             if (updatedFavoritePath) {
                  res.status(200).json({ message: '收藏路径已更新', favoritePath: updatedFavoritePath });
             } else {
@@ -105,7 +107,7 @@ export const updateFavoritePath = async (req: Request, res: Response): Promise<v
                  res.status(200).json({ message: '收藏路径已更新，但无法检索更新后的记录' });
             }
         } else {
-            const pathExists = await FavoritePathsService.getFavoritePathById(id);
+            const pathExists = await FavoritePathsService.getFavoritePathById(id, ownerUserId);
             if (!pathExists) {
                  res.status(404).json({ message: '未找到要更新的收藏路径' });
             } else {
@@ -131,7 +133,7 @@ export const deleteFavoritePath = async (req: Request, res: Response): Promise<v
     }
 
     try {
-        const success = await FavoritePathsService.deleteFavoritePath(id);
+        const success = await FavoritePathsService.deleteFavoritePath(id, req.authorization!.userId);
         if (success) {
             res.status(200).json({ message: '收藏路径已删除' });
         } else {
@@ -156,10 +158,11 @@ export const incrementUsage = async (req: Request, res: Response): Promise<void>
 
     try {
         // 更新上次使用时间
-        const lastUsedSuccess = await FavoritePathsService.updateFavoritePathLastUsed(id);
+        const ownerUserId = req.authorization!.userId;
+        const lastUsedSuccess = await FavoritePathsService.updateFavoritePathLastUsed(id, ownerUserId);
 
         if (lastUsedSuccess) {
-            const updatedPath = await FavoritePathsService.getFavoritePathById(id);
+            const updatedPath = await FavoritePathsService.getFavoritePathById(id, ownerUserId);
             if (updatedPath) {
                 res.status(200).json({ message: '上次使用时间已更新', favoritePath: updatedPath });
             } else {
@@ -170,7 +173,7 @@ export const incrementUsage = async (req: Request, res: Response): Promise<void>
             }
         } else {
             // 更新失败，检查路径是否存在以提供更具体的错误信息
-            const pathExists = await FavoritePathsService.getFavoritePathById(id);
+            const pathExists = await FavoritePathsService.getFavoritePathById(id, ownerUserId);
             if (!pathExists) {
                 res.status(404).json({ message: '未找到要更新上次使用时间的收藏路径' });
             } else {
@@ -198,10 +201,11 @@ export const updateLastUsedTimestamp = async (req: Request, res: Response): Prom
 
     try {
         // 更新上次使用时间
-        const success = await FavoritePathsService.updateFavoritePathLastUsed(id);
+        const ownerUserId = req.authorization!.userId;
+        const success = await FavoritePathsService.updateFavoritePathLastUsed(id, ownerUserId);
 
         if (success) {
-            const updatedPath = await FavoritePathsService.getFavoritePathById(id);
+            const updatedPath = await FavoritePathsService.getFavoritePathById(id, ownerUserId);
             if (updatedPath) {
                 res.status(200).json({ message: '上次使用时间戳已更新', favoritePath: updatedPath });
             } else {
@@ -211,7 +215,7 @@ export const updateLastUsedTimestamp = async (req: Request, res: Response): Prom
             }
         } else {
             // 更新失败，检查路径是否存在以提供更具体的错误信息
-            const pathExists = await FavoritePathsService.getFavoritePathById(id);
+            const pathExists = await FavoritePathsService.getFavoritePathById(id, ownerUserId);
             if (!pathExists) {
                 res.status(404).json({ message: '未找到要更新上次使用时间戳的收藏路径' });
             } else {

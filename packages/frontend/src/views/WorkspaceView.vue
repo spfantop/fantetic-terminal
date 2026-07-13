@@ -2180,10 +2180,10 @@ const closeFileManagerModal = () => {
   }
 
   .file-manager-modal-content {
-    width: min(100%, calc(100dvw - 2rem));
-    max-width: calc(100dvw - 2rem);
-    height: min(85dvh, calc(100dvh - 2rem));
-    max-height: calc(100dvh - 2rem);
+    width: min(100%, calc(100vw - 1rem));
+    max-width: calc(100vw - 1rem);
+    height: min(85dvh, calc(100dvh - 1rem));
+    max-height: calc(100dvh - 1rem);
   }
 
   .file-manager-modal-body {

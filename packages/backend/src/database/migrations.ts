@@ -1,4 +1,12 @@
 import { Database } from 'sqlite3';
+import {
+    addUserAuthenticationEpochSQL,
+    migrateLegacyResourcesToAccessControlSQL,
+    migrateQuickCommandTagsToOwnerScopedNamesSQL,
+    migrateTerminalThemesToOwnerScopedNamesSQL,
+    migrateTagsToOwnerScopedNamesSQL,
+    migrateUserPrivateResourcesSQL,
+} from '../access-control/access-control.schema';
 
 // 1. 定义 migrations 表 SQL
 const createMigrationsTableSQL = `
@@ -473,6 +481,129 @@ const definedMigrations: Migration[] = [
 
             PRAGMA foreign_keys=on;
         `
+    },
+    {
+        id: 17,
+        name: 'Add multi-user group access control and resource ownership',
+        check: async (db: Database): Promise<boolean> => {
+            const groupsExist = await tableExists(db, 'user_groups');
+            const connectionOwnerExists = await columnExists(db, 'connections', 'owner_user_id');
+            return !groupsExist || !connectionOwnerExists;
+        },
+        sql: migrateLegacyResourcesToAccessControlSQL,
+    },
+    {
+        id: 18,
+        name: 'Add ownership for user-private resources and preferences',
+        check: async (db: Database): Promise<boolean> => {
+            const userSettingsExist = await tableExists(db, 'user_settings');
+            const quickCommandOwnerExists = await columnExists(db, 'quick_commands', 'owner_user_id');
+            return !userSettingsExist || !quickCommandOwnerExists;
+        },
+        sql: migrateUserPrivateResourcesSQL,
+    },
+    {
+        id: 19,
+        name: 'Scope tag names to their owning user',
+        check: async (db: Database): Promise<boolean> => {
+            const tableSql = await getTableCreateSQL(db, 'tags');
+            return !!tableSql && /name\s+TEXT[^,\n]*\bUNIQUE\b/i.test(tableSql);
+        },
+        sql: migrateTagsToOwnerScopedNamesSQL,
+    },
+    {
+        id: 20,
+        name: 'Scope quick command tag names to their owning user',
+        check: async (db: Database): Promise<boolean> => {
+            const tableSql = await getTableCreateSQL(db, 'quick_command_tags');
+            return !!tableSql && /name\s+TEXT[^,\n]*\bUNIQUE\b/i.test(tableSql);
+        },
+        sql: migrateQuickCommandTagsToOwnerScopedNamesSQL,
+    },
+    {
+        id: 21,
+        name: 'Scope terminal theme names to their owning user',
+        check: async (db: Database): Promise<boolean> => {
+            const tableSql = await getTableCreateSQL(db, 'terminal_themes');
+            return !!tableSql && /name\s+TEXT[^,\n]*\bUNIQUE\b/i.test(tableSql);
+        },
+        sql: migrateTerminalThemesToOwnerScopedNamesSQL,
+    },
+    {
+        id: 22,
+        name: 'Add user authentication epoch for session revocation',
+        check: async (db: Database): Promise<boolean> => !(await columnExists(db, 'users', 'auth_epoch')),
+        sql: addUserAuthenticationEpochSQL,
+    },
+    {
+        id: 23,
+        name: 'Add structured audit event fields',
+        check: async (db: Database): Promise<boolean> => !(await columnExists(db, 'audit_logs', 'request_id')),
+        sql: `
+            ALTER TABLE audit_logs ADD COLUMN request_id TEXT NULL;
+            ALTER TABLE audit_logs ADD COLUMN actor_username TEXT NULL;
+            ALTER TABLE audit_logs ADD COLUMN actor_role TEXT NULL;
+            ALTER TABLE audit_logs ADD COLUMN source_ip TEXT NULL;
+            ALTER TABLE audit_logs ADD COLUMN asset_id INTEGER NULL;
+            ALTER TABLE audit_logs ADD COLUMN session_id TEXT NULL;
+            ALTER TABLE audit_logs ADD COLUMN result TEXT NOT NULL DEFAULT 'success';
+            CREATE INDEX IF NOT EXISTS idx_audit_logs_actor_time ON audit_logs(actor_user_id, timestamp DESC);
+            CREATE INDEX IF NOT EXISTS idx_audit_logs_asset_time ON audit_logs(asset_id, timestamp DESC);
+            CREATE INDEX IF NOT EXISTS idx_audit_logs_session ON audit_logs(session_id);
+            CREATE INDEX IF NOT EXISTS idx_audit_logs_request ON audit_logs(request_id);
+        `,
+    },
+    {
+        id: 24,
+        name: 'Add encrypted terminal session recording index',
+        check: async (db: Database): Promise<boolean> => !(await tableExists(db, 'session_recordings')),
+        sql: `
+            CREATE TABLE IF NOT EXISTS session_recordings (
+                id TEXT PRIMARY KEY,
+                user_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL,
+                username TEXT NULL,
+                connection_id INTEGER NOT NULL,
+                connection_name TEXT NOT NULL,
+                protocol TEXT NOT NULL CHECK(protocol IN ('SSH', 'TELNET')),
+                started_at INTEGER NOT NULL,
+                ended_at INTEGER NULL,
+                status TEXT NOT NULL CHECK(status IN ('active', 'completed', 'incomplete', 'failed')),
+                relative_path TEXT NOT NULL UNIQUE,
+                event_count INTEGER NOT NULL DEFAULT 0,
+                byte_count INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_session_recordings_user_time
+                ON session_recordings(user_id, started_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_session_recordings_asset_time
+                ON session_recordings(connection_id, started_at DESC);
+        `,
+    },
+    {
+        id: 25,
+        name: 'Repair user-private settings tables after partial migration',
+        check: async (db: Database): Promise<boolean> => (
+            !(await tableExists(db, 'user_settings')) || !(await tableExists(db, 'user_appearance_settings'))
+        ),
+        sql: `
+            CREATE TABLE IF NOT EXISTS user_settings (
+                user_id INTEGER NOT NULL,
+                key TEXT NOT NULL,
+                value TEXT NOT NULL,
+                created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                PRIMARY KEY (user_id, key),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS user_appearance_settings (
+                user_id INTEGER NOT NULL,
+                key TEXT NOT NULL,
+                value TEXT NOT NULL,
+                created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                PRIMARY KEY (user_id, key),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+        `,
     }
 ];
 

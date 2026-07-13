@@ -1,6 +1,7 @@
 {
 
     "appName": "Fantetic Terminal",
+    "adminDateRange": { "range": "日付範囲", "start": "開始日", "end": "終了日", "selectDate": "日付を選択", "calendar": "カレンダー", "previousMonth": "前月", "nextMonth": "翌月", "quickSelect": "日付範囲のクイック選択", "today": "今日", "last7Days": "過去7日間", "last30Days": "過去30日間", "invalidRange": "終了日は開始日より前に設定できません。" },
     "auditLog": {
         "actions": {
             "2FA_DISABLED": "2段階認証無効",
@@ -18,6 +19,11 @@
             "NOTIFICATION_SETTING_DELETED": "通知設定削除",
             "NOTIFICATION_SETTING_UPDATED": "通知設定更新",
             "PASSWORD_CHANGED": "パスワード変更",
+            "USER_CREATED": "ユーザー作成", "USER_UPDATED": "ユーザー更新", "USER_PASSWORD_RESET": "ユーザーパスワードリセット", "USER_DELETED": "ユーザー削除",
+            "GROUP_CREATED": "グループ作成", "GROUP_UPDATED": "グループ更新", "GROUP_DELETED": "グループ削除",
+            "GROUP_MEMBER_SAVED": "グループメンバー保存", "GROUP_MEMBER_DELETED": "グループメンバー削除",
+            "CONNECTION_GRANT_SAVED": "接続権限保存", "CONNECTION_GRANTS_BATCH_SAVED": "接続権限一括保存", "CONNECTION_GRANT_DELETED": "接続権限取消",
+            "BACKUP_CREATED": "システムバックアップ作成", "BACKUP_RESTORE_SCHEDULED": "バックアップ復元予約",
             "PROXY_CREATED": "プロキシ作成",
             "PROXY_DELETED": "プロキシ削除",
             "PROXY_UPDATED": "プロキシ更新",
@@ -40,13 +46,19 @@
             "PASSKEY_NAME_UPDATE_UNAUTHORIZED": "パスキー名更新権限なし"
         },
         "noLogs": "監査ログが見つかりませんでした。",
+        "startDate": "開始日時", "endDate": "終了日時", "total": "全 {count} 件", "detailTitle": "監査詳細", "openRelatedRecordings": "同じ実行者の近接録画を表示", "correlationHint": "録画とセッション ID には直接キーがないため、実行者とイベント時刻の範囲で絞り込みます。", "selectHint": "ログを選択して完全なコンテキストを確認します。",
         "paginationInfo": "{currentPage} ページ / 全 {totalPages} ページ ({totalLogs} 件のログ)",
         "searchPlaceholder": "詳細を",
         "table": {
             "actionType": "アクションタイプ",
             "details": "詳細",
-            "timestamp": "タイムスタンプ"
+            "timestamp": "タイムスタンプ",
+            "actor": "操作主体",
+            "result": "結果",
+            "sourceIp": "送信元 IP",
+            "requestId": "リクエスト ID", "sessionId": "セッション ID", "assetId": "資産 ID"
         },
+        "results": { "success": "成功", "failure": "失敗", "denied": "拒否" },
         "title": "監査ログ"
     },
     "commandHistory": {
@@ -115,6 +127,9 @@
         }
     },
     "common": {
+        "reset": "リセット",
+        "actions": "操作",
+        "refresh": "更新",
         "confirm": "確認",
         "ok": "確認",
         "success": "成功",
@@ -142,6 +157,7 @@
         "saved": "保存済み",
         "search": "検索",
         "settings": "設定",
+        "adminCenter": "管理センター",
         "sortAscending": "昇順",
         "sortDescending": "降順",
         "testing": "テスト中...",
@@ -750,7 +766,7 @@
         "username": "ユーザー名",
         "verifyButton": "検証"
     },
-    "nav": {
+  "nav": {
         "auditLogs": "監査ログ",
         "customizeStyle": "外観のカスタマイズ",
         "dashboard": "ダッシュボード",
@@ -761,8 +777,32 @@
         "proxies": "プロキシ管理",
         "settings": "設定",
         "terminal": "ターミナル",
-        "mainNavigation": "メインナビゲーション"
+    "mainNavigation": "メインナビゲーション"
+  },
+    "adminCenter": {
+      "eyebrow": "プラットフォーム管理", "title": "管理センター", "description": "ID、資産権限、監査記録、システムデータを一元管理します。", "back": "ワークスペースに戻る", "navigation": "管理センターナビゲーション", "signedInAs": "操作ユーザー：{username}", "pagination": "ページナビゲーション", "paginationSummary": "全 {total} 件",
+      "groups": { "workspace": "概要", "identity": "IDと資産", "audit": "監査とコンプライアンス", "system": "システム運用" },
+      "sections": { "overview": "概要" },
+      "descriptions": { "overview": "担当範囲に応じた管理機能を開きます。", "accessControl": "ユーザー、グループ、接続資産の権限を管理します。", "auditLogs": "重要な操作を検索し、実行者を追跡します。", "sessionRecordings": "ターミナルセッションを確認、再生します。", "dataManagement": "システムデータのインポート、エクスポート、バックアップ、復元を行います。" }
     },
+    "accessControl": {
+    "rootFolder": "ルート",
+    "title": "アクセス制御", "users": "ユーザー管理", "groups": "グループ管理", "username": "ユーザー名",
+    "initialPassword": "初期パスワード（12文字以上）", "systemRole": "システムロール", "status": "状態",
+    "password": "パスワード", "createUser": "ユーザー作成", "reset": "リセット", "resetPassword": "パスワードをリセット", "newPassword": "新しいパスワード（12文字以上）", "confirmResetPassword": "リセットを確定", "deleteUser": "ユーザーを削除", "confirmDeleteAndTransfer": "削除して資産を移管", "transferTarget": "資産の引受先",
+    "createGroup": "グループ作成", "groupName": "グループ名", "description": "説明", "selectGroup": "グループを選択",
+    "selectUser": "ユーザーを選択", "addMember": "メンバー追加", "passwordRequirement": "ユーザー名を入力し、パスワードは12文字以上にしてください。",
+    "transferRequired": "削除前に資産の引受先を選択してください。", "groupNameRequired": "グループ名は必須です。",
+    "confirmDeleteUser": "ユーザー「{username}」を削除して資産を移管しますか？", "confirmDeleteGroup": "グループ「{name}」を削除しますか？",
+    "userCreated": "ユーザーを作成しました。", "userUpdated": "ユーザーを更新しました。", "passwordReset": "パスワードをリセットし、以前のセッションを無効化しました。",
+    "userDeleted": "ユーザーを削除し、資産を移管しました。", "groupCreated": "グループを作成しました。", "groupDeleted": "グループを削除しました。",
+    "memberSaved": "メンバー権限を保存しました。", "memberDeleted": "メンバーを削除しました。", "assetPermissions": "接続資産の権限",
+    "selectConnection": "接続資産を選択", "permission": "権限", "addGrant": "権限を追加",
+    "grantSaved": "接続権限を保存しました。", "grantDeleted": "接続権限を取り消しました。", "error": "アクセス制御操作に失敗しました。", "groupUpdated": "グループ情報を更新しました。",
+    "usersHint": "アカウントを作成し、システムロール、状態、認証情報を管理します。", "groupsHint": "グループでメンバーのロールと資産権限を整理します。", "assetsHint": "接続資産ごとにグループへ閲覧、接続、管理権限を付与します。", "searchUsers": "ユーザーを検索", "searchAssets": "資産を検索", "noUsers": "一致するユーザーがありません",
+    "selectAssets": "資産を選択", "selectGroups": "グループを選択", "clearSelection": "選択を解除", "batchGrant": "一括権限付与", "batchSummary": "{assets} 件の資産と {groups} 件のグループに権限を設定します。", "applyBatch": "選択項目に適用", "singleAssetDetail": "単一資産の権限詳細", "batchSelectionRequired": "資産とグループを1件以上選択してください。", "batchSaved": "{count} 件の資産権限を保存しました。",
+    "roles": { "user": "一般ユーザー", "auditor": "監査担当者", "admin": "管理者", "superAdmin": "スーパー管理者" }, "statuses": { "active": "有効", "disabled": "無効" }, "groupRoles": { "viewer": "閲覧者", "operator": "オペレーター", "admin": "管理者", "owner": "所有者" }, "permissions": { "view": "閲覧", "connect": "接続", "manage": "管理" }, "permissionActions": { "view": "資産と接続情報を表示", "connect": "ターミナル、リモートデスクトップ、テスト操作を表示", "manage": "編集、削除、一括管理操作を含む" }
+  },
     "dock": {
         "hide": "ナビゲーションを非表示",
         "show": "ナビゲーションを表示",
@@ -772,6 +812,13 @@
         "themeToDark": "ダークモード",
         "defaultThemeApplied": "デフォルトモードに切り替えました",
         "darkThemeApplied": "ダークモードに切り替えました"
+    },
+    "backup": {
+        "title": "システムのバックアップと復元", "description": "SQLite の整合性スナップショットとユーザーファイルのハッシュを作成します。復元は次回起動時、DB を開く前に実行されます。",
+        "create": "バックアップ作成", "created": "バックアップを作成しました。", "createdAt": "作成日時", "schemaVersion": "スキーマ版", "fileCount": "ファイル数",
+        "verify": "検証", "restore": "復元を予約", "empty": "バックアップなし", "valid": "バックアップの整合性を確認しました。",
+        "invalid": "バックアップ検証失敗: {errors}", "confirmRestore": "この復元を予約しますか？サービス再起動時に現在のデータが置換されます。",
+        "restoreScheduled": "復元を予約しました。サービスを再起動してください。", "operationFailed": "バックアップ操作に失敗しました。", "dataNavigation": "データ管理ナビゲーション", "transferTitle": "インポートとエクスポート", "backupSummary": "スキーマ {schema}・{files} ファイル・{size}", "restoreWizard": "復元ウィザード", "restoreStep": "{current}/{total} ステップ", "review": "バックアップ確認", "integrity": "整合性検証", "confirmImpact": "影響の確認", "totalSize": "合計サイズ", "verifying": "バックアップを検証中…", "verifyBeforeRestore": "復元前に整合性検証に合格する必要があります。", "restartRequired": "復元はサービス再起動後に適用されます", "restoreImpact": "現在のデータベースとユーザーファイルは選択したバックアップに置き換わります。予約後、メンテナンス時間にサービスを再起動してください。", "acknowledgeImpact": "現在のデータが置換されることを理解し、サービス再起動を計画しました。"
     },
     "notificationController": {
         "errorCreateSetting": "通知設定の作成に失敗しました",
@@ -1747,6 +1794,7 @@
             "reconnectingMsg": "再接続を試行中...",
             "disconnectMsg": "接続が切断されました: {reason}",
             "genericErrorMsg": "接続エラー: {message}",
+            "outputTruncated": "ターミナル出力が安全な待機上限を超えたため、古い内容を切り捨てました。",
             "unknownReason": "不明な理由",
             "unknownSshError": "不明なターミナルエラー",
             "unknownGenericError": "不明なエラー",
@@ -1974,5 +2022,17 @@
     "delete": "この履歴を削除",
     "copiedSuccess": "パスがクリップボードにコピーされました",
     "copiedError": "パスのコピーに失敗しました"
+  },
+  "sessionRecording": {
+    "title": "セッション録画",
+    "description": "権限のある SSH と Telnet の端末セッションを確認・再生します。",
+    "empty": "セッション録画はありません。",
+    "loadFailed": "セッション録画の読み込みに失敗しました。",
+    "playFailed": "セッション録画の読み込みまたは再生に失敗しました。",
+    "play": "再生", "delete": "録画を削除", "confirmDelete": "{name} のセッション録画を削除しますか？この操作は元に戻せません。", "deleteFailed": "セッション録画の削除に失敗しました。",
+    "stop": "停止",
+    "speed": "速度",
+    "player": "端末セッションプレーヤー", "searchPlaceholder": "接続名またはユーザー名", "startedAfter": "開始日時", "total": "全 {count} 件", "duration": "時間", "events": "イベント", "eventCount": "{count} 件のイベント", "size": "サイズ", "preparing": "再生を準備中…", "timeline": "再生タイムライン", "selectHint": "録画を選択して詳細を確認し、再生します。",
+    "status": { "active": "進行中", "completed": "完了", "incomplete": "不完全", "failed": "失敗" }
   }
 }

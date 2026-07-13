@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "npm run test:health",
+    "test:health": "esbuild src/test/health.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/gateway-health.behavior-test.mjs && node ../../.vite-codex-cache/gateway-health.behavior-test.mjs",
+    "test:security": "esbuild src/test/security.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/gateway-security.behavior-test.mjs && node ../../.vite-codex-cache/gateway-security.behavior-test.mjs",
     "build": "tsc",
     "start": "node dist/server.js",
     "dev": "nodemon --exec \"ts-node --files src/server.ts\""
@@ -19,12 +21,13 @@
     "@types/ws": "^8.18.1",
     "nodemon": "^3.1.10",
     "ts-node": "^10.9.2",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "esbuild": "^0.25.0"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^5.1.0",
-    "guacamole-lite": "^0.7.3",
-    "ws": "^8.18.1"
+    "guacamole-lite": "^1.2.0",
+    "ws": "^8.21.0"
   }
 }

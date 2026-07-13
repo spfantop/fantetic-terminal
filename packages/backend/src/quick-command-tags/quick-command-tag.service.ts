@@ -4,15 +4,15 @@ import { QuickCommandTag } from '../quick-command-tags/quick-command-tag.reposit
 /**
  * 获取所有快捷指令标签
  */
-export const getAllQuickCommandTags = async (): Promise<QuickCommandTag[]> => {
-    return QuickCommandTagRepository.findAllQuickCommandTags();
+export const getAllQuickCommandTags = async (ownerUserId: number): Promise<QuickCommandTag[]> => {
+    return QuickCommandTagRepository.findAllQuickCommandTags(ownerUserId);
 };
 
 /**
  * 根据 ID 获取单个快捷指令标签
  */
-export const getQuickCommandTagById = async (id: number): Promise<QuickCommandTag | null> => {
-    return QuickCommandTagRepository.findQuickCommandTagById(id);
+export const getQuickCommandTagById = async (id: number, ownerUserId: number): Promise<QuickCommandTag | null> => {
+    return QuickCommandTagRepository.findQuickCommandTagById(id, ownerUserId);
 };
 
 /**
@@ -20,14 +20,14 @@ export const getQuickCommandTagById = async (id: number): Promise<QuickCommandTa
  * @param name 标签名称
  * @returns 返回新标签的 ID
  */
-export const addQuickCommandTag = async (name: string): Promise<number> => {
+export const addQuickCommandTag = async (name: string, ownerUserId: number): Promise<number> => {
     if (!name || name.trim().length === 0) {
         throw new Error('标签名称不能为空');
     }
     const trimmedName = name.trim();
     // 可以在这里添加更多验证逻辑，例如检查名称格式等
     try {
-        const newId = await QuickCommandTagRepository.createQuickCommandTag(trimmedName);
+        const newId = await QuickCommandTagRepository.createQuickCommandTag(trimmedName, ownerUserId);
         return newId;
     } catch (error: any) {
         // Service 层可以重新抛出或处理 Repository 抛出的错误
@@ -42,14 +42,14 @@ export const addQuickCommandTag = async (name: string): Promise<number> => {
  * @param name 新的标签名称
  * @returns 返回是否成功更新
  */
-export const updateQuickCommandTag = async (id: number, name: string): Promise<boolean> => {
+export const updateQuickCommandTag = async (id: number, name: string, ownerUserId: number): Promise<boolean> => {
     if (!name || name.trim().length === 0) {
         throw new Error('标签名称不能为空');
     }
     const trimmedName = name.trim();
     // 可以在这里添加更多验证逻辑
     try {
-        const success = await QuickCommandTagRepository.updateQuickCommandTag(id, trimmedName);
+        const success = await QuickCommandTagRepository.updateQuickCommandTag(id, trimmedName, ownerUserId);
         if (!success) {
              // 可能需要检查标签是否存在，或者让 Repository 处理
              console.warn(`[Service] 尝试更新不存在的快捷指令标签 ID: ${id}`);
@@ -66,9 +66,9 @@ export const updateQuickCommandTag = async (id: number, name: string): Promise<b
  * @param id 标签 ID
  * @returns 返回是否成功删除
  */
-export const deleteQuickCommandTag = async (id: number): Promise<boolean> => {
+export const deleteQuickCommandTag = async (id: number, ownerUserId: number): Promise<boolean> => {
     try {
-        const success = await QuickCommandTagRepository.deleteQuickCommandTag(id);
+        const success = await QuickCommandTagRepository.deleteQuickCommandTag(id, ownerUserId);
          if (!success) {
              console.warn(`[Service] 尝试删除不存在的快捷指令标签 ID: ${id}`);
          }
@@ -85,7 +85,7 @@ export const deleteQuickCommandTag = async (id: number): Promise<boolean> => {
  * @param tagIds 新的快捷指令标签 ID 数组
  * @returns Promise<void>
  */
-export const setCommandTags = async (commandId: number, tagIds: number[]): Promise<void> => {
+export const setCommandTags = async (commandId: number, tagIds: number[], ownerUserId: number): Promise<void> => {
     // 验证 tagIds 是否为数字数组 (基本验证)
     if (!Array.isArray(tagIds) || !tagIds.every(id => typeof id === 'number')) {
         throw new Error('标签 ID 列表必须是一个数字数组');
@@ -95,7 +95,7 @@ export const setCommandTags = async (commandId: number, tagIds: number[]): Promi
 
     try {
         // 直接调用 Repository 处理关联更新 (Repository 函数现在返回 void)
-        await QuickCommandTagRepository.setCommandTagAssociations(commandId, tagIds);
+        await QuickCommandTagRepository.setCommandTagAssociations(commandId, tagIds, ownerUserId);
         // Service 函数也返回 void，所以不需要 return
     } catch (error: any) {
         console.error(`[Service] 设置快捷指令 ${commandId} 的标签失败:`, error.message);
@@ -108,9 +108,9 @@ export const setCommandTags = async (commandId: number, tagIds: number[]): Promi
  * @param commandId 快捷指令 ID
  * @returns 标签对象数组
  */
-export const getTagsForCommand = async (commandId: number): Promise<QuickCommandTag[]> => {
+export const getTagsForCommand = async (commandId: number, ownerUserId: number): Promise<QuickCommandTag[]> => {
     try {
-        return await QuickCommandTagRepository.findTagsByCommandId(commandId);
+        return await QuickCommandTagRepository.findTagsByCommandId(commandId, ownerUserId);
     } catch (error: any) {
         console.error(`[Service] 获取快捷指令 ${commandId} 的标签失败:`, error.message);
         throw error;

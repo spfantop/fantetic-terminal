@@ -7,7 +7,7 @@ import { CreateSshKeyInput, UpdateSshKeyInput } from './ssh_key.service';
  */
 export const getSshKeyNames = async (req: Request, res: Response): Promise<void> => {
     try {
-        const keys = await SshKeyService.getAllSshKeyNames();
+        const keys = await SshKeyService.getAllSshKeyNames(req.authorization!);
         res.status(200).json(keys);
     } catch (error: any) {
         console.error('Controller: 获取 SSH 密钥列表失败:', error);
@@ -26,7 +26,8 @@ export const createSshKey = async (req: Request, res: Response): Promise<void> =
             res.status(400).json({ message: '请求体必须包含 name 和 private_key。' });
             return;
         }
-        const newKey = await SshKeyService.createSshKey(input);
+        const ownerUserId = req.authorization?.runtime === 'web' ? req.authorization.userId : null;
+        const newKey = await SshKeyService.createSshKey(input, ownerUserId);
         res.status(201).json({ message: 'SSH 密钥创建成功。', key: newKey });
     } catch (error: any) {
         console.error('Controller: 创建 SSH 密钥失败:', error);

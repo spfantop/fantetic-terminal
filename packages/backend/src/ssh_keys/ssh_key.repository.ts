@@ -1,5 +1,6 @@
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
 import { Database, RunResult } from 'sqlite3'; // Import Database type if needed by helpers
+import { AuthorizationSubject } from '../access-control/authorization-subject';
 
 // 定义数据库行的接口
 export interface SshKeyDbRow {
@@ -9,6 +10,7 @@ export interface SshKeyDbRow {
     encrypted_passphrase?: string | null; // 密码短语是可选的
     created_at: number;
     updated_at: number;
+    owner_user_id?: number | null;
 }
 
 // 定义创建时需要的数据接口 (不包含 id, created_at, updated_at)
@@ -24,10 +26,10 @@ export type UpdateSshKeyData = Partial<Omit<SshKeyDbRow, 'id' | 'created_at'>>;
  */
 export const createSshKey = async (data: CreateSshKeyData): Promise<number> => {
     const sql = `
-        INSERT INTO ssh_keys (name, encrypted_private_key, encrypted_passphrase, created_at, updated_at)
-        VALUES (?, ?, ?, strftime('%s', 'now'), strftime('%s', 'now'))
+        INSERT INTO ssh_keys (name, encrypted_private_key, encrypted_passphrase, owner_user_id, created_at, updated_at)
+        VALUES (?, ?, ?, ?, strftime('%s', 'now'), strftime('%s', 'now'))
     `;
-    const params = [data.name, data.encrypted_private_key, data.encrypted_passphrase ?? null];
+    const params = [data.name, data.encrypted_private_key, data.encrypted_passphrase ?? null, data.owner_user_id ?? null];
     try {
         const db = await getDbInstance();
         const result = await runDb(db, sql, params);
@@ -145,4 +147,15 @@ export const deleteSshKey = async (id: number): Promise<boolean> => {
         console.error(`Repository: 删除 SSH 密钥 ${id} 失败:`, err.message);
         throw new Error(`删除 SSH 密钥失败: ${err.message}`);
     }
+};
+
+export const findVisibleSshKeyNames = async (
+    subject: AuthorizationSubject,
+): Promise<{ id: number; name: string }[]> => {
+    if (subject.runtime === 'desktop' || subject.systemRole === 'super_admin' || subject.systemRole === 'admin') {
+        return findAllSshKeyNames();
+    }
+    return allDb<{ id: number; name: string }>(await getDbInstance(), `
+        SELECT id, name FROM ssh_keys WHERE owner_user_id = ? ORDER BY name
+    `, [subject.userId]);
 };

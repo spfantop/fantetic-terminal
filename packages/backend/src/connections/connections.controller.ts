@@ -4,6 +4,7 @@ import * as ProtocolTestService from '../services/protocol-test.service';
 import * as GuacamoleService from '../services/guacamole.service'; 
 import * as ImportExportService from '../services/import-export.service';
 import * as ConnectionRepository from './connection.repository';
+import { remoteDesktopGrantRegistry } from '../websocket/remote-desktop-grant';
 
 
 
@@ -12,7 +13,8 @@ import * as ConnectionRepository from './connection.repository';
  */
 export const createConnection = async (req: Request, res: Response): Promise<void> => {
     try {
-        const newConnection = await ConnectionService.createConnection(req.body);
+        const ownerUserId = req.authorization?.runtime === 'web' ? req.authorization.userId : null;
+        const newConnection = await ConnectionService.createConnection(req.body, ownerUserId, req.authorization!);
         res.status(201).json({ message: '连接创建成功。', connection: newConnection });
 
     } catch (error: any) {
@@ -30,7 +32,7 @@ export const createConnection = async (req: Request, res: Response): Promise<voi
  */
 export const getConnections = async (req: Request, res: Response): Promise<void> => {
     try {
-        const connections = await ConnectionService.getAllConnections();
+        const connections = await ConnectionService.getAllConnections(req.authorization);
         res.status(200).json(connections);
     } catch (error: any) {
         console.error('Controller: 获取连接列表时发生错误:', error);
@@ -40,7 +42,7 @@ export const getConnections = async (req: Request, res: Response): Promise<void>
 
 export const getConnectionFolders = async (req: Request, res: Response): Promise<void> => {
     try {
-        const folders = await ConnectionService.getAllConnectionFolders();
+        const folders = await ConnectionService.getAllConnectionFolders(req.authorization!);
         res.status(200).json(folders);
     } catch (error: any) {
         console.error('Controller: 获取连接文件夹列表时发生错误:', error);
@@ -55,7 +57,7 @@ export const createConnectionFolder = async (req: Request, res: Response): Promi
             res.status(400).json({ message: '需要提供有效的文件夹名称。' });
             return;
         }
-        const folder = await ConnectionService.createConnectionFolder(name, parent_id);
+        const folder = await ConnectionService.createConnectionFolder(name, parent_id, req.authorization!);
         res.status(201).json({ message: '文件夹创建成功。', folder });
     } catch (error: any) {
         console.error('Controller: 创建连接文件夹时发生错误:', error);
@@ -75,7 +77,7 @@ export const updateConnectionFolder = async (req: Request, res: Response): Promi
             res.status(400).json({ message: '需要提供有效的文件夹名称。' });
             return;
         }
-        const folder = await ConnectionService.updateConnectionFolder(folderId, name);
+        const folder = await ConnectionService.updateConnectionFolder(folderId, name, req.authorization!);
         if (!folder) {
             res.status(404).json({ message: '文件夹未找到。' });
             return;
@@ -94,7 +96,7 @@ export const deleteConnectionFolder = async (req: Request, res: Response): Promi
             res.status(400).json({ message: '无效的文件夹 ID。' });
             return;
         }
-        const deleted = await ConnectionService.deleteConnectionFolder(folderId);
+        const deleted = await ConnectionService.deleteConnectionFolder(folderId, req.authorization!);
         if (!deleted) {
             res.status(404).json({ message: '文件夹未找到。' });
             return;
@@ -109,7 +111,7 @@ export const deleteConnectionFolder = async (req: Request, res: Response): Promi
 export const reorderConnectionFolders = async (req: Request, res: Response): Promise<void> => {
     try {
         const { items } = req.body;
-        const folders = await ConnectionService.reorderConnectionFolders(items);
+        const folders = await ConnectionService.reorderConnectionFolders(items, req.authorization!);
         res.status(200).json({ message: '文件夹排序更新成功。', folders });
     } catch (error: any) {
         console.error('Controller: 更新连接文件夹排序时发生错误:', error);
@@ -121,7 +123,7 @@ export const reorderConnectionFolders = async (req: Request, res: Response): Pro
 export const reorderConnections = async (req: Request, res: Response): Promise<void> => {
     try {
         const { items } = req.body;
-        const connections = await ConnectionService.reorderConnections(items);
+        const connections = await ConnectionService.reorderConnections(items, req.authorization!);
         res.status(200).json({ message: '服务器排序更新成功。', connections });
     } catch (error: any) {
         console.error('Controller: 更新连接排序时发生错误:', error);
@@ -166,7 +168,7 @@ export const updateConnection = async (req: Request, res: Response): Promise<voi
         }
 
 
-        const updatedConnection = await ConnectionService.updateConnection(connectionId, req.body);
+        const updatedConnection = await ConnectionService.updateConnection(connectionId, req.body, req.authorization!);
 
         if (!updatedConnection) {
             res.status(404).json({ message: '连接未找到。' });
@@ -314,7 +316,7 @@ export const testUnsavedConnection = async (req: Request, res: Response): Promis
  */
 export const exportConnections = async (req: Request, res: Response): Promise<void> => {
     try {
-        const exportedData = await ImportExportService.exportConnectionsAsEncryptedZip();
+        const exportedData = await ImportExportService.exportConnectionsAsEncryptedZip(req.authorization!);
 
         // 设置响应头，提示浏览器下载文件
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -339,7 +341,7 @@ export const importConnections = async (req: Request, res: Response): Promise<vo
     }
 
     try {
-        const result = await ImportExportService.importConnections(req.file.buffer);
+        const result = await ImportExportService.importConnections(req.file.buffer, req.authorization!);
 
         if (result.failureCount > 0) {
              res.status(400).json({ 
@@ -448,6 +450,7 @@ export const getRdpSessionToken = async (req: Request, res: Response): Promise<v
         console.log(`[Controller:getRdpSessionToken] Received Guacamole token via GuacamoleService for RDP connection ${connectionId}`);
 
         // 5. 将 Guacamole 令牌返回给前端
+        remoteDesktopGrantRegistry.register(guacamoleToken, req.authorization!.userId, connectionId);
         res.status(200).json({ token: guacamoleToken });
 
     } catch (error: any) {
@@ -535,6 +538,7 @@ export const getVncSessionToken = async (req: Request, res: Response): Promise<v
 
         console.log(`[Controller:getVncSessionToken] Received Guacamole token via GuacamoleService for VNC connection ${connectionId} with size ${initialWidth}x${initialHeight}`);
         
+        remoteDesktopGrantRegistry.register(guacamoleToken, req.authorization!.userId, connectionId);
         res.status(200).json({ token: guacamoleToken });
 
     } catch (error: any) {
@@ -627,7 +631,7 @@ export const addTagToConnections = async (req: Request, res: Response): Promise<
         }
 
         // 调用服务层批量添加标签
-        await ConnectionService.addTagToConnections(connection_ids, tag_id);
+        await ConnectionService.addTagToConnections(connection_ids, tag_id, req.authorization!);
 
         res.status(200).json({ message: '标签已成功添加到指定连接。' });
 
@@ -661,7 +665,7 @@ export const updateConnectionTags = async (req: Request, res: Response): Promise
              return;
         }
 
-        const success = await ConnectionService.updateConnectionTags(connectionId, tag_ids);
+        const success = await ConnectionService.updateConnectionTags(connectionId, tag_ids, req.authorization!);
 
         if (!success) {
             res.status(404).json({ message: '连接未找到或更新标签失败。' });

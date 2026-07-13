@@ -86,6 +86,10 @@ export function writeSshInput(state: ClientState, data: SshInputChunk): void {
         return;
     }
 
+    if (process.env.SESSION_RECORD_INPUT !== 'false') {
+        state.sessionRecorder?.recordInput(typeof data === 'string' ? Buffer.from(data) : data);
+    }
+
     if (state.isSshInputBackpressured || state.pendingSshInputBuffer?.length) {
         enqueueSshInput(state, data);
         attachDrainHandler(state);

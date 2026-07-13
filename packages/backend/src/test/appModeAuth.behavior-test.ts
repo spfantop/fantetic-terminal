@@ -1,12 +1,18 @@
 import assert from 'node:assert/strict';
-import { isAuthenticated } from '../auth/auth.middleware';
+import { isAuthenticated, sessionMatchesAuthenticationEpoch } from '../auth/auth.middleware';
 import {
   ELECTRON_APP_USERNAME,
   ELECTRON_APP_USER_ID,
   isElectronAppMode,
+  resolveRuntimeCapabilities,
 } from '../config/app-mode';
 
 const originalAppMode = process.env.FANTETIC_APP_MODE;
+const originalElectronNonce = process.env.FANTETIC_ELECTRON_NONCE;
+
+assert.equal(sessionMatchesAuthenticationEpoch(4, 4), true);
+assert.equal(sessionMatchesAuthenticationEpoch(3, 4), false);
+assert.equal(sessionMatchesAuthenticationEpoch(undefined, 0), false, 'legacy sessions must log in again');
 
 const createResponseStub = () => {
   const response = {
@@ -27,9 +33,27 @@ const createResponseStub = () => {
 
 try {
   process.env.FANTETIC_APP_MODE = 'electron';
+  process.env.FANTETIC_ELECTRON_NONCE = 'test-electron-runtime-nonce';
   assert.equal(isElectronAppMode(), true);
+  assert.deepEqual(resolveRuntimeCapabilities(), {
+    runtime: 'desktop', requiresAuthentication: false, remoteDesktop: false, multiUserAdministration: false,
+  });
 
-  const appModeRequest = { session: {} } as any;
+  const missingNonceRequest = { session: {}, headers: {} } as any;
+  const missingNonceResponse = createResponseStub() as any;
+  let missingNonceNextCalled = false;
+
+  isAuthenticated(missingNonceRequest, missingNonceResponse, () => {
+    missingNonceNextCalled = true;
+  });
+
+  assert.equal(missingNonceNextCalled, false);
+  assert.equal(missingNonceResponse.statusCode, 401);
+
+  const appModeRequest = {
+    session: {},
+    headers: { 'x-fantetic-electron-nonce': 'test-electron-runtime-nonce' },
+  } as any;
   const appModeResponse = createResponseStub() as any;
   let appModeNextCalled = false;
 
@@ -45,6 +69,9 @@ try {
 
   process.env.FANTETIC_APP_MODE = 'web';
   assert.equal(isElectronAppMode(), false);
+  assert.deepEqual(resolveRuntimeCapabilities(), {
+    runtime: 'web', requiresAuthentication: true, remoteDesktop: true, multiUserAdministration: true,
+  });
 
   const webRequest = { session: {} } as any;
   const webResponse = createResponseStub() as any;
@@ -62,6 +89,11 @@ try {
     delete process.env.FANTETIC_APP_MODE;
   } else {
     process.env.FANTETIC_APP_MODE = originalAppMode;
+  }
+  if (typeof originalElectronNonce === 'undefined') {
+    delete process.env.FANTETIC_ELECTRON_NONCE;
+  } else {
+    process.env.FANTETIC_ELECTRON_NONCE = originalElectronNonce;
   }
 }
 

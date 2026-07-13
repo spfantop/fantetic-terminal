@@ -81,10 +81,12 @@ const mapRowToTerminalTheme = (row: DbTerminalThemeRow): TerminalTheme => {
  * 查找所有终端主题
  * @returns Promise<TerminalTheme[]>
  */
-export const findAllThemes = async (): Promise<TerminalTheme[]> => {
+export const findAllThemes = async (ownerUserId: number): Promise<TerminalTheme[]> => {
   try {
     const db = await getDbInstance();
-    const rows = await allDb<DbTerminalThemeRow>(db, 'SELECT * FROM terminal_themes ORDER BY CASE theme_type WHEN \'preset\' THEN 0 ELSE 1 END ASC, name ASC');
+    const rows = await allDb<DbTerminalThemeRow>(db, `SELECT * FROM terminal_themes
+      WHERE theme_type = 'preset' OR owner_user_id = ?
+      ORDER BY CASE theme_type WHEN 'preset' THEN 0 ELSE 1 END ASC, name ASC`, [ownerUserId]);
     return rows.map(row => {
         try {
             return mapRowToTerminalTheme(row);
@@ -106,14 +108,14 @@ export const findAllThemes = async (): Promise<TerminalTheme[]> => {
  * @param id 主题 ID (SQLite 数字 ID)
  * @returns Promise<TerminalTheme | null>
  */
-export const findThemeById = async (id: number): Promise<TerminalTheme | null> => {
+export const findThemeById = async (id: number, ownerUserId: number): Promise<TerminalTheme | null> => {
   if (isNaN(id) || id <= 0) {
       console.error("findThemeById called with invalid ID:", id);
       return null;
   }
   try {
     const db = await getDbInstance();
-    const row = await getDb<DbTerminalThemeRow>(db, 'SELECT * FROM terminal_themes WHERE id = ?', [id]);
+    const row = await getDb<DbTerminalThemeRow>(db, `SELECT * FROM terminal_themes WHERE id = ? AND (theme_type = 'preset' OR owner_user_id = ?)`, [id, ownerUserId]);
     return row ? mapRowToTerminalTheme(row) : null;
   } catch (err: any) {
     console.error(`查询 ID 为 ${id} 的终端主题失败:`, err.message);
@@ -126,7 +128,7 @@ export const findThemeById = async (id: number): Promise<TerminalTheme | null> =
  * @param themeDto 创建主题所需的数据
  * @returns Promise<TerminalTheme> 新创建的主题
  */
-export const createTheme = async (themeDto: CreateTerminalThemeDto): Promise<TerminalTheme> => {
+export const createTheme = async (themeDto: CreateTerminalThemeDto, ownerUserId: number): Promise<TerminalTheme> => {
   const nowSeconds = Math.floor(Date.now() / 1000);
   const theme = themeDto.themeData;
 
@@ -136,7 +138,7 @@ export const createTheme = async (themeDto: CreateTerminalThemeDto): Promise<Ter
       'selection_background', 'black', 'red', 'green', 'yellow', 'blue',
       'magenta', 'cyan', 'white', 'bright_black', 'bright_red', 'bright_green',
       'bright_yellow', 'bright_blue', 'bright_magenta', 'bright_cyan', 'bright_white',
-      'created_at', 'updated_at'
+      'owner_user_id', 'created_at', 'updated_at'
   ];
   const values = [
       themeDto.name, 'user',
@@ -144,7 +146,7 @@ export const createTheme = async (themeDto: CreateTerminalThemeDto): Promise<Ter
       theme?.selectionBackground ?? null, theme?.black ?? null, theme?.red ?? null, theme?.green ?? null, theme?.yellow ?? null, theme?.blue ?? null,
       theme?.magenta ?? null, theme?.cyan ?? null, theme?.white ?? null, theme?.brightBlack ?? null, theme?.brightRed ?? null, theme?.brightGreen ?? null,
       theme?.brightYellow ?? null, theme?.brightBlue ?? null, theme?.brightMagenta ?? null, theme?.brightCyan ?? null, theme?.brightWhite ?? null,
-      nowSeconds, nowSeconds
+      ownerUserId, nowSeconds, nowSeconds
   ];
   const placeholders = columns.map(() => '?').join(', ');
 
@@ -159,7 +161,7 @@ export const createTheme = async (themeDto: CreateTerminalThemeDto): Promise<Ter
     if (typeof result.lastID !== 'number' || result.lastID <= 0) {
         throw new Error('创建主题后未能获取有效的 lastID');
     }
-    const newTheme = await findThemeById(result.lastID);
+    const newTheme = await findThemeById(result.lastID, ownerUserId);
     if (newTheme) {
       return newTheme;
     } else {
@@ -181,7 +183,7 @@ export const createTheme = async (themeDto: CreateTerminalThemeDto): Promise<Ter
  * @param themeDto 更新的数据
  * @returns Promise<boolean> 是否成功更新
  */
-export const updateTheme = async (id: number, themeDto: UpdateTerminalThemeDto): Promise<boolean> => {
+export const updateTheme = async (id: number, themeDto: UpdateTerminalThemeDto, ownerUserId: number): Promise<boolean> => {
   const nowSeconds = Math.floor(Date.now() / 1000);
   const theme = themeDto.themeData;
 
@@ -201,13 +203,14 @@ export const updateTheme = async (id: number, themeDto: UpdateTerminalThemeDto):
     theme?.magenta ?? null, theme?.cyan ?? null, theme?.white ?? null, theme?.brightBlack ?? null, theme?.brightRed ?? null, theme?.brightGreen ?? null,
     theme?.brightYellow ?? null, theme?.brightBlue ?? null, theme?.brightMagenta ?? null, theme?.brightCyan ?? null, theme?.brightWhite ?? null,
     nowSeconds,
-    id // For WHERE clause
+    id, // For WHERE clause
+    ownerUserId,
   ];
 
   const sql = `
     UPDATE terminal_themes
     SET ${setClauses.join(', ')}
-    WHERE id = ? AND theme_type = 'user'
+    WHERE id = ? AND theme_type = 'user' AND owner_user_id = ?
   `;
 
   try {
@@ -229,11 +232,11 @@ export const updateTheme = async (id: number, themeDto: UpdateTerminalThemeDto):
  * @param id 要删除的主题 ID (SQLite 数字 ID)
  * @returns Promise<boolean> 是否成功删除
  */
-export const deleteTheme = async (id: number): Promise<boolean> => {
-  const sql = 'DELETE FROM terminal_themes WHERE id = ? AND theme_type = \'user\'';
+export const deleteTheme = async (id: number, ownerUserId: number): Promise<boolean> => {
+  const sql = 'DELETE FROM terminal_themes WHERE id = ? AND theme_type = \'user\' AND owner_user_id = ?';
   try {
     const db = await getDbInstance();
-    const result = await runDb(db, sql, [id]);
+    const result = await runDb(db, sql, [id, ownerUserId]);
     return result.changes > 0;
   } catch (err: any) {
     console.error(`删除 ID 为 ${id} 的终端主题失败:`, err.message);

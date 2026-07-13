@@ -5,6 +5,20 @@ export type AuditLogActionType =
   | 'LOGIN_FAILURE'
   | 'LOGOUT'
   | 'PASSWORD_CHANGED'
+  | 'USER_PASSWORD_RESET'
+  | 'USER_DELETED'
+  | 'USER_CREATED'
+  | 'USER_UPDATED'
+  | 'GROUP_CREATED'
+  | 'GROUP_UPDATED'
+  | 'GROUP_DELETED'
+  | 'GROUP_MEMBER_SAVED'
+  | 'GROUP_MEMBER_DELETED'
+  | 'CONNECTION_GRANT_SAVED'
+  | 'CONNECTION_GRANTS_BATCH_SAVED'
+  | 'CONNECTION_GRANT_DELETED'
+  | 'BACKUP_CREATED'
+  | 'BACKUP_RESTORE_SCHEDULED'
   | '2FA_ENABLED'
   | '2FA_DISABLED'
   // Passkey Events
@@ -48,6 +62,7 @@ export type AuditLogActionType =
   | 'SSH_CONNECT_SUCCESS'
   //   - SSH_CONNECT_FAILURE: { userId?: number, username?: string, connectionId: number, connectionName?: string, ip?: string, reason: string }
   | 'SSH_CONNECT_FAILURE'
+  | 'SESSION_RECORDING_FAILURE'
   //   - SSH_SHELL_FAILURE:   { userId?: number, username?: string, connectionId: number, connectionName?: string, sessionId: string, ip?: string, reason: string }
   | 'SSH_SHELL_FAILURE'
 
@@ -61,6 +76,14 @@ export interface AuditLogEntry {
     timestamp: number; // Unix timestamp (seconds)
     action_type: AuditLogActionType;
     details: string | null; // JSON string or null
+    request_id: string | null;
+    actor_user_id: number | null;
+    actor_username: string | null;
+    actor_role: string | null;
+    source_ip: string | null;
+    asset_id: number | null;
+    session_id: string | null;
+    result: 'success' | 'failure' | 'denied';
 }
 
 // 用于创建日志条目的数据结构

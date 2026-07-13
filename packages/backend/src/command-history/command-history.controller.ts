@@ -13,7 +13,7 @@ export const addCommand = async (req: Request, res: Response): Promise<void> => 
     }
 
     try {
-        const newId = await CommandHistoryService.addCommandHistory(command);
+        const newId = await CommandHistoryService.addCommandHistory(command, req.authorization!.userId);
         res.status(201).json({ id: newId, message: '命令已添加到历史记录' });
     } catch (error: any) {
         console.error('添加命令历史记录控制器出错:', error);
@@ -26,7 +26,7 @@ export const addCommand = async (req: Request, res: Response): Promise<void> => 
  */
 export const getAllCommands = async (req: Request, res: Response): Promise<void> => {
     try {
-        const history = await CommandHistoryService.getAllCommandHistory();
+        const history = await CommandHistoryService.getAllCommandHistory(req.authorization!.userId);
         // 注意：前端要求最新在下，最旧在上。Repository 返回的是升序（旧->新），符合要求。
         res.status(200).json(history);
     } catch (error: any) {
@@ -47,7 +47,7 @@ export const deleteCommand = async (req: Request, res: Response): Promise<void> 
     }
 
     try {
-        const success = await CommandHistoryService.deleteCommandHistoryById(id);
+        const success = await CommandHistoryService.deleteCommandHistoryById(id, req.authorization!.userId);
         if (success) {
             res.status(200).json({ message: '命令历史记录已删除' });
         } else {
@@ -64,7 +64,7 @@ export const deleteCommand = async (req: Request, res: Response): Promise<void> 
  */
 export const clearAllCommands = async (req: Request, res: Response): Promise<void> => {
     try {
-        const count = await CommandHistoryService.clearAllCommandHistory();
+        const count = await CommandHistoryService.clearAllCommandHistory(req.authorization!.userId);
         res.status(200).json({ count, message: `已清空 ${count} 条命令历史记录` });
     } catch (error: any) {
         console.error('清空命令历史记录控制器出错:', error);

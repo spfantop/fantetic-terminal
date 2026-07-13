@@ -1,5 +1,6 @@
 import { Database, Statement } from 'sqlite3';
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
+import { AuthorizationSubject } from '../access-control/authorization-subject';
 
 
 // 定义 Tag 类型 (可以共享到 types 文件)
@@ -8,15 +9,38 @@ export interface TagData {
     name: string;
     created_at: number;
     updated_at: number;
+    owner_user_id?: number | null;
 }
+
+const canReadAll = (subject: AuthorizationSubject) => subject.runtime === 'desktop'
+    || subject.systemRole === 'super_admin'
+    || subject.systemRole === 'admin'
+    || subject.systemRole === 'auditor';
+
+const canWriteAll = (subject: AuthorizationSubject) => subject.runtime === 'desktop'
+    || subject.systemRole === 'super_admin'
+    || subject.systemRole === 'admin';
 
 /**
  * 获取所有标签
  */
-export const findAllTags = async (): Promise<TagData[]> => {
+export const findAllTags = async (subject: AuthorizationSubject): Promise<TagData[]> => {
     try {
         const db = await getDbInstance();
-        const rows = await allDb<TagData>(db, `SELECT * FROM tags ORDER BY name ASC`);
+        const rows = await allDb<TagData>(db, `
+            SELECT DISTINCT t.* FROM tags t
+            WHERE ? = 1 OR t.owner_user_id = ? OR EXISTS (
+                SELECT 1 FROM connection_tags ct
+                JOIN connections c ON c.id = ct.connection_id
+                WHERE ct.tag_id = t.id AND (
+                    c.owner_user_id = ? OR EXISTS (
+                        SELECT 1 FROM connection_group_permissions cgp
+                        JOIN user_group_members ugm ON ugm.group_id = cgp.group_id
+                        WHERE cgp.connection_id = c.id AND ugm.user_id = ?
+                    )
+                )
+            ) ORDER BY t.name ASC
+        `, [canReadAll(subject) ? 1 : 0, subject.userId, subject.userId, subject.userId]);
         return rows;
     } catch (err: any) {
         console.error('[仓库] 查询标签列表时出错:', err.message);
@@ -27,10 +51,23 @@ export const findAllTags = async (): Promise<TagData[]> => {
 /**
  * 根据 ID 获取单个标签
  */
-export const findTagById = async (id: number): Promise<TagData | null> => {
+export const findTagById = async (id: number, subject: AuthorizationSubject): Promise<TagData | null> => {
      try {
         const db = await getDbInstance();
-        const row = await getDbRow<TagData>(db, `SELECT * FROM tags WHERE id = ?`, [id]);
+        const row = await getDbRow<TagData>(db, `
+            SELECT DISTINCT t.* FROM tags t WHERE t.id = ? AND (
+                ? = 1 OR t.owner_user_id = ? OR EXISTS (
+                    SELECT 1 FROM connection_tags ct JOIN connections c ON c.id = ct.connection_id
+                    WHERE ct.tag_id = t.id AND (
+                        c.owner_user_id = ? OR EXISTS (
+                            SELECT 1 FROM connection_group_permissions cgp
+                            JOIN user_group_members ugm ON ugm.group_id = cgp.group_id
+                            WHERE cgp.connection_id = c.id AND ugm.user_id = ?
+                        )
+                    )
+                )
+            )
+        `, [id, canReadAll(subject) ? 1 : 0, subject.userId, subject.userId, subject.userId]);
         return row || null;
      } catch (err: any) {
         console.error(`[仓库] 查询标签 ${id} 时出错:`, err.message);
@@ -42,12 +79,12 @@ export const findTagById = async (id: number): Promise<TagData | null> => {
 /**
  * 创建新标签
  */
-export const createTag = async (name: string): Promise<number> => {
+export const createTag = async (name: string, subject: AuthorizationSubject): Promise<number> => {
     const now = Math.floor(Date.now() / 1000);
-    const sql = `INSERT INTO tags (name, created_at, updated_at) VALUES (?, ?, ?)`;
+    const sql = `INSERT INTO tags (name, owner_user_id, created_at, updated_at) VALUES (?, ?, ?, ?)`;
     try {
         const db = await getDbInstance();
-        const result = await runDb(db, sql, [name, now, now]);
+        const result = await runDb(db, sql, [name, subject.runtime === 'web' ? subject.userId : null, now, now]);
         if (typeof result.lastID !== 'number' || result.lastID <= 0) {
              throw new Error('创建标签后未能获取有效的 lastID');
         }
@@ -64,12 +101,12 @@ export const createTag = async (name: string): Promise<number> => {
 /**
  * 更新标签名称
  */
-export const updateTag = async (id: number, name: string): Promise<boolean> => {
+export const updateTag = async (id: number, name: string, subject: AuthorizationSubject): Promise<boolean> => {
     const now = Math.floor(Date.now() / 1000);
-    const sql = `UPDATE tags SET name = ?, updated_at = ? WHERE id = ?`;
+    const sql = `UPDATE tags SET name = ?, updated_at = ? WHERE id = ? AND (? = 1 OR owner_user_id = ?)`;
     try {
         const db = await getDbInstance();
-        const result = await runDb(db, sql, [name, now, id]);
+        const result = await runDb(db, sql, [name, now, id, canWriteAll(subject) ? 1 : 0, subject.userId]);
         return result.changes > 0;
     } catch (err: any) {
          console.error(`[仓库] 更新标签 ${id} 时出错:`, err.message);
@@ -83,11 +120,11 @@ export const updateTag = async (id: number, name: string): Promise<boolean> => {
 /**
  * 删除标签
  */
-export const deleteTag = async (id: number): Promise<boolean> => {
-    const sql = `DELETE FROM tags WHERE id = ?`;
+export const deleteTag = async (id: number, subject: AuthorizationSubject): Promise<boolean> => {
+    const sql = `DELETE FROM tags WHERE id = ? AND (? = 1 OR owner_user_id = ?)`;
     try {
         const db = await getDbInstance();
-        const result = await runDb(db, sql, [id]);
+        const result = await runDb(db, sql, [id, canWriteAll(subject) ? 1 : 0, subject.userId]);
         return result.changes > 0;
     } catch (err: any) {
         console.error(`[仓库] 删除标签 ${id} 时出错:`, err.message);
@@ -98,11 +135,14 @@ export const deleteTag = async (id: number): Promise<boolean> => {
 /**
  * 更新标签与连接的关联关系
  */
-export const updateTagConnections = async (tagId: number, connectionIds: number[]): Promise<void> => {
+export const updateTagConnections = async (tagId: number, connectionIds: number[], subject: AuthorizationSubject): Promise<void> => {
     const db = await getDbInstance();
     try {
         // 开始事务
         await runDb(db, 'BEGIN TRANSACTION');
+
+        const ownedTag = await getDbRow<{ id: number }>(db, `SELECT id FROM tags WHERE id = ? AND (? = 1 OR owner_user_id = ?)`, [tagId, canWriteAll(subject) ? 1 : 0, subject.userId]);
+        if (!ownedTag) throw new Error('标签未找到或无权管理。');
 
         // 1. 删除该标签旧的连接关联
         const deleteSql = `DELETE FROM connection_tags WHERE tag_id = ?`;

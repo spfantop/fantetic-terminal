@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import { debugLog } from '../composables/useDebugLog';
-import { computed, ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'; // + nextTick
+import { computed, defineAsyncComponent, ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'; // + nextTick
 import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
-import MonacoEditor from './MonacoEditor.vue';
-import CodeMirrorMobileEditor from './CodeMirrorMobileEditor.vue'; // +++ Import new mobile editor
 import FileEditorTabs from './FileEditorTabs.vue';
 import { useFileEditorStore, type FileTab } from '../stores/fileEditor.store';
 import { useSettingsStore } from '../stores/settings.store';
@@ -12,6 +10,8 @@ import { useSessionStore } from '../stores/session.store';
 import { useAppearanceStore } from '../stores/appearance.store';
 import { measureCachedTextWidth } from '../composables/useCachedTextMeasurement';
 
+const MonacoEditor = defineAsyncComponent(() => import('./MonacoEditor.vue'));
+const CodeMirrorMobileEditor = defineAsyncComponent(() => import('./CodeMirrorMobileEditor.vue'));
 
 const { t } = useI18n();
 const fileEditorStore = useFileEditorStore();

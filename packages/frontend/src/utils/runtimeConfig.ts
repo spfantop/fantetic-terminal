@@ -5,6 +5,13 @@ export type RuntimeConfigEnv = {
   locationHost: string;
 };
 
+export type RuntimeCapabilities = {
+  runtime: 'web' | 'desktop';
+  requiresAuthentication: boolean;
+  remoteDesktop: boolean;
+  multiUserAdministration: boolean;
+};
+
 export const ELECTRON_FRONTEND_PORT = 22457;
 export const ELECTRON_BACKEND_PORT = 22458;
 
@@ -22,7 +29,7 @@ export const readRuntimeConfigEnv = (): RuntimeConfigEnv => {
 };
 
 export const resolveApiBaseUrl = (env: RuntimeConfigEnv = readRuntimeConfigEnv()): string => {
-  if (env.isElectron && env.isProd) {
+  if (env.isElectron) {
     return `http://localhost:${ELECTRON_BACKEND_PORT}/api/v1`;
   }
 
@@ -31,7 +38,7 @@ export const resolveApiBaseUrl = (env: RuntimeConfigEnv = readRuntimeConfigEnv()
 
 export const resolveWebSocketBaseUrl = (env: RuntimeConfigEnv = readRuntimeConfigEnv()): string => {
   const protocol = env.locationProtocol === 'https:' ? 'wss:' : 'ws:';
-  const host = env.isElectron && env.isProd
+  const host = env.isElectron
     ? `localhost:${ELECTRON_BACKEND_PORT}`
     : env.locationHost;
 
@@ -41,14 +48,30 @@ export const resolveWebSocketBaseUrl = (env: RuntimeConfigEnv = readRuntimeConfi
 export const isRemoteDesktopFeatureAvailable = (
   env: RuntimeConfigEnv = readRuntimeConfigEnv(),
 ): boolean => {
-  return !env.isElectron;
+  return resolveRuntimeCapabilities(env).remoteDesktop;
 };
 
 export const isAccountFeatureAvailable = (
   env: RuntimeConfigEnv = readRuntimeConfigEnv(),
 ): boolean => {
-  return !env.isElectron;
+  return resolveRuntimeCapabilities(env).requiresAuthentication;
 };
+
+export const resolveRuntimeCapabilities = (
+  env: RuntimeConfigEnv = readRuntimeConfigEnv(),
+): RuntimeCapabilities => env.isElectron
+  ? {
+      runtime: 'desktop',
+      requiresAuthentication: false,
+      remoteDesktop: false,
+      multiUserAdministration: false,
+    }
+  : {
+      runtime: 'web',
+      requiresAuthentication: true,
+      remoteDesktop: true,
+      multiUserAdministration: true,
+    };
 
 export const resolveRemoteDesktopProxyWebSocketUrl = (
   token: string,

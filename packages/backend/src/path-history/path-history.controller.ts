@@ -13,7 +13,7 @@ export const addPath = async (req: Request, res: Response): Promise<void> => {
     }
 
     try {
-        const newId = await PathHistoryService.addPathHistory(path);
+        const newId = await PathHistoryService.addPathHistory(path, req.authorization!.userId);
         res.status(201).json({ id: newId, message: '路径已添加到历史记录' });
     } catch (error: any) {
         console.error('添加路径历史记录控制器出错:', error);
@@ -26,7 +26,7 @@ export const addPath = async (req: Request, res: Response): Promise<void> => {
  */
 export const getAllPaths = async (req: Request, res: Response): Promise<void> => {
     try {
-        const history = await PathHistoryService.getAllPathHistory();
+        const history = await PathHistoryService.getAllPathHistory(req.authorization!.userId);
         // Repository 返回的是升序（旧->新）
         res.status(200).json(history);
     } catch (error: any) {
@@ -47,7 +47,7 @@ export const deletePath = async (req: Request, res: Response): Promise<void> => 
     }
 
     try {
-        const success = await PathHistoryService.deletePathHistoryById(id);
+        const success = await PathHistoryService.deletePathHistoryById(id, req.authorization!.userId);
         if (success) {
             res.status(200).json({ message: '路径历史记录已删除' });
         } else {
@@ -64,7 +64,7 @@ export const deletePath = async (req: Request, res: Response): Promise<void> => 
  */
 export const clearAllPaths = async (req: Request, res: Response): Promise<void> => {
     try {
-        const count = await PathHistoryService.clearAllPathHistory();
+        const count = await PathHistoryService.clearAllPathHistory(req.authorization!.userId);
         res.status(200).json({ count, message: `已清空 ${count} 条路径历史记录` });
     } catch (error: any) {
         console.error('清空路径历史记录控制器出错:', error);

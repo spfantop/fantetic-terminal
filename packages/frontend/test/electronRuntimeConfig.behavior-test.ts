@@ -49,6 +49,15 @@ assert.equal(
   'Electron development should not expose RDP/VNC because dev:app does not start guacd',
 );
 
+const electronDevEnv = {
+  isElectron: true,
+  isProd: false,
+  locationProtocol: 'http:',
+  locationHost: 'localhost:22457',
+};
+assert.equal(resolveApiBaseUrl(electronDevEnv), 'http://localhost:22458/api/v1');
+assert.equal(resolveWebSocketBaseUrl(electronDevEnv), 'ws://localhost:22458/ws/');
+
 assert.equal(
   resolveApiBaseUrl({
     isElectron: false,

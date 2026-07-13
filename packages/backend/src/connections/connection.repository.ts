@@ -1,5 +1,8 @@
 import { Database } from 'sqlite3';
+import { createLogger } from '../logging/logger';
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
+import { AuthorizationSubject } from '../access-control/authorization-subject';
+import { CONNECTION_PERMISSION_LEVEL_SQL } from '../access-control/access-policy';
 
 
 // Define Connection 类型 (可以从 controller 或 types 文件导入，暂时在此定义)
@@ -20,6 +23,7 @@ interface ConnectionBase {
     created_at: number;
     updated_at: number;
     last_connected_at: number | null;
+    owner_user_id?: number | null;
     ssh_key_id?: number | null;
 notes?: string | null;
 //    jump_chain: number[] | null; // <-- REMOVE from ConnectionBase
@@ -29,12 +33,14 @@ notes?: string | null;
 interface ConnectionWithTagsRow extends ConnectionBase { // This will no longer cause error if ConnectionBase has no jump_chain
     tag_ids_str: string | null;
     jump_chain: string | null; // Stored as JSON string in DB
+    effective_permission?: 'view' | 'connect' | 'manage';
 }
 
 // ConnectionWithTags implicitly includes 'type' and 'ssh_key_id' via ConnectionBase
 export interface ConnectionWithTags extends ConnectionBase {
     tag_ids: number[];
     jump_chain: number[] | null; // Explicitly add for service layer type
+    effective_permission?: 'view' | 'connect' | 'manage';
 }
 
 // 包含加密字段的完整类型，用于插入/更新
@@ -56,6 +62,7 @@ export interface ConnectionFolder {
     sort_order: number;
     created_at: number;
     updated_at: number;
+    owner_user_id?: number | null;
 }
 
 export interface ConnectionOrderItem {
@@ -115,6 +122,66 @@ export const findAllConnectionsWithTags = async (): Promise<ConnectionWithTags[]
         console.error('Repository: 查询连接列表时出错:', err.message);
         throw new Error('获取连接列表失败');
     }
+};
+
+export const findAccessibleConnectionsWithTags = async (
+    subject: AuthorizationSubject,
+): Promise<ConnectionWithTags[]> => {
+    if (subject.runtime === 'desktop'
+        || subject.systemRole === 'super_admin'
+        || subject.systemRole === 'admin'
+        || subject.systemRole === 'auditor') {
+        const effectivePermission = subject.systemRole === 'auditor' ? 'view' : 'manage';
+        return (await findAllConnectionsWithTags()).map(connection => ({
+            ...connection,
+            effective_permission: effectivePermission,
+        }));
+    }
+
+    const sql = `
+        SELECT
+            c.id, c.name, c.type, c.host, c.port, c.username, c.auth_method,
+            c.proxy_id, c.proxy_type, c.folder_id, c.icon, c.sort_order,
+            c.ssh_key_id, c.notes, c.jump_chain, c.owner_user_id,
+            c.created_at, c.updated_at, c.last_connected_at,
+            CASE
+                WHEN c.owner_user_id = ? THEN 'manage'
+                ELSE CASE COALESCE((
+                    SELECT MAX(${CONNECTION_PERMISSION_LEVEL_SQL})
+                    FROM connection_group_permissions permission
+                    JOIN user_group_members membership ON membership.group_id = permission.group_id
+                    WHERE permission.connection_id = c.id AND membership.user_id = ?
+                ), 0)
+                    WHEN 3 THEN 'manage'
+                    WHEN 2 THEN 'connect'
+                    ELSE 'view'
+                END
+            END AS effective_permission,
+            GROUP_CONCAT(DISTINCT ct.tag_id) as tag_ids_str
+        FROM connections c
+        LEFT JOIN connection_tags ct ON c.id = ct.connection_id
+        WHERE c.owner_user_id = ? OR EXISTS (
+            SELECT 1
+            FROM connection_group_permissions permission
+            JOIN user_group_members membership ON membership.group_id = permission.group_id
+            WHERE permission.connection_id = c.id AND membership.user_id = ?
+        )
+        GROUP BY c.id
+        ORDER BY COALESCE(c.folder_id, 0), c.sort_order, c.name, c.id`;
+    const rows = await allDb<ConnectionWithTagsRow>(await getDbInstance(), sql, [
+        subject.userId,
+        subject.userId,
+        subject.userId,
+        subject.userId,
+    ]);
+    return rows.map((row) => {
+        const { jump_chain: jumpChain, ...rest } = row;
+        return {
+            ...rest,
+            tag_ids: row.tag_ids_str ? row.tag_ids_str.split(',').map(Number).filter(Number.isFinite) : [],
+            jump_chain: jumpChain ? JSON.parse(jumpChain) as number[] : null,
+        } as ConnectionWithTags;
+    });
 };
 
 /**
@@ -177,7 +244,7 @@ export const findFullConnectionById = async (id: number): Promise<FullConnection
  /**
   * 根据名称查找连接 (用于检查名称是否重复)
   */
- export const findConnectionByName = async (name: string): Promise<ConnectionBase | null> => {
+export const findConnectionByName = async (name: string): Promise<ConnectionBase | null> => {
      const sql = `SELECT id, name, type, host, port, username, auth_method, proxy_id, proxy_type, folder_id, icon, sort_order, ssh_key_id, notes, jump_chain, created_at, updated_at, last_connected_at FROM connections WHERE name = ?`;
      try {
          const db = await getDbInstance();
@@ -210,11 +277,11 @@ export const findFullConnectionById = async (id: number): Promise<FullConnection
   */
 // Update input type to reflect FullConnectionData now has 'type' and 'jump_chain'
 export const createConnection = async (data: Omit<FullConnectionData, 'id' | 'created_at' | 'updated_at' | 'last_connected_at' | 'tag_ids'>): Promise<number> => {
-    console.log('[Repository:createConnection] Received data:', JSON.stringify(data, null, 2));
+    logger.debug('Creating connection record', { type: data.type, authMethod: data.auth_method });
     const now = Math.floor(Date.now() / 1000);
     const sql = `
-        INSERT INTO connections (name, type, host, port, username, auth_method, encrypted_password, encrypted_private_key, encrypted_passphrase, proxy_id, proxy_type, folder_id, icon, sort_order, ssh_key_id, notes, jump_chain, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+        INSERT INTO connections (name, type, host, port, username, auth_method, encrypted_password, encrypted_private_key, encrypted_passphrase, proxy_id, proxy_type, folder_id, icon, sort_order, ssh_key_id, notes, jump_chain, owner_user_id, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
     
     const jumpChainStringified = (data.jump_chain && data.jump_chain.length > 0) ? JSON.stringify(data.jump_chain) : null;
     console.log(`[Repository:createConnection] jump_chain input: ${JSON.stringify(data.jump_chain)}, stringified to: ${jumpChainStringified}`);
@@ -231,10 +298,9 @@ export const createConnection = async (data: Omit<FullConnectionData, 'id' | 'cr
         data.ssh_key_id ?? null, // +++ Add ssh_key_id parameter +++
         data.notes ?? null, // Add notes parameter
         jumpChainStringified, // Use the stringified jump_chain
+        data.owner_user_id ?? null,
         now, now
     ];
-    console.log('[Repository:createConnection] SQL:', sql);
-    console.log('[Repository:createConnection] Params:', JSON.stringify(params, null, 2));
     try {
         const db = await getDbInstance();
         const orderRow = await getDbRow<{ next_order: number }>(
@@ -255,12 +321,29 @@ export const createConnection = async (data: Omit<FullConnectionData, 'id' | 'cr
     }
 };
 
+export const findVisibleConnectionByName = async (
+    name: string,
+    subject: AuthorizationSubject,
+): Promise<ConnectionBase | null> => {
+    if (subject.runtime === 'desktop' || subject.systemRole === 'super_admin' || subject.systemRole === 'admin') {
+        return findConnectionByName(name);
+    }
+
+    const db = await getDbInstance();
+    const row = await getDbRow<ConnectionBase>(db, `
+        SELECT * FROM connections
+        WHERE name = ? AND owner_user_id = ?
+        LIMIT 1
+    `, [name, subject.userId]);
+    return row || null;
+};
+
 /**
  * 更新连接信息 (不处理标签)
  */
 // Update input type to reflect FullConnectionData now has 'type' and 'jump_chain'
 export const updateConnection = async (id: number, data: Partial<Omit<FullConnectionData, 'id' | 'created_at' | 'last_connected_at' | 'tag_ids'>>): Promise<boolean> => {
-    console.log(`[Repository:updateConnection] Received data for ID ${id}:`, JSON.stringify(data, null, 2));
+    logger.debug('Preparing connection record update', { connectionId: id, changedFieldList: Object.keys(data) });
     const fieldsToUpdate: { [key: string]: any } = { ...data };
     const params: any[] = [];
 
@@ -293,8 +376,6 @@ export const updateConnection = async (id: number, data: Partial<Omit<FullConnec
 
     params.push(id);
     const sql = `UPDATE connections SET ${setClauses} WHERE id = ?`;
-    console.log(`[Repository:updateConnection] SQL for ID ${id}:`, sql);
-    console.log(`[Repository:updateConnection] Params for ID ${id}:`, JSON.stringify(params, null, 2));
 
     try {
         const db = await getDbInstance();
@@ -422,28 +503,56 @@ export const findConnectionTags = async (connectionId: number): Promise<{ id: nu
     }
 };
 
-export const findAllConnectionFolders = async (): Promise<ConnectionFolder[]> => {
-    const sql = `SELECT id, name, parent_id, sort_order, created_at, updated_at FROM connection_folders ORDER BY COALESCE(parent_id, 0) ASC, sort_order ASC, name ASC, id ASC`;
+export const findAllConnectionFolders = async (subject: AuthorizationSubject): Promise<ConnectionFolder[]> => {
+    const canReadAll = subject.runtime === 'desktop'
+        || subject.systemRole === 'super_admin'
+        || subject.systemRole === 'admin'
+        || subject.systemRole === 'auditor';
+    const sql = `WITH RECURSIVE visible_folders(id) AS (
+            SELECT DISTINCT c.folder_id
+            FROM connections c
+            WHERE c.folder_id IS NOT NULL AND (
+                c.owner_user_id = ? OR EXISTS (
+                    SELECT 1
+                    FROM connection_group_permissions permission
+                    JOIN user_group_members membership ON membership.group_id = permission.group_id
+                    WHERE permission.connection_id = c.id AND membership.user_id = ?
+                )
+            )
+            UNION
+            SELECT folder.parent_id
+            FROM connection_folders folder
+            JOIN visible_folders visible ON visible.id = folder.id
+            WHERE folder.parent_id IS NOT NULL
+        )
+        SELECT id, name, parent_id, sort_order, created_at, updated_at, owner_user_id
+        FROM connection_folders WHERE ? = 1 OR owner_user_id = ? OR id IN (SELECT id FROM visible_folders)
+        ORDER BY COALESCE(parent_id, 0) ASC, sort_order ASC, name ASC, id ASC`;
     try {
         const db = await getDbInstance();
-        return allDb<ConnectionFolder>(db, sql);
+        return allDb<ConnectionFolder>(db, sql, [
+            subject.userId,
+            subject.userId,
+            canReadAll ? 1 : 0,
+            subject.userId,
+        ]);
     } catch (err: any) {
         console.error('Repository: 查询连接文件夹列表时出错:', err.message);
         throw new Error('获取连接文件夹列表失败');
     }
 };
 
-export const createConnectionFolder = async (name: string, parentId: number | null = null): Promise<number> => {
+export const createConnectionFolder = async (name: string, parentId: number | null, subject: AuthorizationSubject): Promise<number> => {
     const now = Math.floor(Date.now() / 1000);
-    const sql = `INSERT INTO connection_folders (name, parent_id, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`;
+    const sql = `INSERT INTO connection_folders (name, parent_id, sort_order, owner_user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`;
     try {
         const db = await getDbInstance();
         const orderRow = await getDbRow<{ next_order: number }>(
             db,
-            `SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM connection_folders WHERE parent_id IS ?`,
-            [parentId]
+            `SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM connection_folders WHERE parent_id IS ? AND owner_user_id IS ?`,
+            [parentId, subject.runtime === 'web' ? subject.userId : null]
         );
-        const result = await runDb(db, sql, [name, parentId, orderRow?.next_order ?? 0, now, now]);
+        const result = await runDb(db, sql, [name, parentId, orderRow?.next_order ?? 0, subject.runtime === 'web' ? subject.userId : null, now, now]);
         if (typeof result.lastID !== 'number' || result.lastID <= 0) {
             throw new Error('创建连接文件夹后未能获取有效的 lastID');
         }
@@ -454,11 +563,12 @@ export const createConnectionFolder = async (name: string, parentId: number | nu
     }
 };
 
-export const updateConnectionFolder = async (id: number, name: string): Promise<boolean> => {
-    const sql = `UPDATE connection_folders SET name = ?, updated_at = ? WHERE id = ?`;
+export const updateConnectionFolder = async (id: number, name: string, subject: AuthorizationSubject): Promise<boolean> => {
+    const canWriteAll = subject.runtime === 'desktop' || subject.systemRole === 'super_admin' || subject.systemRole === 'admin';
+    const sql = `UPDATE connection_folders SET name = ?, updated_at = ? WHERE id = ? AND (? = 1 OR owner_user_id = ?)`;
     try {
         const db = await getDbInstance();
-        const result = await runDb(db, sql, [name, Math.floor(Date.now() / 1000), id]);
+        const result = await runDb(db, sql, [name, Math.floor(Date.now() / 1000), id, canWriteAll ? 1 : 0, subject.userId]);
         return result.changes > 0;
     } catch (err: any) {
         console.error(`Repository: 更新连接文件夹 ${id} 时出错:`, err.message);
@@ -466,13 +576,21 @@ export const updateConnectionFolder = async (id: number, name: string): Promise<
     }
 };
 
-export const deleteConnectionFolder = async (id: number): Promise<boolean> => {
+export const deleteConnectionFolder = async (id: number, subject: AuthorizationSubject): Promise<boolean> => {
     const db = await getDbInstance();
+    const canWriteAll = subject.runtime === 'desktop' || subject.systemRole === 'super_admin' || subject.systemRole === 'admin';
     try {
         await runDb(db, 'BEGIN TRANSACTION');
-        await runDb(db, `UPDATE connections SET folder_id = NULL WHERE folder_id = ?`, [id]);
-        await runDb(db, `UPDATE connection_folders SET parent_id = NULL WHERE parent_id = ?`, [id]);
-        const result = await runDb(db, `DELETE FROM connection_folders WHERE id = ?`, [id]);
+        const ownedFolder = await getDbRow<{ id: number }>(db, `
+            SELECT id FROM connection_folders WHERE id = ? AND (? = 1 OR owner_user_id = ?)
+        `, [id, canWriteAll ? 1 : 0, subject.userId]);
+        if (!ownedFolder) {
+            await runDb(db, 'ROLLBACK');
+            return false;
+        }
+        await runDb(db, `UPDATE connections SET folder_id = NULL WHERE folder_id = ? AND (? = 1 OR owner_user_id = ?)`, [id, canWriteAll ? 1 : 0, subject.userId]);
+        await runDb(db, `UPDATE connection_folders SET parent_id = NULL WHERE parent_id = ? AND (? = 1 OR owner_user_id = ?)`, [id, canWriteAll ? 1 : 0, subject.userId]);
+        const result = await runDb(db, `DELETE FROM connection_folders WHERE id = ? AND (? = 1 OR owner_user_id = ?)`, [id, canWriteAll ? 1 : 0, subject.userId]);
         await runDb(db, 'COMMIT');
         return result.changes > 0;
     } catch (err: any) {
@@ -486,7 +604,7 @@ export const deleteConnectionFolder = async (id: number): Promise<boolean> => {
     }
 };
 
-export const updateConnectionFoldersOrder = async (items: ConnectionFolderOrderItem[]): Promise<boolean> => {
+export const updateConnectionFoldersOrder = async (items: ConnectionFolderOrderItem[], subject: AuthorizationSubject): Promise<boolean> => {
     const db = await getDbInstance();
     const now = Math.floor(Date.now() / 1000);
     try {
@@ -494,8 +612,8 @@ export const updateConnectionFoldersOrder = async (items: ConnectionFolderOrderI
         for (const item of items) {
             await runDb(
                 db,
-                `UPDATE connection_folders SET parent_id = ?, sort_order = ?, updated_at = ? WHERE id = ?`,
-                [item.parent_id, item.sort_order, now, item.id]
+                `UPDATE connection_folders SET parent_id = ?, sort_order = ?, updated_at = ? WHERE id = ? AND (? = 1 OR owner_user_id = ?)`,
+                [item.parent_id, item.sort_order, now, item.id, subject.runtime === 'desktop' || subject.systemRole === 'super_admin' || subject.systemRole === 'admin' ? 1 : 0, subject.userId]
             );
         }
         await runDb(db, 'COMMIT');
@@ -511,7 +629,7 @@ export const updateConnectionFoldersOrder = async (items: ConnectionFolderOrderI
     }
 };
 
-export const updateConnectionsOrder = async (items: ConnectionOrderItem[]): Promise<boolean> => {
+export const updateConnectionsOrder = async (items: ConnectionOrderItem[], subject: AuthorizationSubject): Promise<boolean> => {
     const db = await getDbInstance();
     const now = Math.floor(Date.now() / 1000);
     try {
@@ -519,8 +637,26 @@ export const updateConnectionsOrder = async (items: ConnectionOrderItem[]): Prom
         for (const item of items) {
             await runDb(
                 db,
-                `UPDATE connections SET folder_id = ?, sort_order = ?, updated_at = ? WHERE id = ?`,
-                [item.folder_id, item.sort_order, now, item.id]
+                `UPDATE connections SET folder_id = ?, sort_order = ?, updated_at = ?
+                 WHERE id = ? AND (
+                    ? = 1 OR owner_user_id = ? OR EXISTS (
+                        SELECT 1 FROM connection_group_permissions cgp
+                        JOIN user_group_members ugm ON ugm.group_id = cgp.group_id
+                        WHERE cgp.connection_id = connections.id
+                          AND ugm.user_id = ?
+                          AND cgp.permission = 'manage'
+                          AND ugm.role IN ('owner', 'admin')
+                    )
+                 )`,
+                [
+                    item.folder_id,
+                    item.sort_order,
+                    now,
+                    item.id,
+                    subject.runtime === 'desktop' || subject.systemRole === 'super_admin' || subject.systemRole === 'admin' ? 1 : 0,
+                    subject.userId,
+                    subject.userId,
+                ]
             );
         }
         await runDb(db, 'COMMIT');
@@ -546,7 +682,7 @@ export const bulkInsertConnections = async (
     connections: Array<Omit<FullConnectionData, 'id' | 'created_at' | 'updated_at' | 'last_connected_at'> & { tag_ids?: number[] }>
 ): Promise<{ connectionId: number, originalData: any }[]> => {
 
-    const insertConnSql = `INSERT INTO connections (name, type, host, port, username, auth_method, encrypted_password, encrypted_private_key, encrypted_passphrase, proxy_id, proxy_type, folder_id, icon, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    const insertConnSql = `INSERT INTO connections (name, type, host, port, username, auth_method, encrypted_password, encrypted_private_key, encrypted_passphrase, proxy_id, proxy_type, folder_id, icon, notes, owner_user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
     const results: { connectionId: number, originalData: any }[] = [];
     const now = Math.floor(Date.now() / 1000);
 
@@ -561,6 +697,7 @@ export const bulkInsertConnections = async (
             connData.folder_id || null,
             connData.icon || null,
 connData.notes || null, // Add notes parameter
+            connData.owner_user_id ?? null,
             now, now
         ];
         try {
@@ -610,3 +747,4 @@ export const addTagToMultipleConnections = async (connectionIds: number[], tagId
         throw new Error(`为多个连接添加标签失败: ${err.message}`);
     }
 };
+const logger = createLogger('ConnectionRepository');

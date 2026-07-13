@@ -3,11 +3,15 @@ import { defineStore } from 'pinia';
 import apiClient from '../utils/apiClient'; 
 import router from '../router'; 
 import { isAccountFeatureAvailable } from '../utils/runtimeConfig';
+import { activateUserCacheScope, clearUserCacheScope } from '../utils/userCacheScope';
 
 // 扩展的用户信息接口，包含 2FA 状态和语言偏好
-interface UserInfo {
+export type SystemRole = 'super_admin' | 'admin' | 'user' | 'auditor';
+
+export interface UserInfo {
     id: number;
     username: string;
+    systemRole: SystemRole;
     isTwoFactorEnabled?: boolean; // 后端 /status 接口会返回这个
     language?: string; // 历史字段，界面语言以系统设置为准
 }
@@ -15,7 +19,12 @@ interface UserInfo {
 const APP_LOCAL_USER: UserInfo = {
     id: 1,
     username: 'local-app',
+    systemRole: 'super_admin',
     isTwoFactorEnabled: false,
+};
+
+const activateCacheForUser = (user: UserInfo, runtime: 'web' | 'desktop' = 'web') => {
+    activateUserCacheScope(localStorage, `${runtime}:${user.id}`);
 };
 
 // Passkey Information Interface
@@ -123,6 +132,7 @@ export const useAuthStore = defineStore('auth', {
                     // 登录成功 (无 2FA)
                     this.isAuthenticated = true;
                     this.user = response.data.user;
+                    activateCacheForUser(this.user);
                     debugLog('登录成功 (无 2FA):', this.user);
                     // await router.push({ name: 'Workspace' }); // 改为页面刷新
                     window.location.href = '/'; // 跳转到根路径并刷新
@@ -155,6 +165,7 @@ export const useAuthStore = defineStore('auth', {
                 // 2FA 验证成功
                 this.isAuthenticated = true;
                 this.user = response.data.user;
+                activateCacheForUser(this.user);
                 this.loginRequires2FA = false; // 重置状态
                 debugLog('2FA 验证成功，登录完成:', this.user);
                 // await router.push({ name: 'Workspace' }); // 改为页面刷新
@@ -176,6 +187,7 @@ export const useAuthStore = defineStore('auth', {
             if (!isAccountFeatureAvailable()) {
                 this.isAuthenticated = true;
                 this.user = APP_LOCAL_USER;
+                activateCacheForUser(APP_LOCAL_USER, 'desktop');
                 this.needsSetup = false;
                 this.loginRequires2FA = false;
                 return;
@@ -187,19 +199,30 @@ export const useAuthStore = defineStore('auth', {
             try {
                 // 调用后端的登出 API
                 await apiClient.post('/auth/logout'); // 使用 apiClient
-
-                // 清除本地状态
-                this.isAuthenticated = false;
-                this.user = null;
-                // Removed passkeys clear on logout
-                debugLog('已登出');
-                // 登出后重定向到登录页
-                await router.push({ name: 'Login' });
             } catch (err: any) {
                 console.error('登出失败:', err);
                 this.error = err.response?.data?.message || err.message || '登出时发生未知错误。';
             } finally {
+                this.isAuthenticated = false;
+                this.user = null;
+                this.passkeys = null;
+                this.ipBlacklist = { entries: [], total: 0 };
+                clearUserCacheScope(localStorage);
                 this.isLoading = false;
+                await router.replace({ name: 'Login' });
+            }
+        },
+
+        expireSession() {
+            if (!isAccountFeatureAvailable()) return;
+            this.isAuthenticated = false;
+            this.user = null;
+            this.loginRequires2FA = false;
+            this.passkeys = null;
+            this.ipBlacklist = { entries: [], total: 0 };
+            clearUserCacheScope(localStorage);
+            if (router.currentRoute.value.name !== 'Login') {
+                void router.replace({ name: 'Login' });
             }
         },
 
@@ -208,6 +231,7 @@ export const useAuthStore = defineStore('auth', {
             if (!isAccountFeatureAvailable()) {
                 this.isAuthenticated = true;
                 this.user = APP_LOCAL_USER;
+                activateCacheForUser(APP_LOCAL_USER, 'desktop');
                 this.loginRequires2FA = false;
                 this.isLoading = false;
                 return;
@@ -219,12 +243,14 @@ export const useAuthStore = defineStore('auth', {
                 if (response.data.isAuthenticated && response.data.user) {
                     this.isAuthenticated = true;
                     this.user = response.data.user; // 更新用户信息，包含 isTwoFactorEnabled 和 language
+                    activateCacheForUser(this.user);
                     this.loginRequires2FA = false; // 确保重置
                     debugLog('认证状态已更新:', this.user);
                 } else {
                     this.isAuthenticated = false;
                     this.user = null;
                     this.loginRequires2FA = false;
+                    clearUserCacheScope(localStorage);
                     // Removed passkeys clear on unauthenticated
                 }
             } catch (error: any) {
@@ -233,6 +259,7 @@ export const useAuthStore = defineStore('auth', {
                 this.isAuthenticated = false;
                 this.user = null;
                 this.loginRequires2FA = false;
+                clearUserCacheScope(localStorage);
                 // Removed passkeys clear on error
                 // 可选：如果不是 401 错误，可以记录更详细的日志
             } finally {
@@ -253,7 +280,7 @@ export const useAuthStore = defineStore('auth', {
                     newPassword,
                 });
                 debugLog('密码修改成功:', response.data.message);
-                // 密码修改成功后，通常不需要更新本地状态，但可以清除错误
+                this.expireSession();
                 return true;
             } catch (err: any) {
                 console.error('修改密码失败:', err);
@@ -381,6 +408,7 @@ export const useAuthStore = defineStore('auth', {
 
                 this.isAuthenticated = true;
                 this.user = response.data.user;
+                activateCacheForUser(this.user);
                 debugLog('Passkey 登录成功:', this.user);
                 window.location.href = '/'; // 跳转到根路径并刷新
                 return { success: true };
@@ -533,5 +561,4 @@ export const useAuthStore = defineStore('auth', {
             }
         },
     },
-    persist: true, // Revert to simple persistence to fix TS error for now
 });

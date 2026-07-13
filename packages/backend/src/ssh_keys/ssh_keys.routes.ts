@@ -7,6 +7,7 @@ import {
     updateSshKey,
     deleteSshKey
 } from './ssh_keys.controller';
+import { requireResourceOwner } from '../access-control/resource-ownership.middleware';
 
 const router = Router();
 
@@ -20,12 +21,12 @@ router.get('/', getSshKeyNames);
 router.post('/', createSshKey);
 
 // GET /api/v1/ssh-keys/:id/details - 获取单个解密后的 SSH 密钥详情 (谨慎使用)
-router.get('/:id/details', getDecryptedSshKey);
+router.get('/:id/details', requireResourceOwner('ssh_keys'), getDecryptedSshKey);
 
 // PUT /api/v1/ssh-keys/:id - 更新 SSH 密钥
-router.put('/:id', updateSshKey);
+router.put('/:id', requireResourceOwner('ssh_keys'), updateSshKey);
 
 // DELETE /api/v1/ssh-keys/:id - 删除 SSH 密钥
-router.delete('/:id', deleteSshKey);
+router.delete('/:id', requireResourceOwner('ssh_keys'), deleteSshKey);
 
 export default router;

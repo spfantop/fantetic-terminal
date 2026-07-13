@@ -16,6 +16,8 @@ import {
     ELECTRON_APP_USER_ID,
     isElectronAppMode,
 } from '../config/app-mode';
+import { completeLogin, startTwoFactorChallenge } from './auth-session';
+import { SystemRole } from '../access-control/access-policy';
 
 const notificationService = new NotificationService();
 const auditLogService = new AuditLogService();
@@ -25,7 +27,16 @@ export interface User {
     username: string;
     hashed_password: string; 
     two_factor_secret?: string | null;
+    system_role: SystemRole;
+    status: 'active' | 'disabled';
+    auth_epoch: number;
 }
+
+const toPublicUser = (user: Pick<User, 'id' | 'username' | 'system_role'>) => ({
+    id: user.id,
+    username: user.username,
+    systemRole: user.system_role,
+});
 
 declare module 'express-session' {
     interface SessionData {
@@ -169,7 +180,7 @@ export const verifyPasskeyAuthenticationHandler = async (req: Request, res: Resp
 
         if (verification.verified && verification.userId && verification.passkey) {
             const user = await userRepository.findUserById(verification.userId);
-            if (!user) {
+            if (!user || user.status !== 'active') {
                 // This should ideally not happen if passkey verification was successful
                 console.error(`[AuthController] Passkey 认证成功但未找到用户 ID: ${verification.userId}`);
                 auditLogService.logAction('PASSKEY_AUTH_FAILURE', { credentialId: verification.passkey.credential_id, reason: 'User not found after verification' });
@@ -183,24 +194,12 @@ export const verifyPasskeyAuthenticationHandler = async (req: Request, res: Resp
             auditLogService.logAction('PASSKEY_AUTH_SUCCESS', { userId: user.id, username: user.username, credentialId: verification.passkey.credential_id, ip: clientIp });
             notificationService.sendNotification('LOGIN_SUCCESS', { userId: user.id, username: user.username, ip: clientIp, method: 'Passkey' });
 
-            // Setup session similar to password login
-            req.session.userId = user.id;
-            req.session.username = user.username;
-            req.session.requiresTwoFactor = false; // Passkey implies 2FA characteristics
-
-            if (rememberMe) {
-                req.session.cookie.maxAge = 315360000000; // 10 years
-            } else {
-                req.session.cookie.maxAge = undefined; // Session cookie
-            }
-            
-            delete req.session.currentChallenge;
-            delete req.session.passkeyUserHandle;
+            await completeLogin(req, { id: user.id, username: user.username, authEpoch: user.auth_epoch }, { rememberMe: Boolean(rememberMe) });
 
             res.status(200).json({
                 verified: true,
                 message: 'Passkey 认证成功。',
-                user: { id: user.id, username: user.username }
+                user: toPublicUser(user)
             });
 
         } else {
@@ -385,7 +384,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
 
         const db = await getDbInstance(); 
-        const user = await getDb<User>(db, 'SELECT id, username, hashed_password, two_factor_secret FROM users WHERE username = ?', [username]);
+        const user = await getDb<User>(db, 'SELECT id, username, hashed_password, two_factor_secret, system_role, status, auth_epoch FROM users WHERE username = ?', [username]);
 
      
 
@@ -396,6 +395,11 @@ export const login = async (req: Request, res: Response): Promise<void> => {
             auditLogService.logAction('LOGIN_FAILURE', { username, reason: 'User not found', ip: clientIp });
             notificationService.sendNotification('LOGIN_FAILURE', { username, reason: 'User not found', ip: clientIp }); 
             res.status(401).json({ message: '无效的凭据。' });
+            return;
+        }
+
+        if (user.status !== 'active') {
+            res.status(403).json({ message: '用户已被禁用。' });
             return;
         }
 
@@ -414,9 +418,10 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         // 检查是否启用了 2FA
         if (user.two_factor_secret) {
             console.log(`用户 ${username} 已启用 2FA，需要进行二次验证。`);
-            req.session.userId = user.id; 
-            req.session.requiresTwoFactor = true;
-            req.session.rememberMe = rememberMe; 
+            await startTwoFactorChallenge(req, {
+                userId: user.id,
+                rememberMe: Boolean(rememberMe),
+            });
             res.status(200).json({ message: '需要进行两步验证。', requiresTwoFactor: true });
         } else {
             console.log(`登录成功 (无 2FA): ${username}`);
@@ -424,19 +429,11 @@ export const login = async (req: Request, res: Response): Promise<void> => {
             ipBlacklistService.resetAttempts(clientIp);
             auditLogService.logAction('LOGIN_SUCCESS', { userId: user.id, username, ip: clientIp });
             notificationService.sendNotification('LOGIN_SUCCESS', { userId: user.id, username, ip: clientIp }); 
-            req.session.userId = user.id;
-            req.session.username = user.username;
-            req.session.requiresTwoFactor = false; 
-
-            if (rememberMe) {
-                req.session.cookie.maxAge = 315360000000;
-            } else {
-                req.session.cookie.maxAge = undefined;
-            }
+            await completeLogin(req, { id: user.id, username: user.username, authEpoch: user.auth_epoch }, { rememberMe: Boolean(rememberMe) });
 
             res.status(200).json({
                 message: '登录成功。',
-                user: { id: user.id, username: user.username }
+                user: toPublicUser(user)
             });
         }
 
@@ -459,6 +456,7 @@ export const getAuthStatus = async (req: Request, res: Response): Promise<void> 
             user: {
                 id: ELECTRON_APP_USER_ID,
                 username: ELECTRON_APP_USERNAME,
+                systemRole: 'super_admin',
                 isTwoFactorEnabled: false
             }
         });
@@ -475,7 +473,7 @@ export const getAuthStatus = async (req: Request, res: Response): Promise<void> 
 
     try {
         const db = await getDbInstance(); 
-        const user = await getDb<{ two_factor_secret: string | null }>(db, 'SELECT two_factor_secret FROM users WHERE id = ?', [userId]);
+        const user = await getDb<{ two_factor_secret: string | null; system_role: SystemRole }>(db, 'SELECT two_factor_secret, system_role FROM users WHERE id = ?', [userId]);
 
         if (!user) {
              res.status(401).json({ isAuthenticated: false });
@@ -487,6 +485,7 @@ export const getAuthStatus = async (req: Request, res: Response): Promise<void> 
             user: {
                 id: userId,
                 username: username,
+                systemRole: user.system_role,
                 isTwoFactorEnabled: !!user.two_factor_secret 
             }
         });
@@ -501,7 +500,7 @@ export const getAuthStatus = async (req: Request, res: Response): Promise<void> 
  */
 export const verifyLogin2FA = async (req: Request, res: Response): Promise<void> => {
     const { token } = req.body;
-    const userId = req.session.userId; 
+    const userId = req.session.pendingTwoFactorUserId;
 
     if (!userId || !req.session.requiresTwoFactor) {
         res.status(400).json({ message: '无效的请求或会话状态。' });
@@ -515,11 +514,11 @@ export const verifyLogin2FA = async (req: Request, res: Response): Promise<void>
 
     try {
         const db = await getDbInstance();
-        const user = await getDb<User>(db, 'SELECT id, username, two_factor_secret FROM users WHERE id = ?', [userId]);
+        const user = await getDb<User>(db, 'SELECT id, username, two_factor_secret, system_role, status, auth_epoch FROM users WHERE id = ?', [userId]);
 
     
 
-        if (!user || !user.two_factor_secret) {
+        if (!user || user.status !== 'active' || !user.two_factor_secret) {
             console.error(`2FA 验证错误: 未找到用户 ${userId} 或未设置密钥。`);
             res.status(400).json({ message: '无法验证，请重新登录。' });
             return;
@@ -538,19 +537,12 @@ export const verifyLogin2FA = async (req: Request, res: Response): Promise<void>
             ipBlacklistService.resetAttempts(clientIp);
             auditLogService.logAction('LOGIN_SUCCESS', { userId: user.id, username: user.username, ip: clientIp, twoFactor: true });
             notificationService.sendNotification('LOGIN_SUCCESS', { userId: user.id, username: user.username, ip: clientIp, twoFactor: true }); 
-            req.session.username = user.username;
-            req.session.requiresTwoFactor = false; 
-
-            if (req.session.rememberMe) {
-                req.session.cookie.maxAge = 315360000000; 
-            } else {
-                req.session.cookie.maxAge = undefined; 
-            }
-            delete req.session.rememberMe;
+            const rememberMe = Boolean(req.session.rememberMe);
+            await completeLogin(req, { id: user.id, username: user.username, authEpoch: user.auth_epoch }, { rememberMe });
 
             res.status(200).json({
                 message: '登录成功。',
-                user: { id: user.id, username: user.username }
+                user: toPublicUser(user)
             });
         } else {
             console.log(`用户 ${user.username} 2FA 验证失败: 验证码错误。`);
@@ -618,7 +610,7 @@ export const changePassword = async (req: Request, res: Response): Promise<void>
 
 
         const result = await runDb(db,
-            'UPDATE users SET hashed_password = ?, updated_at = ? WHERE id = ?',
+            'UPDATE users SET hashed_password = ?, auth_epoch = auth_epoch + 1, updated_at = ? WHERE id = ?',
             [newHashedPassword, now, userId]
         );
 
@@ -870,8 +862,8 @@ export const setupAdmin = async (req: Request, res: Response): Promise<void> => 
         const now = Math.floor(Date.now() / 1000);
 
         const result = await runDb(db,
-            `INSERT INTO users (username, hashed_password, created_at, updated_at)
-             VALUES (?, ?, ?, ?)`,
+            `INSERT INTO users (username, hashed_password, system_role, status, created_at, updated_at)
+             VALUES (?, ?, 'super_admin', 'active', ?, ?)`,
             [username, hashedPassword, now, now]
         );
 

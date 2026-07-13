@@ -12,8 +12,41 @@
     "notifications": "通知管理",
     "auditLogs": "审计日志",
     "settings": "设置",
+    "adminCenter": "管理中心",
     "customizeStyle": "自定义外观",
     "mainNavigation": "主导航"
+  },
+  "adminCenter": {
+    "eyebrow": "平台治理", "title": "管理中心", "description": "集中管理身份、资产权限、审计记录与系统数据。", "back": "返回工作区", "navigation": "管理中心导航", "signedInAs": "当前操作者：{username}", "pagination": "分页导航", "paginationSummary": "共 {total} 条记录",
+    "groups": { "workspace": "管理概览", "identity": "身份与资产", "audit": "审计与合规", "system": "系统运维" },
+    "sections": { "overview": "概览" },
+    "descriptions": { "overview": "按职责快速进入各项管理能力。", "accessControl": "管理用户、用户组和连接资产授权。", "auditLogs": "检索关键操作并追踪责任主体。", "sessionRecordings": "查看终端会话记录和回放。", "dataManagement": "执行导入、导出、备份和恢复。" }
+  },
+  "adminDateRange": { "range": "日期范围", "start": "开始日期", "end": "结束日期", "selectDate": "选择日期", "calendar": "日历", "previousMonth": "上个月", "nextMonth": "下个月", "quickSelect": "快捷日期范围", "today": "今天", "last7Days": "近 7 天", "last30Days": "近 30 天", "invalidRange": "结束日期不能早于开始日期。" },
+  "accessControl": {
+    "rootFolder": "根目录",
+    "title": "访问控制", "users": "用户管理", "groups": "分组管理", "username": "用户名",
+    "initialPassword": "初始密码（至少 12 位）", "systemRole": "系统角色", "status": "状态",
+    "password": "密码", "createUser": "创建用户", "reset": "重置", "resetPassword": "重置密码", "newPassword": "新密码（至少 12 位）", "confirmResetPassword": "确认重置", "deleteUser": "删除用户", "confirmDeleteAndTransfer": "删除并转移资产", "transferTarget": "资产接收人",
+    "createGroup": "创建分组", "groupName": "分组名称", "description": "描述", "selectGroup": "选择分组",
+    "selectUser": "选择用户", "addMember": "添加成员", "passwordRequirement": "用户名不能为空，密码至少需要 12 位。",
+    "transferRequired": "删除用户前必须选择资产接收人。", "groupNameRequired": "分组名称不能为空。",
+    "confirmDeleteUser": "确定删除用户“{username}”并转移其资产吗？", "confirmDeleteGroup": "确定删除分组“{name}”吗？",
+    "userCreated": "用户已创建。", "userUpdated": "用户已更新。", "passwordReset": "密码已重置，原会话已失效。",
+    "userDeleted": "用户已删除，资产已转移。", "groupCreated": "分组已创建。", "groupDeleted": "分组已删除。",
+    "memberSaved": "成员权限已保存。", "memberDeleted": "成员已移除。", "assetPermissions": "连接资产授权",
+    "selectConnection": "选择连接资产", "permission": "权限", "addGrant": "添加授权",
+    "grantSaved": "连接授权已保存。", "grantDeleted": "连接授权已撤销。", "error": "访问控制操作失败。", "groupUpdated": "分组信息已更新。",
+    "usersHint": "创建账号并维护系统角色、状态和凭据。", "groupsHint": "用分组组织成员角色和资产权限。", "assetsHint": "按连接资产向用户组授予查看、连接或管理权限。", "searchUsers": "搜索用户", "searchAssets": "搜索资产", "noUsers": "没有匹配的用户",
+    "selectAssets": "选择资产", "selectGroups": "选择用户组", "clearSelection": "清空", "batchGrant": "批量授权", "batchSummary": "将为 {assets} 个资产与 {groups} 个用户组设置权限。", "applyBatch": "应用到所选项", "singleAssetDetail": "单个资产授权详情", "batchSelectionRequired": "请至少选择一个资产和一个用户组。", "batchSaved": "已保存 {count} 项资产授权。",
+    "roles": { "user": "普通用户", "auditor": "审计员", "admin": "管理员", "superAdmin": "超级管理员" }, "statuses": { "active": "正常", "disabled": "已禁用" }, "groupRoles": { "viewer": "查看者", "operator": "操作员", "admin": "管理员", "owner": "所有者" }, "permissions": { "view": "查看", "connect": "连接", "manage": "管理" }, "permissionActions": { "view": "可见资产与连接信息", "connect": "显示终端、远程桌面和测试入口", "manage": "包含编辑、删除及批量管理操作" }
+  },
+  "backup": {
+    "title": "系统备份与恢复", "description": "创建 SQLite 一致性快照并校验用户文件。恢复将在下次服务启动、数据库打开前执行。",
+    "create": "创建备份", "created": "备份已创建。", "createdAt": "创建时间", "schemaVersion": "数据库版本", "fileCount": "文件数",
+    "verify": "校验", "restore": "安排恢复", "empty": "暂无备份", "valid": "备份完整性校验通过。",
+    "invalid": "备份校验失败：{errors}", "confirmRestore": "确定安排恢复此备份吗？服务必须重启，当前数据会被替换。",
+    "restoreScheduled": "恢复已安排，请重启服务以应用。", "operationFailed": "备份操作失败。", "dataNavigation": "数据管理导航", "transferTitle": "导入与导出", "backupSummary": "数据库版本 {schema} · {files} 个文件 · {size}", "restoreWizard": "恢复向导", "restoreStep": "第 {current}/{total} 步", "review": "检查备份", "integrity": "完整性校验", "confirmImpact": "确认影响", "totalSize": "总大小", "verifying": "正在校验备份…", "verifyBeforeRestore": "恢复前必须通过完整性校验。", "restartRequired": "服务重启后才会应用恢复", "restoreImpact": "当前数据库和用户文件将被所选备份替换。安排恢复后，请在维护窗口重启服务。", "acknowledgeImpact": "我已了解当前数据会被替换，并已安排服务重启。"
   },
   "dock": {
     "hide": "隐藏导航栏",
@@ -472,6 +505,7 @@
       "reconnectingMsg": "正在尝试重新连接...",
       "disconnectMsg": "连接已断开: {reason}",
       "genericErrorMsg": "连接错误: {message}",
+      "outputTruncated": "终端输出积压超过安全上限，较早内容已截断。",
       "unknownReason": "未知原因",
       "unknownSshError": "未知终端错误",
       "unknownGenericError": "未知错误",
@@ -969,6 +1003,11 @@
         "LOGIN_FAILURE": "登录失败",
         "LOGOUT": "登出",
         "PASSWORD_CHANGED": "密码已修改",
+        "USER_CREATED": "用户已创建", "USER_UPDATED": "用户已更新", "USER_PASSWORD_RESET": "用户密码已重置", "USER_DELETED": "用户已删除",
+        "GROUP_CREATED": "分组已创建", "GROUP_UPDATED": "分组已更新", "GROUP_DELETED": "分组已删除",
+        "GROUP_MEMBER_SAVED": "分组成员已保存", "GROUP_MEMBER_DELETED": "分组成员已移除",
+        "CONNECTION_GRANT_SAVED": "连接授权已保存", "CONNECTION_GRANTS_BATCH_SAVED": "连接授权已批量保存", "CONNECTION_GRANT_DELETED": "连接授权已撤销",
+        "BACKUP_CREATED": "系统备份已创建", "BACKUP_RESTORE_SCHEDULED": "备份恢复已安排",
         "2FA_ENABLED": "两步验证已启用",
         "2FA_DISABLED": "两步验证已禁用",
         "PASSKEY_REGISTERED": "Passkey 已注册",
@@ -1291,6 +1330,9 @@
       "testMessageUnsaved": "为未保存的 {channelType} 配置触发的测试"
     },
   "common": {
+    "reset": "重置",
+    "actions": "操作",
+    "refresh": "刷新",
     "apply": "应用",
     "loading": "加载中...",
     "cancel": "取消",
@@ -1360,11 +1402,13 @@
     "title": "审计日志",
     "searchPlaceholder": "搜索详细信息...",
     "noLogs": "未找到审计日志记录。",
+    "startDate": "开始时间", "endDate": "结束时间", "total": "共 {count} 条", "detailTitle": "审计详情", "openRelatedRecordings": "查看同一操作者附近的录像", "correlationHint": "录像与会话 ID 尚无直接键关联，将按操作者和事件时间窗口筛选。", "selectHint": "选择一条日志查看完整上下文。",
     "table": {
       "timestamp": "时间戳",
       "actionType": "操作类型",
-      "details": "详细信息"
+      "details": "详细信息", "actor": "操作主体", "result": "结果", "sourceIp": "来源 IP", "requestId": "请求 ID", "sessionId": "会话 ID", "assetId": "资产 ID"
     },
+    "results": { "success": "成功", "failure": "失败", "denied": "已拒绝" },
     "paginationInfo": "第 {currentPage} 页 / 共 {totalPages} 页 (总计 {totalLogs} 条记录)",
     "actions": {
         "LOGIN_SUCCESS": "登录成功",
@@ -2002,5 +2046,17 @@
     "delete": "删除此条历史",
     "copiedSuccess": "路径已复制到剪贴板",
     "copiedError": "复制路径失败"
+  },
+  "sessionRecording": {
+    "title": "会话录像",
+    "description": "查看并回放权限范围内的 SSH 与 Telnet 终端会话。",
+    "empty": "暂无会话录像。",
+    "loadFailed": "加载会话录像失败。",
+    "playFailed": "读取或回放会话录像失败。",
+    "play": "回放", "delete": "删除录像", "confirmDelete": "确定删除“{name}”的会话录像吗？此操作不可恢复。", "deleteFailed": "删除会话录像失败。",
+    "stop": "停止",
+    "speed": "速度",
+    "player": "终端会话回放器", "searchPlaceholder": "连接或用户名", "startedAfter": "开始时间", "total": "共 {count} 条", "duration": "时长", "events": "事件", "eventCount": "{count} 个事件", "size": "大小", "preparing": "正在准备回放…", "timeline": "回放时间轴", "selectHint": "选择一条录像查看详情并回放。",
+    "status": { "active": "进行中", "completed": "已完成", "incomplete": "不完整", "failed": "失败" }
   }
 }

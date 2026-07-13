@@ -11,8 +11,7 @@ COPY packages/backend/package.json ./packages/backend/
 COPY packages/frontend/package.json ./packages/frontend/
 COPY packages/remote-gateway/package.json ./packages/remote-gateway/
 
-# Install dependencies (using install instead of ci for potential armv7/alpine compatibility issues)
-RUN npm install
+RUN npm ci
 
 COPY packages/backend/src ./packages/backend/src
 COPY packages/backend/tsconfig.json ./packages/backend/
@@ -35,9 +34,11 @@ COPY --from=builder /app/packages/backend/dist ./dist
 COPY --from=builder /app/packages/backend/src/locales ./dist/locales
 COPY --from=builder /app/packages/backend/html-presets ./html-presets
 
-COPY packages/backend/package.json ./package.json
-COPY package-lock.json ./package-lock.json
-RUN npm install --omit=dev --prefer-offline
+COPY package.json package-lock.json ./
+COPY packages/backend/package.json ./packages/backend/
+COPY packages/frontend/package.json ./packages/frontend/
+COPY packages/remote-gateway/package.json ./packages/remote-gateway/
+RUN npm ci --omit=dev --workspace=@fantetic-terminal/backend
 
 
 RUN apk del .build-deps
@@ -45,5 +46,7 @@ RUN apk del .build-deps
 
 EXPOSE 3001
 
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD node -e "fetch('http://127.0.0.1:3001/api/v1/status').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 
 CMD ["node", "dist/index.js"]

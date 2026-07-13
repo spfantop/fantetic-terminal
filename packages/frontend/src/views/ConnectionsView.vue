@@ -28,6 +28,15 @@ import {
   createMobileLongPressHandlers,
   type MobileLongPressHandlers,
 } from '../composables/useMobileLongPress';
+import {
+  compareManualConnectionOrder as compareManualOrder,
+  filterAndSortConnections,
+  getDescendantFolderIds,
+} from '../features/connections/connection-filtering';
+import {
+  canConnectConnection,
+  canManageConnection,
+} from '../features/connections/connection-permissions';
 
 const { t } = useI18n();
 const { showConfirmDialog } = useConfirmDialog();
@@ -49,6 +58,8 @@ const {
 const { connections, folders, isLoading: isLoadingConnections, isFoldersLoading } = storeToRefs(connectionsStore);
 const { tags } = storeToRefs(tagsStore);
 const { isAuthenticated } = storeToRefs(authStore);
+const canOpenAdminCenter = computed(() => accountFeatureAvailable
+  && ['super_admin', 'admin', 'auditor'].includes(authStore.user?.systemRole ?? ''));
 
 const LS_FILTER_FOLDER_KEY = 'connections_view_filter_folder';
 const LS_FILTER_TAGS_KEY = 'connections_view_filter_tags';
@@ -172,69 +183,12 @@ const selectedConnectionIdsForBatch = ref<Set<number>>(new Set());
 const showBatchEditForm = ref(false);
 const isDeletingSelectedConnections = ref(false);
 
-const compareManualOrder = <T extends { sort_order?: number; name?: string | null; id: number }>(a: T, b: T) => {
-  const orderA = typeof a.sort_order === 'number' ? a.sort_order : Number.MAX_SAFE_INTEGER;
-  const orderB = typeof b.sort_order === 'number' ? b.sort_order : Number.MAX_SAFE_INTEGER;
-  if (orderA !== orderB) return orderA - orderB;
-  const nameCompare = (a.name || '').localeCompare(b.name || '');
-  return nameCompare !== 0 ? nameCompare : a.id - b.id;
-};
-
-const connectionMatchesTagFilter = (conn: ConnectionInfo) => {
-  if (selectedTagIds.value.length === 0) return true;
-  const connectionTagIds = conn.tag_ids ?? [];
-  return selectedTagIds.value.some(tagId => connectionTagIds.includes(tagId));
-};
-
-const getDescendantFolderIds = (folderId: number) => {
-  const descendantIds = new Set<number>();
-  const childrenByParent = new Map<number | null, ConnectionFolderInfo[]>();
-
-  folders.value.forEach((folder) => {
-    const parentId = folder.parent_id ?? null;
-    childrenByParent.set(parentId, [...(childrenByParent.get(parentId) ?? []), folder]);
-  });
-
-  const collect = (parentId: number) => {
-    (childrenByParent.get(parentId) ?? []).forEach((child) => {
-      if (descendantIds.has(child.id)) return;
-      descendantIds.add(child.id);
-      collect(child.id);
-    });
-  };
-
-  collect(folderId);
-  return descendantIds;
-};
-
-const filterConnectionsByControls = (sourceConnections: ConnectionInfo[]) => {
-  const filterFolderId = selectedFolderId.value;
-  const query = searchQuery.value.toLowerCase().trim();
-
-  const allowedFolderIds = filterFolderId === null ? null : new Set([filterFolderId, ...getDescendantFolderIds(filterFolderId)]);
-  let filteredByFolder = allowedFolderIds === null
-    ? [...sourceConnections]
-    : sourceConnections.filter(conn => conn.folder_id !== null && typeof conn.folder_id !== 'undefined' && allowedFolderIds.has(conn.folder_id));
-
-  filteredByFolder = filteredByFolder.filter(connectionMatchesTagFilter);
-
-  let searchedConnections = filteredByFolder;
-  if (query) {
-    searchedConnections = filteredByFolder.filter(conn => {
-      const nameMatch = conn.name?.toLowerCase().includes(query);
-      const usernameMatch = conn.username?.toLowerCase().includes(query);
-      const hostMatch = conn.host?.toLowerCase().includes(query);
-      const portMatch = conn.port?.toString().includes(query);
-      const notesMatch = conn.notes?.toLowerCase().includes(query); // 添加对备注的搜索
-      return nameMatch || usernameMatch || hostMatch || portMatch || notesMatch;
-    });
-  }
-
-  return searchedConnections;
-};
-
 const manualOrderedFilteredConnections = computed(() => {
-  return filterConnectionsByControls(connections.value).sort(compareManualOrder);
+  return filterAndSortConnections(connections.value, folders.value, {
+    folderId: selectedFolderId.value,
+    tagIdList: selectedTagIds.value,
+    searchQuery: searchQuery.value,
+  });
 });
 
 const filteredAndSortedConnections = computed(() => manualOrderedFilteredConnections.value);
@@ -243,11 +197,14 @@ const selectedBatchConnections = computed(() => (
     .filter(conn => selectedConnectionIdsForBatch.value.has(conn.id))
     .sort(compareManualOrder)
 ));
+const selectedBatchConnectionsAreManageable = computed(() => (
+  selectedBatchConnections.value.length > 0 && selectedBatchConnections.value.every(canManageConnection)
+));
 const commandTargetConnections = computed(() => (
   isBatchEditMode.value
     ? selectedBatchConnections.value
     : filteredAndSortedConnections.value
-));
+).filter(canConnectConnection));
 const commandTargetSshConnections = computed(() => commandTargetConnections.value.filter(conn => conn.type === 'SSH'));
 const connectAllActionTitle = computed(() => (
   isBatchEditMode.value
@@ -349,9 +306,11 @@ const submitFolderRename = async (folder: ServerFolderGroup) => {
   }
 };
 
+const knownFolderIds = computed(() => new Set(folders.value.map(folder => folder.id)));
+
 const unfiledServerEntries = computed<ConnectionInfo[]>(() => (
   selectedFolderId.value === null
-    ? manualOrderedFilteredConnections.value.filter(conn => !conn.folder_id)
+    ? manualOrderedFilteredConnections.value.filter(conn => !conn.folder_id || !knownFolderIds.value.has(conn.folder_id))
     : []
 ));
 
@@ -464,7 +423,11 @@ const folderFilterOptions = computed(() => {
 
 const hasVisibleServerTreeItems = computed(() => groupedServerFolders.value.length > 0 || unfiledServerEntries.value.length > 0);
 
-const canPersistManualOrder = computed(() => !searchQuery.value.trim() && selectedTagIds.value.length === 0);
+const canPersistManualOrder = computed(() => (
+  !searchQuery.value.trim()
+  && selectedTagIds.value.length === 0
+  && filteredAndSortedConnections.value.every(canManageConnection)
+));
 
 const persistFolderOrderPayload = async (items: { id: number; parent_id: number | null; sort_order: number }[]) => {
   if (!canPersistManualOrder.value) return;
@@ -532,7 +495,7 @@ const getFolderSiblingIds = (parentId: number | null) => (
 
 const isFolderDropAllowed = (draggedFolderId: number, targetParentId: number | null) => {
   if (draggedFolderId === targetParentId) return false;
-  return targetParentId === null || !getDescendantFolderIds(draggedFolderId).has(targetParentId);
+  return targetParentId === null || !getDescendantFolderIds(draggedFolderId, folders.value).has(targetParentId);
 };
 
 const getFolderHeaderDropPosition = (event: DragEvent): FolderDropPosition => {
@@ -788,6 +751,7 @@ onUnmounted(() => {
 });
 
 const connectTo = (connection: ConnectionInfo) => {
+  if (!canConnectConnection(connection)) return;
   sessionStore.handleConnectRequest(connection, { navigateToWorkspace: false });
 };
 
@@ -889,6 +853,7 @@ const openAddConnectionForm = (folderId: number | null = null) => {
 };
 
 const openEditConnectionForm = (conn: ConnectionInfo) => {
+  if (!canManageConnection(conn)) return;
   initialConnectionTagIds.value = [];
   initialConnectionFolderId.value = null;
   connectionToEdit.value = conn;
@@ -1172,21 +1137,21 @@ const handleAddConnectionFromContext = () => {
 const handleTestConnectionFromContext = () => {
   const conn = contextTargetConnection.value;
   closeServerContextMenu();
-  if (!conn) return;
+  if (!conn || !canConnectConnection(conn)) return;
   handleTestSingleConnection(conn);
 };
 
 const handleEditConnectionFromContext = () => {
   const conn = contextTargetConnection.value;
   closeServerContextMenu();
-  if (!conn) return;
+  if (!conn || !canManageConnection(conn)) return;
   openEditConnectionForm(conn);
 };
 
 const handleDeleteConnectionFromContext = async () => {
   const conn = contextTargetConnection.value;
   closeServerContextMenu();
-  if (!conn) return;
+  if (!conn || !canManageConnection(conn)) return;
 
   const confirmed = await showConfirmDialog({
     title: t('connections.actions.delete', '删除'),
@@ -1276,7 +1241,7 @@ const handleDeleteFolderFromContext = async () => {
 
   if (!folder) return;
 
-  const descendantFolderIds = getDescendantFolderIds(folder.folderId);
+  const descendantFolderIds = getDescendantFolderIds(folder.folderId, folders.value);
   const folderIdsToDelete = new Set([folder.folderId, ...descendantFolderIds]);
   const connectionsToDelete = connections.value.filter(conn => conn.folder_id !== null && typeof conn.folder_id !== 'undefined' && folderIdsToDelete.has(conn.folder_id));
   const connectionCount = connectionsToDelete.length;
@@ -1481,7 +1446,7 @@ const getLatencyColorString = (latencyMs?: number): string => {
 };
 
 const handleTestSingleConnection = async (conn: ConnectionInfo) => {
-  if (!conn.id || !isConnectionTestSupported(conn.type)) return;
+  if (!conn.id || !canConnectConnection(conn) || !isConnectionTestSupported(conn.type)) return;
 
   clearConnectionTestHideTimer(conn.id);
   connectionTestStates.value.set(conn.id, {
@@ -1533,7 +1498,7 @@ const handleTestSingleConnection = async (conn: ConnectionInfo) => {
 
 const handleTestAllFilteredConnections = async () => {
   if (isTestingAll.value || isLoadingConnections.value) return;
-  const connectionsToTest = filteredAndSortedConnections.value.filter(c => isConnectionTestSupported(c.type) && c.id != null);
+  const connectionsToTest = filteredAndSortedConnections.value.filter(c => canConnectConnection(c) && isConnectionTestSupported(c.type) && c.id != null);
   if (connectionsToTest.length === 0) {
     return;
   }
@@ -1823,7 +1788,7 @@ const handleOpenAllTargetConnections = async () => {
                 type="button"
                 class="server-icon-button"
                 @click="handleTestAllFilteredConnections"
-                :disabled="isTestingAll || isLoadingConnections || !filteredAndSortedConnections.some(c => c.type === 'SSH')"
+                :disabled="isTestingAll || isLoadingConnections || !filteredAndSortedConnections.some(c => canConnectConnection(c) && c.type === 'SSH')"
                 :aria-label="t('connections.actions.testAllFiltered', '测试全部筛选的SSH连接')"
                 :title="t('connections.actions.testAllFiltered', '测试全部筛选的SSH连接')"
               >
@@ -1843,14 +1808,14 @@ const handleOpenAllTargetConnections = async () => {
             <button type="button" @click="invertSelection">
               {{ t('connections.batchEdit.invertSelection', '反选') }}
             </button>
-            <button type="button" :disabled="selectedConnectionIdsForBatch.size === 0" @click="openBatchEditModal">
+            <button type="button" :disabled="!selectedBatchConnectionsAreManageable" @click="openBatchEditModal">
               <i class="fas fa-edit"></i>
               {{ t('connections.batchEdit.editSelected', '编辑选中') }}
             </button>
             <button
               type="button"
               class="danger"
-              :disabled="selectedConnectionIdsForBatch.size === 0 || isDeletingSelectedConnections"
+              :disabled="!selectedBatchConnectionsAreManageable || isDeletingSelectedConnections"
               :title="t('connections.batchEdit.deleteSelectedTooltip', '删除选中的连接')"
               @click="handleBatchDeleteConnections"
             >
@@ -1900,7 +1865,7 @@ const handleOpenAllTargetConnections = async () => {
                       }
                     ]"
                     @click="handleConnectionClick(conn.id)"
-                    @dblclick="!isBatchEditMode && connectTo(conn)"
+                    @dblclick="!isBatchEditMode && canConnectConnection(conn) && connectTo(conn)"
                     @contextmenu.prevent.stop="showServerContextMenu($event, null, 'connection', conn.id)"
                     @touchstart.stop="getServerConnectionLongPressHandlers(null, conn.id).onTouchstart"
                     @touchmove.stop="getServerConnectionLongPressHandlers(null, conn.id).onTouchmove"
@@ -1955,6 +1920,17 @@ const handleOpenAllTargetConnections = async () => {
                         </template>
                       </div>
                     </div>
+                    <button
+                      v-if="!isBatchEditMode && canConnectConnection(conn)"
+                      type="button"
+                      class="server-entry-connect"
+                      :aria-label="t('connections.actions.connect', '连接')"
+                      :title="t('connections.actions.connect', '连接')"
+                      @click.stop="connectTo(conn)"
+                      @dblclick.stop
+                    >
+                      <i :class="['fas', conn.type === 'SSH' || conn.type === 'TELNET' ? 'fa-terminal' : 'fa-desktop']"></i>
+                    </button>
                   </li>
                 </template>
               </draggable>
@@ -2043,7 +2019,7 @@ const handleOpenAllTargetConnections = async () => {
                       }
                     ]"
                     @click="handleConnectionClick(conn.id)"
-                    @dblclick="!isBatchEditMode && connectTo(conn)"
+                    @dblclick="!isBatchEditMode && canConnectConnection(conn) && connectTo(conn)"
                     @contextmenu.prevent.stop="showServerContextMenu($event, folder.folderId, 'connection', conn.id)"
                     @touchstart.stop="getServerConnectionLongPressHandlers(folder.folderId, conn.id).onTouchstart"
                     @touchmove.stop="getServerConnectionLongPressHandlers(folder.folderId, conn.id).onTouchmove"
@@ -2098,6 +2074,17 @@ const handleOpenAllTargetConnections = async () => {
                         </template>
                       </div>
                     </div>
+                    <button
+                      v-if="!isBatchEditMode && canConnectConnection(conn)"
+                      type="button"
+                      class="server-entry-connect"
+                      :aria-label="t('connections.actions.connect', '连接')"
+                      :title="t('connections.actions.connect', '连接')"
+                      @click.stop="connectTo(conn)"
+                      @dblclick.stop
+                    >
+                      <i :class="['fas', conn.type === 'SSH' || conn.type === 'TELNET' ? 'fa-terminal' : 'fa-desktop']"></i>
+                    </button>
                   </li>
                   </template>
                 </draggable>
@@ -2153,6 +2140,15 @@ const handleOpenAllTargetConnections = async () => {
                 >
                   <i class="fas fa-gear"></i>
                   <span>{{ t('nav.settings') }}</span>
+                </RouterLink>
+                <RouterLink
+                  v-if="canOpenAdminCenter"
+                  :to="{ name: 'AdminCenter' }"
+                  class="server-actions-menu-item"
+                  @click="closeServerActionMenu"
+                >
+                  <i class="fas fa-users-gear"></i>
+                  <span>{{ t('adminCenter.title', '管理中心') }}</span>
                 </RouterLink>
                 <RouterLink
                   v-if="accountFeatureAvailable && !isAuthenticated"
@@ -2269,6 +2265,15 @@ const handleOpenAllTargetConnections = async () => {
         </button>
         <template v-if="serverContextMenu.targetType === 'connection'">
           <button
+            v-if="contextTargetConnection && canConnectConnection(contextTargetConnection)"
+            type="button"
+            @click="connectTo(contextTargetConnection); closeServerContextMenu()"
+          >
+            <i class="fas fa-terminal"></i>
+            <span>{{ t('connections.actions.connect', '连接') }}</span>
+          </button>
+          <button
+            v-if="contextTargetConnection && canConnectConnection(contextTargetConnection)"
             type="button"
             :disabled="!contextTargetConnection || !isConnectionTestSupported(contextTargetConnection.type)"
             @click="handleTestConnectionFromContext"
@@ -2276,11 +2281,11 @@ const handleOpenAllTargetConnections = async () => {
             <i class="fas fa-plug"></i>
             <span>{{ t('connections.actions.testConnection', '测试连接') }}</span>
           </button>
-          <button type="button" @click="handleEditConnectionFromContext">
+          <button v-if="contextTargetConnection && canManageConnection(contextTargetConnection)" type="button" @click="handleEditConnectionFromContext">
             <i class="fas fa-pencil-alt"></i>
             <span>{{ t('connections.actions.editServer', '编辑服务器') }}</span>
           </button>
-          <button type="button" class="danger" @click="handleDeleteConnectionFromContext">
+          <button v-if="contextTargetConnection && canManageConnection(contextTargetConnection)" type="button" class="danger" @click="handleDeleteConnectionFromContext">
             <i class="fas fa-trash-alt"></i>
             <span>{{ t('connections.actions.deleteServer', '删除服务器') }}</span>
           </button>
@@ -3023,7 +3028,41 @@ const handleOpenAllTargetConnections = async () => {
   min-width: 0;
   flex: 1;
   padding-top: 0.05rem;
-  padding-right: 2rem;
+  padding-right: 1.6rem;
+}
+
+.server-entry-connect {
+  position: absolute;
+  top: 50%;
+  right: 0.35rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.45rem;
+  height: 1.45rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 0.32rem;
+  background: transparent;
+  color: var(--text-color-secondary);
+  font-size: .72rem;
+  opacity: .72;
+  transform: translateY(-50%);
+  transition: opacity .12s ease, background-color .12s ease;
+}
+
+.server-entry:hover .server-entry-connect,
+.server-entry:focus-within .server-entry-connect {
+  border-color: var(--border-color);
+  background: var(--app-bg-color);
+  color: var(--link-active-color);
+  opacity: 1;
+}
+
+.server-entry-connect:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--link-active-color);
+  outline-offset: 1px;
 }
 
 .server-entry-mainline {

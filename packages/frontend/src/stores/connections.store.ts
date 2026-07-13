@@ -23,6 +23,7 @@ export interface ConnectionInfo {
 notes?: string | null;
     vncPassword?: string; // VNC specific password
     jump_chain?: number[] | null;
+    effective_permission?: 'view' | 'connect' | 'manage';
 }
 
 export interface ConnectionFolderInfo {

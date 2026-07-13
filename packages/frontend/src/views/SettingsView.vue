@@ -65,11 +65,6 @@
         </div>
 
         <div v-else class="settings-content-body">
-        <!-- Dashboard Tab Content -->
-        <div v-if="activeTab === 'dashboard'">
-          <DashboardView />
-        </div>
-
         <!-- Security Tab Content -->
         <div v-if="activeTab === 'security'">
           <div v-if="settings" class="p-4 bg-background text-foreground">
@@ -117,17 +112,6 @@
           <div v-else class="p-4 text-center text-muted-foreground">{{ $t('settings.loading', '加载中...') }}</div>
         </div>
 
-        <!-- Data Management Tab Content -->
-        <div v-if="activeTab === 'dataManagement'">
-          <DataManagementSection v-if="settings" />
-          <div v-else class="p-4 text-center text-muted-foreground">{{ $t('settings.loading', '加载中...') }}</div>
-        </div>
-
-        <!-- Audit Logs Tab Content -->
-        <div v-if="activeTab === 'auditLogs'">
-          <AuditLogView />
-        </div>
-        
         <!-- Appearance Tab Content -->
         <div v-if="activeTab === 'appearance'">
           <AppearanceSection v-if="settings" />
@@ -155,30 +139,29 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useSettingsStore } from '../stores/settings.store';
 import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
-import ChangePasswordForm from '../components/settings/ChangePasswordForm.vue';
-import PasskeyManagement from '../components/settings/PasskeyManagement.vue';
-import TwoFactorAuthSettings from '../components/settings/TwoFactorAuthSettings.vue';
-import CaptchaSettingsForm from '../components/settings/CaptchaSettingsForm.vue';
-import IpWhitelistSettings from '../components/settings/IpWhitelistSettings.vue';
-import IpBlacklistSettings from '../components/settings/IpBlacklistSettings.vue';
-import AboutSection from '../components/settings/AboutSection.vue';
-import WorkspaceSettingsSection from '../components/settings/WorkspaceSettingsSection.vue';
-import AISettingsSection from '../components/settings/AISettingsSection.vue';
-import SystemSettingsSection from '../components/settings/SystemSettingsSection.vue';
-import DataManagementSection from '../components/settings/DataManagementSection.vue';
-import AppearanceSection from '../components/settings/AppearanceSection.vue';
-import ProxiesView from './ProxiesView.vue';
-import NotificationsView from './NotificationsView.vue';
-import DashboardView from './DashboardView.vue';
-import AuditLogView from './AuditLogView.vue';
 import { createSettingsTabs, type SettingsTabKey } from '../utils/settingsTabs';
 import { useResizable } from '../composables/useResizable';
 import { isAccountFeatureAvailable } from '../utils/runtimeConfig';
+import { useAuthStore } from '../stores/auth.store';
+
+const AboutSection = defineAsyncComponent(() => import('../components/settings/AboutSection.vue'));
+const ChangePasswordForm = defineAsyncComponent(() => import('../components/settings/ChangePasswordForm.vue'));
+const PasskeyManagement = defineAsyncComponent(() => import('../components/settings/PasskeyManagement.vue'));
+const TwoFactorAuthSettings = defineAsyncComponent(() => import('../components/settings/TwoFactorAuthSettings.vue'));
+const CaptchaSettingsForm = defineAsyncComponent(() => import('../components/settings/CaptchaSettingsForm.vue'));
+const IpWhitelistSettings = defineAsyncComponent(() => import('../components/settings/IpWhitelistSettings.vue'));
+const IpBlacklistSettings = defineAsyncComponent(() => import('../components/settings/IpBlacklistSettings.vue'));
+const WorkspaceSettingsSection = defineAsyncComponent(() => import('../components/settings/WorkspaceSettingsSection.vue'));
+const AISettingsSection = defineAsyncComponent(() => import('../components/settings/AISettingsSection.vue'));
+const SystemSettingsSection = defineAsyncComponent(() => import('../components/settings/SystemSettingsSection.vue'));
+const AppearanceSection = defineAsyncComponent(() => import('../components/settings/AppearanceSection.vue'));
+const ProxiesView = defineAsyncComponent(() => import('./ProxiesView.vue'));
+const NotificationsView = defineAsyncComponent(() => import('./NotificationsView.vue'));
 
 const props = withDefaults(defineProps<{
   isDialog?: boolean;
@@ -195,9 +178,18 @@ const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const accountFeatureAvailable = isAccountFeatureAvailable();
+const authStore = useAuthStore();
 
 // Define tabs for settings sections
-const tabs = ref(createSettingsTabs(t).filter(tab => accountFeatureAvailable || tab.key !== 'security'));
+const tabs = computed(() => {
+  const role = authStore.user?.systemRole;
+  const administrator = !accountFeatureAvailable || role === 'super_admin' || role === 'admin';
+  return createSettingsTabs(t).filter(tab => {
+    if (!accountFeatureAvailable && tab.key === 'security') return false;
+    if (['notifications', 'ipControl'].includes(tab.key)) return administrator;
+    return true;
+  });
+});
 const isSettingsTabKey = (value: unknown): value is SettingsTabKey => (
   typeof value === 'string' && tabs.value.some(tab => tab.key === value)
 );

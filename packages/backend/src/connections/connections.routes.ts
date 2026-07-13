@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express'; 
 import { isAuthenticated } from '../auth/auth.middleware';
 import multer from 'multer'; 
+import { requireConnectionPermission } from '../access-control/connection-authorization.middleware';
 import {
     createConnection,
     getConnections,
@@ -23,8 +24,16 @@ import {
     
     addTagToConnections 
 } from './connections.controller';
+import { resolveRuntimeCapabilities } from '../config/app-mode';
 
 const router = Router();
+const requireRemoteDesktopCapability = (_req: Request, res: Response, next: NextFunction): void => {
+    if (!resolveRuntimeCapabilities().remoteDesktop) {
+        res.status(404).json({ code: 'runtimeCapability.remoteDesktopUnavailable' });
+        return;
+    }
+    next();
+};
 
 // 配置 multer 用于处理 JSON 文件上传 (存储在内存中)
 const storage = multer.memoryStorage(); // 将文件存储在内存中作为 Buffer
@@ -97,25 +106,25 @@ router.put('/folders/:folderId', updateConnectionFolder);
 router.delete('/folders/:folderId', deleteConnectionFolder);
 
 // GET /api/v1/connections/:id - 获取单个连接信息
-router.get('/:id', getConnectionById);
+router.get('/:id', requireConnectionPermission('view'), getConnectionById);
 
 // PUT /api/v1/connections/:id - 更新连接信息
-router.put('/:id', updateConnection);
+router.put('/:id', requireConnectionPermission('manage'), updateConnection);
 
 // DELETE /api/v1/connections/:id - 删除连接
-router.delete('/:id', deleteConnection);
+router.delete('/:id', requireConnectionPermission('manage'), deleteConnection);
 
 // POST /api/v1/connections/:id/test - 测试连接
-router.post('/:id/test', testConnection);
+router.post('/:id/test', requireConnectionPermission('connect'), testConnection);
 
 // POST /api/v1/connections/:id/rdp-session - Get RDP session token via backend
-router.post('/:id/rdp-session', getRdpSessionToken);
+router.post('/:id/rdp-session', requireRemoteDesktopCapability, requireConnectionPermission('connect'), getRdpSessionToken);
 
 // POST /api/v1/connections/:id/vnc-session - Get VNC session token
-router.post('/:id/vnc-session', getVncSessionToken);
+router.post('/:id/vnc-session', requireRemoteDesktopCapability, requireConnectionPermission('connect'), getVncSessionToken);
 
 // +++ POST /api/v1/connections/:id/clone - 克隆连接 +++
-router.post('/:id/clone', cloneConnection);
+router.post('/:id/clone', requireConnectionPermission('manage'), cloneConnection);
 
 // Note: PUT /:id/tags route is removed as the primary flow uses the bulk add endpoint now.
 // It could be kept if there's a separate use case for updating a single connection's tags.

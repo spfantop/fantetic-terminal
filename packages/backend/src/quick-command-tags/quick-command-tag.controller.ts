@@ -6,7 +6,7 @@ import * as QuickCommandTagService from './quick-command-tag.service';
  */
 export const getAllQuickCommandTags = async (req: Request, res: Response): Promise<void> => {
     try {
-        const tags = await QuickCommandTagService.getAllQuickCommandTags();
+        const tags = await QuickCommandTagService.getAllQuickCommandTags(req.authorization!.userId);
         res.status(200).json(tags);
     } catch (error: any) {
         console.error('[Controller] 获取快捷指令标签列表失败:', error.message);
@@ -26,9 +26,10 @@ export const addQuickCommandTag = async (req: Request, res: Response): Promise<v
     }
 
     try {
-        const newId = await QuickCommandTagService.addQuickCommandTag(name);
+        const ownerUserId = req.authorization!.userId;
+        const newId = await QuickCommandTagService.addQuickCommandTag(name, ownerUserId);
         // 成功添加后，获取新创建的标签信息返回给前端
-        const newTag = await QuickCommandTagService.getQuickCommandTagById(newId);
+        const newTag = await QuickCommandTagService.getQuickCommandTagById(newId, ownerUserId);
         if (newTag) {
              res.status(201).json({ message: '快捷指令标签已添加', tag: newTag });
         } else {
@@ -64,10 +65,11 @@ export const updateQuickCommandTag = async (req: Request, res: Response): Promis
     }
 
     try {
-        const success = await QuickCommandTagService.updateQuickCommandTag(id, name);
+        const ownerUserId = req.authorization!.userId;
+        const success = await QuickCommandTagService.updateQuickCommandTag(id, name, ownerUserId);
         if (success) {
             // 成功更新后，获取更新后的标签信息返回给前端
-            const updatedTag = await QuickCommandTagService.getQuickCommandTagById(id);
+            const updatedTag = await QuickCommandTagService.getQuickCommandTagById(id, ownerUserId);
             if (updatedTag) {
                  res.status(200).json({ message: '快捷指令标签已更新', tag: updatedTag });
             } else {
@@ -76,7 +78,7 @@ export const updateQuickCommandTag = async (req: Request, res: Response): Promis
             }
         } else {
             // 检查标签是否真的不存在
-            const tagExists = await QuickCommandTagService.getQuickCommandTagById(id);
+            const tagExists = await QuickCommandTagService.getQuickCommandTagById(id, ownerUserId);
             if (!tagExists) {
                 res.status(404).json({ message: '未找到要更新的快捷指令标签' });
             } else {
@@ -109,13 +111,14 @@ export const deleteQuickCommandTag = async (req: Request, res: Response): Promis
 
     try {
         // 先检查标签是否存在，以便返回 404
-        const tagExists = await QuickCommandTagService.getQuickCommandTagById(id);
+        const ownerUserId = req.authorization!.userId;
+        const tagExists = await QuickCommandTagService.getQuickCommandTagById(id, ownerUserId);
         if (!tagExists) {
              res.status(404).json({ message: '未找到要删除的快捷指令标签' });
              return;
         }
 
-        const success = await QuickCommandTagService.deleteQuickCommandTag(id);
+        const success = await QuickCommandTagService.deleteQuickCommandTag(id, ownerUserId);
         if (success) {
             res.status(200).json({ message: '快捷指令标签已删除' });
         } else {

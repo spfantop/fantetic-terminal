@@ -14,7 +14,15 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp INTEGER NOT NULL,
     action_type TEXT NOT NULL,
-    details TEXT NULL
+    details TEXT NULL,
+    request_id TEXT NULL,
+    actor_user_id INTEGER NULL,
+    actor_username TEXT NULL,
+    actor_role TEXT NULL,
+    source_ip TEXT NULL,
+    asset_id INTEGER NULL,
+    session_id TEXT NULL,
+    result TEXT NOT NULL DEFAULT 'success'
 );
 `;
 
@@ -58,7 +66,8 @@ CREATE TABLE IF NOT EXISTS users (
     hashed_password TEXT NOT NULL,
     two_factor_secret TEXT NULL, -- 添加 2FA 密钥列，允许为空
     created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-    updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+    updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+    auth_epoch INTEGER NOT NULL DEFAULT 0
 );
 `;
 

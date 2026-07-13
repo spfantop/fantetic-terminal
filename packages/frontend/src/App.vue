@@ -7,25 +7,35 @@ import { useDeviceDetection } from './composables/useDeviceDetection';
 import { useSettingsStore } from './stores/settings.store';
 import { useFocusSwitcherStore } from './stores/focusSwitcher.store';
 import { useSessionStore } from './stores/session.store';
+import { useFileEditorStore } from './stores/fileEditor.store';
 import { useFavoritePathsStore } from './stores/favoritePaths.store';
 import { storeToRefs } from 'pinia';
 import UINotificationDisplay from './components/UINotificationDisplay.vue';
-import FileEditorOverlay from './components/FileEditorOverlay.vue';
-import FocusSwitcherConfigurator from './components/FocusSwitcherConfigurator.vue';
 import ConfirmDialog from './components/common/ConfirmDialog.vue';
-import SettingsView from './views/SettingsView.vue';
 import { useDialogStore } from './stores/dialog.store';
 import { debugLog } from './composables/useDebugLog';
 import {
   shouldEnableFocusSwitcherHotkeys,
   shouldSuppressFocusSwitcherKeyDefault,
 } from './utils/focusSwitcherConfig';
+import { isRemoteDesktopFeatureAvailable } from './utils/runtimeConfig';
 
 const { t } = useI18n();
-const RemoteDesktopModal = defineAsyncComponent(() => import('./components/RemoteDesktopModal.vue'));
-const VncModal = defineAsyncComponent(() => import('./components/VncModal.vue'));
+const remoteDesktopFeatureAvailable = isRemoteDesktopFeatureAvailable();
+const isDesktopBuild = import.meta.env.VITE_FANTETIC_APP_MODE === 'electron';
+const FileEditorOverlay = defineAsyncComponent(() => import('./components/FileEditorOverlay.vue'));
+const FocusSwitcherConfigurator = defineAsyncComponent(() => import('./components/FocusSwitcherConfigurator.vue'));
+const SettingsView = defineAsyncComponent(() => import('./views/SettingsView.vue'));
+const AdminCenterView = defineAsyncComponent(() => import('./views/AdminCenterView.vue'));
+const RemoteDesktopModal = isDesktopBuild
+  ? null
+  : defineAsyncComponent(() => import('./components/RemoteDesktopModal.vue'));
+const VncModal = isDesktopBuild
+  ? null
+  : defineAsyncComponent(() => import('./components/VncModal.vue'));
 const authStore = useAuthStore();
 const settingsStore = useSettingsStore();
+const fileEditorStore = useFileEditorStore();
 const focusSwitcherStore = useFocusSwitcherStore(); // +++ 实例化焦点切换 Store +++
 const sessionStore = useSessionStore(); // +++ 实例化 Session Store +++
 const dialogStore = useDialogStore(); // +++ 实例化 DialogStore +++
@@ -33,6 +43,8 @@ const { state: dialogState } = storeToRefs(dialogStore);
 const favoritePathsStore = useFavoritePathsStore(); // +++ 实例化 favoritePathsStore +++
 const { isAuthenticated } = storeToRefs(authStore);
 const { showPopupFileEditorBoolean } = storeToRefs(settingsStore);
+const { popupFileInfo } = storeToRefs(fileEditorStore);
+const shouldMountPopupFileEditor = computed(() => showPopupFileEditorBoolean.value && popupFileInfo.value !== null);
 const {
   isConfiguratorVisible: isFocusSwitcherVisible,
   configuratorSourceDocument: focusSwitcherConfiguratorSourceDocument,
@@ -93,12 +105,17 @@ const normalizedRoutePath = computed(() => {
 
 const isFocusSwitcherHotkeyRoute = computed(() => shouldEnableFocusSwitcherHotkeys(normalizedRoutePath.value));
 const isSettingsOverlayVisible = computed(() => route.name === 'Connections' && route.query.settings === '1');
+const isAdminCenterOverlayVisible = computed(() => route.name === 'Connections' && route.query.admin === '1');
 const shouldShowMainFocusSwitcherConfigurator = computed(() => (
   isFocusSwitcherVisible.value
   && (focusSwitcherConfiguratorSourceDocument.value === null || focusSwitcherConfiguratorSourceDocument.value === document)
 ));
 
 const closeSettingsOverlay = () => {
+  void router.push({ name: 'Connections' });
+};
+
+const closeAdminCenterOverlay = () => {
   void router.push({ name: 'Connections' });
 };
 
@@ -255,12 +272,18 @@ const handleGlobalKeyUp = async (event: KeyboardEvent) => {
     <UINotificationDisplay />
 
     <!-- 根据设置条件渲染全局文件编辑器弹窗 -->
-    <FileEditorOverlay v-if="showPopupFileEditorBoolean" :is-mobile="isMobile" />
+    <FileEditorOverlay v-if="shouldMountPopupFileEditor" :is-mobile="isMobile" />
 
     <SettingsView
       v-if="isSettingsOverlayVisible"
       is-dialog
       @close="closeSettingsOverlay"
+    />
+
+    <AdminCenterView
+      v-if="isAdminCenterOverlayVisible"
+      is-dialog
+      @close="closeAdminCenterOverlay"
     />
 
     <!-- +++ 条件渲染焦点切换配置器 (使用 v-show 保持实例) +++ -->
@@ -272,14 +295,14 @@ const handleGlobalKeyUp = async (event: KeyboardEvent) => {
 
     <!-- +++ 条件渲染 RDP 模态框 +++ -->
     <RemoteDesktopModal
-      v-if="isRdpModalOpen"
+      v-if="remoteDesktopFeatureAvailable && isRdpModalOpen"
       :connection="rdpConnectionInfo"
       @close="sessionStore.closeRdpModal()"
     />
 
     <!-- +++ 条件渲染 VNC 模态框 +++ -->
     <VncModal
-      v-if="isVncModalOpen"
+      v-if="remoteDesktopFeatureAvailable && isVncModalOpen"
       :connection="vncConnectionInfo"
       @close="sessionStore.closeVncModal()"
     />

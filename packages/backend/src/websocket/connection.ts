@@ -30,6 +30,8 @@ import { clientStates } from './state';
 import { temporaryLogStorageService } from '../ssh-suspend/temporary-log-storage.service';
 import { buildSshInputDataPrefix, parseSshInputFastPath } from './ssh-input-fast-path';
 import { writeSshInput } from './ssh-input-writer';
+import { readOwnedClientState } from './session-access';
+import { BoundedTaskQueue } from './bounded-task-queue';
 
 const SSH_INPUT_BINARY_HEADER = Buffer.from([0x53, 0x53, 0x48, 0x49]); // SSHI
 const SSH_INPUT_BINARY_HEADER_LENGTH = SSH_INPUT_BINARY_HEADER.length;
@@ -99,6 +101,7 @@ export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendServ
             let cachedFastSshInputBoundSessionId = '';
             let cachedFastSshInputPrefix: string | null = null;
             let cachedFastSshInputFallbackPrefix: string | null = null;
+            const controlMessageQueue = new BoundedTaskQueue({ maxTasks: 128, maxBytes: 8 * 1024 * 1024 });
             ws.on('message', (message: RawData) => {
                 const sshInputBinaryPayload = readSshInputBinaryPayload(message);
                 if (sshInputBinaryPayload) {
@@ -147,7 +150,7 @@ export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendServ
                 try {
                     parsedMessage = JSON.parse(messageText);
                 } catch (e) {
-                    console.error(`WebSocket：来自 ${ws.username} 的无效 JSON 消息:`, messageText);
+                    console.error(`WebSocket：来自 ${ws.username} 的无效 JSON 消息。`);
                     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'error', payload: '无效的消息格式 (非 JSON)' }));
                     return;
                 }
@@ -160,7 +163,7 @@ export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendServ
                 // For other messages, ws.sessionId should exist if connection was successful.
                 const state = sessionId ? clientStates.get(sessionId) : undefined;
 
-                void (async () => {
+                const accepted = controlMessageQueue.enqueue(Buffer.byteLength(messageText), async () => {
                     try {
                         switch (type) {
                             case 'client:ping':
@@ -441,7 +444,7 @@ export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendServ
                                     break;
                                 }
 
-                                const activeSessionState = clientStates.get(sessionToMarkId);
+                                const activeSessionState = readOwnedClientState(clientStates, ws, sessionToMarkId);
                                 if (!activeSessionState || !activeSessionState.sshClient || !activeSessionState.sshShellStream) {
                                     console.error(`[SSH_MARK_FOR_SUSPEND] 找不到活动的SSH会话或其组件: ${sessionToMarkId}`);
                                     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'SSH_MARKED_FOR_SUSPEND_ACK', payload: { sessionId: sessionToMarkId, success: false, error: '未找到要标记的活动SSH会话' } as SshMarkedForSuspendAck['payload'] }));
@@ -501,7 +504,7 @@ export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendServ
                                     break;
                                 }
 
-                                const activeSessionState = clientStates.get(sessionToUnmarkId);
+                                const activeSessionState = readOwnedClientState(clientStates, ws, sessionToUnmarkId);
                                 if (!activeSessionState) {
                                     console.warn(`[SSH_UNMARK_FOR_SUSPEND] 未找到会话: ${sessionToUnmarkId}`);
                                     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'SSH_UNMARKED_FOR_SUSPEND_ACK', payload: { ...ackPayloadBase, success: false, error: '未找到要取消标记的会话' } as SshUnmarkedForSuspendAck['payload'] }));
@@ -550,7 +553,11 @@ export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendServ
                         console.error(`WebSocket: 处理来自 ${ws.username} (会话: ${sessionId}) 的消息 (${type}) 时发生顶层错误:`, error);
                         if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'error', payload: `处理消息时发生内部错误: ${error.message}` }));
                     }
-                })();
+                });
+                if (!accepted && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: 'error', payload: '消息处理队列已超载，连接已关闭' }));
+                    ws.close(1013, 'message queue overloaded');
+                }
             });
 
             ws.on('close', (code, reason) => {

@@ -1,13 +1,26 @@
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
 import { NotificationSetting, RawNotificationSetting, NotificationChannelType, NotificationEvent, NotificationChannelConfig } from '../types/notification.types';
+import { decrypt, encrypt } from '../utils/crypto';
 
+const ENCRYPTED_CONFIG_PREFIX = 'enc:v1:';
+
+export const encodeNotificationConfig = (config: NotificationChannelConfig | Record<string, unknown>): string => (
+    `${ENCRYPTED_CONFIG_PREFIX}${encrypt(JSON.stringify(config || {}))}`
+);
+
+export const decodeNotificationConfig = (value: string): NotificationChannelConfig => {
+    const json = value.startsWith(ENCRYPTED_CONFIG_PREFIX)
+        ? decrypt(value.slice(ENCRYPTED_CONFIG_PREFIX.length))
+        : value;
+    return JSON.parse(json || '{}') as NotificationChannelConfig;
+};
 
 const parseRawSetting = (raw: RawNotificationSetting): NotificationSetting => {
     try {
         return {
             ...raw,
             enabled: Boolean(raw.enabled),
-            config: JSON.parse(raw.config || '{}'),
+            config: decodeNotificationConfig(raw.config || '{}'),
             enabled_events: JSON.parse(raw.enabled_events || '[]'),
         };
     } catch (error: any) {
@@ -23,10 +36,26 @@ const parseRawSetting = (raw: RawNotificationSetting): NotificationSetting => {
 
 export class NotificationSettingsRepository {
 
+    private async upgradePlaintextConfigs(rows: RawNotificationSetting[]): Promise<void> {
+        const plaintextRows = rows.filter(row => !row.config.startsWith(ENCRYPTED_CONFIG_PREFIX));
+        if (plaintextRows.length === 0) return;
+        const db = await getDbInstance();
+        await Promise.all(plaintextRows.map(async row => {
+            const encryptedConfig = encodeNotificationConfig(decodeNotificationConfig(row.config || '{}'));
+            await runDb(
+                db,
+                'UPDATE notification_settings SET config = ? WHERE id = ? AND config = ?',
+                [encryptedConfig, row.id, row.config],
+            );
+            row.config = encryptedConfig;
+        }));
+    }
+
     async getAll(): Promise<NotificationSetting[]> {
         try {
             const db = await getDbInstance();
             const rows = await allDb<RawNotificationSetting>(db, 'SELECT * FROM notification_settings ORDER BY created_at ASC');
+            await this.upgradePlaintextConfigs(rows);
             return rows.map(parseRawSetting);
         } catch (err: any) {
             console.error(`获取通知设置时出错:`, err.message);
@@ -38,6 +67,7 @@ export class NotificationSettingsRepository {
         try {
             const db = await getDbInstance();
             const row = await getDbRow<RawNotificationSetting>(db, 'SELECT * FROM notification_settings WHERE id = ?', [id]);
+            if (row) await this.upgradePlaintextConfigs([row]);
             return row ? parseRawSetting(row) : null;
         } catch (err: any) {
             console.error(`通过 ID ${id} 获取通知设置时出错:`, err.message);
@@ -49,6 +79,7 @@ export class NotificationSettingsRepository {
         try {
             const db = await getDbInstance();
             const rows = await allDb<RawNotificationSetting>(db, 'SELECT * FROM notification_settings WHERE enabled = 1');
+            await this.upgradePlaintextConfigs(rows);
             const parsedRows = rows.map(parseRawSetting);
             const filteredRows = parsedRows.filter(setting => setting.enabled_events.includes(event));
             return filteredRows;
@@ -67,7 +98,7 @@ export class NotificationSettingsRepository {
             setting.channel_type,
             setting.name ?? '',
             setting.enabled ? 1 : 0,
-            JSON.stringify(setting.config || {}),
+            encodeNotificationConfig(setting.config || {}),
             JSON.stringify(setting.enabled_events || [])
         ];
         try {
@@ -91,7 +122,7 @@ export class NotificationSettingsRepository {
         if (setting.channel_type !== undefined) { fields.push('channel_type = ?'); params.push(setting.channel_type); }
         if (setting.name !== undefined) { fields.push('name = ?'); params.push(setting.name); }
         if (setting.enabled !== undefined) { fields.push('enabled = ?'); params.push(setting.enabled ? 1 : 0); }
-        if (setting.config !== undefined) { fields.push('config = ?'); params.push(JSON.stringify(setting.config || {})); }
+        if (setting.config !== undefined) { fields.push('config = ?'); params.push(encodeNotificationConfig(setting.config || {})); }
         if (setting.enabled_events !== undefined) { fields.push('enabled_events = ?'); params.push(JSON.stringify(setting.enabled_events || [])); }
 
         if (fields.length === 0) {

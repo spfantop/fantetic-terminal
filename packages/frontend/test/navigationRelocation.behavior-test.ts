@@ -20,17 +20,16 @@ const draggableDialogComposable = readFileSync(resolve('src/composables/useDragg
 
 const tabKeys = createSettingsTabs((key, fallback) => fallback || key).map(tab => tab.key);
 
-assert.deepEqual(
-  tabKeys.slice(0, 2),
-  ['dashboard', 'system'],
-  'dashboard should be the first settings tab',
+assert.equal(tabKeys.includes('dashboard'), false, 'dashboard should not appear in settings');
+assert.equal(settingsView.includes('DashboardView'), false, 'settings should not load dashboard content');
+assert.equal(
+  settingsView.includes("activeTab === 'dashboard'"),
+  false,
+  'settings should not retain a dashboard rendering branch',
 );
 
-assert.equal(
-  tabKeys[tabKeys.indexOf('dataManagement') + 1],
-  'auditLogs',
-  'audit logs should appear directly below data management in settings',
-);
+assert.equal(tabKeys.includes('dataManagement'), false, 'data management should live in the admin center');
+assert.equal(tabKeys.includes('auditLogs'), false, 'audit logs should live in the admin center');
 
 assert.equal(
   appVue.includes('class="app-dock"') || appVue.includes("'app-dock'"),
@@ -215,7 +214,8 @@ assert.ok(
 );
 
 assert.ok(
-  quickCommandsView.includes('<Teleport to="body">')
+  quickCommandsView.includes('<Teleport :to="quickCommandTeleportTarget">')
+    && quickCommandsView.includes('ownerDocument.body')
     && quickCommandsView.includes('<AddEditQuickCommandForm')
     && quickCommandsView.includes('</Teleport>'),
   'quick command add/edit form should teleport to body so it is not clipped by the sidebar or quick command popup',

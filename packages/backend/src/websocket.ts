@@ -8,6 +8,7 @@ import { clientStates } from './websocket/state';
 import { sshSuspendService } from './ssh-suspend/ssh-suspend.service';
 import { SftpService } from './sftp/sftp.service';
 import { cleanupClientConnection } from './websocket/utils';
+import { ClientIpResolver } from './config/client-ip';
 
 
 export {
@@ -21,7 +22,12 @@ export {
     SuspendedSessionInfo
 } from './websocket/types'; // Re-export essential types
 
-export const initializeWebSocket = async (server: http.Server, sessionParser: RequestHandler): Promise<WebSocketServer> => {
+export const initializeWebSocket = async (
+    server: http.Server,
+    sessionParser: RequestHandler,
+    clientIpResolver: ClientIpResolver,
+    allowedOrigins: ReadonlySet<string>,
+): Promise<WebSocketServer> => {
     // Environment variables are expected to be loaded by index.ts
 
     const wss = new WebSocketServer({
@@ -45,7 +51,7 @@ export const initializeWebSocket = async (server: http.Server, sessionParser: Re
     const heartbeatTimer = initializeHeartbeat(wss); // Store timer to potentially clear it, though heartbeat.ts handles its own wss.on('close')
 
     // 2. Initialize Upgrade Handler (handles authentication and protocol upgrade)
-    initializeUpgradeHandler(server, wss, sessionParser);
+    initializeUpgradeHandler(server, wss, sessionParser, clientIpResolver, allowedOrigins);
 
     // +++ 创建 SftpService 实例 +++
     const sftpService = new SftpService(clientStates);
