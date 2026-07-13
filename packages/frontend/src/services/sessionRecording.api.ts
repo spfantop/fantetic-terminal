@@ -1,26 +1,12 @@
 import apiClient from '../utils/apiClient';
+import type {
+  SessionRecordingEvent,
+  SessionRecordingMetadata,
+  SessionRecordingPage,
+} from '@fantetic-terminal/contracts';
 
-export interface SessionRecording {
-  id: string;
-  username: string | null;
-  connection_name: string;
-  protocol: 'SSH' | 'TELNET';
-  started_at: number;
-  ended_at: number | null;
-  status: 'active' | 'completed' | 'incomplete' | 'failed';
-  event_count: number;
-  byte_count: number;
-}
-
-export type SessionRecordingEvent =
-  | { offsetMs: number; type: 'output' | 'input'; data: string }
-  | { offsetMs: number; type: 'resize'; cols: number; rows: number };
-
-export interface SessionRecordingPage {
-  metadata: SessionRecording;
-  eventList: SessionRecordingEvent[];
-  nextCursor: number | null;
-}
+export type SessionRecording = SessionRecordingMetadata;
+export type { SessionRecordingEvent, SessionRecordingPage };
 
 export const sessionRecordingApi = {
   async list(): Promise<SessionRecording[]> {

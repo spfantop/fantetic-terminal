@@ -15,7 +15,8 @@
     "noEmit": true, // 不输出编译后的文件 (由 Vite 处理构建)
     "baseUrl": ".", // 恢复基础目录
     "paths": {
-      "@/*": ["src/*"] // 恢复原始前端别名路径
+      "@/*": ["src/*"], // 恢复原始前端别名路径
+      "@fantetic-terminal/contracts": ["../contracts/index.d.ts"]
     },
     "types": ["vite/client", "node"]
   },

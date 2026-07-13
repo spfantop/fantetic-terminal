@@ -1,19 +1,7 @@
 import { allDb, getDb, getDbInstance, runDb } from '../database/connection';
+import type { SessionRecordingMetadata } from '@fantetic-terminal/contracts';
 
-export interface SessionRecordingRow {
-  id: string;
-  user_id: number | null;
-  username: string | null;
-  connection_id: number;
-  connection_name: string;
-  protocol: 'SSH' | 'TELNET';
-  started_at: number;
-  ended_at: number | null;
-  status: 'active' | 'completed' | 'incomplete' | 'failed';
-  relative_path: string;
-  event_count: number;
-  byte_count: number;
-}
+export type SessionRecordingRow = SessionRecordingMetadata;
 
 export const insertSessionRecording = async (row: SessionRecordingRow): Promise<void> => {
   const db = await getDbInstance();

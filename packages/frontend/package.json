@@ -33,6 +33,7 @@
       "test:file-manager-open-interaction": "esbuild test/fileManagerOpenInteraction.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/fileManagerOpenInteraction.behavior-test.mjs && node ../../.vite-codex-cache/fileManagerOpenInteraction.behavior-test.mjs"
    },
    "dependencies": {
+      "@fantetic-terminal/contracts": "*",
       "@codemirror/commands": "^6.8.1",
       "@codemirror/lang-cpp": "^6.0.2",
       "@codemirror/lang-go": "^6.0.1",

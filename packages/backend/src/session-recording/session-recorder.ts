@@ -1,12 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
+import type { SessionRecordingEvent } from '@fantetic-terminal/contracts';
 
 import { decrypt, encrypt } from '../utils/crypto';
 
-export type RecordingEvent =
-  | { offsetMs: number; type: 'output' | 'input'; data: string }
-  | { offsetMs: number; type: 'resize'; cols: number; rows: number };
+export type RecordingEvent = SessionRecordingEvent;
 
 type PendingRecordingEvent =
   | { offsetMs: number; type: 'output' | 'input'; data: Buffer }
