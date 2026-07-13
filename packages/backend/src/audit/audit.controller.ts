@@ -3,6 +3,8 @@ import { AuditLogService } from './audit.service';
 import { AuditLogActionType } from '../types/audit.types';
 
 const auditLogService = new AuditLogService();
+const MAX_AUDIT_PAGE_SIZE = 200;
+const MAX_AUDIT_SEARCH_LENGTH = 200;
 
 export class AuditController {
     /**
@@ -19,17 +21,21 @@ export class AuditController {
             const startDate = req.query.startDate ? parseInt(req.query.startDate as string, 10) : undefined;
             const endDate = req.query.endDate ? parseInt(req.query.endDate as string, 10) : undefined;
             // 解析 searchTerm 参数
-            const searchTerm = req.query.search as string | undefined;
+            const searchTerm = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
             const resultFilter = typeof req.query.result === 'string' ? req.query.result as 'success' | 'failure' | 'denied' : undefined;
 
 
             // 输入验证 (基本)
-            if (isNaN(limit) || limit <= 0) {
+            if (isNaN(limit) || limit <= 0 || limit > MAX_AUDIT_PAGE_SIZE) {
                 res.status(400).json({ message: '无效的 limit 参数' });
                 return;
             }
             if (isNaN(offset) || offset < 0) {
                 res.status(400).json({ message: '无效的 offset 参数' });
+                return;
+            }
+            if (searchTerm && searchTerm.length > MAX_AUDIT_SEARCH_LENGTH) {
+                res.status(400).json({ message: '无效的 search 参数' });
                 return;
             }
             if (startDate && isNaN(startDate)) {

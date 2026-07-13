@@ -14,9 +14,10 @@ export const sessionRecordingApi = {
   async list(query: SessionRecordingListQuery = {}): Promise<SessionRecordingListPage> {
     return (await apiClient.get<SessionRecordingListPage>('/session-recordings', { params: query })).data;
   },
-  async read(id: string, cursor = 0): Promise<SessionRecordingPage> {
+  async read(id: string, cursor = 0, signal?: AbortSignal): Promise<SessionRecordingPage> {
     return (await apiClient.get<SessionRecordingPage>(`/session-recordings/${id}`, {
       params: { cursor, limit: 100 },
+      signal,
     })).data;
   },
   async delete(id: string): Promise<void> {

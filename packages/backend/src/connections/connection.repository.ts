@@ -1,6 +1,8 @@
 import { Database } from 'sqlite3';
+import { createLogger } from '../logging/logger';
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
 import { AuthorizationSubject } from '../access-control/authorization-subject';
+import { CONNECTION_PERMISSION_LEVEL_SQL } from '../access-control/access-policy';
 
 
 // Define Connection 类型 (可以从 controller 或 types 文件导入，暂时在此定义)
@@ -145,13 +147,7 @@ export const findAccessibleConnectionsWithTags = async (
             CASE
                 WHEN c.owner_user_id = ? THEN 'manage'
                 ELSE CASE COALESCE((
-                    SELECT MAX(CASE
-                        WHEN membership.role = 'viewer' THEN 1
-                        WHEN membership.role = 'operator' AND permission.permission IN ('connect', 'manage') THEN 2
-                        WHEN membership.role IN ('admin', 'owner') AND permission.permission = 'manage' THEN 3
-                        WHEN permission.permission = 'connect' THEN 2
-                        ELSE 1
-                    END)
+                    SELECT MAX(${CONNECTION_PERMISSION_LEVEL_SQL})
                     FROM connection_group_permissions permission
                     JOIN user_group_members membership ON membership.group_id = permission.group_id
                     WHERE permission.connection_id = c.id AND membership.user_id = ?
@@ -281,7 +277,7 @@ export const findConnectionByName = async (name: string): Promise<ConnectionBase
   */
 // Update input type to reflect FullConnectionData now has 'type' and 'jump_chain'
 export const createConnection = async (data: Omit<FullConnectionData, 'id' | 'created_at' | 'updated_at' | 'last_connected_at' | 'tag_ids'>): Promise<number> => {
-    console.log('[Repository:createConnection] Received data:', JSON.stringify(data, null, 2));
+    logger.debug('Creating connection record', { type: data.type, authMethod: data.auth_method });
     const now = Math.floor(Date.now() / 1000);
     const sql = `
         INSERT INTO connections (name, type, host, port, username, auth_method, encrypted_password, encrypted_private_key, encrypted_passphrase, proxy_id, proxy_type, folder_id, icon, sort_order, ssh_key_id, notes, jump_chain, owner_user_id, created_at, updated_at)
@@ -305,8 +301,6 @@ export const createConnection = async (data: Omit<FullConnectionData, 'id' | 'cr
         data.owner_user_id ?? null,
         now, now
     ];
-    console.log('[Repository:createConnection] SQL:', sql);
-    console.log('[Repository:createConnection] Params:', JSON.stringify(params, null, 2));
     try {
         const db = await getDbInstance();
         const orderRow = await getDbRow<{ next_order: number }>(
@@ -349,7 +343,7 @@ export const findVisibleConnectionByName = async (
  */
 // Update input type to reflect FullConnectionData now has 'type' and 'jump_chain'
 export const updateConnection = async (id: number, data: Partial<Omit<FullConnectionData, 'id' | 'created_at' | 'last_connected_at' | 'tag_ids'>>): Promise<boolean> => {
-    console.log(`[Repository:updateConnection] Received data for ID ${id}:`, JSON.stringify(data, null, 2));
+    logger.debug('Preparing connection record update', { connectionId: id, changedFieldList: Object.keys(data) });
     const fieldsToUpdate: { [key: string]: any } = { ...data };
     const params: any[] = [];
 
@@ -382,8 +376,6 @@ export const updateConnection = async (id: number, data: Partial<Omit<FullConnec
 
     params.push(id);
     const sql = `UPDATE connections SET ${setClauses} WHERE id = ?`;
-    console.log(`[Repository:updateConnection] SQL for ID ${id}:`, sql);
-    console.log(`[Repository:updateConnection] Params for ID ${id}:`, JSON.stringify(params, null, 2));
 
     try {
         const db = await getDbInstance();
@@ -755,3 +747,4 @@ export const addTagToMultipleConnections = async (connectionIds: number[], tagId
         throw new Error(`为多个连接添加标签失败: ${err.message}`);
     }
 };
+const logger = createLogger('ConnectionRepository');

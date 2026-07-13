@@ -149,6 +149,8 @@ export const createBackupService = ({
     .filter(entry => entry.isDirectory() && BACKUP_ID_PATTERN.test(entry.name))
     .map(entry => readBackup(entry.name))
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  const countBackups = (): number => fs.readdirSync(backupsPath, { withFileTypes: true })
+    .filter(entry => entry.isDirectory() && !entry.name.endsWith('.tmp')).length;
 
   const scheduleRestore = async (backupId: string): Promise<void> => {
     const verification = await verifyBackup(backupId);
@@ -158,7 +160,7 @@ export const createBackupService = ({
     fs.renameSync(temporaryMarker, restoreRequestPath);
   };
 
-  return { createBackup, listBackups, readBackup, verifyBackup, scheduleRestore, backupsPath, restoreRequestPath };
+  return { createBackup, listBackups, countBackups, readBackup, verifyBackup, scheduleRestore, backupsPath, restoreRequestPath };
 };
 
 export const applyScheduledRestore = async (appDataPath: string): Promise<string | null> => {

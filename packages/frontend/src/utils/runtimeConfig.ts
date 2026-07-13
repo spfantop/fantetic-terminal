@@ -29,7 +29,7 @@ export const readRuntimeConfigEnv = (): RuntimeConfigEnv => {
 };
 
 export const resolveApiBaseUrl = (env: RuntimeConfigEnv = readRuntimeConfigEnv()): string => {
-  if (env.isElectron && env.isProd) {
+  if (env.isElectron) {
     return `http://localhost:${ELECTRON_BACKEND_PORT}/api/v1`;
   }
 
@@ -38,7 +38,7 @@ export const resolveApiBaseUrl = (env: RuntimeConfigEnv = readRuntimeConfigEnv()
 
 export const resolveWebSocketBaseUrl = (env: RuntimeConfigEnv = readRuntimeConfigEnv()): string => {
   const protocol = env.locationProtocol === 'https:' ? 'wss:' : 'ws:';
-  const host = env.isElectron && env.isProd
+  const host = env.isElectron
     ? `localhost:${ELECTRON_BACKEND_PORT}`
     : env.locationHost;
 

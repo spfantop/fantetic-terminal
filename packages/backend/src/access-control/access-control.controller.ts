@@ -10,6 +10,10 @@ const auditLogService = new AuditLogService();
 const GROUP_ROLE_SET = new Set<GroupRole>(['owner', 'admin', 'operator', 'viewer']);
 const CONNECTION_PERMISSION_SET = new Set(['view', 'connect', 'manage'] as const);
 
+export const readAdministrationSummary = async (_req: Request, res: Response): Promise<void> => {
+  res.json(await accessControlRepository.readAdministrationSummary());
+};
+
 const readPositiveInteger = (value: unknown): number | null => {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;

@@ -4,6 +4,7 @@ import * as ProtocolTestService from '../services/protocol-test.service';
 import * as GuacamoleService from '../services/guacamole.service'; 
 import * as ImportExportService from '../services/import-export.service';
 import * as ConnectionRepository from './connection.repository';
+import { remoteDesktopGrantRegistry } from '../websocket/remote-desktop-grant';
 
 
 
@@ -449,6 +450,7 @@ export const getRdpSessionToken = async (req: Request, res: Response): Promise<v
         console.log(`[Controller:getRdpSessionToken] Received Guacamole token via GuacamoleService for RDP connection ${connectionId}`);
 
         // 5. 将 Guacamole 令牌返回给前端
+        remoteDesktopGrantRegistry.register(guacamoleToken, req.authorization!.userId, connectionId);
         res.status(200).json({ token: guacamoleToken });
 
     } catch (error: any) {
@@ -536,6 +538,7 @@ export const getVncSessionToken = async (req: Request, res: Response): Promise<v
 
         console.log(`[Controller:getVncSessionToken] Received Guacamole token via GuacamoleService for VNC connection ${connectionId} with size ${initialWidth}x${initialHeight}`);
         
+        remoteDesktopGrantRegistry.register(guacamoleToken, req.authorization!.userId, connectionId);
         res.status(200).json({ token: guacamoleToken });
 
     } catch (error: any) {

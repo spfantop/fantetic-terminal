@@ -1794,6 +1794,7 @@
             "reconnectingMsg": "再接続を試行中...",
             "disconnectMsg": "接続が切断されました: {reason}",
             "genericErrorMsg": "接続エラー: {message}",
+            "outputTruncated": "ターミナル出力が安全な待機上限を超えたため、古い内容を切り捨てました。",
             "unknownReason": "不明な理由",
             "unknownSshError": "不明なターミナルエラー",
             "unknownGenericError": "不明なエラー",

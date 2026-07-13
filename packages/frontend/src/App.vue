@@ -7,6 +7,7 @@ import { useDeviceDetection } from './composables/useDeviceDetection';
 import { useSettingsStore } from './stores/settings.store';
 import { useFocusSwitcherStore } from './stores/focusSwitcher.store';
 import { useSessionStore } from './stores/session.store';
+import { useFileEditorStore } from './stores/fileEditor.store';
 import { useFavoritePathsStore } from './stores/favoritePaths.store';
 import { storeToRefs } from 'pinia';
 import UINotificationDisplay from './components/UINotificationDisplay.vue';
@@ -34,6 +35,7 @@ const VncModal = isDesktopBuild
   : defineAsyncComponent(() => import('./components/VncModal.vue'));
 const authStore = useAuthStore();
 const settingsStore = useSettingsStore();
+const fileEditorStore = useFileEditorStore();
 const focusSwitcherStore = useFocusSwitcherStore(); // +++ 实例化焦点切换 Store +++
 const sessionStore = useSessionStore(); // +++ 实例化 Session Store +++
 const dialogStore = useDialogStore(); // +++ 实例化 DialogStore +++
@@ -41,6 +43,8 @@ const { state: dialogState } = storeToRefs(dialogStore);
 const favoritePathsStore = useFavoritePathsStore(); // +++ 实例化 favoritePathsStore +++
 const { isAuthenticated } = storeToRefs(authStore);
 const { showPopupFileEditorBoolean } = storeToRefs(settingsStore);
+const { popupFileInfo } = storeToRefs(fileEditorStore);
+const shouldMountPopupFileEditor = computed(() => showPopupFileEditorBoolean.value && popupFileInfo.value !== null);
 const {
   isConfiguratorVisible: isFocusSwitcherVisible,
   configuratorSourceDocument: focusSwitcherConfiguratorSourceDocument,
@@ -268,7 +272,7 @@ const handleGlobalKeyUp = async (event: KeyboardEvent) => {
     <UINotificationDisplay />
 
     <!-- 根据设置条件渲染全局文件编辑器弹窗 -->
-    <FileEditorOverlay v-if="showPopupFileEditorBoolean" :is-mobile="isMobile" />
+    <FileEditorOverlay v-if="shouldMountPopupFileEditor" :is-mobile="isMobile" />
 
     <SettingsView
       v-if="isSettingsOverlayVisible"

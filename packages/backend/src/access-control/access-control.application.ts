@@ -39,6 +39,10 @@ export interface AccessControlRepository {
     ownerUserId: number | null;
     grants: ConnectionGrant[];
   } | null>;
+  readConnectionAccessList(userId: number, connectionIdList: number[]): Promise<Map<number, {
+    ownerUserId: number | null;
+    grants: ConnectionGrant[];
+  }>>;
   saveConnectionGrant(input: ConnectionGroupGrant): Promise<ConnectionGroupGrant>;
   saveConnectionGrants(input: ConnectionGroupGrant[]): Promise<ConnectionGroupGrant[]>;
   deleteConnectionGrant(connectionId: number, groupId: number): Promise<boolean>;
@@ -235,8 +239,19 @@ export class AccessControlApplication {
     if (connectionIds.length * groupIds.length > 5000) {
       throw new Error('A batch cannot contain more than 5,000 connection group grants.');
     }
+    const accessMap = await this.repository.readConnectionAccessList(subject.userId, connectionIds);
     for (const connectionId of connectionIds) {
-      await this.requireConnectionPermission(subject, connectionId, 'manage');
+      const access = accessMap.get(connectionId);
+      if (!access) throw new Error('Connection not found.');
+      const permission = resolveConnectionPermission({
+        userId: subject.userId,
+        systemRole: subject.systemRole,
+        ownerUserId: access.ownerUserId,
+        grants: access.grants,
+      });
+      if (!hasConnectionPermission(permission, 'manage')) {
+        throw new Error('The current user does not have the required connection access.');
+      }
     }
     return this.repository.saveConnectionGrants(connectionIds.flatMap(connectionId =>
       groupIds.map(groupId => ({ connectionId, groupId, permission: input.permission })),

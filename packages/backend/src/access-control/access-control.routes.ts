@@ -12,6 +12,7 @@ import {
   saveConnectionGrant,
   saveConnectionGrants,
   saveMember,
+  readAdministrationSummary,
   updateGroup,
 } from './access-control.controller';
 import {
@@ -21,9 +22,11 @@ import {
   resetUserPassword,
   updateUser,
 } from './user-administration.controller';
+import { requireSystemAdministrator } from './system-administrator.middleware';
 
 const router = Router();
 router.use(isAuthenticated);
+router.get('/summary', requireSystemAdministrator, readAdministrationSummary);
 
 router.get('/users', listUsers);
 router.post('/users', createUser);

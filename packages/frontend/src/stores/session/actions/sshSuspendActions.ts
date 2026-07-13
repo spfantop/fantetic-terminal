@@ -614,19 +614,8 @@ const handleSshSuspendResumedNotif = async (payload: SshSuspendResumedNotifPaylo
 const handleSshOutputCachedChunk = (payload: SshOutputCachedChunkPayload): void => {
   const session = sessions.value.get(payload.frontendSessionId) as SessionState | undefined;
   if (session && session.terminalManager) {
-    if (session.terminalManager.terminalInstance.value) {
-      // 复用终端管理器的输出入口，确保恢复缓存内容也经过高亮与分批写入。
-      debugLog('[SSH Suspend Frontend] Received cached chunk data (writing to terminal):', payload.data);
-      session.terminalManager.writeOutput(payload.data);
-    } else {
-      // 终端实例尚未就绪，暂存输出
-      if (!session.pendingOutput) {
-        session.pendingOutput = [];
-      }
-      debugLog('[SSH Suspend Frontend] Received cached chunk data (buffering):', payload.data);
-      session.pendingOutput.push(payload.data);
-      // debugLog(`[${t('term.sshSuspend')}] (会话: ${payload.frontendSessionId}) 终端实例未就绪，已暂存数据块 (长度: ${payload.data.length})。当前暂存块数: ${session.pendingOutput.length}`);
-    }
+    // 统一经过终端管理器的有界队列；终端未就绪时也不能绕回无上限的 SessionState 缓冲。
+    session.terminalManager.writeOutput(payload.data);
 
     // isLastChunk 逻辑应该在数据被处理（写入或暂存）后执行
     if (payload.isLastChunk) {

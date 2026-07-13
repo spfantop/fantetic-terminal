@@ -226,7 +226,7 @@ const startServer = async (): Promise<WebSocketServer> => {
             resolve();
         });
     });
-    const webSocketServer = await initializeWebSocket(server, sessionMiddleware as RequestHandler, clientIpResolver);
+    const webSocketServer = await initializeWebSocket(server, sessionMiddleware as RequestHandler, clientIpResolver, allowedCorsOrigins);
     console.log(`后端服务器正在监听 http://${serverBinding.host}:${serverBinding.port}`);
     return webSocketServer;
 };

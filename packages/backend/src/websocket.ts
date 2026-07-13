@@ -26,6 +26,7 @@ export const initializeWebSocket = async (
     server: http.Server,
     sessionParser: RequestHandler,
     clientIpResolver: ClientIpResolver,
+    allowedOrigins: ReadonlySet<string>,
 ): Promise<WebSocketServer> => {
     // Environment variables are expected to be loaded by index.ts
 
@@ -50,7 +51,7 @@ export const initializeWebSocket = async (
     const heartbeatTimer = initializeHeartbeat(wss); // Store timer to potentially clear it, though heartbeat.ts handles its own wss.on('close')
 
     // 2. Initialize Upgrade Handler (handles authentication and protocol upgrade)
-    initializeUpgradeHandler(server, wss, sessionParser, clientIpResolver);
+    initializeUpgradeHandler(server, wss, sessionParser, clientIpResolver, allowedOrigins);
 
     // +++ 创建 SftpService 实例 +++
     const sftpService = new SftpService(clientStates);

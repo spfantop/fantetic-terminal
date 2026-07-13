@@ -29,7 +29,8 @@ export function useExportConnections() {
         }
       }
 
-      const blob = new Blob([response.data], { type: response.headers['content-type'] || 'application/zip' });
+      const contentType = response.headers['content-type'];
+      const blob = new Blob([response.data], { type: typeof contentType === 'string' ? contentType : 'application/zip' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;

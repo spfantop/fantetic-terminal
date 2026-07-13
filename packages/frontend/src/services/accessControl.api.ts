@@ -39,6 +39,9 @@ export interface ConnectionGroupGrant {
 const base = '/access-control';
 
 export const accessControlApi = {
+  async readSummary(): Promise<{ users: number; groups: number; assets: number }> {
+    return (await apiClient.get<{ users: number; groups: number; assets: number }>(`${base}/summary`)).data;
+  },
   async listUsers(): Promise<ManagedUser[]> {
     return (await apiClient.get<ManagedUser[]>(`${base}/users`)).data;
   },

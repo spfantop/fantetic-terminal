@@ -505,6 +505,7 @@
       "reconnectingMsg": "Attempting to reconnect...",
       "disconnectMsg": "Connection disconnected: {reason}",
       "genericErrorMsg": "Connection error: {message}",
+      "outputTruncated": "Terminal output exceeded the safe backlog limit. Older content was truncated.",
       "unknownReason": "Unknown reason",
       "unknownSshError": "Unknown terminal error",
       "unknownGenericError": "Unknown error",

@@ -10,8 +10,6 @@ import { useAppearanceStore } from './stores/appearance.store';
 import './style.css';
 import '@fortawesome/fontawesome-free/css/all.min.css';
 import 'splitpanes/dist/splitpanes.css';
-import ElementPlus from 'element-plus';
-import 'element-plus/dist/index.css';
 import { readRuntimeConfigEnv } from './utils/runtimeConfig';
 
 

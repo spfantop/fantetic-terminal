@@ -53,6 +53,7 @@ const { t } = useI18n();
 const route = useRoute();
 const { showConfirmDialog } = useConfirmDialog();
 const PAGE_SIZE = 25;
+const MAX_CACHED_EVENTS = 1000;
 const recordingList = ref<SessionRecording[]>([]);
 const total = ref(0);
 const currentPage = ref(1);
@@ -84,6 +85,9 @@ let fitAddon: FitAddon | undefined;
 let resizeObserver: ResizeObserver | undefined;
 let playGeneration = 0;
 let recordedTerminalSize: { cols: number; rows: number } | undefined;
+let nextEventCursor: number | null = 0;
+let cacheStartCursor = 0;
+let recordingAbortController: AbortController | undefined;
 
 const selectedRecording = computed(() => recordingList.value.find(item => item.id === selectedId.value));
 const durationMs = computed(() => selectedRecording.value ? Math.max(0, (selectedRecording.value.ended_at ?? Date.now()) - selectedRecording.value.started_at) : 0);
@@ -153,24 +157,41 @@ const renderEvent = (event: SessionRecordingEvent) => {
     syncTerminalViewport();
   }
 };
+const loadNextEventPage = async (reset = false) => {
+  if (!selectedId.value || (!reset && nextEventCursor === null)) return false;
+  if (reset) { cachedEvents.value = []; nextEventCursor = 0; cacheStartCursor = 0; }
+  const recordingId = selectedId.value;
+  const cursor = nextEventCursor ?? 0;
+  recordingAbortController ??= new AbortController();
+  const page = await sessionRecordingApi.read(recordingId, cursor, recordingAbortController.signal);
+  if (recordingId !== selectedId.value) return false;
+  cachedEvents.value.push(...page.eventList);
+  nextEventCursor = page.nextCursor;
+  if (cachedEvents.value.length > MAX_CACHED_EVENTS) {
+    const removedCount = cachedEvents.value.length - MAX_CACHED_EVENTS;
+    cachedEvents.value.splice(0, removedCount);
+    cacheStartCursor += removedCount;
+  }
+  return page.eventList.length > 0;
+};
 const loadEvents = async () => {
   if (!selectedId.value || cachedEvents.value.length) return;
   preparing.value = true;
-  try { let cursor: number | null = 0; while (cursor !== null) { const page = await sessionRecordingApi.read(selectedId.value, cursor); cachedEvents.value.push(...page.eventList); cursor = page.nextCursor; } }
-  catch { error.value = t('sessionRecording.playFailed'); }
+  try { await loadNextEventPage(); }
+  catch (requestError) { const canceled = requestError instanceof DOMException && requestError.name === 'AbortError' || Boolean(requestError && typeof requestError === 'object' && 'code' in requestError && requestError.code === 'ERR_CANCELED'); if (!canceled) error.value = t('sessionRecording.playFailed'); }
   finally { preparing.value = false; }
 };
-const selectRecording = async (id: string) => { stop(); selectedId.value = id; cachedEvents.value = []; timelineOffset.value = 0; recordedTerminalSize = undefined; await nextTick(); await centerRecordingDialog(); await ensureTerminal(); clearTerminalViewportStyles(); fitAddon?.fit(); terminal?.reset(); void loadEvents(); };
-const closePlayer = () => { stop(); selectedId.value=''; cachedEvents.value=[]; recordedTerminalSize=undefined; resizeObserver?.disconnect(); resizeObserver=undefined; terminal?.dispose(); terminal=undefined; fitAddon=undefined; };
+const selectRecording = async (id: string) => { stop(); recordingAbortController?.abort(); recordingAbortController = new AbortController(); selectedId.value = id; cachedEvents.value = []; nextEventCursor = 0; cacheStartCursor = 0; timelineOffset.value = 0; recordedTerminalSize = undefined; await nextTick(); await centerRecordingDialog(); await ensureTerminal(); clearTerminalViewportStyles(); fitAddon?.fit(); terminal?.reset(); void loadEvents(); };
+const closePlayer = () => { stop(); recordingAbortController?.abort(); recordingAbortController=undefined; selectedId.value=''; cachedEvents.value=[]; nextEventCursor=0; cacheStartCursor=0; recordedTerminalSize=undefined; resizeObserver?.disconnect(); resizeObserver=undefined; terminal?.dispose(); terminal=undefined; fitAddon=undefined; };
 const deleteRecording = async (recording: SessionRecording) => { if(recording.status==='active'||!await showConfirmDialog({message:t('sessionRecording.confirmDelete',{name:recording.connection_name})}))return; deletingId.value=recording.id; try{await sessionRecordingApi.delete(recording.id);if(selectedId.value===recording.id)closePlayer();await loadList();}catch{error.value=t('sessionRecording.deleteFailed');}finally{deletingId.value='';} };
-const seekTo = (offset: number) => { stop(); terminal?.reset(); primeTerminalForReplay(); for (const event of cachedEvents.value) { if (event.offsetMs > offset) break; renderEvent(event); } timelineOffset.value = offset; syncTerminalViewport(); };
+const seekTo = async (offset: number) => { stop(); if (cacheStartCursor > 0 && offset < (cachedEvents.value[0]?.offsetMs ?? 0)) { preparing.value = true; try { await loadNextEventPage(true); while (nextEventCursor !== null && (cachedEvents.value[cachedEvents.value.length - 1]?.offsetMs ?? 0) < offset) await loadNextEventPage(); } finally { preparing.value = false; } } terminal?.reset(); primeTerminalForReplay(); for (const event of cachedEvents.value) { if (event.offsetMs > offset) break; renderEvent(event); } timelineOffset.value = offset; syncTerminalViewport(); };
 const play = async () => {
   await ensureTerminal(); await loadEvents(); if (!cachedEvents.value.length) return;
   const lastOffset = cachedEvents.value[cachedEvents.value.length - 1]?.offsetMs ?? 0;
-  if (timelineOffset.value >= lastOffset) seekTo(0);
+  if (timelineOffset.value >= lastOffset && nextEventCursor === null) await seekTo(0);
   else if (timelineOffset.value === 0) { terminal?.reset(); primeTerminalForReplay(); }
   const generation = ++playGeneration; playing.value = true; let previous = timelineOffset.value;
-  try { for (const event of cachedEvents.value) { if (event.offsetMs < timelineOffset.value) continue; if (generation !== playGeneration) return; const delay = Math.min(1000, Math.max(0, event.offsetMs - previous)) / speed.value; if (delay) await sleep(delay); if (generation !== playGeneration) return; renderEvent(event); timelineOffset.value = event.offsetMs; previous = event.offsetMs; } }
+  try { let index = cachedEvents.value.findIndex(event => event.offsetMs >= timelineOffset.value); if (index < 0) index = cachedEvents.value.length; while (generation === playGeneration) { if (index >= cachedEvents.value.length) { if (nextEventCursor === null || !await loadNextEventPage()) break; index = Math.max(0, cachedEvents.value.findIndex(event => event.offsetMs >= previous)); continue; } const event = cachedEvents.value[index++]; const delay = Math.min(1000, Math.max(0, event.offsetMs - previous)) / speed.value; if (delay) await sleep(delay); if (generation !== playGeneration) return; renderEvent(event); timelineOffset.value = event.offsetMs; previous = event.offsetMs; } }
   finally { if (generation === playGeneration) playing.value = false; }
 };
 const stop = () => { playGeneration += 1; playing.value = false; };
@@ -187,7 +208,7 @@ onMounted(() => {
   }
   void loadList();
 });
-onBeforeUnmount(() => { window.removeEventListener('keydown', handleEscape); stop(); resizeObserver?.disconnect(); terminal?.dispose(); });
+onBeforeUnmount(() => { window.removeEventListener('keydown', handleEscape); stop(); recordingAbortController?.abort(); resizeObserver?.disconnect(); terminal?.dispose(); });
 </script>
 
 <style scoped>

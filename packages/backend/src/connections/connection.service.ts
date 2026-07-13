@@ -19,8 +19,10 @@ import { AccessControlApplication } from '../access-control/access-control.appli
 import { accessControlRepository } from '../access-control/access-control.repository';
 import * as ProxyRepository from '../proxies/proxy.repository';
 import * as SshKeyRepository from '../ssh_keys/ssh_key.repository';
+import { createLogger } from '../logging/logger';
 
 const accessControl = new AccessControlApplication(accessControlRepository);
+const logger = createLogger('ConnectionService');
 
 const requireOwnedTags = async (tagIds: number[], subject: AuthorizationSubject): Promise<void> => {
     if (tagIds.length === 0) return;
@@ -272,7 +274,7 @@ export const createConnection = async (
     // +++ Define a local type alias for clarity, including ssh_key_id +++
     type ConnectionDataForRepo = Omit<FullConnectionData, 'id' | 'created_at' | 'updated_at' | 'last_connected_at' | 'tag_ids'> & { jump_chain?: number[] | null; proxy_type?: 'proxy' | 'jump' | null };
 
-    console.log('[Service:createConnection] Received input:', JSON.stringify(input, null, 2)); // Log input
+    logger.info('Creating connection', { type: input.type, authMethod: input.auth_method });
 
     // 0. 处理和验证 jump_chain
     if (subject) await requireOwnedDependencies(input, subject);
@@ -419,7 +421,7 @@ export const createConnection = async (
     if (finalConnectionData.ssh_key_id === null) {
         delete (finalConnectionData as any).ssh_key_id; // Adjust based on repository function signature if needed
     }
-    console.log('[Service:createConnection] Data being passed to ConnectionRepository.createConnection:', JSON.stringify(finalConnectionData, null, 2)); // Log data before saving
+    logger.debug('Connection data prepared', { type: finalConnectionData.type, authMethod: finalConnectionData.auth_method });
 
     // 4. 在仓库中创建连接记录
     // Pass the potentially modified finalConnectionData
@@ -639,7 +641,7 @@ export const updateConnection = async (
     let updatedFieldsForAudit: string[] = []; // 跟踪审计日志的字段
     if (hasNonTagChanges) {
         updatedFieldsForAudit = Object.keys(dataToUpdate); // 在更新调用之前获取字段
-        console.log(`[Service:updateConnection] Data being passed to ConnectionRepository.updateConnection for ID ${id}:`, JSON.stringify(dataToUpdate, null, 2)); // ADD THIS LOG
+        logger.debug('Updating connection', { connectionId: id, changedFieldList: updatedFieldsForAudit });
         const updated = await ConnectionRepository.updateConnection(id, dataToUpdate);
         if (!updated) {
             // 如果 findFullConnectionById 成功，则不应发生这种情况，但这是良好的实践

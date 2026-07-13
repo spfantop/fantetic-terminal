@@ -9,6 +9,7 @@ export interface BackupManifest {
 }
 
 export const backupApi = {
+  async readCount(): Promise<number> { return (await apiClient.get<{ total: number }>('/backups/count')).data.total; },
   async list(): Promise<BackupManifest[]> { return (await apiClient.get<BackupManifest[]>('/backups')).data; },
   async create(): Promise<BackupManifest> { return (await apiClient.post<BackupManifest>('/backups')).data; },
   async verify(backupId: string): Promise<{ valid: boolean; errors: string[] }> {

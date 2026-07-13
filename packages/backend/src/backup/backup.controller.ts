@@ -23,6 +23,10 @@ export const listBackups = (_req: Request, res: Response): void => {
   try { res.json(service.listBackups()); } catch (error) { fail(res, error); }
 };
 
+export const readBackupCount = (_req: Request, res: Response): void => {
+  try { res.json({ total: service.countBackups() }); } catch (error) { fail(res, error); }
+};
+
 export const createBackup = async (_req: Request, res: Response): Promise<void> => {
   try {
     const backup = await service.createBackup();

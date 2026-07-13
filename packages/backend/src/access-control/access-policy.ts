@@ -28,6 +28,15 @@ const GROUP_ROLE_LIMIT: Record<GroupRole, Exclude<ConnectionPermission, 'none'>>
   owner: 'manage',
 };
 
+// SQL 列表投影与运行时授权规则同处一处维护，避免 Repository 复制角色上限规则后发生漂移。
+export const CONNECTION_PERMISSION_LEVEL_SQL = `CASE
+  WHEN membership.role = 'viewer' THEN 1
+  WHEN membership.role = 'operator' AND permission.permission IN ('connect', 'manage') THEN 2
+  WHEN membership.role IN ('admin', 'owner') AND permission.permission = 'manage' THEN 3
+  WHEN permission.permission = 'connect' THEN 2
+  ELSE 1
+END`;
+
 const permissionAtLevel = (level: number): ConnectionPermission => (
   (Object.entries(PERMISSION_LEVEL).find(([, value]) => value === level)?.[0]
     ?? 'none') as ConnectionPermission

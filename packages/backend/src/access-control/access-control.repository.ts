@@ -144,6 +144,36 @@ export class SqliteAccessControlRepository implements AccessControlRepository {
     };
   }
 
+  async readConnectionAccessList(userId: number, connectionIdList: number[]): Promise<Map<number, {
+    ownerUserId: number | null;
+    grants: ConnectionGrant[];
+  }>> {
+    const result = new Map<number, { ownerUserId: number | null; grants: ConnectionGrant[] }>();
+    if (connectionIdList.length === 0) return result;
+    const db = await this.getDatabase();
+    const placeholders = connectionIdList.map(() => '?').join(',');
+    const rowList = await allDb<{
+      connection_id: number;
+      owner_user_id: number | null;
+      group_role: ConnectionGrant['groupRole'] | null;
+      permission: ConnectionGrant['permission'] | null;
+    }>(db, `
+      SELECT connection.id AS connection_id, connection.owner_user_id,
+             membership.role AS group_role, permission.permission
+      FROM connections connection
+      LEFT JOIN connection_group_permissions permission ON permission.connection_id = connection.id
+      LEFT JOIN user_group_members membership
+        ON membership.group_id = permission.group_id AND membership.user_id = ?
+      WHERE connection.id IN (${placeholders})
+    `, [userId, ...connectionIdList]);
+    for (const row of rowList) {
+      const access = result.get(row.connection_id) ?? { ownerUserId: row.owner_user_id, grants: [] };
+      if (row.group_role && row.permission) access.grants.push({ groupRole: row.group_role, permission: row.permission });
+      result.set(row.connection_id, access);
+    }
+    return result;
+  }
+
   async saveConnectionGrant(input: ConnectionGroupGrant): Promise<ConnectionGroupGrant> {
     const db = await this.getDatabase();
     await runDb(db, `
@@ -256,6 +286,16 @@ export class SqliteAccessControlRepository implements AccessControlRepository {
       groupName: row.group_name,
       permission: row.permission,
     }));
+  }
+
+  async readAdministrationSummary(): Promise<{ users: number; groups: number; assets: number }> {
+    const db = await this.getDatabase();
+    const [users, groups, assets] = await Promise.all([
+      getDb<{ total: number }>(db, 'SELECT COUNT(*) AS total FROM users'),
+      getDb<{ total: number }>(db, 'SELECT COUNT(*) AS total FROM user_groups'),
+      getDb<{ total: number }>(db, 'SELECT COUNT(*) AS total FROM connections'),
+    ]);
+    return { users: users?.total ?? 0, groups: groups?.total ?? 0, assets: assets?.total ?? 0 };
   }
 }
 

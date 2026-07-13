@@ -7,6 +7,7 @@ import {
 import { createAuthorizationSubject } from '../access-control/authorization-subject';
 import { userRepository } from '../user/user.repository';
 import { setAuditActor } from '../audit/audit-context';
+import { isElectronRuntimeNonceValid } from '../security/electron-runtime-nonce';
 
 export const sessionMatchesAuthenticationEpoch = (
     sessionEpoch: number | undefined,
@@ -18,6 +19,10 @@ export const sessionMatchesAuthenticationEpoch = (
  */
 export const isAuthenticated = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     if (isElectronAppMode()) {
+        if (!isElectronRuntimeNonceValid(req.headers)) {
+            res.status(401).json({ message: 'Unauthorized.' });
+            return;
+        }
         req.session.userId = ELECTRON_APP_USER_ID;
         req.session.username = ELECTRON_APP_USERNAME;
         req.session.requiresTwoFactor = false;

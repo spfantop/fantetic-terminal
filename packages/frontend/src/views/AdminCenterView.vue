@@ -52,19 +52,20 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { useAuthStore, type SystemRole } from '../stores/auth.store';
-import AccessControlSettings from '../components/settings/AccessControlSettings.vue';
-import SessionRecordingSettings from '../components/settings/SessionRecordingSettings.vue';
-import DataManagementSection from '../components/settings/DataManagementSection.vue';
-import AuditLogView from './AuditLogView.vue';
 import { accessControlApi } from '../services/accessControl.api';
 import { sessionRecordingApi } from '../services/sessionRecording.api';
 import { backupApi } from '../services/backup.api';
 import apiClient from '../utils/apiClient';
 import { useDraggableDialog } from '../composables/useDraggableDialog';
+
+const AccessControlSettings = defineAsyncComponent(() => import('../components/settings/AccessControlSettings.vue'));
+const SessionRecordingSettings = defineAsyncComponent(() => import('../components/settings/SessionRecordingSettings.vue'));
+const DataManagementSection = defineAsyncComponent(() => import('../components/settings/DataManagementSection.vue'));
+const AuditLogView = defineAsyncComponent(() => import('./AuditLogView.vue'));
 
 type AdminSection = 'overview' | 'accessControl' | 'auditLogs' | 'sessionRecordings' | 'dataManagement';
 interface AdminNavigationItem {
@@ -151,12 +152,15 @@ const loadOverviewStats = async () => {
     { key:'auditLogs',load:async()=>Number((await apiClient.get<{total:number}>('/audit-logs',{params:{limit:1,offset:0}})).data.total) },
     { key:'recordings',load:async()=>Number((await sessionRecordingApi.list({limit:1,offset:0})).total) },
   ];
-  if (administratorRoles.includes(authStore.user?.systemRole ?? 'user')) jobs.push(
-    {key:'users',load:async()=>(await accessControlApi.listUsers()).length},
-    {key:'groups',load:async()=>(await accessControlApi.listGroups()).length},
-    {key:'assets',load:async()=>(await accessControlApi.listConnections()).length},
-    {key:'backups',load:async()=>(await backupApi.list()).length},
-  );
+  if (administratorRoles.includes(authStore.user?.systemRole ?? 'user')) {
+    const summaryPromise = accessControlApi.readSummary();
+    jobs.push(
+      {key:'users',load:async()=>(await summaryPromise).users},
+      {key:'groups',load:async()=>(await summaryPromise).groups},
+      {key:'assets',load:async()=>(await summaryPromise).assets},
+      {key:'backups',load:()=>backupApi.readCount()},
+    );
+  }
   const results=await Promise.allSettled(jobs.map(job=>job.load()));
   results.forEach((result,index)=>{overviewStats.value[jobs[index]!.key]=result.status==='fulfilled'?result.value:null;});
   overviewLoading.value=false;
