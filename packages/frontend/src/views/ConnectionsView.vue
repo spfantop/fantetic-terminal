@@ -28,6 +28,11 @@ import {
   createMobileLongPressHandlers,
   type MobileLongPressHandlers,
 } from '../composables/useMobileLongPress';
+import {
+  compareManualConnectionOrder as compareManualOrder,
+  filterAndSortConnections,
+  getDescendantFolderIds,
+} from '../features/connections/connection-filtering';
 
 const { t } = useI18n();
 const { showConfirmDialog } = useConfirmDialog();
@@ -172,69 +177,12 @@ const selectedConnectionIdsForBatch = ref<Set<number>>(new Set());
 const showBatchEditForm = ref(false);
 const isDeletingSelectedConnections = ref(false);
 
-const compareManualOrder = <T extends { sort_order?: number; name?: string | null; id: number }>(a: T, b: T) => {
-  const orderA = typeof a.sort_order === 'number' ? a.sort_order : Number.MAX_SAFE_INTEGER;
-  const orderB = typeof b.sort_order === 'number' ? b.sort_order : Number.MAX_SAFE_INTEGER;
-  if (orderA !== orderB) return orderA - orderB;
-  const nameCompare = (a.name || '').localeCompare(b.name || '');
-  return nameCompare !== 0 ? nameCompare : a.id - b.id;
-};
-
-const connectionMatchesTagFilter = (conn: ConnectionInfo) => {
-  if (selectedTagIds.value.length === 0) return true;
-  const connectionTagIds = conn.tag_ids ?? [];
-  return selectedTagIds.value.some(tagId => connectionTagIds.includes(tagId));
-};
-
-const getDescendantFolderIds = (folderId: number) => {
-  const descendantIds = new Set<number>();
-  const childrenByParent = new Map<number | null, ConnectionFolderInfo[]>();
-
-  folders.value.forEach((folder) => {
-    const parentId = folder.parent_id ?? null;
-    childrenByParent.set(parentId, [...(childrenByParent.get(parentId) ?? []), folder]);
-  });
-
-  const collect = (parentId: number) => {
-    (childrenByParent.get(parentId) ?? []).forEach((child) => {
-      if (descendantIds.has(child.id)) return;
-      descendantIds.add(child.id);
-      collect(child.id);
-    });
-  };
-
-  collect(folderId);
-  return descendantIds;
-};
-
-const filterConnectionsByControls = (sourceConnections: ConnectionInfo[]) => {
-  const filterFolderId = selectedFolderId.value;
-  const query = searchQuery.value.toLowerCase().trim();
-
-  const allowedFolderIds = filterFolderId === null ? null : new Set([filterFolderId, ...getDescendantFolderIds(filterFolderId)]);
-  let filteredByFolder = allowedFolderIds === null
-    ? [...sourceConnections]
-    : sourceConnections.filter(conn => conn.folder_id !== null && typeof conn.folder_id !== 'undefined' && allowedFolderIds.has(conn.folder_id));
-
-  filteredByFolder = filteredByFolder.filter(connectionMatchesTagFilter);
-
-  let searchedConnections = filteredByFolder;
-  if (query) {
-    searchedConnections = filteredByFolder.filter(conn => {
-      const nameMatch = conn.name?.toLowerCase().includes(query);
-      const usernameMatch = conn.username?.toLowerCase().includes(query);
-      const hostMatch = conn.host?.toLowerCase().includes(query);
-      const portMatch = conn.port?.toString().includes(query);
-      const notesMatch = conn.notes?.toLowerCase().includes(query); // 添加对备注的搜索
-      return nameMatch || usernameMatch || hostMatch || portMatch || notesMatch;
-    });
-  }
-
-  return searchedConnections;
-};
-
 const manualOrderedFilteredConnections = computed(() => {
-  return filterConnectionsByControls(connections.value).sort(compareManualOrder);
+  return filterAndSortConnections(connections.value, folders.value, {
+    folderId: selectedFolderId.value,
+    tagIdList: selectedTagIds.value,
+    searchQuery: searchQuery.value,
+  });
 });
 
 const filteredAndSortedConnections = computed(() => manualOrderedFilteredConnections.value);
@@ -532,7 +480,7 @@ const getFolderSiblingIds = (parentId: number | null) => (
 
 const isFolderDropAllowed = (draggedFolderId: number, targetParentId: number | null) => {
   if (draggedFolderId === targetParentId) return false;
-  return targetParentId === null || !getDescendantFolderIds(draggedFolderId).has(targetParentId);
+  return targetParentId === null || !getDescendantFolderIds(draggedFolderId, folders.value).has(targetParentId);
 };
 
 const getFolderHeaderDropPosition = (event: DragEvent): FolderDropPosition => {
@@ -1276,7 +1224,7 @@ const handleDeleteFolderFromContext = async () => {
 
   if (!folder) return;
 
-  const descendantFolderIds = getDescendantFolderIds(folder.folderId);
+  const descendantFolderIds = getDescendantFolderIds(folder.folderId, folders.value);
   const folderIdsToDelete = new Set([folder.folderId, ...descendantFolderIds]);
   const connectionsToDelete = connections.value.filter(conn => conn.folder_id !== null && typeof conn.folder_id !== 'undefined' && folderIdsToDelete.has(conn.folder_id));
   const connectionCount = connectionsToDelete.length;
