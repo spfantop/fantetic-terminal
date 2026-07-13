@@ -6,6 +6,7 @@ import { sshSuspendService } from '../ssh-suspend/ssh-suspend.service';
 import { clearSshOutputQueue } from './ssh-output-buffer';
 import { clearSshInputQueue } from './ssh-input-writer';
 import { finishSessionRecording } from '../session-recording/session-recording.service';
+import { createKeyedRunOnce } from '../utils/keyed-run-once';
 
 // --- 解析 Ports 字符串的辅助函数 ---
 export function parsePortsString(portsString: string | undefined | null): PortInfo[] {
@@ -70,7 +71,7 @@ export function parsePortsString(portsString: string | undefined | null): PortIn
  * 清理指定会话 ID 关联的所有资源
  * @param sessionId - 会话 ID
  */
-export const cleanupClientConnection = async (sessionId: string | undefined) => { // Made async
+const cleanupClientConnectionImpl = async (sessionId: string | undefined) => { // Made async
     if (!sessionId) return;
 
     const state = clientStates.get(sessionId);
@@ -167,3 +168,9 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
         // console.warn(`[WebSocket Utils] cleanupClientConnection: No state found for session ID ${sessionId}.`);
     }
 };
+
+const cleanupExistingClientConnection = createKeyedRunOnce(cleanupClientConnectionImpl);
+
+export const cleanupClientConnection = (sessionId: string | undefined): Promise<void> => (
+    sessionId ? cleanupExistingClientConnection(sessionId) : Promise.resolve()
+);
