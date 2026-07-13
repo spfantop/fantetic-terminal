@@ -2004,5 +2004,17 @@
     "delete": "この履歴を削除",
     "copiedSuccess": "パスがクリップボードにコピーされました",
     "copiedError": "パスのコピーに失敗しました"
+  },
+  "sessionRecording": {
+    "title": "セッション録画",
+    "description": "権限のある SSH と Telnet の端末セッションを確認・再生します。",
+    "empty": "セッション録画はありません。",
+    "loadFailed": "セッション録画の読み込みに失敗しました。",
+    "playFailed": "セッション録画の読み込みまたは再生に失敗しました。",
+    "play": "再生",
+    "stop": "停止",
+    "speed": "速度",
+    "player": "端末セッションプレーヤー",
+    "status": { "active": "進行中", "completed": "完了", "incomplete": "不完全", "failed": "失敗" }
   }
 }

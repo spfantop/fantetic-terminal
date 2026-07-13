@@ -2028,5 +2028,17 @@
     "delete": "删除此条历史",
     "copiedSuccess": "路径已复制到剪贴板",
     "copiedError": "复制路径失败"
+  },
+  "sessionRecording": {
+    "title": "会话录像",
+    "description": "查看并回放权限范围内的 SSH 与 Telnet 终端会话。",
+    "empty": "暂无会话录像。",
+    "loadFailed": "加载会话录像失败。",
+    "playFailed": "读取或回放会话录像失败。",
+    "play": "回放",
+    "stop": "停止",
+    "speed": "速度",
+    "player": "终端会话回放器",
+    "status": { "active": "进行中", "completed": "已完成", "incomplete": "不完整", "failed": "失败" }
   }
 }

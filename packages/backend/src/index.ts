@@ -49,6 +49,8 @@ import tagsRouter from './tags/tags.routes';
 import settingsRoutes from './settings/settings.routes';
 import notificationRoutes from './notifications/notification.routes';
 import auditRoutes from './audit/audit.routes';
+import sessionRecordingRoutes from './session-recording/session-recording.routes';
+import { markInterruptedSessionRecordings } from './session-recording/session-recording.repository';
 import commandHistoryRoutes from './command-history/command-history.routes';
 import quickCommandsRoutes from './quick-commands/quick-commands.routes';
 import terminalThemeRoutes from './terminal-themes/terminal-theme.routes';
@@ -198,6 +200,7 @@ const startServer = async (): Promise<WebSocketServer> => {
     app.use('/api/v1/ai', aiRoutes);
     app.use('/api/v1/access-control', accessControlRouter);
     app.use('/api/v1/backups', backupRouter);
+    app.use('/api/v1/session-recordings', sessionRecordingRoutes);
     
     // 状态检查接口
     app.get('/api/v1/status', (req: Request, res: Response) => {
@@ -262,6 +265,10 @@ const main = async () => {
     const restoredBackupId = await applyScheduledRestore(getAppDataPath());
     if (restoredBackupId) console.warn(`[Backup] 已在数据库启动前恢复备份 ${restoredBackupId}。`);
     await initializeDatabase();   // 然后初始化数据库
+    const interruptedRecordingCount = await markInterruptedSessionRecordings();
+    if (interruptedRecordingCount > 0) {
+        console.warn(`[SessionRecording] 已将 ${interruptedRecordingCount} 个异常中断的录像标记为不完整。`);
+    }
     webSocketServer = await startServer();
 };
 

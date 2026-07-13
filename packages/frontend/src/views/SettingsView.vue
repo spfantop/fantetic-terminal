@@ -128,6 +128,10 @@
           <AuditLogView />
         </div>
 
+        <div v-if="activeTab === 'sessionRecordings'">
+          <SessionRecordingSettings />
+        </div>
+
         <div v-if="activeTab === 'accessControl'">
           <AccessControlSettings />
         </div>
@@ -181,6 +185,7 @@ import NotificationsView from './NotificationsView.vue';
 import DashboardView from './DashboardView.vue';
 import AuditLogView from './AuditLogView.vue';
 import AccessControlSettings from '../components/settings/AccessControlSettings.vue';
+import SessionRecordingSettings from '../components/settings/SessionRecordingSettings.vue';
 import { createSettingsTabs, type SettingsTabKey } from '../utils/settingsTabs';
 import { useResizable } from '../composables/useResizable';
 import { isAccountFeatureAvailable } from '../utils/runtimeConfig';

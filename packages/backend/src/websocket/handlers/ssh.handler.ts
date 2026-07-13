@@ -11,6 +11,7 @@ import { writeSshInput } from '../ssh-input-writer';
 import { appendSuspendLogBatch, createSuspendLogBatcher, flushSuspendLogBatcher } from '../suspend-log-batcher';
 import { AccessControlApplication } from '../../access-control/access-control.application';
 import { accessControlRepository } from '../../access-control/access-control.repository';
+import { startSessionRecording } from '../../session-recording/session-recording.service';
 
 const accessControlApplication = new AccessControlApplication(accessControlRepository);
 
@@ -85,6 +86,24 @@ export async function handleSshConnect(
             supportsSshBinaryInput: payload?.clientCapabilities?.sshBinaryInput === true,
         };
         clientStates.set(newSessionId, newState);
+        try {
+            newState.sessionRecorder = await startSessionRecording({
+                userId: ws.userId,
+                username: ws.username,
+                connectionId: dbConnectionIdAsNumber,
+                connectionName: connInfo!.name,
+                protocol: 'SSH',
+            });
+        } catch (error) {
+            console.error(`[SessionRecording] SSH 会话 ${newSessionId} 启动录像失败:`, error);
+            await auditLogService.logAction('SESSION_RECORDING_FAILURE', {
+                userId: ws.userId,
+                username: ws.username,
+                connectionId: dbConnectionIdAsNumber,
+                sessionId: newSessionId,
+                reason: error instanceof Error ? error.message : String(error),
+            });
+        }
         console.log(`WebSocket: 为用户 ${ws.username} (IP: ${clientIp}) 创建新会话 ${newSessionId} (DB ID: ${dbConnectionIdAsNumber}, 连接名称: ${newState.connectionName})`);
 
         if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ssh:status', payload: 'SSH 连接成功，正在打开 Shell...' }));
@@ -123,6 +142,7 @@ export async function handleSshConnect(
                 newState.isShellReady = true;
 
                 stream.on('data', (data: Buffer) => {
+                    newState.sessionRecorder?.recordOutput(data);
                     scheduleSshOutput(newState, data);
                     // 如果会话被标记为待挂起，则将输出写入日志
                     const currentState = clientStates.get(newSessionId); // 获取最新的状态
@@ -135,6 +155,7 @@ export async function handleSshConnect(
                     if (process.env.DEBUG_SSH_STDERR === 'true') {
                         console.error(`SSH Stderr (会话: ${newSessionId}): ${data.toString('utf8').substring(0, 100)}...`);
                     }
+                    newState.sessionRecorder?.recordOutput(data);
                     scheduleSshOutput(newState, data);
                     // 同样，如果会话被标记为待挂起，则将 stderr 输出写入日志
                     const currentState = clientStates.get(newSessionId);
@@ -280,6 +301,7 @@ export function handleSshResize(ws: AuthenticatedWebSocket, payload: any): void 
             console.log(`SSH: 会话 ${sessionId} 调整终端大小: ${cols}x${rows}`);
         }
         state.sshShellStream.setWindow(rows, cols, 0, 0);
+        state.sessionRecorder?.recordResize(cols, rows);
     } else {
         // Store intended size if shell not ready, apply when shell is ready.
         // This part is a bit more complex as it requires modifying the shell opening logic.

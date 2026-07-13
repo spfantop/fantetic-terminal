@@ -5,6 +5,7 @@ import { clientStates, sftpService, statusMonitorService } from './state';
 import { sshSuspendService } from '../ssh-suspend/ssh-suspend.service';
 import { clearSshOutputQueue } from './ssh-output-buffer';
 import { clearSshInputQueue } from './ssh-input-writer';
+import { finishSessionRecording } from '../session-recording/session-recording.service';
 
 // --- 解析 Ports 字符串的辅助函数 ---
 export function parsePortsString(portsString: string | undefined | null): PortInfo[] {
@@ -79,6 +80,7 @@ export const cleanupClientConnection = async (sessionId: string | undefined) => 
         // 清理会话时取消延迟输出任务，避免关闭后继续向旧 WebSocket 写入。
         clearSshOutputQueue(state);
         clearSshInputQueue(state);
+        await finishSessionRecording(state.sessionRecorder);
 
         // 1. 停止状态轮询 (如果存在)
         if (statusMonitorService) statusMonitorService.stopStatusPolling(sessionId);

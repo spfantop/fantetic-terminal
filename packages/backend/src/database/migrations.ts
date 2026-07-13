@@ -552,6 +552,31 @@ const definedMigrations: Migration[] = [
             CREATE INDEX IF NOT EXISTS idx_audit_logs_session ON audit_logs(session_id);
             CREATE INDEX IF NOT EXISTS idx_audit_logs_request ON audit_logs(request_id);
         `,
+    },
+    {
+        id: 24,
+        name: 'Add encrypted terminal session recording index',
+        check: async (db: Database): Promise<boolean> => !(await tableExists(db, 'session_recordings')),
+        sql: `
+            CREATE TABLE IF NOT EXISTS session_recordings (
+                id TEXT PRIMARY KEY,
+                user_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL,
+                username TEXT NULL,
+                connection_id INTEGER NOT NULL,
+                connection_name TEXT NOT NULL,
+                protocol TEXT NOT NULL CHECK(protocol IN ('SSH', 'TELNET')),
+                started_at INTEGER NOT NULL,
+                ended_at INTEGER NULL,
+                status TEXT NOT NULL CHECK(status IN ('active', 'completed', 'incomplete', 'failed')),
+                relative_path TEXT NOT NULL UNIQUE,
+                event_count INTEGER NOT NULL DEFAULT 0,
+                byte_count INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_session_recordings_user_time
+                ON session_recordings(user_id, started_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_session_recordings_asset_time
+                ON session_recordings(connection_id, started_at DESC);
+        `,
     }
 ];
 

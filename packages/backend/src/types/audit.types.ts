@@ -61,6 +61,7 @@ export type AuditLogActionType =
   | 'SSH_CONNECT_SUCCESS'
   //   - SSH_CONNECT_FAILURE: { userId?: number, username?: string, connectionId: number, connectionName?: string, ip?: string, reason: string }
   | 'SSH_CONNECT_FAILURE'
+  | 'SESSION_RECORDING_FAILURE'
   //   - SSH_SHELL_FAILURE:   { userId?: number, username?: string, connectionId: number, connectionName?: string, sessionId: string, ip?: string, reason: string }
   | 'SSH_SHELL_FAILURE'
 

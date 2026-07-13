@@ -11,6 +11,8 @@ assert.match(routeSource, /router\.use\(isAuthenticated, requireSystemAdministra
 const appDataPath = fs.mkdtempSync(path.join(os.tmpdir(), 'fantetic-backup-test-'));
 fs.mkdirSync(path.join(appDataPath, 'uploads'), { recursive: true });
 fs.writeFileSync(path.join(appDataPath, 'uploads', 'avatar.txt'), 'avatar');
+fs.mkdirSync(path.join(appDataPath, 'session-recordings', '2026-07'), { recursive: true });
+fs.writeFileSync(path.join(appDataPath, 'session-recordings', '2026-07', 'recording.enc'), 'encrypted-recording');
 
 const service = createBackupService({
   appDataPath,
@@ -22,6 +24,7 @@ const service = createBackupService({
 const backup = await service.createBackup();
 assert.match(backup.id, /^20260713T000000-/);
 assert.equal((await service.verifyBackup(backup.id)).valid, true);
+assert.equal(fs.existsSync(path.join(appDataPath, 'backups', backup.id, 'session-recordings', '2026-07', 'recording.enc')), true);
 assert.throws(() => service.readBackup('../escape'));
 
 fs.writeFileSync(path.join(appDataPath, 'backups', backup.id, 'uploads', 'avatar.txt'), 'tampered');

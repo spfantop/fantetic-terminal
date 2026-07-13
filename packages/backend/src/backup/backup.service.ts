@@ -19,7 +19,7 @@ type BackupServiceDependencies = {
 };
 
 const BACKUP_ID_PATTERN = /^\d{8}T\d{6}-[a-f0-9]{8}$/;
-const BACKUP_CONTENT_NAMES = ['uploads', 'custom-html-themes'] as const;
+const BACKUP_CONTENT_NAMES = ['uploads', 'custom-html-themes', 'session-recordings'] as const;
 
 const assertInside = (targetPath: string, parentPath: string): string => {
   const target = path.resolve(targetPath);

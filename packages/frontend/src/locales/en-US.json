@@ -2023,5 +2023,17 @@
     "delete": "Delete this history entry",
     "copiedSuccess": "Path copied to clipboard",
     "copiedError": "Failed to copy path"
+  },
+  "sessionRecording": {
+    "title": "Session Recordings",
+    "description": "Review and replay authorized SSH and Telnet terminal sessions.",
+    "empty": "No session recordings.",
+    "loadFailed": "Failed to load session recordings.",
+    "playFailed": "Failed to read or replay the session recording.",
+    "play": "Replay",
+    "stop": "Stop",
+    "speed": "Speed",
+    "player": "Terminal session player",
+    "status": { "active": "Active", "completed": "Completed", "incomplete": "Incomplete", "failed": "Failed" }
   }
 }
