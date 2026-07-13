@@ -534,6 +534,24 @@ const definedMigrations: Migration[] = [
         name: 'Add user authentication epoch for session revocation',
         check: async (db: Database): Promise<boolean> => !(await columnExists(db, 'users', 'auth_epoch')),
         sql: addUserAuthenticationEpochSQL,
+    },
+    {
+        id: 23,
+        name: 'Add structured audit event fields',
+        check: async (db: Database): Promise<boolean> => !(await columnExists(db, 'audit_logs', 'request_id')),
+        sql: `
+            ALTER TABLE audit_logs ADD COLUMN request_id TEXT NULL;
+            ALTER TABLE audit_logs ADD COLUMN actor_username TEXT NULL;
+            ALTER TABLE audit_logs ADD COLUMN actor_role TEXT NULL;
+            ALTER TABLE audit_logs ADD COLUMN source_ip TEXT NULL;
+            ALTER TABLE audit_logs ADD COLUMN asset_id INTEGER NULL;
+            ALTER TABLE audit_logs ADD COLUMN session_id TEXT NULL;
+            ALTER TABLE audit_logs ADD COLUMN result TEXT NOT NULL DEFAULT 'success';
+            CREATE INDEX IF NOT EXISTS idx_audit_logs_actor_time ON audit_logs(actor_user_id, timestamp DESC);
+            CREATE INDEX IF NOT EXISTS idx_audit_logs_asset_time ON audit_logs(asset_id, timestamp DESC);
+            CREATE INDEX IF NOT EXISTS idx_audit_logs_session ON audit_logs(session_id);
+            CREATE INDEX IF NOT EXISTS idx_audit_logs_request ON audit_logs(request_id);
+        `,
     }
 ];
 

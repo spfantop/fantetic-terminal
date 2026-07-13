@@ -80,6 +80,10 @@
                   <tr>
                     <th scope="col" class="px-6 py-3 text-left font-medium text-text-secondary tracking-wider whitespace-nowrap">{{ $t('auditLog.table.timestamp') }}</th>
                     <th scope="col" class="px-6 py-3 text-left font-medium text-text-secondary tracking-wider whitespace-nowrap">{{ $t('auditLog.table.actionType') }}</th>
+                    <th scope="col" class="px-6 py-3 text-left font-medium text-text-secondary tracking-wider whitespace-nowrap">{{ $t('auditLog.table.actor') }}</th>
+                    <th scope="col" class="px-6 py-3 text-left font-medium text-text-secondary tracking-wider whitespace-nowrap">{{ $t('auditLog.table.result') }}</th>
+                    <th scope="col" class="px-6 py-3 text-left font-medium text-text-secondary tracking-wider whitespace-nowrap">{{ $t('auditLog.table.sourceIp') }}</th>
+                    <th scope="col" class="px-6 py-3 text-left font-medium text-text-secondary tracking-wider whitespace-nowrap">{{ $t('auditLog.table.requestId') }}</th>
                     <th scope="col" class="px-6 py-3 text-left font-medium text-text-secondary tracking-wider">{{ $t('auditLog.table.details') }}</th>
                   </tr>
                 </thead>
@@ -87,6 +91,10 @@
                   <tr v-for="log in logs" :key="log.id" class="hover:bg-header/50"> <!-- Table rows with hover -->
                     <td class="px-6 py-4 whitespace-nowrap">{{ formatTimestamp(log.timestamp) }}</td>
                     <td class="px-6 py-4 whitespace-nowrap">{{ translateActionType(log.action_type) }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">{{ log.actor_username || (log.actor_user_id ? `#${log.actor_user_id}` : '-') }}<span v-if="log.actor_role" class="text-text-secondary"> · {{ log.actor_role }}</span></td>
+                    <td class="px-6 py-4 whitespace-nowrap"><span :class="log.result === 'success' ? 'text-success' : 'text-error'">{{ log.result }}</span></td>
+                    <td class="px-6 py-4 whitespace-nowrap font-mono text-xs">{{ log.source_ip || '-' }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap font-mono text-xs" :title="log.request_id || ''">{{ log.request_id ? log.request_id.slice(0, 12) : '-' }}</td>
                     <td class="px-6 py-4">
                       <pre v-if="log.details" class="whitespace-pre-wrap break-all bg-header/50 p-2 border border-border/50 rounded text-xs font-mono max-h-40 overflow-y-auto">{{ formatDetails(log.details) }}</pre> <!-- Details pre styling -->
                       <span v-else class="text-text-secondary">-</span>
@@ -121,6 +129,9 @@ const selectedActionType = ref<AuditLogActionType | ''>(''); // Allow empty stri
 // Define all possible action types for the dropdown
 const allActionTypes: AuditLogActionType[] = [
     'LOGIN_SUCCESS', 'LOGIN_FAILURE', 'LOGOUT', 'PASSWORD_CHANGED',
+    'USER_CREATED', 'USER_UPDATED', 'USER_PASSWORD_RESET', 'USER_DELETED',
+    'GROUP_CREATED', 'GROUP_UPDATED', 'GROUP_DELETED', 'GROUP_MEMBER_SAVED', 'GROUP_MEMBER_DELETED',
+    'CONNECTION_GRANT_SAVED', 'CONNECTION_GRANT_DELETED',
     '2FA_ENABLED', '2FA_DISABLED',
     'CONNECTION_CREATED', 'CONNECTION_UPDATED', 'CONNECTION_DELETED',
     'PROXY_CREATED', 'PROXY_UPDATED', 'PROXY_DELETED',

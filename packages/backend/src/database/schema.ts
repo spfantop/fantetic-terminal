@@ -14,7 +14,15 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp INTEGER NOT NULL,
     action_type TEXT NOT NULL,
-    details TEXT NULL
+    details TEXT NULL,
+    request_id TEXT NULL,
+    actor_user_id INTEGER NULL,
+    actor_username TEXT NULL,
+    actor_role TEXT NULL,
+    source_ip TEXT NULL,
+    asset_id INTEGER NULL,
+    session_id TEXT NULL,
+    result TEXT NOT NULL DEFAULT 'success'
 );
 `;
 

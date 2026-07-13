@@ -111,6 +111,9 @@ export type NotificationSettingData = Omit<NotificationSetting, 'id' | 'created_
 // Keep action types aligned with backend for potential filtering
 export type AuditLogActionType =
   | 'LOGIN_SUCCESS' | 'LOGIN_FAILURE' | 'LOGOUT' | 'PASSWORD_CHANGED'
+  | 'USER_CREATED' | 'USER_UPDATED' | 'USER_PASSWORD_RESET' | 'USER_DELETED'
+  | 'GROUP_CREATED' | 'GROUP_UPDATED' | 'GROUP_DELETED' | 'GROUP_MEMBER_SAVED' | 'GROUP_MEMBER_DELETED'
+  | 'CONNECTION_GRANT_SAVED' | 'CONNECTION_GRANT_DELETED'
   | '2FA_ENABLED' | '2FA_DISABLED'
   | 'CONNECTION_CREATED' | 'CONNECTION_UPDATED' | 'CONNECTION_DELETED'
   | 'PROXY_CREATED' | 'PROXY_UPDATED' | 'PROXY_DELETED'
@@ -131,6 +134,14 @@ export interface AuditLogEntry {
     timestamp: number; // Unix timestamp (seconds)
     action_type: AuditLogActionType;
     details: Record<string, any> | { raw: string; parseError: boolean } | null; // Parsed JSON or raw string with error flag
+    request_id: string | null;
+    actor_user_id: number | null;
+    actor_username: string | null;
+    actor_role: string | null;
+    source_ip: string | null;
+    asset_id: number | null;
+    session_id: string | null;
+    result: 'success' | 'failure' | 'denied';
 }
 
 // Structure for the API response when fetching logs

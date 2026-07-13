@@ -48,7 +48,11 @@ await runMigrations(db);
 
 assert.deepEqual(
   await get<{ currentVersion: number }>('SELECT MAX(id) AS currentVersion FROM migrations'),
-  { currentVersion: 22 },
+  { currentVersion: 23 },
+);
+assert.deepEqual(
+  await get<{ count: number }>("SELECT COUNT(*) AS count FROM pragma_table_info('audit_logs') WHERE name IN ('request_id','actor_user_id','actor_role','source_ip','asset_id','session_id','result')"),
+  { count: 7 },
 );
 assert.deepEqual(
   await get<{ system_role: string }>('SELECT system_role FROM users WHERE id = 3'),

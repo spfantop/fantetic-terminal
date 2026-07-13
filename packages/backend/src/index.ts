@@ -68,6 +68,7 @@ import { createClientIpResolver } from './config/client-ip';
 import accessControlRouter from './access-control/access-control.routes';
 import { initializeRuntimeSecrets } from './config/runtime-secrets';
 import { installProcessLifecycle } from './config/process-lifecycle';
+import { auditContextMiddleware } from './audit/audit-context';
 
 
 import './services/event.service'; 
@@ -168,6 +169,7 @@ const startServer = async (): Promise<WebSocketServer> => {
         }
     });
     app.use(sessionMiddleware);
+    app.use(auditContextMiddleware);
     // --- 结束会话中间件配置 ---
 
 

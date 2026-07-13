@@ -18,6 +18,10 @@
             "NOTIFICATION_SETTING_DELETED": "通知設定削除",
             "NOTIFICATION_SETTING_UPDATED": "通知設定更新",
             "PASSWORD_CHANGED": "パスワード変更",
+            "USER_CREATED": "ユーザー作成", "USER_UPDATED": "ユーザー更新", "USER_PASSWORD_RESET": "ユーザーパスワードリセット", "USER_DELETED": "ユーザー削除",
+            "GROUP_CREATED": "グループ作成", "GROUP_UPDATED": "グループ更新", "GROUP_DELETED": "グループ削除",
+            "GROUP_MEMBER_SAVED": "グループメンバー保存", "GROUP_MEMBER_DELETED": "グループメンバー削除",
+            "CONNECTION_GRANT_SAVED": "接続権限保存", "CONNECTION_GRANT_DELETED": "接続権限取消",
             "PROXY_CREATED": "プロキシ作成",
             "PROXY_DELETED": "プロキシ削除",
             "PROXY_UPDATED": "プロキシ更新",
@@ -45,7 +49,11 @@
         "table": {
             "actionType": "アクションタイプ",
             "details": "詳細",
-            "timestamp": "タイムスタンプ"
+            "timestamp": "タイムスタンプ",
+            "actor": "操作主体",
+            "result": "結果",
+            "sourceIp": "送信元 IP",
+            "requestId": "リクエスト ID"
         },
         "title": "監査ログ"
     },

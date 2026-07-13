@@ -1,5 +1,17 @@
 import { AuditLogRepository } from '../audit/audit.repository';
 import { AuditLogActionType, AuditLogEntry } from '../types/audit.types';
+import { readAuditContext } from './audit-context';
+
+export const resolveAuditResult = (
+    actionType: AuditLogActionType,
+    details?: Record<string, any> | string | null,
+): AuditLogEntry['result'] => {
+    if (details && typeof details === 'object'
+        && (details.result === 'failure' || details.result === 'denied')) return details.result;
+    if (actionType.includes('UNAUTHORIZED')) return 'denied';
+    if (actionType.includes('FAILURE')) return 'failure';
+    return 'success';
+};
 
 export class AuditLogService {
     private repository: AuditLogRepository;
@@ -21,7 +33,14 @@ export class AuditLogService {
         try {
             // 使用 'await' 确保日志记录完成（如果需要保证顺序或处理错误）
             // 或者不使用 'await' 让其在后台执行
-            await this.repository.addLog(actionType, details);
+            const objectDetails = details && typeof details === 'object' ? details : undefined;
+            const rawAssetId = objectDetails?.assetId ?? objectDetails?.connectionId;
+            const assetId = Number.isInteger(Number(rawAssetId)) ? Number(rawAssetId) : undefined;
+            const sessionId = typeof objectDetails?.sessionId === 'string' ? objectDetails.sessionId : undefined;
+            const result = resolveAuditResult(actionType, details);
+            await this.repository.addLog(actionType, details, {
+                ...readAuditContext(), assetId, sessionId, result,
+            });
         } catch (error) {
             // Repository 内部已经处理了错误打印，这里可以根据需要再次处理或忽略
             console.error(`[Audit Service] Failed to log action ${actionType}:`, error);

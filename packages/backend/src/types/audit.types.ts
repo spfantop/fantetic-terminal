@@ -7,6 +7,15 @@ export type AuditLogActionType =
   | 'PASSWORD_CHANGED'
   | 'USER_PASSWORD_RESET'
   | 'USER_DELETED'
+  | 'USER_CREATED'
+  | 'USER_UPDATED'
+  | 'GROUP_CREATED'
+  | 'GROUP_UPDATED'
+  | 'GROUP_DELETED'
+  | 'GROUP_MEMBER_SAVED'
+  | 'GROUP_MEMBER_DELETED'
+  | 'CONNECTION_GRANT_SAVED'
+  | 'CONNECTION_GRANT_DELETED'
   | '2FA_ENABLED'
   | '2FA_DISABLED'
   // Passkey Events
@@ -63,6 +72,14 @@ export interface AuditLogEntry {
     timestamp: number; // Unix timestamp (seconds)
     action_type: AuditLogActionType;
     details: string | null; // JSON string or null
+    request_id: string | null;
+    actor_user_id: number | null;
+    actor_username: string | null;
+    actor_role: string | null;
+    source_ip: string | null;
+    asset_id: number | null;
+    session_id: string | null;
+    result: 'success' | 'failure' | 'denied';
 }
 
 // 用于创建日志条目的数据结构

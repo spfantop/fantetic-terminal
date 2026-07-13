@@ -6,6 +6,7 @@ import {
 } from '../config/app-mode';
 import { createAuthorizationSubject } from '../access-control/authorization-subject';
 import { userRepository } from '../user/user.repository';
+import { setAuditActor } from '../audit/audit-context';
 
 export const sessionMatchesAuthenticationEpoch = (
     sessionEpoch: number | undefined,
@@ -21,6 +22,7 @@ export const isAuthenticated = async (req: Request, res: Response, next: NextFun
         req.session.username = ELECTRON_APP_USERNAME;
         req.session.requiresTwoFactor = false;
         req.authorization = createAuthorizationSubject({ runtime: 'desktop' }) ?? undefined;
+        if (req.authorization) setAuditActor(req.authorization);
         next();
         return;
     }
@@ -48,6 +50,7 @@ export const isAuthenticated = async (req: Request, res: Response, next: NextFun
             }
 
             req.authorization = authorization;
+            setAuditActor(authorization);
             next();
         } catch (error) {
             console.error('认证用户加载失败:', error);

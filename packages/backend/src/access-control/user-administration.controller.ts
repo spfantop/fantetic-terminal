@@ -39,6 +39,7 @@ export const createUser = async (req: Request, res: Response): Promise<void> => 
       password: typeof req.body.password === 'string' ? req.body.password : '',
       systemRole,
     });
+    await auditLogService.logAction('USER_CREATED', { targetUserId: user.id, systemRole: user.systemRole });
     res.status(201).json(user);
   } catch (error) { handleError(error, res); }
 };
@@ -52,7 +53,11 @@ export const updateUser = async (req: Request, res: Response): Promise<void> => 
     || (status && !STATUS_SET.has(status))) {
     res.status(400).json({ code: 'userAdministration.invalidRequest' }); return;
   }
-  try { res.json(await application.updateUser(req.authorization!, userId, { systemRole, status })); }
+  try {
+    const user = await application.updateUser(req.authorization!, userId, { systemRole, status });
+    await auditLogService.logAction('USER_UPDATED', { targetUserId: userId, systemRole, status });
+    res.json(user);
+  }
   catch (error) { handleError(error, res); }
 };
 

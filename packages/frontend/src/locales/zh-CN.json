@@ -983,6 +983,10 @@
         "LOGIN_FAILURE": "登录失败",
         "LOGOUT": "登出",
         "PASSWORD_CHANGED": "密码已修改",
+        "USER_CREATED": "用户已创建", "USER_UPDATED": "用户已更新", "USER_PASSWORD_RESET": "用户密码已重置", "USER_DELETED": "用户已删除",
+        "GROUP_CREATED": "分组已创建", "GROUP_UPDATED": "分组已更新", "GROUP_DELETED": "分组已删除",
+        "GROUP_MEMBER_SAVED": "分组成员已保存", "GROUP_MEMBER_DELETED": "分组成员已移除",
+        "CONNECTION_GRANT_SAVED": "连接授权已保存", "CONNECTION_GRANT_DELETED": "连接授权已撤销",
         "2FA_ENABLED": "两步验证已启用",
         "2FA_DISABLED": "两步验证已禁用",
         "PASSKEY_REGISTERED": "Passkey 已注册",
@@ -1377,7 +1381,7 @@
     "table": {
       "timestamp": "时间戳",
       "actionType": "操作类型",
-      "details": "详细信息"
+      "details": "详细信息", "actor": "操作主体", "result": "结果", "sourceIp": "来源 IP", "requestId": "请求 ID"
     },
     "paginationInfo": "第 {currentPage} 页 / 共 {totalPages} 页 (总计 {totalLogs} 条记录)",
     "actions": {

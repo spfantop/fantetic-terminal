@@ -999,6 +999,10 @@
         "LOGIN_FAILURE": "Login Failure",
         "LOGOUT": "Logout",
         "PASSWORD_CHANGED": "Password Changed",
+        "USER_CREATED": "User Created", "USER_UPDATED": "User Updated", "USER_PASSWORD_RESET": "User Password Reset", "USER_DELETED": "User Deleted",
+        "GROUP_CREATED": "Group Created", "GROUP_UPDATED": "Group Updated", "GROUP_DELETED": "Group Deleted",
+        "GROUP_MEMBER_SAVED": "Group Member Saved", "GROUP_MEMBER_DELETED": "Group Member Removed",
+        "CONNECTION_GRANT_SAVED": "Connection Grant Saved", "CONNECTION_GRANT_DELETED": "Connection Grant Revoked",
         "2FA_ENABLED": "2FA Enabled",
         "2FA_DISABLED": "2FA Disabled",
         "PASSKEY_REGISTERED": "Passkey Registered",
@@ -1373,7 +1377,7 @@
     "table": {
       "timestamp": "Timestamp",
       "actionType": "Action Type",
-      "details": "Details"
+      "details": "Details", "actor": "Actor", "result": "Result", "sourceIp": "Source IP", "requestId": "Request ID"
     },
     "paginationInfo": "Page {currentPage} of {totalPages} ({totalLogs} total logs)",
     "actions": {
