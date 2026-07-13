@@ -73,6 +73,7 @@ import { installProcessLifecycle } from './config/process-lifecycle';
 import { auditContextMiddleware } from './audit/audit-context';
 import backupRouter from './backup/backup.routes';
 import { applyScheduledRestore } from './backup/backup.service';
+import { apiErrorHandler, securityHeaders, validateJsonComplexity, validateMutationOrigin } from './security/web-security.middleware';
 
 
 import './services/event.service'; 
@@ -83,6 +84,7 @@ import './notifications/notification.dispatcher.service';
 
 // 基础 Express 应用设置
 const app = express();
+app.disable('x-powered-by');
 const server = http.createServer(app);
 const clientIpResolver = createClientIpResolver();
 
@@ -91,7 +93,9 @@ app.set('trust proxy', (address: string) => clientIpResolver.isTrustedProxy(addr
 
 // --- 中间件 ---
 app.use(ipWhitelistMiddleware as RequestHandler);
-app.use(express.json());
+app.use(securityHeaders);
+app.use(express.json({ limit: '100kb', strict: true }));
+app.use(validateJsonComplexity({ maxDepth: 20, maxKeys: 2_000, maxStringLength: 65_536 }));
 
 const allowedCorsOrigins = parseCorsOrigins(
     process.env.RP_ORIGIN || 'http://localhost:5173',
@@ -109,6 +113,7 @@ app.use(cors((req, callback) => {
         credentials: true,
     });
 }));
+app.use('/api/v1', validateMutationOrigin(allowedCorsOrigins));
 
 // --- 静态文件服务 ---
 const uploadsPath = ensureAndGetPathInAppData('uploads');
@@ -206,6 +211,7 @@ const startServer = async (): Promise<WebSocketServer> => {
     app.get('/api/v1/status', (req: Request, res: Response) => {
       res.json({ status: '后端服务运行中！' });
     });
+    app.use('/api/v1', apiErrorHandler);
     // --- 结束 API 路由 ---
 
 
