@@ -6,7 +6,7 @@
 
 [![Docker](https://img.shields.io/badge/-Docker-2496ED?style=flat-square&logo=docker&logoColor=white)][docker-url] [![License: GPL-3.0](https://img.shields.io/badge/License-GPL%203.0-4CAF50?style=flat-square)](https://github.com/spfantop/fantetic-terminal/blob/main/LICENSE)
 
-[English](./README.md) | [中文](./README_EN.md)
+[English](./README.md) | [中文](./README_CN.md)
 
 [docker-url]: https://hub.docker.com/r/spfantop/fantetic-terminal-frontend
 
