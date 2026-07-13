@@ -25,7 +25,9 @@
     "confirmDeleteUser": "确定删除用户“{username}”并转移其资产吗？", "confirmDeleteGroup": "确定删除分组“{name}”吗？",
     "userCreated": "用户已创建。", "userUpdated": "用户已更新。", "passwordReset": "密码已重置，原会话已失效。",
     "userDeleted": "用户已删除，资产已转移。", "groupCreated": "分组已创建。", "groupDeleted": "分组已删除。",
-    "memberSaved": "成员权限已保存。", "memberDeleted": "成员已移除。", "error": "访问控制操作失败。"
+    "memberSaved": "成员权限已保存。", "memberDeleted": "成员已移除。", "assetPermissions": "连接资产授权",
+    "selectConnection": "选择连接资产", "permission": "权限", "addGrant": "添加授权",
+    "grantSaved": "连接授权已保存。", "grantDeleted": "连接授权已撤销。", "error": "访问控制操作失败。"
   },
   "dock": {
     "hide": "隐藏导航栏",

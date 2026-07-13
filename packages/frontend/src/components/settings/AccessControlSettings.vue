@@ -3,6 +3,9 @@ import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
   accessControlApi,
+  type AssetConnection,
+  type ConnectionGroupGrant,
+  type ConnectionPermission,
   type GroupMember,
   type GroupRole,
   type ManagedUser,
@@ -14,8 +17,11 @@ import type { SystemRole } from '../../stores/auth.store';
 const { t } = useI18n();
 const users = ref<ManagedUser[]>([]);
 const groups = ref<UserGroup[]>([]);
+const connections = ref<AssetConnection[]>([]);
 const selectedGroupId = ref<number | null>(null);
 const members = ref<GroupMember[]>([]);
+const connectionGrants = ref<ConnectionGroupGrant[]>([]);
+const selectedConnectionId = ref<number | null>(null);
 const loading = ref(false);
 const saving = ref(false);
 const error = ref('');
@@ -26,12 +32,15 @@ const newUser = ref<{ username: string; password: string; systemRole: SystemRole
 });
 const newGroup = ref({ name: '', description: '' });
 const memberDraft = ref<{ userId: number | null; role: GroupRole }>({ userId: null, role: 'viewer' });
+const grantDraft = ref<{ groupId: number | null; permission: ConnectionPermission }>({ groupId: null, permission: 'view' });
 const resetPasswords = ref<Record<number, string>>({});
 const transferTargets = ref<Record<number, number | null>>({});
 
 const selectedGroup = computed(() => groups.value.find(group => group.id === selectedGroupId.value) ?? null);
 const memberUserIds = computed(() => new Set(members.value.map(member => member.userId)));
 const availableMemberUsers = computed(() => users.value.filter(user => !memberUserIds.value.has(user.id)));
+const grantedGroupIds = computed(() => new Set(connectionGrants.value.map(grant => grant.groupId)));
+const availableGrantGroups = computed(() => groups.value.filter(group => !grantedGroupIds.value.has(group.id)));
 
 const report = (message: string, isError = false) => {
   error.value = isError ? message : '';
@@ -47,14 +56,25 @@ const loadMembers = async () => {
   members.value = await accessControlApi.listMembers(selectedGroupId.value);
 };
 
+const loadConnectionGrants = async () => {
+  if (!selectedConnectionId.value) { connectionGrants.value = []; return; }
+  connectionGrants.value = await accessControlApi.listConnectionGrants(selectedConnectionId.value);
+};
+
 const load = async () => {
   loading.value = true;
   try {
-    [users.value, groups.value] = await Promise.all([accessControlApi.listUsers(), accessControlApi.listGroups()]);
+    [users.value, groups.value, connections.value] = await Promise.all([
+      accessControlApi.listUsers(), accessControlApi.listGroups(), accessControlApi.listConnections(),
+    ]);
     if (!selectedGroupId.value || !groups.value.some(group => group.id === selectedGroupId.value)) {
       selectedGroupId.value = groups.value[0]?.id ?? null;
     }
     await loadMembers();
+    if (!selectedConnectionId.value || !connections.value.some(connection => connection.id === selectedConnectionId.value)) {
+      selectedConnectionId.value = connections.value[0]?.id ?? null;
+    }
+    await loadConnectionGrants();
   } catch (cause) { report(errorMessage(cause), true); }
   finally { loading.value = false; }
 };
@@ -151,6 +171,34 @@ const deleteMember = async (member: GroupMember) => {
   } catch (cause) { report(errorMessage(cause), true); }
 };
 
+const saveGrant = async () => {
+  if (!selectedConnectionId.value || !grantDraft.value.groupId) return;
+  try {
+    await accessControlApi.saveConnectionGrant(
+      selectedConnectionId.value, grantDraft.value.groupId, grantDraft.value.permission,
+    );
+    grantDraft.value = { groupId: null, permission: 'view' };
+    report(t('accessControl.grantSaved'));
+    await loadConnectionGrants();
+  } catch (cause) { report(errorMessage(cause), true); }
+};
+
+const updateGrant = async (grant: ConnectionGroupGrant, permission: ConnectionPermission) => {
+  try {
+    await accessControlApi.saveConnectionGrant(grant.connectionId, grant.groupId, permission);
+    report(t('accessControl.grantSaved'));
+    await loadConnectionGrants();
+  } catch (cause) { report(errorMessage(cause), true); await loadConnectionGrants(); }
+};
+
+const deleteGrant = async (grant: ConnectionGroupGrant) => {
+  try {
+    await accessControlApi.deleteConnectionGrant(grant.connectionId, grant.groupId);
+    report(t('accessControl.grantDeleted'));
+    await loadConnectionGrants();
+  } catch (cause) { report(errorMessage(cause), true); }
+};
+
 onMounted(load);
 </script>
 
@@ -191,6 +239,39 @@ onMounted(load);
       <template v-if="selectedGroup">
         <form class="form-grid" @submit.prevent="saveMember"><select v-model="memberDraft.userId"><option :value="null">{{ t('accessControl.selectUser') }}</option><option v-for="user in availableMemberUsers" :key="user.id" :value="user.id">{{ user.username }}</option></select><select v-model="memberDraft.role"><option value="viewer">viewer</option><option value="operator">operator</option><option value="admin">admin</option><option value="owner">owner</option></select><button type="submit">{{ t('accessControl.addMember') }}</button></form>
         <ul class="member-list"><li v-for="member in members" :key="member.userId"><span>{{ member.username }}</span><select :value="member.role" @change="updateMemberRole(member, ($event.target as HTMLSelectElement).value as GroupRole)"><option value="viewer">viewer</option><option value="operator">operator</option><option value="admin">admin</option><option value="owner">owner</option></select><button type="button" class="danger" @click="deleteMember(member)">{{ t('common.delete') }}</button></li></ul>
+      </template>
+    </div>
+
+    <div class="card">
+      <h2>{{ t('accessControl.assetPermissions') }}</h2>
+      <div class="group-toolbar">
+        <select v-model="selectedConnectionId" :aria-label="t('accessControl.selectConnection')" @change="loadConnectionGrants">
+          <option :value="null">{{ t('accessControl.selectConnection') }}</option>
+          <option v-for="connection in connections" :key="connection.id" :value="connection.id">
+            {{ connection.name }} · {{ connection.type }} · {{ connection.host }}
+          </option>
+        </select>
+      </div>
+      <template v-if="selectedConnectionId">
+        <form class="form-grid" @submit.prevent="saveGrant">
+          <select v-model="grantDraft.groupId" :aria-label="t('accessControl.selectGroup')">
+            <option :value="null">{{ t('accessControl.selectGroup') }}</option>
+            <option v-for="group in availableGrantGroups" :key="group.id" :value="group.id">{{ group.name }}</option>
+          </select>
+          <select v-model="grantDraft.permission" :aria-label="t('accessControl.permission')">
+            <option value="view">view</option><option value="connect">connect</option><option value="manage">manage</option>
+          </select>
+          <button type="submit">{{ t('accessControl.addGrant') }}</button>
+        </form>
+        <ul class="member-list">
+          <li v-for="grant in connectionGrants" :key="grant.groupId">
+            <span>{{ grant.groupName }}</span>
+            <select :value="grant.permission" @change="updateGrant(grant, ($event.target as HTMLSelectElement).value as ConnectionPermission)">
+              <option value="view">view</option><option value="connect">connect</option><option value="manage">manage</option>
+            </select>
+            <button type="button" class="danger" @click="deleteGrant(grant)">{{ t('common.delete') }}</button>
+          </li>
+        </ul>
       </template>
     </div>
   </section>

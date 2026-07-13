@@ -15,5 +15,9 @@ assert.match(component, /password\.length < 12/);
 assert.match(component, /saveMember/);
 assert.match(api, /\/access-control/);
 assert.match(api, /\/groups\/\$\{groupId\}\/members\/\$\{userId\}/);
+assert.match(component, /assetPermissions/);
+assert.match(component, /saveConnectionGrant/);
+assert.match(component, /deleteConnectionGrant/);
+assert.match(api, /\/connections\/\$\{connectionId\}\/groups\/\$\{groupId\}/);
 
 console.log('access control UI behavior ok');

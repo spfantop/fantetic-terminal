@@ -773,7 +773,9 @@
     "confirmDeleteUser": "ユーザー「{username}」を削除して資産を移管しますか？", "confirmDeleteGroup": "グループ「{name}」を削除しますか？",
     "userCreated": "ユーザーを作成しました。", "userUpdated": "ユーザーを更新しました。", "passwordReset": "パスワードをリセットし、以前のセッションを無効化しました。",
     "userDeleted": "ユーザーを削除し、資産を移管しました。", "groupCreated": "グループを作成しました。", "groupDeleted": "グループを削除しました。",
-    "memberSaved": "メンバー権限を保存しました。", "memberDeleted": "メンバーを削除しました。", "error": "アクセス制御操作に失敗しました。"
+    "memberSaved": "メンバー権限を保存しました。", "memberDeleted": "メンバーを削除しました。", "assetPermissions": "接続資産の権限",
+    "selectConnection": "接続資産を選択", "permission": "権限", "addGrant": "権限を追加",
+    "grantSaved": "接続権限を保存しました。", "grantDeleted": "接続権限を取り消しました。", "error": "アクセス制御操作に失敗しました。"
   },
     "dock": {
         "hide": "ナビゲーションを非表示",

@@ -26,6 +26,15 @@ export interface GroupMember {
   role: GroupRole;
 }
 
+export type ConnectionPermission = 'view' | 'connect' | 'manage';
+export interface AssetConnection { id: number; name: string; host: string; type: string }
+export interface ConnectionGroupGrant {
+  connectionId: number;
+  groupId: number;
+  groupName: string;
+  permission: ConnectionPermission;
+}
+
 const base = '/access-control';
 
 export const accessControlApi = {
@@ -64,5 +73,17 @@ export const accessControlApi = {
   },
   async deleteMember(groupId: number, userId: number): Promise<void> {
     await apiClient.delete(`${base}/groups/${groupId}/members/${userId}`);
+  },
+  async listConnections(): Promise<AssetConnection[]> {
+    return (await apiClient.get<AssetConnection[]>('/connections')).data;
+  },
+  async listConnectionGrants(connectionId: number): Promise<ConnectionGroupGrant[]> {
+    return (await apiClient.get<ConnectionGroupGrant[]>(`${base}/connections/${connectionId}/groups`)).data;
+  },
+  async saveConnectionGrant(connectionId: number, groupId: number, permission: ConnectionPermission): Promise<ConnectionGroupGrant> {
+    return (await apiClient.put<ConnectionGroupGrant>(`${base}/connections/${connectionId}/groups/${groupId}`, { permission })).data;
+  },
+  async deleteConnectionGrant(connectionId: number, groupId: number): Promise<void> {
+    await apiClient.delete(`${base}/connections/${connectionId}/groups/${groupId}`);
   },
 };
