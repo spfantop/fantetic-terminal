@@ -45,6 +45,7 @@ assert.match(qualityWorkflow, /npm run test:delivery/);
 assert.match(qualityWorkflow, /npm run build --workspace=@fantetic-terminal\/backend/);
 assert.match(qualityWorkflow, /npm run build --workspace=@fantetic-terminal\/frontend/);
 assert.match(qualityWorkflow, /npm run build --workspace=@fantetic-terminal\/remote-gateway/);
+assert.match(qualityWorkflow, /npm run test:guacamole-lite-patch --workspace=@fantetic-terminal\/remote-gateway/);
 
 assert.match(releaseGuide, /Release Assets/);
 assert.match(releaseGuide, /v\$\{version\}/);

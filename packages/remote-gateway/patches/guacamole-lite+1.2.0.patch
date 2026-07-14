@@ -1,0 +1,130 @@
+diff --git a/node_modules/guacamole-lite/lib/GuacdClient.js b/node_modules/guacamole-lite/lib/GuacdClient.js
+--- a/node_modules/guacamole-lite/lib/GuacdClient.js
++++ b/node_modules/guacamole-lite/lib/GuacdClient.js
+@@ -28,6 +28,8 @@ class GuacdClient extends EventEmitter {
+ 
+         this.lastActivity = Date.now();
+         this.sendBuffer = '';
++        this.guacdInstructionSummaryCount = 0;
++        this.guacdInstructionSummaryLimit = 20;
+ 
+         this.parser = new GuacamoleParser();
+         this.parser.oninstruction = this.processInstruction.bind(this);
+@@ -84,7 +86,7 @@ class GuacdClient extends EventEmitter {
+         this.emit('close', error);
+     }
+ 
+-    send(data, afterOpened = false) {
++    send(data, afterOpened = false, logData = data) {
+         if (this.state === this.STATE_CLOSED) {
+             return;
+         }
+@@ -94,7 +96,7 @@ class GuacdClient extends EventEmitter {
+             return;
+         }
+ 
+-        this.logger.log(LOGLEVEL.DEBUG, '[     # >>> ]    Sending to guacd: ```' + data + '```');
++        this.logger.log(LOGLEVEL.DEBUG, '[     # >>> ]    Sending to guacd: ```' + logData + '```');
+         this.guacdConnection.write(data, (error) => {
+ 
+             if (error) {
+@@ -124,14 +126,7 @@ class GuacdClient extends EventEmitter {
+             if (argName.indexOf('VERSION_') === 0) {
+                 let version = argName.substring(8, argName.length);
+ 
+-                // we only support 1.0.0 (default) and 1.1.0.
+-                // If guacd sends us a different version, we will use 1.1.0
+-                // If it sends nothing, we will use 1.0.0
+-                if (version === '1_0_0' || version === '1_1_0') {
+-                    protocolVersion = version;
+-                } else {
+-                    protocolVersion = '1_1_0';
+-                }
++                protocolVersion = this.constructor.selectProtocolVersion(version);
+ 
+                 arg = 'VERSION_' + protocolVersion;
+             } else {
+@@ -148,11 +143,11 @@ class GuacdClient extends EventEmitter {
+             this.connectionSettings.dpi,
+         ]);
+ 
+-        this.sendInstruction(['audio'].concat(this.connectionSettings.audio || []));
++        this.sendInstruction(['audio', 'audio/L16'].concat(this.connectionSettings.audio || []));
+         this.sendInstruction(['video'].concat(this.connectionSettings.video || []));
+-        this.sendInstruction(['image'].concat(this.connectionSettings.image || []));
++        this.sendInstruction(['image', 'image/png', 'image/jpeg'].concat(this.connectionSettings.image || []));
+ 
+-        if (protocolVersion === '1_1_0') {
++        if (protocolVersion !== '1_0_0') {
+             this.sendInstruction(['timezone'].concat(this.connectionSettings.timezone || []));
+         }
+ 
+@@ -162,6 +157,7 @@ class GuacdClient extends EventEmitter {
+     }
+ 
+     sendInstruction(instruction) {
++        const logInstruction = this.constructor.redactInstructionForLog(instruction);
+         // convert every element in the instruction array to a string. convert null to an empty string
+         instruction = instruction.map((element) => {
+             if (element === null || element === undefined) {
+@@ -171,7 +167,51 @@ class GuacdClient extends EventEmitter {
+         });
+ 
+         const instructionString = GuacamoleParser.toInstruction(instruction);
+-        this.send(instructionString);
++        this.send(instructionString, false, GuacamoleParser.toInstruction(logInstruction));
++    }
++
++    static selectProtocolVersion(serverVersion) {
++        const supportedVersions = ['1_5_0', '1_3_0', '1_1_0', '1_0_0'];
++        const parseVersion = (version) => version.split('_').map(Number);
++        const [serverMajor, serverMinor, serverPatch] = parseVersion(serverVersion);
++
++        return supportedVersions.find((version) => {
++            const [major, minor, patch] = parseVersion(version);
++            if (major !== serverMajor) return major < serverMajor;
++            if (minor !== serverMinor) return minor < serverMinor;
++            return patch <= serverPatch;
++        }) || '1_0_0';
++    }
++
++    static redactInstructionForLog(instruction) {
++        return instruction[0] === 'connect' ? ['connect', '[REDACTED]'] : instruction;
++    }
++
++    logGuacdInstructionSummary(data) {
++        if (this.guacdInstructionSummaryCount >= this.guacdInstructionSummaryLimit) return;
++
++        const summary = this.constructor.summarizeInstructionNames(data);
++        if (summary.total === 0) return;
++
++        this.guacdInstructionSummaryCount += 1;
++        this.logger.log(
++            LOGLEVEL.VERBOSE,
++            `Guacd instruction summary ${this.guacdInstructionSummaryCount}/${this.guacdInstructionSummaryLimit}: ${JSON.stringify(summary.counts)}`,
++        );
++    }
++
++    static summarizeInstructionNames(data) {
++        const counts = {};
++        const instructions = data.split(';').filter(Boolean);
++
++        instructions.forEach((instruction) => {
++            const firstPart = instruction.split(',', 1)[0];
++            const delimiterIndex = firstPart.indexOf('.');
++            const name = delimiterIndex === -1 ? '(unknown)' : firstPart.substring(delimiterIndex + 1);
++            counts[name] = (counts[name] || 0) + 1;
++        });
++
++        return { total: instructions.length, counts };
+     }
+ 
+ 
+@@ -194,6 +234,7 @@ class GuacdClient extends EventEmitter {
+ 
+     processReceivedData(data) {
+         this.lastActivity = Date.now();
++        this.logGuacdInstructionSummary(data);
+         this.logger.log(LOGLEVEL.DEBUG, '[     # <<< ] Received from guacd: ```' + data + '```');
+ 
+         this.parser.receive(data.toString('utf8'));

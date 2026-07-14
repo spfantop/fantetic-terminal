@@ -16,7 +16,7 @@
     "build:app": "npx cross-env VITE_FANTETIC_APP_MODE=electron npm run build:frontend && npm run build:backend && npm --prefix electron-app run build",
     "test:delivery": "node build-tools/test/delivery-pipeline.behavior-test.js",
     "dev:app": "node electron-app/dev-app.js",
-    "postinstall": "patch-package"
+    "postinstall": "node build-tools/apply-patches.js"
   },
   "repository": {
     "type": "git",

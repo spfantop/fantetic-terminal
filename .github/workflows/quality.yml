@@ -64,6 +64,7 @@ jobs:
         run: |
           npm run test:health --workspace=@fantetic-terminal/remote-gateway
           npm run test:security --workspace=@fantetic-terminal/remote-gateway
+          npm run test:guacamole-lite-patch --workspace=@fantetic-terminal/remote-gateway
 
       - name: Build all runtime packages
         run: |
