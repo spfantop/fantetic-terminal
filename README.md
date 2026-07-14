@@ -78,7 +78,7 @@ For the design history and known follow-up work, see [Architecture Audit](./docs
 
 ## 🖥️ Desktop Client
 
-Desktop builds are available on the [latest release page](https://github.com/spfantop/fantetic-terminal/releases/latest). Windows releases include both the standard `-setup.exe` installer and the `-portable.exe` no-install portable package.
+Desktop builds are available on the [latest release page](https://github.com/spfantop/fantetic-terminal/releases/latest). Windows releases include both the standard `-setup.exe` installer and the `-portable.zip` archive for extract-and-run use.
 
 The desktop runtime is local-first and does not expose web account administration or packaged RDP/VNC gateway capabilities. It protects its loopback backend with a per-launch random nonce and restricted Electron renderer permissions.
 

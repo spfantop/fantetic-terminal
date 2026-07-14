@@ -67,8 +67,10 @@ assert.match(qualityWorkflow, /npm run test:guacamole-lite-patch --workspace=@fa
 
 assert.match(releaseGuide, /Release Assets/);
 assert.match(releaseGuide, /v\$\{version\}/);
-assert.match(releaseGuide, /-portable\.exe/);
-assert.deepEqual(electronPackage.build.win.target, ['nsis', 'portable']);
+assert.match(releaseGuide, /-portable\.zip/);
+assert.deepEqual(electronPackage.build.win.target, ['nsis', 'zip']);
+assert.match(workflow, /electron-app\/dist_electron\/\*\.zip/);
+assert.match(workflow, /release-assets\/\*\.zip/);
 assert.match(electronPackage.scripts['build:windows'], /electron-builder --win --x64/);
 assert.ok(electronPackage.build.files.includes('service-readiness.js'));
 assert.doesNotMatch(dockerCompose, /:\?Set (ENCRYPTION_KEY|SESSION_SECRET|REMOTE_GATEWAY_SHARED_SECRET)/);

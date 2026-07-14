@@ -33,6 +33,7 @@ jobs:
             artifact: windows-x64
             files: |
               electron-app/dist_electron/*.exe
+              electron-app/dist_electron/*.zip
           - name: Linux x64
             os: ubuntu-latest
             command: build:linux
@@ -141,6 +142,7 @@ jobs:
           fail_on_unmatched_files: true
           files: |
             release-assets/*.exe
+            release-assets/*.zip
             release-assets/*.AppImage
             release-assets/*.deb
             release-assets/*.dmg

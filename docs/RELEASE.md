@@ -7,7 +7,7 @@
 1. 修改根目录 `package.json` 的 `version`，例如 `1.5.3`。
 2. 本地执行 `npm run test:delivery`，并完成常规构建与测试。
 3. 合并版本提交后创建并推送严格匹配的标签 `v${version}`，例如 `v1.5.3`。
-4. `Build desktop applications` 成功后，会创建或更新同名 GitHub Release，并把 Windows 标准安装包 `-setup.exe`、Windows 绿色包 `-portable.exe`、`.AppImage`、`.deb`、`.dmg` 与 `SHA256SUMS.txt` 上传到 Release Assets。
+4. `Build desktop applications` 成功后，会创建或更新同名 GitHub Release，并把 Windows 标准安装包 `-setup.exe`、Windows 解压即用的绿色包 `-portable.zip`、`.AppImage`、`.deb`、`.dmg` 与 `SHA256SUMS.txt` 上传到 Release Assets。
 
 也可手动运行工作流并填写 `release_tag`。该值仍必须严格等于 `v${version}`；留空时只生成 Actions Artifact，不创建 GitHub Release。
 

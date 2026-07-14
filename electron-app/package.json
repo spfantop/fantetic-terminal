@@ -60,8 +60,9 @@
     "win": {
       "target": [
         "nsis",
-        "portable"
+        "zip"
       ],
+      "artifactName": "${productName}-${version}-${os}-${arch}-portable.${ext}",
       "icon": "../packages/frontend/public/icons/icon-512x512.png"
     },
     "mac": {
@@ -82,9 +83,6 @@
       "artifactName": "${productName}-${version}-${os}-${arch}-setup.${ext}",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
-    },
-    "portable": {
-      "artifactName": "${productName}-${version}-${os}-${arch}-portable.${ext}"
     }
   }
 }

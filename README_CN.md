@@ -78,7 +78,7 @@
 
 ## 🖥️ 桌面客户端
 
-桌面端安装包可在[最新 Release](https://github.com/spfantop/fantetic-terminal/releases/latest)中下载。Windows Release 同时提供标准 `-setup.exe` 安装包和无需安装的 `-portable.exe` 绿色包。
+桌面端安装包可在[最新 Release](https://github.com/spfantop/fantetic-terminal/releases/latest)中下载。Windows Release 同时提供标准 `-setup.exe` 安装包和解压即用的 `-portable.zip` 绿色包。
 
 桌面运行时以本地使用为主，不开放 Web 多用户管理或内置 RDP/VNC Gateway 能力。它通过每次启动随机 nonce 和受限 Electron Renderer 权限保护 loopback 后端。
 
