@@ -92,18 +92,12 @@ wget https://raw.githubusercontent.com/spfantop/fantetic-terminal/refs/heads/mai
 wget https://raw.githubusercontent.com/spfantop/fantetic-terminal/refs/heads/main/.env.example -O .env
 ```
 
-Generate independent secrets and place them in `.env`:
+No secret setup is required. On the first `docker compose up -d`, the backend generates strong random values for `ENCRYPTION_KEY`, `SESSION_SECRET`, and `REMOTE_GATEWAY_SHARED_SECRET`, then saves them to `./data/.env`. The Remote Gateway reads the shared secret from that file.
 
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
-```
+Keep `./data/.env` private and include it in backups. Deleting or replacing it makes previously encrypted data unreadable and invalidates active sessions.
 
-Required values:
+Configure only the deployment-specific values in `.env`:
 
-- `ENCRYPTION_KEY`: 64 hexadecimal characters.
-- `SESSION_SECRET`: at least 32 random characters.
-- `REMOTE_GATEWAY_SHARED_SECRET`: at least 32 random characters and identical for backend and Remote Gateway.
 - `RP_ID` / `RP_ORIGIN`: the public Passkey domain and origin.
 - `CORS_ALLOWED_ORIGINS`: additional comma-separated trusted frontend origins, when needed.
 

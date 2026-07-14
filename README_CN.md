@@ -92,18 +92,12 @@ wget https://raw.githubusercontent.com/spfantop/fantetic-terminal/refs/heads/mai
 wget https://raw.githubusercontent.com/spfantop/fantetic-terminal/refs/heads/main/.env.example -O .env
 ```
 
-生成相互独立的密钥并填写到 `.env`：
+无需手动设置密钥。首次执行 `docker compose up -d` 时，Backend 会自动生成高强度的 `ENCRYPTION_KEY`、`SESSION_SECRET` 与 `REMOTE_GATEWAY_SHARED_SECRET`，并保存至 `./data/.env`；Remote Gateway 会从该文件读取共享密钥。
 
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
-```
+请妥善保管并备份 `./data/.env`。删除或替换该文件会导致既有加密数据无法读取，并使现有会话失效。
 
-必需配置：
+只需在 `.env` 中配置部署相关项：
 
-- `ENCRYPTION_KEY`：64 位十六进制字符。
-- `SESSION_SECRET`：至少 32 位随机字符。
-- `REMOTE_GATEWAY_SHARED_SECRET`：至少 32 位随机字符，Backend 与 Remote Gateway 必须一致。
 - `RP_ID` / `RP_ORIGIN`：Passkey 使用的公开域名与 Origin。
 - `CORS_ALLOWED_ORIGINS`：需要额外信任的前端 Origin，使用逗号分隔。
 
