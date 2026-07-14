@@ -11,6 +11,8 @@ COPY packages/backend/package.json ./packages/backend/
 COPY packages/contracts/package.json ./packages/contracts/
 COPY packages/frontend/package.json ./packages/frontend/
 COPY packages/remote-gateway/package.json ./packages/remote-gateway/
+COPY build-tools/apply-patches.js ./build-tools/
+COPY packages/remote-gateway/patches ./packages/remote-gateway/patches
 
 RUN npm ci
 
@@ -41,6 +43,7 @@ COPY packages/backend/package.json ./packages/backend/
 COPY packages/contracts/package.json ./packages/contracts/
 COPY packages/frontend/package.json ./packages/frontend/
 COPY packages/remote-gateway/package.json ./packages/remote-gateway/
+COPY build-tools/apply-patches.js ./build-tools/
 RUN npm ci --omit=dev --workspace=@fantetic-terminal/backend
 
 

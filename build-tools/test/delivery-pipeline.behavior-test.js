@@ -34,6 +34,8 @@ assert.match(backendDockerfile, /RUN npm ci/);
 assert.doesNotMatch(backendDockerfile, /RUN npm install/);
 assert.match(backendDockerfile, /COPY packages\/contracts\/package\.json \.\/packages\/contracts\//);
 assert.match(backendDockerfile, /COPY packages\/contracts\/index\.d\.ts \.\/packages\/contracts\//);
+assert.match(backendDockerfile, /COPY build-tools\/apply-patches\.js \.\/build-tools\//);
+assert.match(backendDockerfile, /COPY packages\/remote-gateway\/patches \.\/packages\/remote-gateway\/patches/);
 assert.match(backendDockerfile, /HEALTHCHECK/);
 assert.match(frontendDockerfile, /HEALTHCHECK/);
 assert.match(gatewayDockerfile, /COPY package\.json package-lock\.json/);
