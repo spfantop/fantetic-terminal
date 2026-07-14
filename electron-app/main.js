@@ -38,8 +38,8 @@ const ensureDirectory = (targetPath) => {
 const installBackendNonceInjection = () => {
   session.defaultSession.webRequest.onBeforeSendHeaders({
     urls: [
-      `http://localhost:${PROD_BACKEND_PORT}/*`,
-      `ws://localhost:${PROD_BACKEND_PORT}/*`,
+      `http://127.0.0.1:${PROD_BACKEND_PORT}/*`,
+      `ws://127.0.0.1:${PROD_BACKEND_PORT}/*`,
     ],
   }, (details, callback) => {
     callback({ requestHeaders: addElectronNonceHeader(details, electronRuntimeNonce) });
@@ -91,6 +91,7 @@ const createMainWindow = async () => {
     height: lastWindowState.height,
     x: lastWindowState.x,
     y: lastWindowState.y,
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -105,6 +106,9 @@ const createMainWindow = async () => {
 
   installBackendNonceInjection();
   installWindowTrustSeam(mainWindow, frontendUrl);
+  mainWindow.once('ready-to-show', () => {
+    mainWindow?.show();
+  });
   mainWindow.loadURL(frontendUrl);
 
   mainWindow.on('close', () => {
@@ -128,12 +132,12 @@ const startProductionServices = async () => {
   ensureDirectory(backendDataPath);
 
   startBackendProcess(backendDataPath);
-  await waitForHttp(`http://localhost:${PROD_BACKEND_PORT}/api/v1/status`, {
+  await waitForHttp(`http://127.0.0.1:${PROD_BACKEND_PORT}/api/v1/status`, {
     label: 'backend',
   });
   await startFrontendServer();
 
-  return `http://localhost:${PROD_FRONTEND_PORT}`;
+  return `http://127.0.0.1:${PROD_FRONTEND_PORT}`;
 };
 
 const pipeProcessOutput = (processName, childProcess) => {
@@ -159,7 +163,7 @@ const startBackendProcess = (backendDataPath) => {
       FANTETIC_ELECTRON_NONCE: electronRuntimeNonce,
       HOST: '127.0.0.1',
       PORT: String(PROD_BACKEND_PORT),
-      RP_ORIGIN: `http://localhost:${PROD_FRONTEND_PORT}`,
+      RP_ORIGIN: `http://127.0.0.1:${PROD_FRONTEND_PORT}`,
       NODE_ENV: 'production',
     },
   });

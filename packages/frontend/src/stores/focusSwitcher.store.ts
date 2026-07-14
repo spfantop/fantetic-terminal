@@ -9,8 +9,7 @@ import {
   type FocusItemConfig,
   type FocusSwitcherFullConfig,
 } from '../utils/focusSwitcherConfig';
-// 假设有一个 API 客户端或辅助函数，这里我们直接使用 fetch
-// import apiClient from '@/services/api';
+import { resolveApiBaseUrl } from '../utils/runtimeConfig';
 
 export type { FocusableInput, FocusItemConfig, FocusSwitcherFullConfig };
 
@@ -70,7 +69,7 @@ export const useFocusSwitcherStore = defineStore('focusSwitcher', () => {
 
   // +++ 修改：从后端加载配置（包括快捷键） +++
   async function loadConfigurationFromBackend() {
-    const apiUrl = '/api/v1/settings/focus-switcher-sequence'; // 假设 API 端点不变，但返回结构改变
+    const apiUrl = `${resolveApiBaseUrl()}/settings/focus-switcher-sequence`;
     // console.log(`[FocusSwitcherStore] Attempting to load full configuration (sequence & shortcuts) from backend via: ${apiUrl}`);
     try {
       const response = await fetch(apiUrl);
@@ -130,7 +129,7 @@ export const useFocusSwitcherStore = defineStore('focusSwitcher', () => {
   }
 
   async function saveConfigurationToBackend() {
-    const apiUrl = '/api/v1/settings/focus-switcher-sequence'; // 假设 API 端点不变，但接受结构改变
+    const apiUrl = `${resolveApiBaseUrl()}/settings/focus-switcher-sequence`;
     // console.log(`[FocusSwitcherStore] Attempting to save full configuration (sequence & shortcuts) to backend via PUT: ${apiUrl}`);
     try {
       // *** 构造 FocusSwitcherFullConfig 结构发送给后端 ***

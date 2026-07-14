@@ -8,9 +8,11 @@ const { waitForHttp } = require('../service-readiness');
 const mainSource = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
 assert.match(
   mainSource,
-  /startBackendProcess\(backendDataPath\);\s+await waitForHttp\(`http:\/\/localhost:\$\{PROD_BACKEND_PORT\}\/api\/v1\/status`,\s*\{\s*label: 'backend',\s*\}\);\s+await startFrontendServer\(\);/s,
+  /startBackendProcess\(backendDataPath\);\s+await waitForHttp\(`http:\/\/127\.0\.0\.1:\$\{PROD_BACKEND_PORT\}\/api\/v1\/status`,\s*\{\s*label: 'backend',\s*\}\);\s+await startFrontendServer\(\);/s,
   'the renderer must wait for the packaged backend health endpoint before it starts serving the UI',
 );
+assert.match(mainSource, /show:\s*false/);
+assert.match(mainSource, /once\('ready-to-show',[\s\S]*?\.show\(\)/);
 
 let ready = false;
 let requestCount = 0;

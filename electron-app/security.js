@@ -1,5 +1,5 @@
 const ELECTRON_NONCE_HEADER = 'X-Fantetic-Electron-Nonce';
-const ELECTRON_BACKEND_ORIGIN = 'http://localhost:22458';
+const ELECTRON_BACKEND_ORIGIN = 'http://127.0.0.1:22458';
 
 const parseUrl = (value) => {
   try {
