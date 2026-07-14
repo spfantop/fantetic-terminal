@@ -20,6 +20,16 @@ if [ -z "${REMOTE_GATEWAY_SHARED_SECRET:-}" ]; then
     done
 fi
 
+if [ "$(id -u)" -eq 0 ]; then
+    if [ "${#REMOTE_GATEWAY_SHARED_SECRET}" -lt 32 ]; then
+        echo "[entrypoint] REMOTE_GATEWAY_SHARED_SECRET is unavailable."
+        exit 1
+    fi
+
+    # 仅 root 可读取后端以 0600 权限写入的数据文件；随后立即降权运行 Gateway。
+    exec su-exec guacd "$0" --run
+fi
+
 if [ "${#REMOTE_GATEWAY_SHARED_SECRET}" -lt 32 ]; then
     echo "[entrypoint] REMOTE_GATEWAY_SHARED_SECRET is unavailable."
     exit 1

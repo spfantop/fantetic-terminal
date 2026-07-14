@@ -21,7 +21,7 @@ RUN npm run build --workspace=@fantetic-terminal/remote-gateway \
 FROM guacamole/guacd:latest
 
 USER root
-RUN apk add --no-cache nodejs curl bash netcat-openbsd
+RUN apk add --no-cache nodejs curl bash netcat-openbsd su-exec
 
 WORKDIR /app
 
@@ -31,8 +31,6 @@ COPY packages/remote-gateway/package.json ./package.json
 COPY packages/remote-gateway/entrypoint.sh /entrypoint.sh
 
 RUN chmod +x /entrypoint.sh && chown -R guacd:guacd /app
-
-USER guacd
 
 EXPOSE 9090 8081
 

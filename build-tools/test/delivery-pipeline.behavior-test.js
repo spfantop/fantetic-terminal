@@ -55,6 +55,8 @@ assert.doesNotMatch(gatewayDockerfile, /RUN npm install/);
 assert.match(gatewayDockerfile, /COPY build-tools\/apply-patches\.js \.\/build-tools\//);
 assert.match(gatewayDockerfile, /COPY packages\/remote-gateway\/patches \.\/packages\/remote-gateway\/patches/);
 assert.doesNotMatch(gatewayDockerfile, /COPY patches \.\/patches/);
+assert.match(gatewayDockerfile, /apk add --no-cache nodejs curl bash netcat-openbsd su-exec/);
+assert.doesNotMatch(gatewayDockerfile, /USER guacd/);
 
 assert.match(qualityWorkflow, /pull_request:/);
 assert.match(qualityWorkflow, /npm run test:delivery/);
@@ -73,6 +75,8 @@ assert.doesNotMatch(dockerCompose, /:\?Set (ENCRYPTION_KEY|SESSION_SECRET|REMOTE
 assert.match(dockerCompose, /APP_BACKEND_DATA_PATH: \/app\/data/);
 assert.match(dockerCompose, /\.\/data:\/app\/data:ro/);
 assert.match(gatewayEntrypoint, /Waiting for Docker runtime secrets/);
+assert.match(gatewayEntrypoint, /id -u/);
+assert.match(gatewayEntrypoint, /exec su-exec guacd "\$0" --run/);
 assert.match(frontendNginxConfig, /resolver\s+127\.0\.0\.11\s+ipv6=off/);
 assert.match(frontendNginxConfig, /set\s+\$backend_upstream\s+http:\/\/backend:3001/);
 assert.match(frontendNginxConfig, /proxy_pass\s+\$backend_upstream/);
