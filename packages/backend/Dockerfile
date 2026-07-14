@@ -8,6 +8,7 @@ COPY package.json package-lock.json ./
 
 # Copy workspace package.json files to ensure npm ci works correctly in monorepo
 COPY packages/backend/package.json ./packages/backend/
+COPY packages/contracts/package.json ./packages/contracts/
 COPY packages/frontend/package.json ./packages/frontend/
 COPY packages/remote-gateway/package.json ./packages/remote-gateway/
 
@@ -16,6 +17,7 @@ RUN npm ci
 COPY packages/backend/src ./packages/backend/src
 COPY packages/backend/tsconfig.json ./packages/backend/
 COPY packages/backend/html-presets ./packages/backend/html-presets
+COPY packages/contracts/index.d.ts ./packages/contracts/
 
 RUN npm run build --workspace=@fantetic-terminal/backend
 
@@ -36,6 +38,7 @@ COPY --from=builder /app/packages/backend/html-presets ./html-presets
 
 COPY package.json package-lock.json ./
 COPY packages/backend/package.json ./packages/backend/
+COPY packages/contracts/package.json ./packages/contracts/
 COPY packages/frontend/package.json ./packages/frontend/
 COPY packages/remote-gateway/package.json ./packages/remote-gateway/
 RUN npm ci --omit=dev --workspace=@fantetic-terminal/backend

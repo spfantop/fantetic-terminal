@@ -90,9 +90,17 @@ jobs:
 
       - name: Package desktop application
         env:
-          CSC_LINK: ${{ runner.os == 'Windows' && secrets.WINDOWS_CSC_LINK || runner.os == 'macOS' && secrets.MACOS_CSC_LINK || '' }}
-          CSC_KEY_PASSWORD: ${{ runner.os == 'Windows' && secrets.WINDOWS_CSC_KEY_PASSWORD || runner.os == 'macOS' && secrets.MACOS_CSC_KEY_PASSWORD || '' }}
-        run: npm run ${{ matrix.command }} --prefix electron-app
+          SIGNING_CSC_LINK: ${{ runner.os == 'Windows' && secrets.WINDOWS_CSC_LINK || runner.os == 'macOS' && secrets.MACOS_CSC_LINK || '' }}
+          SIGNING_CSC_KEY_PASSWORD: ${{ runner.os == 'Windows' && secrets.WINDOWS_CSC_KEY_PASSWORD || runner.os == 'macOS' && secrets.MACOS_CSC_KEY_PASSWORD || '' }}
+        shell: pwsh
+        run: |
+          if ($env:SIGNING_CSC_LINK) {
+            $env:CSC_LINK = $env:SIGNING_CSC_LINK
+          }
+          if ($env:SIGNING_CSC_KEY_PASSWORD) {
+            $env:CSC_KEY_PASSWORD = $env:SIGNING_CSC_KEY_PASSWORD
+          }
+          npm run ${{ matrix.command }} --prefix electron-app
 
       - name: Upload desktop packages
         uses: actions/upload-artifact@v4

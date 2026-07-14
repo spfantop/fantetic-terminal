@@ -23,12 +23,17 @@ assert.match(workflow, /build:linux/);
 assert.match(workflow, /build:macos:x64/);
 assert.match(workflow, /build:macos:arm64/);
 assert.match(workflow, /release-assets\/SHA256SUMS\.txt/);
+assert.match(workflow, /SIGNING_CSC_LINK:/);
+assert.match(workflow, /if \(\$env:SIGNING_CSC_LINK\)/);
+assert.doesNotMatch(workflow, /^\s*CSC_LINK:\s*\$\{\{[^\n]*\|\|\s*''/m);
 
 assert.doesNotMatch(frontendDockerfile, /COPY\s+\.env\s/);
 assert.match(frontendDockerfile, /RUN npm ci/);
 assert.doesNotMatch(frontendDockerfile, /RUN npm install/);
 assert.match(backendDockerfile, /RUN npm ci/);
 assert.doesNotMatch(backendDockerfile, /RUN npm install/);
+assert.match(backendDockerfile, /COPY packages\/contracts\/package\.json \.\/packages\/contracts\//);
+assert.match(backendDockerfile, /COPY packages\/contracts\/index\.d\.ts \.\/packages\/contracts\//);
 assert.match(backendDockerfile, /HEALTHCHECK/);
 assert.match(frontendDockerfile, /HEALTHCHECK/);
 assert.match(gatewayDockerfile, /COPY package\.json package-lock\.json/);
