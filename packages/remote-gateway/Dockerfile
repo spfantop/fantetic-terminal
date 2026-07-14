@@ -6,7 +6,8 @@ COPY package.json package-lock.json ./
 COPY packages/backend/package.json ./packages/backend/
 COPY packages/frontend/package.json ./packages/frontend/
 COPY packages/remote-gateway/package.json ./packages/remote-gateway/
-COPY patches ./patches
+COPY build-tools/apply-patches.js ./build-tools/
+COPY packages/remote-gateway/patches ./packages/remote-gateway/patches
 
 RUN npm ci
 

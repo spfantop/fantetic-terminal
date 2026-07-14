@@ -30,6 +30,8 @@ assert.doesNotMatch(workflow, /^\s*CSC_LINK:\s*\$\{\{[^\n]*\|\|\s*''/m);
 assert.doesNotMatch(frontendDockerfile, /COPY\s+\.env\s/);
 assert.match(frontendDockerfile, /RUN npm ci/);
 assert.doesNotMatch(frontendDockerfile, /RUN npm install/);
+assert.match(frontendDockerfile, /COPY build-tools\/apply-patches\.js \.\/build-tools\//);
+assert.match(frontendDockerfile, /COPY packages\/remote-gateway\/patches \.\/packages\/remote-gateway\/patches/);
 assert.match(backendDockerfile, /RUN npm ci/);
 assert.doesNotMatch(backendDockerfile, /RUN npm install/);
 assert.match(backendDockerfile, /COPY packages\/contracts\/package\.json \.\/packages\/contracts\//);
@@ -41,6 +43,9 @@ assert.match(frontendDockerfile, /HEALTHCHECK/);
 assert.match(gatewayDockerfile, /COPY package\.json package-lock\.json/);
 assert.match(gatewayDockerfile, /RUN npm ci/);
 assert.doesNotMatch(gatewayDockerfile, /RUN npm install/);
+assert.match(gatewayDockerfile, /COPY build-tools\/apply-patches\.js \.\/build-tools\//);
+assert.match(gatewayDockerfile, /COPY packages\/remote-gateway\/patches \.\/packages\/remote-gateway\/patches/);
+assert.doesNotMatch(gatewayDockerfile, /COPY patches \.\/patches/);
 
 assert.match(qualityWorkflow, /pull_request:/);
 assert.match(qualityWorkflow, /npm run test:delivery/);
