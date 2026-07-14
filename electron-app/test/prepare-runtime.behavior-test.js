@@ -4,10 +4,26 @@ const os = require('node:os');
 const path = require('node:path');
 
 const {
+  IGNORED_BACKEND_RUNTIME_DEPENDENCY_NAMES,
   collectRuntimeDependencyLockKeys,
   copyBackendRuntimeDependencies,
   resolveDependencyLockKey,
 } = require('../build-tools/prepare-runtime');
+
+const rootLockData = require('../../package-lock.json');
+const backendPackage = require('../../packages/backend/package.json');
+const actualRuntimeDependencyLockKeys = collectRuntimeDependencyLockKeys(rootLockData);
+
+for (const dependencyName of Object.keys(backendPackage.dependencies)) {
+  if (IGNORED_BACKEND_RUNTIME_DEPENDENCY_NAMES?.has?.(dependencyName)) continue;
+  assert.ok(
+    actualRuntimeDependencyLockKeys.some((lockKey) => (
+      lockKey === `node_modules/${dependencyName}`
+      || lockKey.endsWith(`/node_modules/${dependencyName}`)
+    )),
+    `Root lock file must include backend runtime dependency: ${dependencyName}`,
+  );
+}
 
 const lockData = {
   packages: {
@@ -16,6 +32,7 @@ const lockData = {
         express: '^5.1.0',
         sqlite3: '^5.1.7',
         ssh2: '^1.16.0',
+        'express-session': '^1.19.0',
         '@simplewebauthn/server': '^13.1.1',
         '@types/uuid': '^10.0.0',
       },
@@ -53,6 +70,12 @@ const lockData = {
     },
     'node_modules/@hexagon/base64': {},
     'node_modules/@types/uuid': {},
+    'packages/backend/node_modules/express-session': {
+      dependencies: {
+        cookie: '~0.7.2',
+      },
+    },
+    'packages/backend/node_modules/cookie': {},
     'node_modules/typescript': {},
     'node_modules/vite': {},
     'node_modules/monaco-editor': {},
@@ -77,6 +100,8 @@ assert.ok(dependencyLockKeys.includes('node_modules/sqlite3/node_modules/node-ad
 assert.ok(dependencyLockKeys.includes('node_modules/ssh2'));
 assert.ok(dependencyLockKeys.includes('node_modules/@simplewebauthn/server'));
 assert.ok(dependencyLockKeys.includes('node_modules/@hexagon/base64'));
+assert.ok(dependencyLockKeys.includes('packages/backend/node_modules/express-session'));
+assert.ok(dependencyLockKeys.includes('packages/backend/node_modules/cookie'));
 
 assert.equal(dependencyLockKeys.includes('node_modules/@types/uuid'), false);
 assert.equal(dependencyLockKeys.includes('node_modules/typescript'), false);
@@ -85,7 +110,7 @@ assert.equal(dependencyLockKeys.includes('node_modules/monaco-editor'), false);
 
 for (const lockKey of dependencyLockKeys) {
   assert.ok(
-    lockKey.startsWith('node_modules/'),
+    lockKey.startsWith('node_modules/') || lockKey.startsWith('packages/backend/node_modules/'),
     `Runtime dependency should be copied under backend node_modules: ${lockKey}`,
   );
   assert.equal(path.isAbsolute(lockKey), false);
@@ -107,10 +132,19 @@ try {
     path.join('@simplewebauthn', 'server'),
     path.join('@hexagon', 'base64'),
   ];
+  const copiedWorkspacePackagePaths = [
+    path.join('packages', 'backend', 'node_modules', 'express-session'),
+    path.join('packages', 'backend', 'node_modules', 'cookie'),
+  ];
 
   fs.writeFileSync(lockFilePath, JSON.stringify(lockData), 'utf8');
   for (const packagePath of copiedPackagePaths) {
     const packageDir = path.join(sourceNodeModulesDir, packagePath);
+    fs.mkdirSync(packageDir, { recursive: true });
+    fs.writeFileSync(path.join(packageDir, 'package.json'), '{}', 'utf8');
+  }
+  for (const packagePath of copiedWorkspacePackagePaths) {
+    const packageDir = path.join(tmpDir, packagePath);
     fs.mkdirSync(packageDir, { recursive: true });
     fs.writeFileSync(path.join(packageDir, 'package.json'), '{}', 'utf8');
   }
@@ -125,6 +159,8 @@ try {
   assert.equal(fs.existsSync(path.join(targetNodeModulesDir, '@hexagon', 'base64')), true);
   assert.equal(fs.existsSync(path.join(targetNodeModulesDir, 'router')), true);
   assert.equal(fs.existsSync(path.join(targetNodeModulesDir, 'optional-native-helper')), false);
+  assert.equal(fs.existsSync(path.join(targetNodeModulesDir, 'express-session')), true);
+  assert.equal(fs.existsSync(path.join(targetNodeModulesDir, 'cookie')), true);
 } finally {
   fs.rmSync(tmpDir, { recursive: true, force: true });
 }

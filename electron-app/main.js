@@ -5,6 +5,7 @@ const express = require('express');
 const http = require('http');
 const { spawn } = require('child_process');
 const fs = require('fs');
+const { waitForHttp } = require('./service-readiness');
 const {
   addElectronNonceHeader,
   isAllowedPopupUrl,
@@ -127,6 +128,9 @@ const startProductionServices = async () => {
   ensureDirectory(backendDataPath);
 
   startBackendProcess(backendDataPath);
+  await waitForHttp(`http://localhost:${PROD_BACKEND_PORT}/api/v1/status`, {
+    label: 'backend',
+  });
   await startFrontendServer();
 
   return `http://localhost:${PROD_FRONTEND_PORT}`;

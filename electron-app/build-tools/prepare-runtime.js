@@ -10,6 +10,7 @@ const runtimeFrontendDir = path.join(runtimePackagesDir, 'frontend');
 const runtimeBackendNodeModulesDir = path.join(runtimeBackendDir, 'node_modules');
 
 const BACKEND_LOCK_KEY = 'packages/backend';
+const BACKEND_NODE_MODULES_LOCK_PREFIX = `${BACKEND_LOCK_KEY}/node_modules/`;
 const IGNORED_BACKEND_RUNTIME_DEPENDENCY_NAMES = new Set([
   '@types/archiver',
   '@types/multer',
@@ -116,6 +117,7 @@ const collectRuntimeDependencyLockKeys = (lockData) => {
 const copyBackendRuntimeDependencies = ({
   lockFilePath = path.join(rootDir, 'package-lock.json'),
   sourceNodeModulesDir = path.join(rootDir, 'node_modules'),
+  sourceWorkspaceDir = path.dirname(sourceNodeModulesDir),
   targetNodeModulesDir = runtimeBackendNodeModulesDir,
 } = {}) => {
   const lockData = readJson(lockFilePath);
@@ -123,12 +125,19 @@ const copyBackendRuntimeDependencies = ({
   const packages = lockData.packages ?? {};
 
   for (const lockKey of dependencyLockKeys) {
-    if (!lockKey.startsWith('node_modules/')) {
-      continue;
+    let relativePackagePath;
+    let sourcePath;
+
+    if (lockKey.startsWith('node_modules/')) {
+      relativePackagePath = lockKey.slice('node_modules/'.length);
+      sourcePath = path.join(sourceNodeModulesDir, relativePackagePath);
+    } else if (lockKey.startsWith(BACKEND_NODE_MODULES_LOCK_PREFIX)) {
+      relativePackagePath = lockKey.slice(BACKEND_NODE_MODULES_LOCK_PREFIX.length);
+      sourcePath = path.join(sourceWorkspaceDir, BACKEND_NODE_MODULES_LOCK_PREFIX, relativePackagePath);
+    } else {
+      throw new Error(`Unsupported backend runtime dependency path: ${lockKey}`);
     }
 
-    const relativePackagePath = lockKey.slice('node_modules/'.length);
-    const sourcePath = path.join(sourceNodeModulesDir, relativePackagePath);
     const targetPath = path.join(targetNodeModulesDir, relativePackagePath);
     const packageEntry = packages[lockKey] ?? {};
 

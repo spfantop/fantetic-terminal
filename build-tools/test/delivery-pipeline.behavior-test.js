@@ -13,6 +13,7 @@ const gatewayEntrypoint = read('packages/remote-gateway/entrypoint.sh');
 const qualityWorkflow = read('.github/workflows/quality.yml');
 const releaseGuide = read('docs/RELEASE.md');
 const dockerCompose = read('docker-compose.yml');
+const electronPackage = JSON.parse(read('electron-app/package.json'));
 
 assert.match(
   workflow,
@@ -24,6 +25,7 @@ assert.match(workflow, /build:windows/);
 assert.match(workflow, /build:linux/);
 assert.match(workflow, /build:macos:x64/);
 assert.match(workflow, /build:macos:arm64/);
+assert.match(workflow, /Validate Electron packaging behavior/);
 assert.match(workflow, /release-assets\/SHA256SUMS\.txt/);
 assert.match(workflow, /SIGNING_CSC_LINK:/);
 assert.match(workflow, /if \(\$env:SIGNING_CSC_LINK\)/);
@@ -60,6 +62,10 @@ assert.match(qualityWorkflow, /npm run test:guacamole-lite-patch --workspace=@fa
 
 assert.match(releaseGuide, /Release Assets/);
 assert.match(releaseGuide, /v\$\{version\}/);
+assert.match(releaseGuide, /-portable\.exe/);
+assert.deepEqual(electronPackage.build.win.target, ['nsis', 'portable']);
+assert.match(electronPackage.scripts['build:windows'], /electron-builder --win --x64/);
+assert.ok(electronPackage.build.files.includes('service-readiness.js'));
 assert.doesNotMatch(dockerCompose, /:\?Set (ENCRYPTION_KEY|SESSION_SECRET|REMOTE_GATEWAY_SHARED_SECRET)/);
 assert.match(dockerCompose, /APP_BACKEND_DATA_PATH: \/app\/data/);
 assert.match(dockerCompose, /\.\/data:\/app\/data:ro/);
