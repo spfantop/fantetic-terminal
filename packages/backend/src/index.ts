@@ -64,7 +64,7 @@ import favoritePathsRouter from './favorite-paths/favorite-paths.routes';
 import aiRoutes from './ai-ops/ai.routes';
 import { initializeWebSocket } from './websocket';
 import { ipWhitelistMiddleware } from './auth/ipWhitelist.middleware';
-import { isCorsOriginAllowed, parseCorsOrigins, readForwardedHost } from './config/cors-origin';
+import { ELECTRON_FRONTEND_ORIGINS, isCorsOriginAllowed, parseCorsOrigins, readForwardedHost } from './config/cors-origin';
 import { resolveServerBinding } from './config/server-binding';
 import { createClientIpResolver } from './config/client-ip';
 import accessControlRouter from './access-control/access-control.routes';
@@ -76,6 +76,8 @@ import { applyScheduledRestore } from './backup/backup.service';
 import { createLogger } from './logging/logger';
 import { apiErrorHandler, securityHeaders, validateJsonComplexity, validateMutationOrigin } from './security/web-security.middleware';
 import { resolveSessionCookieSecure } from './config/session-cookie';
+import { ensureElectronRuntimeUser } from './config/electron-runtime-user';
+import { isElectronAppMode } from './config/app-mode';
 
 
 import './services/event.service'; 
@@ -104,7 +106,7 @@ app.use(validateJsonComplexity({ maxDepth: 20, maxKeys: 2_000, maxStringLength: 
 const allowedCorsOrigins = parseCorsOrigins(
     process.env.RP_ORIGIN || 'http://localhost:5173',
     process.env.CORS_ALLOWED_ORIGINS,
-    'http://localhost:22457',
+    ...ELECTRON_FRONTEND_ORIGINS,
 );
 
 app.use(cors((req, callback) => {
@@ -142,6 +144,9 @@ const serverBinding = resolveServerBinding({
 const initializeDatabase = async () => {
   try {
     const db = await getDbInstance();
+    if (isElectronAppMode()) {
+      await ensureElectronRuntimeUser(db);
+    }
     console.log('[Index] 正在检查用户数量...');
     const userCount = await new Promise<number>((resolve, reject) => {
       db.get('SELECT COUNT(*) as count FROM users', (err: Error | null, row: { count: number }) => {

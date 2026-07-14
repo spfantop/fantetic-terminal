@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-import { isCorsOriginAllowed, parseCorsOrigins, readForwardedHost } from '../config/cors-origin';
+import { ELECTRON_FRONTEND_ORIGINS, isCorsOriginAllowed, parseCorsOrigins, readForwardedHost } from '../config/cors-origin';
 
 const configuredOrigins = new Set(['https://terminal.example.com']);
 
@@ -32,6 +32,12 @@ assert.deepEqual(
   [...parseCorsOrigins('https://one.example, https://two.example/path', 'not-a-url')],
   ['https://one.example', 'https://two.example'],
   'Configured origins must be normalized and invalid entries ignored',
+);
+
+assert.equal(
+  parseCorsOrigins(...ELECTRON_FRONTEND_ORIGINS).has('http://127.0.0.1:22457'),
+  true,
+  'The Electron renderer origin must be accepted for authenticated mutations',
 );
 
 assert.equal(

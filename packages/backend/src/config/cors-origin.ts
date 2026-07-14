@@ -1,3 +1,8 @@
+export const ELECTRON_FRONTEND_ORIGINS = [
+  'http://localhost:22457',
+  'http://127.0.0.1:22457',
+] as const;
+
 const normalizeOrigin = (value: string | undefined): string | undefined => {
   if (!value) return undefined;
 

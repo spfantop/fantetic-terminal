@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import sqlite3 from 'sqlite3';
 import { isAuthenticated, sessionMatchesAuthenticationEpoch } from '../auth/auth.middleware';
+import { ensureElectronRuntimeUser } from '../config/electron-runtime-user';
 import {
   ELECTRON_APP_USERNAME,
   ELECTRON_APP_USER_ID,
@@ -13,6 +15,34 @@ const originalElectronNonce = process.env.FANTETIC_ELECTRON_NONCE;
 assert.equal(sessionMatchesAuthenticationEpoch(4, 4), true);
 assert.equal(sessionMatchesAuthenticationEpoch(3, 4), false);
 assert.equal(sessionMatchesAuthenticationEpoch(undefined, 0), false, 'legacy sessions must log in again');
+
+const verifyElectronRuntimeUser = async () => {
+  const runtimeUserDatabase = new sqlite3.Database(':memory:');
+  await new Promise<void>((resolve, reject) => runtimeUserDatabase.run(
+    `CREATE TABLE users (
+      id INTEGER PRIMARY KEY,
+      username TEXT UNIQUE NOT NULL,
+      hashed_password TEXT NOT NULL,
+      system_role TEXT NOT NULL,
+      status TEXT NOT NULL,
+      auth_epoch INTEGER NOT NULL DEFAULT 0
+    )`,
+    error => error ? reject(error) : resolve(),
+  ));
+  await ensureElectronRuntimeUser(runtimeUserDatabase);
+  await ensureElectronRuntimeUser(runtimeUserDatabase);
+  const runtimeUser = await new Promise<any>((resolve, reject) => runtimeUserDatabase.get(
+    'SELECT id, username, system_role, status FROM users WHERE id = 1',
+    (error, row) => error ? reject(error) : resolve(row),
+  ));
+  assert.deepEqual(runtimeUser, {
+    id: ELECTRON_APP_USER_ID,
+    username: ELECTRON_APP_USERNAME,
+    system_role: 'super_admin',
+    status: 'active',
+  });
+  await new Promise<void>((resolve, reject) => runtimeUserDatabase.close(error => error ? reject(error) : resolve()));
+};
 
 const createResponseStub = () => {
   const response = {
@@ -97,4 +127,9 @@ try {
   }
 }
 
-console.log('app mode auth behavior passed');
+verifyElectronRuntimeUser().then(() => {
+  console.log('app mode auth behavior passed');
+}).catch(error => {
+  console.error(error);
+  process.exitCode = 1;
+});

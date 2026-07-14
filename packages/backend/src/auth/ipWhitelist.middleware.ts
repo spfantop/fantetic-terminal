@@ -1,8 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import ipaddr from 'ipaddr.js';
+import { isIpWhitelistEnabled } from '../config/ip-whitelist';
 import { settingsService } from '../settings/settings.service';
 
 const IP_WHITELIST_SETTING_KEY = 'ipWhitelist';
+const IP_WHITELIST_ENABLED_SETTING_KEY = 'ipWhitelistEnabled';
 
 // 本地开发环境的 IP 地址列表
 const LOCAL_IPS = [
@@ -34,9 +36,16 @@ export const ipWhitelistMiddleware = async (req: Request, res: Response, next: N
             return next();
         }
 
-        const whitelistString = await settingsService.getSetting(IP_WHITELIST_SETTING_KEY);
+        const [enabledValue, whitelistString] = await Promise.all([
+            settingsService.getSetting(IP_WHITELIST_ENABLED_SETTING_KEY),
+            settingsService.getSetting(IP_WHITELIST_SETTING_KEY),
+        ]);
 
-        // 如果白名单未设置或为空字符串，则允许所有请求
+        if (!isIpWhitelistEnabled(enabledValue)) {
+            return next();
+        }
+
+        // 已启用但白名单未设置或为空字符串时，允许所有请求，避免配置错误导致锁死。
         if (!whitelistString || whitelistString.trim() === '') {
             return next();
         }
