@@ -51,6 +51,7 @@ assert.match(backendDockerfile, /HEALTHCHECK/);
 assert.match(frontendDockerfile, /HEALTHCHECK/);
 assert.match(gatewayDockerfile, /COPY package\.json package-lock\.json/);
 assert.match(gatewayDockerfile, /RUN npm ci/);
+assert.match(gatewayDockerfile, /COPY --from=builder \/app\/packages\/remote-gateway\/node_modules \.\/node_modules/);
 assert.doesNotMatch(gatewayDockerfile, /RUN npm install/);
 assert.match(gatewayDockerfile, /COPY build-tools\/apply-patches\.js \.\/build-tools\//);
 assert.match(gatewayDockerfile, /COPY packages\/remote-gateway\/patches \.\/packages\/remote-gateway\/patches/);

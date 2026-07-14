@@ -27,6 +27,8 @@ WORKDIR /app
 
 COPY --from=builder /app/packages/remote-gateway/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
+# npm 将仅属于工作区的运行时依赖安装在工作区目录下；合并到应用根目录以供 dist/server.js 解析。
+COPY --from=builder /app/packages/remote-gateway/node_modules ./node_modules
 COPY packages/remote-gateway/package.json ./package.json
 COPY packages/remote-gateway/entrypoint.sh /entrypoint.sh
 
