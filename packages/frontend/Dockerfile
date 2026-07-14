@@ -8,6 +8,7 @@ COPY package.json package-lock.json ./
 
 # Copy workspace package.json files to ensure npm ci works correctly in monorepo
 COPY packages/backend/package.json ./packages/backend/
+COPY packages/contracts/package.json ./packages/contracts/
 COPY packages/frontend/package.json ./packages/frontend/
 COPY packages/remote-gateway/package.json ./packages/remote-gateway/
 COPY build-tools/apply-patches.js ./build-tools/
@@ -18,6 +19,7 @@ RUN npm ci
 
 COPY build-tools ./build-tools
 COPY packages/frontend/src ./packages/frontend/src
+COPY packages/contracts/index.d.ts ./packages/contracts/
 COPY packages/frontend/index.html ./packages/frontend/
 COPY packages/frontend/tsconfig.json ./packages/frontend/
 COPY packages/frontend/vite.config.ts ./packages/frontend/
