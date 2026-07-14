@@ -1,4 +1,5 @@
 import { NextFunction, Request, RequestHandler, Response } from 'express';
+import { readForwardedHost } from '../config/cors-origin';
 
 interface RateLimiterOptions {
   windowMs: number;
@@ -50,7 +51,7 @@ export const validateMutationOrigin = (allowedOriginSet: Set<string>): RequestHa
       return;
     }
     const origin = request.get('origin');
-    const requestHost = request.get('host')?.toLowerCase();
+    const requestHost = (readForwardedHost(request.get('x-forwarded-host')) || request.get('host'))?.toLowerCase();
     let sameRequestOrigin = false;
     try { sameRequestOrigin = !!requestHost && new URL(origin || '').host.toLowerCase() === requestHost; } catch { /* invalid origin */ }
     // Native clients and server-to-server callers may omit Origin; browser mutations always include it.

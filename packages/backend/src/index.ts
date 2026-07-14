@@ -75,6 +75,7 @@ import backupRouter from './backup/backup.routes';
 import { applyScheduledRestore } from './backup/backup.service';
 import { createLogger } from './logging/logger';
 import { apiErrorHandler, securityHeaders, validateJsonComplexity, validateMutationOrigin } from './security/web-security.middleware';
+import { resolveSessionCookieSecure } from './config/session-cookie';
 
 
 import './services/event.service'; 
@@ -177,7 +178,7 @@ const startServer = async (): Promise<WebSocketServer> => {
         cookie: {
             httpOnly: true,
             sameSite: 'lax',
-            secure: process.env.NODE_ENV === 'production' && process.env.FANTETIC_APP_MODE !== 'electron',
+            secure: resolveSessionCookieSecure(process.env.FANTETIC_APP_MODE),
         }
     });
     app.use(sessionMiddleware);

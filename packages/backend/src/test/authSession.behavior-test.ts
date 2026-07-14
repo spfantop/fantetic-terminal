@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 
 import { completeLogin, startTwoFactorChallenge } from '../auth/auth-session';
+import { resolveSessionCookieSecure } from '../config/session-cookie';
+
+assert.equal(resolveSessionCookieSecure(undefined), 'auto');
+assert.equal(resolveSessionCookieSecure('electron'), false);
 
 const events: string[] = [];
 const request = {

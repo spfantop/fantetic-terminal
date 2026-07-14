@@ -53,6 +53,21 @@ validateMutationOrigin(new Set(['https://terminal.example.com']))(
 );
 assert.equal(trustedOriginContinued, true);
 
+let forwardedIpOriginContinued = false;
+validateMutationOrigin(new Set())(
+  {
+    method: 'POST',
+    get: (name: string) => ({
+      origin: 'http://192.168.1.20:18111',
+      host: 'backend:3001',
+      'x-forwarded-host': '192.168.1.20:18111',
+    })[name.toLowerCase()],
+  } as any,
+  createResponse() as any,
+  () => { forwardedIpOriginContinued = true; },
+);
+assert.equal(forwardedIpOriginContinued, true, 'a trusted reverse proxy must preserve the public IP origin and port');
+
 const complexityResponse = createResponse();
 validateJsonComplexity({ maxDepth: 3, maxKeys: 10, maxStringLength: 20 })(
   { body: { one: { two: { three: { four: true } } } } } as any,
