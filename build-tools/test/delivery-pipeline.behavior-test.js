@@ -10,6 +10,7 @@ const frontendDockerfile = read('packages/frontend/Dockerfile');
 const backendDockerfile = read('packages/backend/Dockerfile');
 const gatewayDockerfile = read('packages/remote-gateway/Dockerfile');
 const gatewayEntrypoint = read('packages/remote-gateway/entrypoint.sh');
+const frontendNginxConfig = read('packages/frontend/nginx.conf');
 const qualityWorkflow = read('.github/workflows/quality.yml');
 const releaseGuide = read('docs/RELEASE.md');
 const dockerCompose = read('docker-compose.yml');
@@ -70,5 +71,8 @@ assert.doesNotMatch(dockerCompose, /:\?Set (ENCRYPTION_KEY|SESSION_SECRET|REMOTE
 assert.match(dockerCompose, /APP_BACKEND_DATA_PATH: \/app\/data/);
 assert.match(dockerCompose, /\.\/data:\/app\/data:ro/);
 assert.match(gatewayEntrypoint, /Waiting for Docker runtime secrets/);
+assert.match(frontendNginxConfig, /resolver\s+127\.0\.0\.11\s+ipv6=off/);
+assert.match(frontendNginxConfig, /set\s+\$backend_upstream\s+http:\/\/backend:3001/);
+assert.match(frontendNginxConfig, /proxy_pass\s+\$backend_upstream/);
 
 console.log('Delivery pipeline behavior checks passed');
