@@ -5,6 +5,7 @@ import path from 'path';
 export type RuntimeSecretInput = {
   nodeEnv?: string;
   appMode?: string;
+  deploymentMode?: string;
   encryptionKey?: string;
   sessionSecret?: string;
   gatewaySharedSecret?: string;
@@ -14,6 +15,7 @@ export type RuntimeSecretInput = {
 export type ResolvedRuntimeSecrets = {
   encryptionKey: string;
   sessionSecret: string;
+  gatewaySharedSecret: string;
   generated: boolean;
   generatedValues: Record<string, string>;
 };
@@ -23,6 +25,7 @@ const isValidSessionSecret = (value?: string): value is string => (value?.length
 
 export const resolveRuntimeSecrets = (input: RuntimeSecretInput): ResolvedRuntimeSecrets => {
   const productionWeb = input.nodeEnv === 'production' && input.appMode !== 'electron';
+  const allowDockerGeneration = input.deploymentMode === 'docker';
   const missingOrInvalid: string[] = [];
   if (!isValidEncryptionKey(input.encryptionKey)) missingOrInvalid.push('ENCRYPTION_KEY');
   if (!isValidSessionSecret(input.sessionSecret)) missingOrInvalid.push('SESSION_SECRET');
@@ -30,7 +33,7 @@ export const resolveRuntimeSecrets = (input: RuntimeSecretInput): ResolvedRuntim
     missingOrInvalid.push('REMOTE_GATEWAY_SHARED_SECRET');
   }
 
-  if (productionWeb && missingOrInvalid.length > 0) {
+  if (productionWeb && !allowDockerGeneration && missingOrInvalid.length > 0) {
     throw new Error(`Missing or invalid production secrets: ${missingOrInvalid.join(', ')}.`);
   }
 
@@ -42,10 +45,16 @@ export const resolveRuntimeSecrets = (input: RuntimeSecretInput): ResolvedRuntim
   const sessionSecret = isValidSessionSecret(input.sessionSecret)
     ? input.sessionSecret
     : (generatedValues.SESSION_SECRET = randomHex(64));
+  const gatewaySharedSecret = isValidSessionSecret(input.gatewaySharedSecret)
+    ? input.gatewaySharedSecret
+    : allowDockerGeneration
+      ? (generatedValues.REMOTE_GATEWAY_SHARED_SECRET = randomHex(64))
+      : '';
 
   return {
     encryptionKey,
     sessionSecret,
+    gatewaySharedSecret,
     generated: Object.keys(generatedValues).length > 0,
     generatedValues,
   };
@@ -89,6 +98,7 @@ export const initializeRuntimeSecrets = (envFilePath: string): ResolvedRuntimeSe
   const resolved = resolveRuntimeSecrets({
     nodeEnv: process.env.NODE_ENV,
     appMode: process.env.FANTETIC_APP_MODE,
+    deploymentMode: process.env.DEPLOYMENT_MODE,
     encryptionKey: process.env.ENCRYPTION_KEY,
     sessionSecret: process.env.SESSION_SECRET,
     gatewaySharedSecret: process.env.REMOTE_GATEWAY_SHARED_SECRET,
@@ -96,5 +106,8 @@ export const initializeRuntimeSecrets = (envFilePath: string): ResolvedRuntimeSe
   persistRuntimeSecrets(envFilePath, resolved.generatedValues);
   process.env.ENCRYPTION_KEY = resolved.encryptionKey;
   process.env.SESSION_SECRET = resolved.sessionSecret;
+  if (resolved.gatewaySharedSecret) {
+    process.env.REMOTE_GATEWAY_SHARED_SECRET = resolved.gatewaySharedSecret;
+  }
   return resolved;
 };

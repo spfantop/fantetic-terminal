@@ -29,6 +29,21 @@ assert.throws(() => resolveRuntimeSecrets({
   gatewaySharedSecret: undefined,
 }), /REMOTE_GATEWAY_SHARED_SECRET/);
 
+const dockerGenerated = resolveRuntimeSecrets({
+  nodeEnv: 'production',
+  appMode: 'web',
+  deploymentMode: 'docker',
+  randomHex: (bytes) => 'c'.repeat(bytes * 2),
+});
+assert.equal(dockerGenerated.encryptionKey, 'c'.repeat(64));
+assert.equal(dockerGenerated.sessionSecret, 'c'.repeat(128));
+assert.equal(dockerGenerated.gatewaySharedSecret, 'c'.repeat(128));
+assert.deepEqual(Object.keys(dockerGenerated.generatedValues).sort(), [
+  'ENCRYPTION_KEY',
+  'REMOTE_GATEWAY_SHARED_SECRET',
+  'SESSION_SECRET',
+]);
+
 const updated = updateEnvDocument(
   '# existing\nENCRYPTION_KEY=old\nOTHER=value\nENCRYPTION_KEY=duplicate\n',
   { ENCRYPTION_KEY: 'new-key', SESSION_SECRET: 'new-secret' },

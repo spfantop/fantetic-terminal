@@ -16,9 +16,8 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3001
-      ENCRYPTION_KEY: "${ENCRYPTION_KEY:?Set ENCRYPTION_KEY to 64 hexadecimal characters}"
-      SESSION_SECRET: "${SESSION_SECRET:?Set SESSION_SECRET to at least 32 random characters}"
-      REMOTE_GATEWAY_SHARED_SECRET: "${REMOTE_GATEWAY_SHARED_SECRET:?Set REMOTE_GATEWAY_SHARED_SECRET to at least 32 random characters}"
+      # 首次启动会将随机密钥持久化到 ./data/.env，后续启动自动复用。
+      APP_BACKEND_DATA_PATH: /app/data
       DEPLOYMENT_MODE: "${DEPLOYMENT_MODE:-docker}"
       REMOTE_GATEWAY_API_BASE_LOCAL: "${REMOTE_GATEWAY_API_BASE_LOCAL:-http://localhost:9090}"
       REMOTE_GATEWAY_API_BASE_DOCKER: "${REMOTE_GATEWAY_API_BASE_DOCKER:-http://remote-gateway:9090}"
@@ -42,7 +41,8 @@ services:
       REMOTE_GATEWAY_API_PORT: 9090
       REMOTE_GATEWAY_WS_PORT: 8081
       NODE_ENV: production
-      REMOTE_GATEWAY_SHARED_SECRET: "${REMOTE_GATEWAY_SHARED_SECRET:?Set REMOTE_GATEWAY_SHARED_SECRET to at least 32 random characters}"
+    volumes:
+      - ./data:/app/data:ro
     networks:
       - fantetic-terminal-network
     depends_on:

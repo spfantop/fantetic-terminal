@@ -6,6 +6,25 @@ umask 077
 GUACD_HOST="${GUACD_HOST:-localhost}"
 GUACD_PORT="${GUACD_PORT:-4822}"
 
+if [ -z "${REMOTE_GATEWAY_SHARED_SECRET:-}" ]; then
+    echo "[entrypoint] Waiting for Docker runtime secrets..."
+    for i in $(seq 1 30); do
+        if [ -r /app/data/.env ]; then
+            REMOTE_GATEWAY_SHARED_SECRET="$(sed -n 's/^REMOTE_GATEWAY_SHARED_SECRET=//p' /app/data/.env | tail -n 1)"
+            if [ "${#REMOTE_GATEWAY_SHARED_SECRET}" -ge 32 ]; then
+                export REMOTE_GATEWAY_SHARED_SECRET
+                break
+            fi
+        fi
+        sleep 1
+    done
+fi
+
+if [ "${#REMOTE_GATEWAY_SHARED_SECRET}" -lt 32 ]; then
+    echo "[entrypoint] REMOTE_GATEWAY_SHARED_SECRET is unavailable."
+    exit 1
+fi
+
 echo "[entrypoint] Starting guacd..."
 GUACD_BIN="/opt/guacamole/sbin/guacd"
 if [ ! -x "$GUACD_BIN" ]; then
