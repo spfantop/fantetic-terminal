@@ -45,6 +45,8 @@ assert.match(backendDockerfile, /COPY packages\/contracts\/package\.json \.\/pac
 assert.match(backendDockerfile, /COPY packages\/contracts\/index\.d\.ts \.\/packages\/contracts\//);
 assert.match(backendDockerfile, /COPY build-tools\/apply-patches\.js \.\/build-tools\//);
 assert.match(backendDockerfile, /COPY packages\/remote-gateway\/patches \.\/packages\/remote-gateway\/patches/);
+assert.match(backendDockerfile, /COPY --from=builder \/app\/packages\/backend\/dist \.\/packages\/backend\/dist/);
+assert.match(backendDockerfile, /CMD \["node", "packages\/backend\/dist\/index\.js"\]/);
 assert.match(backendDockerfile, /HEALTHCHECK/);
 assert.match(frontendDockerfile, /HEALTHCHECK/);
 assert.match(gatewayDockerfile, /COPY package\.json package-lock\.json/);

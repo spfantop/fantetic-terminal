@@ -33,10 +33,10 @@ RUN apk add --no-cache --virtual .build-deps python3 py3-setuptools make g++
 WORKDIR /app
 
 
-COPY --from=builder /app/packages/backend/dist ./dist
+COPY --from=builder /app/packages/backend/dist ./packages/backend/dist
 
-COPY --from=builder /app/packages/backend/src/locales ./dist/locales
-COPY --from=builder /app/packages/backend/html-presets ./html-presets
+COPY --from=builder /app/packages/backend/src/locales ./packages/backend/dist/locales
+COPY --from=builder /app/packages/backend/html-presets ./packages/backend/html-presets
 
 COPY package.json package-lock.json ./
 COPY packages/backend/package.json ./packages/backend/
@@ -55,4 +55,4 @@ EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
     CMD node -e "fetch('http://127.0.0.1:3001/api/v1/status').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 
-CMD ["node", "dist/index.js"]
+CMD ["node", "packages/backend/dist/index.js"]
