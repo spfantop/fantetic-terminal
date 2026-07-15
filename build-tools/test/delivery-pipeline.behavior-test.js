@@ -46,12 +46,17 @@ assert.match(backendDockerfile, /COPY packages\/contracts\/index\.d\.ts \.\/pack
 assert.match(backendDockerfile, /COPY build-tools\/apply-patches\.js \.\/build-tools\//);
 assert.match(backendDockerfile, /COPY packages\/remote-gateway\/patches \.\/packages\/remote-gateway\/patches/);
 assert.match(backendDockerfile, /COPY --from=builder \/app\/packages\/backend\/dist \.\/packages\/backend\/dist/);
+assert.match(backendDockerfile, /npm ci --omit=dev --workspace=@fantetic-terminal\/backend[\s\S]*npm cache clean --force[\s\S]*apk del \.build-deps/);
 assert.match(backendDockerfile, /CMD \["node", "packages\/backend\/dist\/index\.js"\]/);
 assert.match(backendDockerfile, /HEALTHCHECK/);
 assert.match(frontendDockerfile, /HEALTHCHECK/);
 assert.match(gatewayDockerfile, /COPY package\.json package-lock\.json/);
 assert.match(gatewayDockerfile, /RUN npm ci/);
-assert.match(gatewayDockerfile, /COPY --from=builder \/app\/packages\/remote-gateway\/node_modules \.\/node_modules/);
+assert.match(gatewayDockerfile, /FROM node:20-alpine AS production-dependencies/);
+assert.match(gatewayDockerfile, /RUN npm ci --omit=dev --workspace=@fantetic-terminal\/remote-gateway/);
+assert.match(gatewayDockerfile, /COPY --from=production-dependencies \/app\/node_modules \.\/node_modules/);
+assert.match(gatewayDockerfile, /COPY --from=production-dependencies \/app\/packages\/remote-gateway\/node_modules \.\/node_modules/);
+assert.doesNotMatch(gatewayDockerfile, /COPY --from=builder \/app\/node_modules \.\/node_modules/);
 assert.doesNotMatch(gatewayDockerfile, /RUN npm install/);
 assert.match(gatewayDockerfile, /COPY build-tools\/apply-patches\.js \.\/build-tools\//);
 assert.match(gatewayDockerfile, /COPY packages\/remote-gateway\/patches \.\/packages\/remote-gateway\/patches/);

@@ -26,10 +26,6 @@ RUN npm run build --workspace=@fantetic-terminal/backend
 
 FROM node:20-alpine
 
-
-# Install build dependencies including setuptools for node-gyp
-RUN apk add --no-cache --virtual .build-deps python3 py3-setuptools make g++
-
 WORKDIR /app
 
 
@@ -44,10 +40,10 @@ COPY packages/contracts/package.json ./packages/contracts/
 COPY packages/frontend/package.json ./packages/frontend/
 COPY packages/remote-gateway/package.json ./packages/remote-gateway/
 COPY build-tools/apply-patches.js ./build-tools/
-RUN npm ci --omit=dev --workspace=@fantetic-terminal/backend
-
-
-RUN apk del .build-deps
+RUN apk add --no-cache --virtual .build-deps python3 py3-setuptools make g++ \
+    && npm ci --omit=dev --workspace=@fantetic-terminal/backend \
+    && npm cache clean --force \
+    && apk del .build-deps
 
 
 EXPOSE 3001
