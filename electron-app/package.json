@@ -6,7 +6,7 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-    "test:behavior": "node test/service-readiness.behavior-test.js && node test/windows-packaging.behavior-test.js && node test/security.behavior-test.js && node test/prepare-runtime.behavior-test.js && node test/dev-app.behavior-test.js",
+    "test:behavior": "node test/service-readiness.behavior-test.js && node test/windows-packaging.behavior-test.js && node test/macos-packaging.behavior-test.js && node test/security.behavior-test.js && node test/prepare-runtime.behavior-test.js && node test/dev-app.behavior-test.js",
     "sync:version": "node ../build-tools/sync-frontend-version.js",
     "prepare:runtime": "node build-tools/prepare-runtime.js",
     "build": "node ../build-tools/sync-frontend-version.js && npm run prepare:runtime && electron-builder",

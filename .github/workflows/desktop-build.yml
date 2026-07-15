@@ -104,7 +104,22 @@ jobs:
           if ($env:SIGNING_CSC_KEY_PASSWORD) {
             $env:CSC_KEY_PASSWORD = $env:SIGNING_CSC_KEY_PASSWORD
           }
-          npm run ${{ matrix.command }} --prefix electron-app
+          $maxPackagingAttempts = if ('${{ runner.os }}' -eq 'macOS') { 2 } else { 1 }
+          $packagingExitCode = 1
+          for ($attempt = 1; $attempt -le $maxPackagingAttempts; $attempt += 1) {
+            npm run ${{ matrix.command }} --prefix electron-app
+            $packagingExitCode = $LASTEXITCODE
+            if ($packagingExitCode -eq 0) {
+              break
+            }
+            if ($attempt -eq $maxPackagingAttempts) {
+              break
+            }
+            Write-Host "macOS DMG packaging failed; cleaning stale Fantetic Terminal disk images before retry."
+            bash electron-app/build-tools/cleanup-dmg-mounts.sh
+            Start-Sleep -Seconds 10
+          }
+          exit $packagingExitCode
 
       - name: Upload desktop packages
         uses: actions/upload-artifact@v4
