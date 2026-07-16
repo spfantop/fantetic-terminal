@@ -138,8 +138,6 @@ Fantetic Terminal is designed as a **remote workspace**, not just a web SSH page
 
 ## Screenshots
 
-> Recommended screenshot order: terminal, dark terminal, split pane, SFTP, RDP, Admin Center, Electron, mobile.
-
 ### Terminal Workspace
 
 <img src="./docs/images/en-US/workspace-dark.png" alt="Terminal workspace" width="100%" />
