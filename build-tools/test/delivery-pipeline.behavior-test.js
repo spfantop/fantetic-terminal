@@ -105,5 +105,15 @@ assert.match(gatewayEntrypoint, /exec su-exec guacd "\$0" --run/);
 assert.match(frontendNginxConfig, /resolver\s+127\.0\.0\.11\s+ipv6=off/);
 assert.match(frontendNginxConfig, /set\s+\$backend_upstream\s+http:\/\/backend:3001/);
 assert.match(frontendNginxConfig, /proxy_pass\s+\$backend_upstream/);
+assert.doesNotMatch(
+  frontendNginxConfig,
+  /proxy_set_header\s+X-Forwarded-Proto\s+\$scheme;/,
+  'The Docker frontend must not overwrite the original HTTPS scheme before proxying to the backend',
+);
+assert.equal(
+  (frontendNginxConfig.match(/proxy_set_header\s+X-Forwarded-Proto\s+\$http_x_forwarded_proto;/g) ?? []).length,
+  2,
+  'Both API and WebSocket proxy routes must preserve the external forwarded protocol',
+);
 
 console.log('Delivery pipeline behavior checks passed');

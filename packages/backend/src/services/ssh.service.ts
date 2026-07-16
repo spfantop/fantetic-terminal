@@ -9,8 +9,10 @@ import * as SshKeyService from '../ssh_keys/ssh_key.service';
 
 const CONNECT_TIMEOUT = 20000; // 连接超时时间 (毫秒)
 const TEST_TIMEOUT = 15000; // 测试连接超时时间 (毫秒)
-const DEFAULT_SSH_KEEPALIVE_INTERVAL_MS = 5000;
-const DEFAULT_SSH_KEEPALIVE_COUNT_MAX = 10;
+// 挂起会话可能经历浏览器休眠、VPN 重连等短暂网络抖动；ssh2 会在超过次数后主动销毁 socket。
+// 10 秒 × (30 + 1) 次约为 5 分钟，既避免短暂抖动导致掉线，也保留真实失联后的资源回收。
+const DEFAULT_SSH_KEEPALIVE_INTERVAL_MS = 10000;
+const DEFAULT_SSH_KEEPALIVE_COUNT_MAX = 30;
 
 const readClampedIntegerEnv = (name: string, fallback: number, min: number, max: number): number => {
     const rawValue = process.env[name];

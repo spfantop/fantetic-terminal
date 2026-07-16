@@ -47,6 +47,7 @@ let fitAddon: FitAddon | null = null;
 let searchAddon: SearchAddon | null = null; // *** 添加 searchAddon 变量 ***
 let webLinksAddonDisposable: IDisposable | null = null;
 let resizeObserver: ResizeObserver | null = null;
+let resizeObserverWindow: Window | null = null;
 let observedElement: HTMLElement | null = null; // +++ Store the observed element +++
 let selectionListenerDisposable: IDisposable | null = null; // +++ 提升声明并添加类型 +++
 let resizeAnimationFrameId: number | null = null;
@@ -70,6 +71,7 @@ const RESIZE_EMIT_DELAY = 150;
 const STABILIZED_RESIZE_DELAY = 150;
 const RESIZE_TRANSACTION_SETTLE_DELAY = 80;
 const SINGLE_LINE_OUTPUT_COLS = 4096;
+const TERMINAL_RESIZE_EVENT = 'terminal:resize-request';
 
 type TerminalDimensions = {
   cols: number;
@@ -389,6 +391,45 @@ const scheduleTerminalFit = (options: { forceFit?: boolean; forceResizeEmit?: bo
     pendingFitOptions = { forceFit: false, forceResizeEmit: false };
     fitTerminalToContainer(nextOptions);
   });
+};
+
+const handleObservedResize = (entries: ResizeObserverEntry[]) => {
+  if (!props.isActive || !terminal || !terminalRef.value) return;
+
+  const entry = entries[0];
+  if (!entry) return;
+  const size = { width: entry.contentRect.width, height: entry.contentRect.height };
+  if (size.width <= 0 || size.height <= 0 || isSamePixelSize(lastObservedSize, size)) return;
+
+  lastObservedSize = { ...size };
+  scheduleTerminalFit({ pixelSize: size });
+};
+
+const syncTerminalResizeObserver = () => {
+  const nextObservedElement = terminalOuterWrapperRef.value ?? terminalRef.value;
+  if (!nextObservedElement) return;
+
+  const nextResizeObserverWindow = readTerminalWindow();
+  if (resizeObserver && observedElement === nextObservedElement && resizeObserverWindow === nextResizeObserverWindow) {
+    return;
+  }
+
+  resizeObserver?.disconnect();
+  observedElement = nextObservedElement;
+  resizeObserverWindow = nextResizeObserverWindow;
+  const ResizeObserverConstructor = readTerminalWindow().ResizeObserver ?? ResizeObserver;
+  resizeObserver = new ResizeObserverConstructor(handleObservedResize);
+
+  if (props.isActive) {
+    resizeObserver.observe(observedElement);
+  }
+};
+
+const handleExternalResizeRequest = () => {
+  syncTerminalResizeObserver();
+  if (props.isActive) {
+    scheduleTerminalFit({ forceFit: true, forceResizeEmit: true });
+  }
 };
 
 // 立即执行 Fit 并发送 Resize 的函数
@@ -724,25 +765,11 @@ onMounted(() => {
       emitTerminalInput(data);
     });
 
-    // 监听终端大小变化 (通过 ResizeObserver) - 主要处理浏览器窗口大小变化等
-    // ResizeObserver 观察内部容器 terminalRef
+    // 监听终端大小变化；弹出窗口迁移后必须在新的宿主窗口中重新创建 observer。
     if (terminalRef.value) {
-        observedElement = terminalOuterWrapperRef.value ?? terminalRef.value;
-        resizeObserver = new ResizeObserver((entries) => {
-            if (!props.isActive || !terminal || !terminalRef.value) return;
-
-            const entry = entries[0];
-            const size = { width: entry.contentRect.width, height: entry.contentRect.height };
-            if (size.width <= 0 || size.height <= 0 || isSamePixelSize(lastObservedSize, size)) return;
-
-            lastObservedSize = { ...size };
-            scheduleTerminalFit({ pixelSize: size });
-        });
-        // Observe only if initially active (or becomes active later)
-        if (props.isActive) {
-            resizeObserver.observe(observedElement);
-            debugLog(`[Terminal ${props.sessionId}] Initial observe.`);
-        }
+        syncTerminalResizeObserver();
+        terminalOuterWrapperRef.value?.addEventListener(TERMINAL_RESIZE_EVENT, handleExternalResizeRequest);
+        debugLog(`[Terminal ${props.sessionId}] Initial observe.`);
     }
 
 
@@ -753,9 +780,9 @@ onMounted(() => {
             if (newValue) {
                 // --- Become Active ---
                 debugLog(`[Terminal ${props.sessionId}] Becoming active. Observing element and fitting.`);
-                // Start observing
                 try {
-                    resizeObserver.observe(observedElement);
+                    syncTerminalResizeObserver();
+                    resizeObserver?.observe(observedElement);
                 } catch (e) {
                      console.warn(`[Terminal ${props.sessionId}] Error observing element:`, e);
                 }
@@ -970,6 +997,7 @@ onMounted(() => {
 // 组件卸载前清理资源
 onBeforeUnmount(() => {
   unsubscribeFromWorkspaceEvent('ui:resizeTransaction', handleResizeTransaction);
+  terminalOuterWrapperRef.value?.removeEventListener(TERMINAL_RESIZE_EVENT, handleExternalResizeRequest);
 
   if (resizeAnimationFrameId !== null) {
     (resizeAnimationFrameWindow ?? readTerminalWindow()).cancelAnimationFrame(resizeAnimationFrameId);
@@ -1000,6 +1028,7 @@ onBeforeUnmount(() => {
       debugLog(`[Terminal ${props.sessionId}] ResizeObserver disconnected.`);
   }
   resizeObserver = null;
+  resizeObserverWindow = null;
   observedElement = null;
 
   if (terminal) {

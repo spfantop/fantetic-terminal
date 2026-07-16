@@ -44,6 +44,7 @@ const keyboard = ref<any | null>(null);
 const mouse = ref<any | null>(null);
 const isKeyboardDisabledForInput = ref(false);
 let resizeObserver: ResizeObserver | null = null;
+let resizeObserverWindow: Window | null = null;
 let resizeFrameId: number | null = null;
 let resizeFrameWindow: Window | null = null;
 let resizeSendTimer: number | null = null;
@@ -400,6 +401,22 @@ const syncResizeWindowListener = () => {
   resizeWindow.addEventListener('resize', handleResizeSignal);
 };
 
+const syncResizeObserver = () => {
+  const displayContainer = rdpContainerRef.value;
+  if (!displayContainer) return;
+
+  const nextResizeObserverWindow = getDisplayWindow();
+  if (resizeObserver && resizeObserverWindow === nextResizeObserverWindow) return;
+
+  resizeObserver?.disconnect();
+  resizeObserverWindow = nextResizeObserverWindow;
+  const ResizeObserverConstructor = getDisplayWindow().ResizeObserver ?? ResizeObserver;
+  resizeObserver = new ResizeObserverConstructor(() => {
+    handleResizeSignal();
+  });
+  resizeObserver.observe(displayContainer);
+};
+
 const handleResizeTransaction = (payload: WorkspaceEventPayloads['ui:resizeTransaction']) => {
   if (payload.phase === 'start') return;
   handleResizeSignal();
@@ -433,6 +450,7 @@ const handleQualityProfileChange = () => {
 
 const handleExternalResizeRequest = () => {
   syncResizeWindowListener();
+  syncResizeObserver();
   handleResizeSignal();
 };
 
@@ -740,12 +758,7 @@ watch(() => props.isActive, (active) => {
 });
 
 onMounted(() => {
-  resizeObserver = new ResizeObserver(() => {
-    handleResizeSignal();
-  });
-  if (rdpContainerRef.value) {
-    resizeObserver.observe(rdpContainerRef.value);
-  }
+  syncResizeObserver();
   syncResizeWindowListener();
   remoteSessionRootRef.value?.addEventListener(REMOTE_DESKTOP_RESIZE_EVENT, handleExternalResizeRequest);
   subscribeToWorkspaceEvent('ui:resizeTransaction', handleResizeTransaction);
@@ -760,6 +773,7 @@ onMounted(() => {
 onUnmounted(() => {
   resizeObserver?.disconnect();
   resizeObserver = null;
+  resizeObserverWindow = null;
   resizeWindow?.removeEventListener('resize', handleResizeSignal);
   resizeWindow = null;
   remoteSessionRootRef.value?.removeEventListener(REMOTE_DESKTOP_RESIZE_EVENT, handleExternalResizeRequest);

@@ -43,3 +43,5 @@ assert.match(wsConnectionHandlerSource, /client:pong/);
 assert.match(sshServiceSource, /resolveSshKeepaliveConfig/);
 assert.match(sshServiceSource, /SSH_KEEPALIVE_INTERVAL_MS/);
 assert.match(sshServiceSource, /SSH_KEEPALIVE_COUNT_MAX/);
+assert.match(sshServiceSource, /DEFAULT_SSH_KEEPALIVE_INTERVAL_MS\s*=\s*10000/);
+assert.match(sshServiceSource, /DEFAULT_SSH_KEEPALIVE_COUNT_MAX\s*=\s*30/);

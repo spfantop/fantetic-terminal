@@ -393,10 +393,16 @@ const dispatchResizeOnWindow = (targetWindow: Window) => {
 };
 
 const REMOTE_DESKTOP_RESIZE_EVENT = 'remote-desktop:resize-request';
+const TERMINAL_RESIZE_EVENT = 'terminal:resize-request';
 
 const requestRemoteDesktopSessionResize = (sessionElement: HTMLElement) => {
   const eventWindow = sessionElement.ownerDocument.defaultView ?? window;
   sessionElement.dispatchEvent(new eventWindow.Event(REMOTE_DESKTOP_RESIZE_EVENT));
+};
+
+const requestTerminalSessionResize = (sessionElement: HTMLElement) => {
+  const eventWindow = sessionElement.ownerDocument.defaultView ?? window;
+  sessionElement.dispatchEvent(new eventWindow.Event(TERMINAL_RESIZE_EVENT));
 };
 
 const shouldHandleFocusSwitcherHotkeys = () => true;
@@ -1075,7 +1081,10 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
     focusSwitcherKeyUpHandler,
   } = registerPopoutFocusSwitcherHotkeys(popup, sessionId);
   const resizeHandler = () => {
-    if (isRemoteDesktopSessionKind(sessionStore.sessions.get(sessionId)?.kind)) {
+    const sessionKind = sessionStore.sessions.get(sessionId)?.kind;
+    if (isTerminalShellSessionKind(sessionKind)) {
+      requestTerminalSessionResize(sessionElement);
+    } else if (isRemoteDesktopSessionKind(sessionKind)) {
       requestRemoteDesktopSessionResize(sessionElement);
     }
   };
