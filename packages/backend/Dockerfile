@@ -28,7 +28,8 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-RUN apk add --no-cache su-exec
+RUN apk upgrade --no-cache \
+    && apk add --no-cache su-exec
 
 COPY --from=builder /app/packages/backend/dist ./packages/backend/dist
 
@@ -41,10 +42,13 @@ COPY packages/contracts/package.json ./packages/contracts/
 COPY packages/frontend/package.json ./packages/frontend/
 COPY packages/remote-gateway/package.json ./packages/remote-gateway/
 COPY build-tools/apply-patches.js ./build-tools/
+# The production server invokes node directly; retain no package-manager toolchain in the final image.
 RUN apk add --no-cache --virtual .build-deps python3 py3-setuptools make g++ \
     && npm ci --omit=dev --workspace=@fantetic-terminal/backend \
     && npm cache clean --force \
-    && apk del .build-deps
+    && apk del .build-deps \
+    && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn \
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg
 
 COPY packages/backend/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

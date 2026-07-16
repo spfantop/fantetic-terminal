@@ -15,14 +15,14 @@ const rootPackage = JSON.parse(read('package.json'));
 const electronPackage = JSON.parse(read('electron-app/package.json'));
 const gatewayPackage = JSON.parse(read('packages/remote-gateway/package.json'));
 const gatewayDockerfile = read('packages/remote-gateway/Dockerfile');
-const armCompose = read('doc/arm/docker-compose.yml');
+const armCompose = read('docs/arm/docker-compose.yml');
 
-assert.doesNotMatch(compose, /^\s*image:\s*[^\n]+:latest\s*$/m);
-assert.doesNotMatch(armCompose, /^\s*#?\s*image:\s*[^\n]+:latest\s*$/m);
-assert.doesNotMatch(readme, /guacamole\/guacd:latest/);
+assert.match(readme, /guacamole\/guacd:1\.6\.0-RC1/);
 for (const image of ['frontend', 'backend', 'remote-gateway']) {
-  assert.match(compose, new RegExp(`image: spfantop/fantetic-terminal-${image}:${rootPackage.version}`));
+  assert.match(compose, new RegExp(`image: spfantop/fantetic-terminal-${image}:latest`));
 }
+assert.match(armCompose, /image:\s*spfantop\/fantetic-terminal-frontend:latest/);
+assert.match(armCompose, /image:\s*spfantop\/fantetic-terminal-backend:latest/);
 assert.equal((compose.match(/^\s*restart:\s*unless-stopped\s*$/gm) || []).length, 3);
 assert.equal((compose.match(/^\s*- no-new-privileges:true\s*$/gm) || []).length, 3);
 assert.match(compose, /backend:\s*\n\s*condition: service_healthy/);
@@ -33,7 +33,7 @@ assert.equal(electronPackage.license, 'GPL-3.0-only');
 assert.equal(gatewayPackage.license, 'GPL-3.0-only');
 assert.match(license, /GNU GENERAL PUBLIC LICENSE\s+Version 3, 29 June 2007/);
 assert.match(readme, /Lockfile-based frontend\/backend\/desktop builds/);
-assert.match(readme, /pins all three application images to the same release version/);
+assert.match(readme, /tracks the latest frontend, backend, and Remote Gateway images/);
 
 assert.match(qualityWorkflow, /npm audit --audit-level=high/);
 assert.match(qualityWorkflow, /npm audit --prefix electron-app --package-lock-only --audit-level=high/);

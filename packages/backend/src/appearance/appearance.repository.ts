@@ -377,6 +377,40 @@ const findAndSetModeTerminalThemeDefaultsIfNull = async (db: sqlite3.Database): 
     }
 };
 
+const ensureUserTerminalThemeDefaults = async (db: sqlite3.Database, ownerUserId: number): Promise<void> => {
+    const builtinDefaultThemeId = await findPresetThemeIdByName(db, 'Builtin Light');
+    const builtinDarkThemeId = await findPresetThemeIdByName(db, 'Builtin Dark');
+    if (builtinDefaultThemeId === null || builtinDarkThemeId === null) return;
+
+    const rows = await allDb<Pick<DbAppearanceSettingsRow, 'key' | 'value'>>(
+        db,
+        `SELECT key, value FROM ${USER_TABLE_NAME} WHERE user_id = ?`,
+        [ownerUserId],
+    );
+    const valueByKey = new Map(rows.map(row => [row.key, row.value]));
+    const isMissingThemeId = (key: string) => {
+        const value = valueByKey.get(key);
+        return value === undefined || value === '' || value === 'null';
+    };
+    const updates: UpdateAppearanceDto = {};
+
+    if (isMissingThemeId('activeDefaultTerminalThemeId')) {
+        updates.activeDefaultTerminalThemeId = builtinDefaultThemeId;
+    }
+    if (isMissingThemeId('activeDarkTerminalThemeId')) {
+        updates.activeDarkTerminalThemeId = builtinDarkThemeId;
+    }
+    if (isMissingThemeId('activeTerminalThemeId')) {
+        updates.activeTerminalThemeId = valueByKey.get('uiThemeMode') === 'dark'
+            ? builtinDarkThemeId
+            : builtinDefaultThemeId;
+    }
+
+    if (Object.keys(updates).length > 0) {
+        await updateAppearanceSettingsInternal(db, updates, ownerUserId);
+    }
+};
+
 
 /**
  * 获取外观设置。
@@ -387,6 +421,7 @@ const findAndSetModeTerminalThemeDefaultsIfNull = async (db: sqlite3.Database): 
 export const getAppearanceSettings = async (ownerUserId: number): Promise<AppearanceSettings> => {
   try {
     const db = await getDbInstance();
+    await ensureUserTerminalThemeDefaults(db, ownerUserId);
     // 从键值表中获取所有行
     const rows = await allDb<DbAppearanceSettingsRow>(db, `SELECT key, value, updated_at FROM ${USER_TABLE_NAME} WHERE user_id = ?`, [ownerUserId]);
     const mappedSettings = mapRowsToAppearanceSettings(rows); // 将键值对映射到设置对象

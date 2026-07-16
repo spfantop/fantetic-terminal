@@ -56,6 +56,8 @@ assert.match(backendDockerfile, /npm ci --omit=dev --workspace=@fantetic-termina
 assert.match(backendDockerfile, /CMD \["node", "packages\/backend\/dist\/index\.js"\]/);
 assert.match(backendDockerfile, /ENTRYPOINT \["\/entrypoint\.sh"\]/);
 assert.match(backendDockerfile, /apk add --no-cache su-exec/);
+assert.match(backendDockerfile, /apk upgrade --no-cache/);
+assert.match(backendDockerfile, /rm -rf \/usr\/local\/lib\/node_modules\/npm/);
 assert.match(read('packages\/backend\/entrypoint\.sh'), /exec su-exec node/);
 assert.match(backendDockerfile, /HEALTHCHECK/);
 assert.match(frontendDockerfile, /HEALTHCHECK/);
@@ -67,11 +69,14 @@ assert.match(gatewayDockerfile, /COPY --from=production-dependencies \/app\/node
 assert.match(gatewayDockerfile, /COPY --from=production-dependencies \/app\/packages\/remote-gateway\/node_modules \.\/node_modules/);
 assert.doesNotMatch(gatewayDockerfile, /COPY --from=builder \/app\/node_modules \.\/node_modules/);
 assert.doesNotMatch(gatewayDockerfile, /RUN npm install/);
+assert.match(gatewayDockerfile, /COPY --from=builder \/app\/packages\/remote-gateway\/node_modules\/guacamole-lite \.\/node_modules\/guacamole-lite/);
 assert.match(gatewayDockerfile, /COPY build-tools\/apply-patches\.js \.\/build-tools\//);
 assert.match(gatewayDockerfile, /COPY packages\/remote-gateway\/patches \.\/packages\/remote-gateway\/patches/);
 assert.doesNotMatch(gatewayDockerfile, /COPY patches \.\/patches/);
-assert.match(gatewayDockerfile, /apk add --no-cache nodejs curl bash netcat-openbsd su-exec/);
+assert.match(gatewayDockerfile, /apk add --no-cache curl bash netcat-openbsd su-exec/);
 assert.doesNotMatch(gatewayDockerfile, /USER guacd/);
+assert.match(gatewayDockerfile, /COPY --from=builder \/usr\/local\/bin\/node \/usr\/local\/bin\/node/);
+assert.doesNotMatch(gatewayDockerfile, /apk add --no-cache nodejs/);
 
 assert.match(qualityWorkflow, /pull_request:/);
 assert.match(qualityWorkflow, /Run full behavior suite/);
@@ -108,6 +113,7 @@ assert.match(gatewayEntrypoint, /exec su-exec guacd "\$0" --run/);
 assert.match(frontendNginxConfig, /resolver\s+127\.0\.0\.11\s+ipv6=off/);
 assert.match(frontendNginxConfig, /set\s+\$backend_upstream\s+http:\/\/backend:3001/);
 assert.match(frontendNginxConfig, /proxy_pass\s+\$backend_upstream/);
+assert.match(frontendDockerfile, /apk upgrade --no-cache/);
 assert.doesNotMatch(
   frontendNginxConfig,
   /proxy_set_header\s+X-Forwarded-Proto\s+\$scheme;/,

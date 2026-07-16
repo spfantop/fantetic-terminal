@@ -31,7 +31,8 @@ RUN npm run build --workspace=@fantetic-terminal/frontend
 FROM nginx:stable-alpine
 
 
-RUN rm -rf /usr/share/nginx/html/*
+RUN apk upgrade --no-cache \
+    && rm -rf /usr/share/nginx/html/*
 
 
 COPY --from=builder /app/packages/frontend/dist /usr/share/nginx/html

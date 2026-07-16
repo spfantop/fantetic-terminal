@@ -33,6 +33,14 @@ const run = async () => {
       () => appearance.updateAppearanceSettings({ activeDarkTerminalThemeId: Number(bobTheme._id) }, 101),
       /无权使用/,
     );
+
+    await runDb(db, `INSERT INTO users (id, username, hashed_password, system_role, status) VALUES (103, 'new-user', 'x', 'user', 'active')`);
+    const builtinLightTheme = (await themes.findAllThemes(103)).find(theme => theme.name === 'Builtin Light');
+    const builtinDarkTheme = (await themes.findAllThemes(103)).find(theme => theme.name === 'Builtin Dark');
+    const initialAppearance = await appearance.getAppearanceSettings(103);
+    assert.equal(initialAppearance.activeDefaultTerminalThemeId, Number(builtinLightTheme?._id));
+    assert.equal(initialAppearance.activeDarkTerminalThemeId, Number(builtinDarkTheme?._id));
+    assert.equal(initialAppearance.activeTerminalThemeId, Number(builtinLightTheme?._id));
   } finally {
     if (db) await new Promise<void>((resolve, reject) => db!.close(error => error ? reject(error) : resolve()));
     fs.rmSync(tempDir, { recursive: true, force: true });

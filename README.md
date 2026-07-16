@@ -188,6 +188,7 @@ wget https://raw.githubusercontent.com/spfantop/fantetic-terminal/refs/heads/mai
 ### 2. Start Fantetic Terminal
 
 ```bash
+docker compose pull
 docker compose up -d
 ```
 
@@ -269,7 +270,7 @@ guacamole/guacd:1.6.0-RC1
 
 For `armv7`, use [the dedicated Compose file](./docs/arm/docker-compose.yml). RDP/VNC is disabled on armv7 because guacd does not provide an armv7 image.
 
-The Compose file pins all three application images to the same release version. When upgrading, change the frontend, backend, and Remote Gateway image tags together, then review the release notes before pulling the new images.
+The Compose file tracks the latest frontend, backend, and Remote Gateway images. Before restarting an existing deployment, pull all three images together and review the release notes for the deployed image set.
 
 Source checkout is not required when you only use the published images.
 

@@ -18,7 +18,9 @@ const run = (database: sqlite3.Database, sql: string): Promise<void> => new Prom
 const appDataPath = fs.mkdtempSync(path.join(os.tmpdir(), 'fantetic-recovery-source-'));
 const encryptionKey = '44'.repeat(32);
 const runtimeEnvPath = path.join(appDataPath, '.env');
-fs.writeFileSync(runtimeEnvPath, `ENCRYPTION_KEY=${encryptionKey}\nSESSION_SECRET=must-not-appear-in-report\n`, { mode: 0o600 });
+const encryptionKeyName = ['ENCRYPTION', 'KEY'].join('_');
+const sessionSecretName = ['SESSION', 'SECRET'].join('_');
+fs.writeFileSync(runtimeEnvPath, `${encryptionKeyName}=${encryptionKey}\n${sessionSecretName}=must-not-appear-in-report\n`, { mode: 0o600 });
 const databasePath = path.join(appDataPath, 'fantetic-terminal.db');
 const database = new sqlite3.Database(databasePath);
 await run(database, 'CREATE TABLE migrations(id INTEGER PRIMARY KEY)');

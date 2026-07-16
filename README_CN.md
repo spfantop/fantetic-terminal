@@ -182,6 +182,7 @@ wget https://raw.githubusercontent.com/spfantop/fantetic-terminal/refs/heads/mai
 ### 2. 启动 Fantetic Terminal
 
 ```bash id="gx9lyy"
+docker compose pull
 docker compose up -d
 ```
 
@@ -260,6 +261,8 @@ guacamole/guacd:1.6.0-RC1
 ```
 
 对于 `armv7`，请使用专用 Compose 文件。由于 guacd 未提供 armv7 镜像，armv7 环境下 RDP/VNC 功能不可用。
+
+Compose 文件默认跟踪 frontend、backend 和 Remote Gateway 的最新镜像。升级已有部署前，请同时拉取三个镜像，并查看该镜像集对应的发布说明。
 
 ---
 
