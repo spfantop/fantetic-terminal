@@ -1,6 +1,6 @@
 services:
   frontend:
-    image: spfantop/fantetic-terminal-frontend:2.0.0
+    image: spfantop/fantetic-terminal-frontend:latest
     container_name: fantetic-terminal-frontend
     restart: unless-stopped
     stop_grace_period: 20s
@@ -17,7 +17,7 @@ services:
       - fantetic-terminal-network
 
   backend:
-    image: spfantop/fantetic-terminal-backend:2.0.0
+    image: spfantop/fantetic-terminal-backend:latest
     container_name: fantetic-terminal-backend
     restart: unless-stopped
     stop_grace_period: 20s
@@ -47,7 +47,7 @@ services:
       - fantetic-terminal-network
 
   remote-gateway:
-    image: spfantop/fantetic-terminal-remote-gateway:2.0.0
+    image: spfantop/fantetic-terminal-remote-gateway:latest
     container_name: fantetic-terminal-remote-gateway
     restart: unless-stopped
     stop_grace_period: 20s
