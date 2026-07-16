@@ -10,6 +10,8 @@
 
 <br />
 
+[English](./README.md) | [中文](./README_CN.md)
+
 [![Docker](https://img.shields.io/badge/Docker-ready-blue?logo=docker)](#快速开始)
 [![License](https://img.shields.io/github/license/spfantop/fantetic-terminal)](./LICENSE)
 [![Release](https://img.shields.io/github/v/release/spfantop/fantetic-terminal)](https://github.com/spfantop/fantetic-terminal/releases)
