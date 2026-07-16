@@ -1,111 +1,227 @@
-![Fantetic Terminal 横幅](./doc/imgs/banner.png)
-
----
-
 <div align="center">
 
-[![Docker](https://img.shields.io/badge/-Docker-2496ED?style=flat-square&logo=docker&logoColor=white)][docker-url] [![License: GPL-3.0](https://img.shields.io/badge/license-GNU%20GPLv3-green)](https://github.com/spfantop/fantetic-terminal/blob/main/LICENSE)
+<img src="./docs/images/banner.png" alt="Fantetic Terminal" width="100%" />
 
-[English](./README.md) | [中文](./README_CN.md)
+# Fantetic Terminal
 
-[docker-url]: https://hub.docker.com/r/spfantop/fantetic-terminal-frontend
+### 面向 SSH、RDP、VNC 和 SFTP 的现代化远程工作空间
+
+**Web 终端 · 远程桌面 · SFTP · 会话录像 · 管理中心 · Electron 桌面端**
+
+<br />
+
+[![Docker](https://img.shields.io/badge/Docker-ready-blue?logo=docker)](#快速开始)
+[![License](https://img.shields.io/github/license/spfantop/fantetic-terminal)](./LICENSE)
+[![Release](https://img.shields.io/github/v/release/spfantop/fantetic-terminal)](https://github.com/spfantop/fantetic-terminal/releases)
+[![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue?logo=typescript)](https://www.typescriptlang.org/)
+[![Vue](https://img.shields.io/badge/Vue-3.x-42b883?logo=vue.js)](https://vuejs.org/)
+[![Electron](https://img.shields.io/badge/Electron-Desktop-47848f?logo=electron)](./electron-app)
+
+<br />
+
+**Fantetic Terminal** 是一个可私有部署的现代化远程访问工作空间，适合开发者、DevOps 团队、Homelab 用户和小型团队使用。
+
+它将 **SSH**、**Telnet**、**RDP**、**VNC**、**SFTP**、会话管理、审计、录像、备份恢复和桌面端能力整合到一个现代化界面中。
+
+<br />
+
+[快速开始](#快速开始) · [功能特性](#功能特性) · [界面预览](#界面预览) · [产品对比](#产品对比) · [架构设计](#架构设计) · [路线图](#路线图)
 
 </div>
 
-## 📖 概述
+---
 
-**Fantetic Terminal** 是一个现代化的 Web 与桌面远程访问工作台，支持 SSH、Telnet、RDP 和 VNC，并将终端会话、SFTP 文件管理、在线编辑、管理控制、审计、加密录像及校验备份恢复整合到可高度定制的界面中。
+## 为什么选择 Fantetic Terminal？
 
-本项目基于 [Heavrnl/nexus-terminal](https://github.com/Heavrnl/nexus-terminal) 开发，感谢原作者。
+大多数远程访问工具只专注于工作流中的某一个环节。
 
-- 当前维护仓库：[spfantop/fantetic-terminal](https://github.com/spfantop/fantetic-terminal)
-- 源项目：[Heavrnl/nexus-terminal](https://github.com/Heavrnl/nexus-terminal)
+Fantetic Terminal 的目标不是做一个简单的 Web SSH 页面，而是打造一个完整的 **远程工作空间**。
 
-## ✨ 功能特性
+| 你的需求         | Fantetic Terminal 提供             |
+| ------------ | -------------------------------- |
+| 管理 Linux 服务器 | SSH、Telnet、多标签、分屏、会话挂起           |
+| 管理服务器文件      | SFTP、拖拽上传、在线编辑、文件操作              |
+| 访问远程桌面       | 通过独立 Remote Gateway 支持 RDP 和 VNC |
+| 像应用一样使用      | Web、PWA 和 Electron 桌面端           |
+| 管理团队权限       | 用户、用户组、角色和资产授权                   |
+| 审计访问行为       | 审计日志和加密终端录像                      |
+| 完全私有部署       | Docker 部署，数据自持有                  |
 
-### 远程工作台
+---
 
-- SSH 与 Telnet 终端，支持多标签页、分屏、弹出窗口、自动重连、心跳保活和会话挂起。
-- SFTP 文件管理，支持拖拽上传、多选、重命名、权限修改、复制/移动、压缩及在线编辑。
-- 通过隔离的 Remote Gateway 信任边界支持 RDP/VNC。
-- Monaco Editor 与移动端 CodeMirror 编辑器，仅在真实编辑请求出现时按需加载。
-- 快捷指令、命令历史、路径历史、收藏路径、Docker 工具、状态监控及自定义布局。
-- 支持 PWA 和独立 Electron 桌面客户端。
+## 预览
+<div align="center">
 
-### 管理与安全
+<img src="./docs/images/demo.gif" alt="Fantetic Terminal preview" width="100%" />
 
-- 多用户账户体系，提供 `super_admin`、`admin`、`auditor`、`user` 系统角色。
-- 用户组提供 owner/admin/operator/viewer 角色，并支持连接的查看/连接/管理权限。
-- 支持批量资产授权、私有资源隔离，以及删除用户时转移资产。
-- 支持 Passkey、验证码、2FA、IP 白名单/黑名单、认证纪元会话撤销和通知凭证加密。
-- 凭证感知的结构化日志；密码、私钥、passphrase、token 和 SQL 参数不会写入日志。
-- 严格的 HTTP/WebSocket Origin、路径白名单、用户级限流、有界消息队列和一次性 RDP/VNC grant。
-- Electron 启用 sandbox、导航/窗口限制、IPC sender 校验和每次启动随机后端 nonce。
+</div>
 
-### 审计、录像与恢复
+---
 
-- 结构化审计上下文，可关联操作者、请求、IP、资产、会话和执行结果。
-- 基于角色的管理中心，统一提供访问控制、审计调查、录像和数据管理。
-- SSH/Telnet 加密会话录像，支持筛选、流式回放、取消请求和有界事件缓存。
-- 支持创建校验备份、完整性验证、引导式恢复计划和异常中断录像恢复。
+## 功能特性
 
-### 可靠性与性能
+### 远程工作空间
 
-- SQLite WAL/运行参数优化、可控启停、运行期密钥生成和幂等资源清理。
-- 有界终端输出缓冲及 SSH 流 pause/resume 背压。
-- 编辑器、设置页和管理页按需加载，不再打包 Element Plus 全量 CSS。
-- 可复现的前后端/桌面端构建，以及交付与安全行为测试。
+* SSH 和 Telnet 终端会话
+* 多标签、分屏和独立窗口
+* 会话重连、心跳和挂起恢复
+* 命令历史、快捷命令和路径历史
+* 可自定义终端布局和外观
+* 移动端友好的终端交互
+* PWA 支持
 
-更多设计背景和后续工作请参阅：[架构审计](./docs/ARCHITECTURE_AUDIT.md)、[发布指南](./docs/RELEASE.md) 和 [部署安全](./docs/deployment-security.md)。
+### 文件管理
 
-## 📸 截图
+* SFTP 文件管理器
+* 拖拽上传
+* 多选文件操作
+* 重命名、复制、移动、删除和权限修改
+* 压缩和解压
+* 基于 Monaco Editor 的在线编辑
+* 移动端 CodeMirror 编辑器
+* 常用路径和路径历史
 
-| 终端界面（Light） |
-|:--:|
-| ![浅色终端工作台](./doc/imgs/zh-CN/workspace_light.png) |
+### 远程桌面
 
-| 终端界面（Dark） |
-|:--:|
-| ![深色终端工作台](./doc/imgs/zh-CN/workspace_dark.png) |
+* RDP 访问
+* VNC 访问
+* 独立 Remote Gateway 隔离边界
+* 一次性远程桌面授权
+* guacd 集成
 
-| 分屏界面 |
-|:--:|
-| ![分屏工作台](./doc/imgs/zh-CN/workspace_split.png) |
+### 管理能力
 
-| 设置界面（Dark） |
-|:--:|
-| ![设置界面](./doc/imgs/zh-CN/setting.png) |
+* 多用户管理
+* 系统角色：`super_admin`、`admin`、`auditor`、`user`
+* 用户组和资产授权
+* 查看、连接和管理权限
+* 批量资产授权
+* 删除用户时支持资产转移
+* 基于角色的管理中心
 
-## 🖥️ 桌面客户端
+### 安全能力
 
-桌面端安装包可在[最新 Release](https://github.com/spfantop/fantetic-terminal/releases/latest)中下载。Windows Release 同时提供标准 `-setup.exe` 安装包和解压即用的 `-portable.zip` 绿色包。
+* Passkey 支持
+* 验证码
+* 双因素认证
+* IP 黑白名单
+* HTTP 和 WebSocket Origin 校验
+* 用户级限流
+* 会话吊销
+* 敏感日志脱敏
+* 通知凭据加密
+* Electron 沙箱和 IPC 来源校验
 
-桌面运行时以本地使用为主，不开放 Web 多用户管理或内置 RDP/VNC Gateway 能力。它通过每次启动随机 nonce 和受限 Electron Renderer 权限保护 loopback 后端。
+### 审计、录像和恢复
 
-## 🚀 快速开始
+* 结构化审计日志
+* 关联操作人、请求、IP、资产和会话
+* 加密 SSH/Telnet 会话录像
+* 录像搜索、筛选和回放
+* 备份创建
+* 备份完整性校验
+* 引导式恢复调度
+* 中断录像恢复
 
-### 1️⃣ 准备配置
+### 桌面客户端
 
-```bash
-mkdir ./fantetic-terminal && cd ./fantetic-terminal
+* 独立 Electron 桌面客户端
+* Windows 安装包和便携包
+* 本地优先运行模式
+* 每次启动生成后端随机 nonce
+* 受限的渲染进程权限
+
+> 桌面客户端主要面向本地终端使用场景。Web 多用户管理和完整 RDP/VNC 网关能力由私有部署的服务端提供。
+
+---
+
+## 界面预览
+
+> 推荐截图顺序：终端、暗色终端、分屏、SFTP、RDP、管理中心、Electron、移动端。
+
+### 终端工作区
+
+<img src="./docs/images/zh-CN/workspace-dark.png" alt="Terminal workspace" width="100%" />
+
+### 分屏模式
+
+<img src="./docs/images/zh-CN/split-pane.png" alt="Split pane" width="100%" />
+
+### 文件管理器
+
+<img src="./docs/images/zh-CN/filemanager.png" alt="SFTP file manager" width="100%" />
+
+### 远程桌面
+
+<img src="./docs/images/zh-CN/remote.png" alt="Remote desktop" width="100%" />
+
+### 管理中心
+
+<img src="./docs/images/zh-CN/admincenter.png" alt="Admin Center" width="100%" />
+
+---
+
+## 快速开始
+
+### 1. 下载 Compose 文件
+
+```bash id="dfzurr"
+mkdir ./fantetic-terminal
+cd ./fantetic-terminal
+
 wget https://raw.githubusercontent.com/spfantop/fantetic-terminal/refs/heads/main/docker-compose.yml -O docker-compose.yml
 wget https://raw.githubusercontent.com/spfantop/fantetic-terminal/refs/heads/main/.env.example -O .env
 ```
 
-无需手动设置密钥。首次执行 `docker compose up -d` 时，Backend 会自动生成高强度的 `ENCRYPTION_KEY`、`SESSION_SECRET` 与 `REMOTE_GATEWAY_SHARED_SECRET`，并保存至 `./data/.env`；Remote Gateway 会从该文件读取共享密钥。
+### 2. 启动 Fantetic Terminal
 
-请妥善保管并备份 `./data/.env`。删除或替换该文件会导致既有加密数据无法读取，并使现有会话失效。
+```bash id="gx9lyy"
+docker compose up -d
+```
 
-只需在 `.env` 中配置部署相关项：
+### 3. 打开 Web 界面
 
-- `RP_ID` / `RP_ORIGIN`：Passkey 使用的公开域名与 Origin。
-- `CORS_ALLOWED_ORIGINS`：需要额外信任的前端 Origin，使用逗号分隔。
+```text id="gpo0es"
+http://localhost:18111
+```
 
-> ⚠️ **arm64 用户**在部署 guacd 时，请按环境将 `guacamole/guacd:latest` 替换为 `guacamole/guacd:1.6.0-RC1`。**armv7 用户**请使用[专用 Compose 文件](./doc/arm/docker-compose.yml)；由于 guacd 没有 ARMv7 镜像，RDP/VNC 会被禁用。
+使用已发布的 Docker 镜像部署时，不需要拉取源码。
 
-### 2️⃣ 配置反向代理
+---
 
-```nginx
+## 配置说明
+
+首次启动时，后端会自动生成强随机值：
+
+* `ENCRYPTION_KEY`
+* `SESSION_SECRET`
+* `REMOTE_GATEWAY_SHARED_SECRET`
+
+这些值会保存到：
+
+```text id="uyjl5y"
+./data/.env
+```
+
+请妥善保存该文件，并将其纳入备份。
+
+删除或替换该文件可能导致历史加密数据无法解密，并使当前会话失效。
+
+生产环境请在 `.env` 中配置：
+
+```env id="kkd8ov"
+RP_ID=your-domain.com
+RP_ORIGIN=https://your-domain.com
+CORS_ALLOWED_ORIGINS=https://your-domain.com
+```
+
+生产环境建议使用 HTTPS。安全 Cookie、剪贴板、Passkey 等浏览器能力在非 HTTPS 来源下可能无法正常工作，localhost 除外。
+
+---
+
+## 反向代理示例
+
+```nginx id="mnt4w6"
 location / {
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
@@ -121,68 +237,205 @@ location / {
 }
 ```
 
-生产环境请使用 HTTPS。除 localhost 外，非 HTTPS Origin 可能无法使用剪贴板、Passkey、安全 Cookie 等浏览器能力。
+---
 
-### 3️⃣ 启动与更新
+## ARM 说明
 
-```bash
-docker compose up -d
+对于 `arm64`，请将：
+
+```yaml id="b40yoy"
+guacamole/guacd:latest
 ```
 
-```bash
-docker compose down
-docker compose pull
-docker compose up -d
+替换为：
+
+```yaml id="api0ym"
+guacamole/guacd:1.6.0-RC1
 ```
 
-仅使用已发布镜像时，不需要拉取仓库源码。
+对于 `armv7`，请使用专用 Compose 文件。由于 guacd 未提供 armv7 镜像，armv7 环境下 RDP/VNC 功能不可用。
 
-## 📚 使用指南
+---
 
-### 挂起会话
+## 架构设计
 
-在 SSH 标签页上右键选择“挂起会话”，移动端可长按标签。后端会接管 SSH 连接，使编译等长任务在浏览器断开后继续运行；之后可在挂起会话面板中恢复。
+```text id="utd8ty"
+Browser / PWA / Electron
+        |
+        v
+Frontend
+        |
+        v
+Backend API + WebSocket
+        |
+        +-------------------+
+        |                   |
+        v                   v
+SSH / Telnet / SFTP     Remote Gateway
+                            |
+                            v
+                          guacd
+                            |
+                     +------+------+
+                     |             |
+                    RDP           VNC
+```
 
-### 命令输入框
+Fantetic Terminal 采用 Monorepo 结构：
 
-1. 输入框聚焦时，使用 `Alt + ↑/↓` 切换 SSH 标签，使用 `Alt + ←/→` 切换编辑器标签。
-2. 开启命令同步后，输入内容会同步到选定终端；使用 `↑/↓` 和 `Enter` 选择并发送建议命令。
+```text id="bqfy51"
+fantetic-terminal
+├── packages
+│   ├── backend
+│   ├── contracts
+│   ├── frontend
+│   └── remote-gateway
+├── electron-app
+├── build-tools
+├── docs
+├── docker-compose.yml
+└── package.json
+```
 
-### 文件管理器
+---
 
-1. 在搜索框内使用 `↑/↓` 快速选择文件。
-2. 从系统拖入文件或文件夹即可上传；大量或深层目录建议先压缩。
-3. 在文件管理器内部拖拽条目可执行移动。
-4. 按住 `Ctrl` 或 `Shift` 可多选。
-5. 右键菜单提供复制、剪切、粘贴、删除、重命名和权限修改。
+## 产品对比
 
-### 终端与工作区
+| 功能           | Fantetic Terminal | Nexterm | Apache Guacamole | JumpServer |
+| ------------ | ----------------: | ------: | ---------------: | ---------: |
+| SSH 终端       |                 ✅ |       ✅ |                ✅ |          ✅ |
+| Telnet       |                 ✅ |       ✅ |                ✅ |          ✅ |
+| SFTP 文件管理    |                 ✅ |       ✅ |                ❌ |          ✅ |
+| RDP          |                 ✅ |      ⚠️ |                ✅ |          ✅ |
+| VNC          |                 ✅ |      ⚠️ |                ✅ |          ✅ |
+| Web 界面       |                 ✅ |       ✅ |                ✅ |          ✅ |
+| Electron 桌面端 |                 ✅ |       ❌ |                ❌ |          ❌ |
+| PWA          |                 ✅ |      ⚠️ |                ❌ |          ❌ |
+| 多用户管理        |                 ✅ |       ✅ |               ⚠️ |          ✅ |
+| 用户组          |                 ✅ |      ⚠️ |                ❌ |          ✅ |
+| 资产授权         |                 ✅ |       ✅ |               ⚠️ |          ✅ |
+| 会话录像         |                 ✅ |       ❌ |               ⚠️ |          ✅ |
+| 管理中心         |                 ✅ |       ✅ |               ⚠️ |          ✅ |
+| 轻量化私有部署      |                 ✅ |       ✅ |                ✅ |         ⚠️ |
+| 企业级堡垒机能力     |                ⚠️ |      ⚠️ |                ❌ |          ✅ |
 
-1. `Ctrl + Shift + C` 复制，`Ctrl + Shift + V` 粘贴。
-2. 在终端、文件管理器、编辑器和快捷指令视图中使用 `Ctrl + 鼠标滚轮` 缩放。
-3. 展开的侧栏可拖拽调整宽度。
-4. SSH 与文件管理器标签支持关闭左侧/其他/右侧标签页。
-5. 连接断开后，在终端或命令输入框按回车，或再次点击同一连接，可触发重连。
-6. 移动端可通过双指手势调整终端字体。
+> 上述对比基于产品定位和常见部署方式。不同版本和部署场景下，具体能力深度可能存在差异。
 
-### 管理中心
+---
 
-- 系统管理员可在管理中心维护用户、用户组、授权、备份和恢复请求。
-- 审计员可调查结构化审计事件和关联录像，但不会获得配置管理权限。
-- 恢复前会校验备份完整性。仍建议额外备份挂载的 `data` 目录，作为灾难恢复保障。
+## 项目定位
 
-## ⚠️ 注意事项
+Fantetic Terminal 当前更适合以下场景：
 
-1. 双文件管理器布局仍属于实验性功能。
-2. 同一布局暂不支持多个相互独立的文本编辑器。
-3. 会话录像可能包含终端输入；开启 `SESSION_RECORD_INPUT` 前请确认法律与组织策略。
-4. RDP/VNC 需要正确配置 guacd 和 Remote Gateway。
-5. 内置备份流程不能替代对 `data` 目录的外部备份。
+* 个人服务器管理
+* Homelab 环境
+* 小团队远程访问
+* 轻量级 DevOps 工作空间
+* 私有部署的远程终端和远程桌面管理
+* 希望在一个平台中统一使用 SSH、SFTP、RDP 和 VNC 的团队
 
-## 💐 致谢
+它目前**还不定位为完整企业级堡垒机替代品**。
 
-- 终端配色预设来源于 [iTerm2-Color-Schemes](https://github.com/mbadolato/iTerm2-Color-Schemes)。
+---
 
-## 📄 开源协议
+## 路线图
 
-Fantetic Terminal 使用 [GPL-3.0](LICENSE) 开源协议。
+### 已完成
+
+* SSH 终端
+* Telnet 终端
+* SFTP 文件管理
+* RDP 和 VNC 网关
+* 多标签工作区
+* 分屏
+* 会话挂起
+* 多用户管理
+* 用户组和资产授权
+* Passkey、验证码和双因素认证
+* 审计日志
+* 加密终端录像
+* 备份和恢复
+* PWA
+* Electron 桌面客户端
+
+### 进行中 / 计划中
+
+* 更好的终端高亮
+* 更接近 WindTerm 的终端体验
+* RDP 剪贴板增强
+* RDP 文件传输增强
+* 远程桌面多窗口工作流
+* 更完整的审计追踪体验
+* PostgreSQL 支持
+* 插件系统
+* 更多部署模板
+* 公开演示环境
+
+---
+
+## 开发
+
+```bash id="qvof5e"
+git clone https://github.com/spfantop/fantetic-terminal.git
+cd fantetic-terminal
+
+npm install
+npm run dev
+```
+
+构建：
+
+```bash id="8ph73x"
+npm run build
+```
+
+桌面端打包：
+
+```bash id="0v1ali"
+cd electron-app
+npm install
+npm run build
+```
+
+---
+
+## 安全说明
+
+Fantetic Terminal 会处理服务器凭据、私钥、会话令牌和远程访问流量等敏感数据。
+
+生产环境使用前，请务必：
+
+* 启用 HTTPS
+* 妥善保存 `./data/.env`
+* 备份挂载的 `data` 目录
+* 检查反向代理配置
+* 限制可信 Origin
+* 使用强管理员密码
+* 尽可能启用双因素认证
+* 确认终端输入录像是否符合你的组织规范和法律要求
+
+---
+
+## 致谢
+
+Fantetic Terminal 基于 [Heavrnl/nexus-terminal](https://github.com/Heavrnl/nexus-terminal) 开发。
+
+感谢原作者以及所有让本项目成为可能的开源项目。
+
+终端配色预设基于 [iTerm2-Color-Schemes](https://github.com/mbadolato/iTerm2-Color-Schemes)。
+
+---
+
+## 许可证
+
+Fantetic Terminal 使用 [GPL-3.0](./LICENSE) 许可证。
+
+---
+
+<div align="center">
+
+如果你觉得 Fantetic Terminal 对你有帮助，欢迎点一个 Star。
+
+**Star · Fork · 分享 · 贡献**
+
+</div>
