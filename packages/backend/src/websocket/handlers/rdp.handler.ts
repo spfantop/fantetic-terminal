@@ -1,148 +1,189 @@
 import WebSocket, { RawData } from 'ws';
 import { Request } from 'express';
 import { AuthenticatedWebSocket } from '../types';
+import { startSessionRecording } from '../../session-recording/session-recording.service';
+import { createRemoteDesktopRecordingBridge } from '../remote-desktop-recording';
+import { createLogger } from '../../logging/logger';
+import { runWithAuditContext } from '../../audit/audit-context';
 
-const redactTokenFromUrl = (targetUrl: string): string => {
-    try {
-        const parsedUrl = new URL(targetUrl);
-        if (parsedUrl.searchParams.has('token')) {
-            parsedUrl.searchParams.set('token', '[REDACTED]');
-        }
-        return parsedUrl.toString();
-    } catch (error) {
-        return targetUrl.replace(/([?&]token=)[^&]*/i, '$1[REDACTED]');
-    }
+const logger = createLogger('RemoteDesktopProxy');
+
+type RemoteDesktopRecordingMetadata = {
+    connectionId: number;
+    protocol?: 'RDP' | 'VNC';
+    connectionName?: string;
+    requestId?: string;
 };
 
-export function handleRdpProxyConnection(
+type PendingClientFrame = { data: RawData; isBinary: boolean };
+
+const MAX_PENDING_CLIENT_FRAME_BYTES = 1024 * 1024;
+
+const toBuffer = (data: RawData): Buffer => {
+    if (Buffer.isBuffer(data)) return Buffer.from(data);
+    if (Array.isArray(data)) return Buffer.concat(data.map(part => Buffer.from(part)));
+    return Buffer.from(data);
+};
+
+/**
+ * The backend proxy is the only in-repository point that sees both directions
+ * of the Guacamole protocol. Capture those exact frames; do not label them as
+ * browser-playable video because no Guacamole playback adapter is bundled.
+ */
+export async function handleRdpProxyConnection(
     ws: AuthenticatedWebSocket,
-    request: Request
-): void {
-    const clientIp = (request as any).clientIpAddress || 'unknown';
-    console.log(`WebSocket：RDP 代理客户端 ${ws.username} (ID: ${ws.userId}, IP: ${clientIp}) 已连接。`);
+    request: Request,
+): Promise<void> {
+    const recordingMetadata = (request as any).remoteDesktopRecording as RemoteDesktopRecordingMetadata | undefined;
+    if (recordingMetadata?.requestId) {
+        return runWithAuditContext({
+            requestId: recordingMetadata.requestId,
+            sourceIp: (request as any).clientIpAddress || 'unknown',
+            ...(ws.userId === undefined ? {} : { actorUserId: ws.userId }),
+            ...(ws.username === undefined ? {} : { actorUsername: ws.username }),
+            ...(ws.authorization?.systemRole === undefined ? {} : { actorRole: ws.authorization.systemRole }),
+        }, () => handleRdpProxyConnectionWithAuditContext(ws, request, recordingMetadata));
+    }
+    return handleRdpProxyConnectionWithAuditContext(ws, request, recordingMetadata);
+}
 
-    ws.on('pong', () => { ws.isAlive = true; });
+async function handleRdpProxyConnectionWithAuditContext(
+    ws: AuthenticatedWebSocket,
+    request: Request,
+    recordingMetadata: RemoteDesktopRecordingMetadata | undefined,
+): Promise<void> {
+    const rdpToken = (request as any).rdpToken as string | undefined;
+    const widthValue = (request as any).rdpWidth as string | undefined;
+    const heightValue = (request as any).rdpHeight as string | undefined;
 
-    // Retrieve all necessary parameters passed from the upgrade handler
-    const rdpToken = (request as any).rdpToken;
-    const rdpWidthStr = (request as any).rdpWidth; // Get as string first
-    const rdpHeightStr = (request as any).rdpHeight; // Get as string first
-
-    // --- 参数验证和 DPI 计算 ---
-    if (!rdpToken || !rdpWidthStr || !rdpHeightStr) { // Check string presence
-        console.error(`WebSocket: RDP Proxy connection for ${ws.username} missing required parameters (token, width, height).`);
-        ws.send(JSON.stringify({ type: 'rdp:error', payload: 'Missing RDP connection parameters (token, width, height).' }));
-        ws.close(1008, 'Missing RDP parameters');
+    if (!rdpToken || !widthValue || !heightValue || !recordingMetadata?.protocol || !recordingMetadata.connectionName || !ws.userId) {
+        ws.close(1008, 'Missing remote desktop recording metadata');
         return;
     }
 
-    const rdpWidth = parseInt(rdpWidthStr, 10);
-    const rdpHeight = parseInt(rdpHeightStr, 10);
-
-    if (isNaN(rdpWidth) || isNaN(rdpHeight) || rdpWidth <= 0 || rdpHeight <= 0) {
-         console.error(`WebSocket: RDP Proxy connection for ${ws.username} has invalid width or height parameters.`);
-         ws.send(JSON.stringify({ type: 'rdp:error', payload: 'Invalid width or height parameters.' }));
-         ws.close(1008, 'Invalid RDP dimensions');
-         return;
+    const width = Number.parseInt(widthValue, 10);
+    const height = Number.parseInt(heightValue, 10);
+    if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) {
+        ws.close(1008, 'Invalid RDP dimensions');
+        return;
     }
-
-    // 根据宽高的简单 DPI 计算逻辑 (如果宽度 > 1920，则 DPI=120，否则 DPI=96)
-    const calculatedDpi = rdpWidth > 1920 ? 120 : 96;
-    console.log(`WebSocket: RDP Proxy calculated DPI for ${ws.username} based on width ${rdpWidth}: ${calculatedDpi}`);
-
-    // Determine RDP target URL based on deployment mode
-    const deploymentMode = process.env.DEPLOYMENT_MODE;
-    let remoteGatewayWsBaseUrl: string;
-    if (deploymentMode === 'local') {
-        remoteGatewayWsBaseUrl = process.env.REMOTE_GATEWAY_WS_URL_LOCAL || 'ws://localhost:8080';
-        console.log(`[WebSocket Remote Desktop Proxy] Using LOCAL deployment mode. Target Base: ${remoteGatewayWsBaseUrl}`);
-    } else if (deploymentMode === 'docker') {
-        remoteGatewayWsBaseUrl = process.env.REMOTE_GATEWAY_WS_URL_DOCKER || 'ws://remote-gateway:8080';
-        console.log(`[WebSocket Remote Desktop Proxy] Using DOCKER deployment mode. Target Base: ${remoteGatewayWsBaseUrl}`);
-    } else {
-        remoteGatewayWsBaseUrl = 'ws://localhost:8080';
-        console.warn(`[WebSocket Remote Desktop Proxy] Unknown deployment mode '${deploymentMode}'. Defaulting to safe fallback Target Base: ${remoteGatewayWsBaseUrl}`);
-    }
-
-    const cleanRemoteGatewayWsBaseUrl = remoteGatewayWsBaseUrl.endsWith('/') ? remoteGatewayWsBaseUrl.slice(0, -1) : remoteGatewayWsBaseUrl;
-
-    const remoteDesktopTargetUrl = `${cleanRemoteGatewayWsBaseUrl}/?token=${encodeURIComponent(rdpToken)}&width=${encodeURIComponent(rdpWidth)}&height=${encodeURIComponent(rdpHeight)}&dpi=${encodeURIComponent(calculatedDpi)}`;
-    const safeRemoteDesktopTargetUrl = redactTokenFromUrl(remoteDesktopTargetUrl);
-
-    console.log(`WebSocket: Remote Desktop Proxy for ${ws.username} attempting to connect to ${safeRemoteDesktopTargetUrl}`);
 
     const gatewaySharedSecret = process.env.REMOTE_GATEWAY_SHARED_SECRET;
     if (!gatewaySharedSecret || gatewaySharedSecret.length < 32) {
-        ws.send(JSON.stringify({ type: 'rdp:error', payload: 'Remote desktop gateway authentication is not configured.' }));
         ws.close(1011, 'Remote desktop gateway authentication is not configured.');
         return;
     }
-    const rdpWs = new WebSocket(remoteDesktopTargetUrl, {
-        headers: { 'x-fantetic-gateway-secret': gatewaySharedSecret },
-    });
-    let clientWsClosed = false;
-    let rdpWsClosed = false;
 
-    // --- 消息转发: Client -> RDP ---
-    ws.on('message', (message: RawData) => {
-        if (rdpWs.readyState === WebSocket.OPEN) {
-            rdpWs.send(message);
-        } else {
-            console.warn(`[RDP 代理 C->S] 用户: ${ws.username}, 会话: ${ws.sessionId}, RDP WS 未打开，丢弃消息。`);
-        }
+    const recording = createRemoteDesktopRecordingBridge({
+        start: () => startSessionRecording({
+            userId: ws.userId,
+            username: ws.username,
+            connectionId: recordingMetadata.connectionId,
+            connectionName: recordingMetadata.connectionName!,
+            protocol: recordingMetadata.protocol!,
+        }),
     });
+    const pendingClientFrameList: PendingClientFrame[] = [];
+    let pendingClientFrameBytes = 0;
+    let gatewaySocket: WebSocket | undefined;
+    let clientClosed = false;
+    let gatewayClosed = false;
+    let finalized = false;
 
-    // --- 消息转发: RDP -> Client ---
-    rdpWs.on('message', (message: RawData) => {
-        if (ws.readyState === WebSocket.OPEN) {
-            const messageString = message.toString('utf-8');
-            ws.send(messageString);
-        } else {
-             console.warn(`[RDP 代理 S->C] 用户: ${ws.username}, 会话: ${ws.sessionId}, 客户端 WS 未打开，丢弃消息。`);
-        }
-    });
+    const finishRecording = (incomplete = false): void => {
+        if (finalized) return;
+        finalized = true;
+        void recording.finish({ incomplete }).catch(error => {
+            logger.error('远程桌面录屏收尾失败', { connectionId: recordingMetadata.connectionId, error });
+        });
+    };
 
-    // --- 错误处理 ---
-    ws.on('error', (error) => {
-        console.error(`[RDP 代理 客户端 WS 错误] 用户: ${ws.username}, 会话: ${ws.sessionId}, 错误:`, error);
-        if (!rdpWsClosed && rdpWs.readyState !== WebSocket.CLOSED && rdpWs.readyState !== WebSocket.CLOSING) {
-            console.log(`[RDP 代理] 因客户端 WS 错误关闭 RDP WS。会话: ${ws.sessionId}`);
-            rdpWs.close(1011, 'Client WS Error');
-            rdpWsClosed = true;
+    const sendOrQueueClientFrame = (data: RawData, isBinary: boolean): void => {
+        recording.recordClient(toBuffer(data));
+        if (gatewaySocket?.readyState === WebSocket.OPEN) {
+            gatewaySocket.send(data, { binary: isBinary });
+            return;
         }
-        clientWsClosed = true;
-    });
-    rdpWs.on('error', (error) => {
-         console.error(`[RDP 代理 RDP WS 错误] 用户: ${ws.username}, 会话: ${ws.sessionId}, 连接到 ${safeRemoteDesktopTargetUrl} 时出错:`, error);
-         if (!clientWsClosed && ws.readyState !== WebSocket.CLOSED && ws.readyState !== WebSocket.CLOSING) {
-            console.log(`[RDP 代理] 因 RDP WS 错误关闭客户端 WS。会话: ${ws.sessionId}`);
-            ws.close(1011, `RDP WS Error: ${error.message}`);
-            clientWsClosed = true;
+        const size = toBuffer(data).byteLength;
+        if (pendingClientFrameBytes + size > MAX_PENDING_CLIENT_FRAME_BYTES) {
+            finishRecording(true);
+            ws.close(1013, 'Remote desktop recording buffer exceeded');
+            return;
         }
-        rdpWsClosed = true;
-    });
+        pendingClientFrameList.push({ data, isBinary });
+        pendingClientFrameBytes += size;
+    };
 
-    // --- 关闭处理 ---
-    ws.on('close', (code, reason) => {
-        clientWsClosed = true;
-        console.log(`[RDP 代理 客户端 WS 关闭] 用户: ${ws.username}, 会话: ${ws.sessionId}, 代码: ${code}, 原因: ${reason.toString()}`);
-        if (!rdpWsClosed && rdpWs.readyState !== WebSocket.CLOSED && rdpWs.readyState !== WebSocket.CLOSING) {
-            console.log(`[RDP 代理] 因客户端 WS 关闭而关闭 RDP WS。会话: ${ws.sessionId}`);
-            rdpWs.close(1000, 'Client WS Closed');
-            rdpWsClosed = true;
+    // Register before awaiting the SQLite row so no early browser instruction is lost.
+    ws.on('message', sendOrQueueClientFrame);
+    ws.on('close', () => {
+        clientClosed = true;
+        finishRecording(false);
+        if (!gatewayClosed && gatewaySocket && gatewaySocket.readyState < WebSocket.CLOSING) {
+            gatewaySocket.close(1000, 'Client WS Closed');
         }
     });
-    rdpWs.on('close', (code, reason) => {
-        rdpWsClosed = true;
-         console.log(`[RDP 代理 RDP WS 关闭] 用户: ${ws.username}, 会话: ${ws.sessionId}, 到 ${safeRemoteDesktopTargetUrl} 的连接已关闭。代码: ${code}, 原因: ${reason.toString()}`);
-        if (!clientWsClosed && ws.readyState !== WebSocket.CLOSED && ws.readyState !== WebSocket.CLOSING) {
-            console.log(`[RDP 代理] 因 RDP WS 关闭而关闭客户端 WS。会话: ${ws.sessionId}`);
-            ws.close(1000, 'RDP WS Closed');
-            clientWsClosed = true;
+    ws.on('error', () => {
+        clientClosed = true;
+        finishRecording(true);
+        if (!gatewayClosed && gatewaySocket && gatewaySocket.readyState < WebSocket.CLOSING) {
+            gatewaySocket.close(1011, 'Client WS Error');
         }
     });
 
-    rdpWs.on('open', () => {
-         console.log(`[RDP 代理 RDP WS 打开] 用户: ${ws.username}, 会话: ${ws.sessionId}, 到 ${safeRemoteDesktopTargetUrl} 的连接已建立。开始转发消息。`);
+    try {
+        await recording.ready;
+    } catch (error) {
+        logger.error('无法创建远程桌面录屏索引', { connectionId: recordingMetadata.connectionId, error });
+        finishRecording(true);
+        ws.close(1011, 'Remote desktop recording unavailable');
+        return;
+    }
+    if (clientClosed || ws.readyState !== WebSocket.OPEN) {
+        finishRecording(false);
+        return;
+    }
+
+    const deploymentMode = process.env.DEPLOYMENT_MODE;
+    const gatewayBaseUrl = deploymentMode === 'docker'
+        ? (process.env.REMOTE_GATEWAY_WS_URL_DOCKER || 'ws://remote-gateway:8080')
+        : (process.env.REMOTE_GATEWAY_WS_URL_LOCAL || 'ws://localhost:8080');
+    const cleanGatewayBaseUrl = gatewayBaseUrl.endsWith('/') ? gatewayBaseUrl.slice(0, -1) : gatewayBaseUrl;
+    const dpi = width > 1920 ? 120 : 96;
+    const targetUrl = `${cleanGatewayBaseUrl}/?token=${encodeURIComponent(rdpToken)}&width=${encodeURIComponent(width)}&height=${encodeURIComponent(height)}&dpi=${dpi}`;
+    const requestId = recordingMetadata.requestId;
+    logger.info('正在连接远程桌面网关', {
+        connectionId: recordingMetadata.connectionId,
+        protocol: recordingMetadata.protocol,
+        width,
+        height,
+    });
+
+    gatewaySocket = new WebSocket(targetUrl, {
+        headers: {
+            'x-fantetic-gateway-secret': gatewaySharedSecret,
+            ...(requestId ? { 'x-request-id': requestId } : {}),
+        },
+    });
+    gatewaySocket.on('open', () => {
+        for (const frame of pendingClientFrameList.splice(0)) {
+            gatewaySocket?.send(frame.data, { binary: frame.isBinary });
+        }
+        pendingClientFrameBytes = 0;
+    });
+    gatewaySocket.on('message', (data: RawData, isBinary: boolean) => {
+        recording.recordServer(toBuffer(data));
+        if (ws.readyState === WebSocket.OPEN) ws.send(data, { binary: isBinary });
+    });
+    gatewaySocket.on('error', error => {
+        gatewayClosed = true;
+        logger.error('远程桌面网关连接失败', { connectionId: recordingMetadata.connectionId, error });
+        finishRecording(true);
+        if (!clientClosed && ws.readyState < WebSocket.CLOSING) ws.close(1011, 'Remote desktop gateway error');
+    });
+    gatewaySocket.on('close', () => {
+        gatewayClosed = true;
+        finishRecording(false);
+        if (!clientClosed && ws.readyState < WebSocket.CLOSING) ws.close(1000, 'Remote desktop gateway closed');
     });
 }

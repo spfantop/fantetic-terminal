@@ -62,6 +62,12 @@ Fantetic Terminal is designed as a **remote workspace**, not just a web SSH page
 
 ## Features
 
+- Structured audit context with actor, request, IP, asset, session, and result correlation.
+- Role-aware Admin Center for access control, audit investigation, recordings, and data management.
+- Encrypted SSH/Telnet session recordings with filtering, streaming playback, cancellation, and bounded event caching.
+- Encrypted bidirectional Guacamole protocol transcripts for RDP/VNC. They are evidence archives only: this repository does not bundle a browser or terminal playback adapter for them.
+- Verified backup creation, integrity checks, guided restore scheduling, and interrupted-recording recovery.
+
 ### Remote Workspace
 
 * SSH and Telnet terminal sessions
@@ -71,6 +77,13 @@ Fantetic Terminal is designed as a **remote workspace**, not just a web SSH page
 * Customizable terminal layout and appearance
 * Mobile-friendly terminal interaction
 * PWA support
+
+### Reliability and Performance
+
+- SQLite WAL/runtime tuning, controlled startup/shutdown, generated runtime secrets, and idempotent resource cleanup.
+- Bounded terminal output buffers and SSH stream pause/resume backpressure.
+- Lazy-loaded editor, settings, and administration chunks; Element Plus global CSS is not shipped.
+- Lockfile-based frontend/backend/desktop builds with delivery and security behavior tests.
 
 ### File Management
 
@@ -186,6 +199,8 @@ http://localhost:18111
 
 Source checkout is not required when using the published Docker images.
 
+> ⚠️ For **arm64**, use `guacamole/guacd:1.6.0-RC1` when your deployment includes guacd. For **armv7**, use [the dedicated Compose file](./docs/arm/docker-compose.yml); RDP/VNC is disabled because guacd does not provide an ARMv7 image.
+
 ---
 
 ## Configuration
@@ -252,7 +267,11 @@ with:
 guacamole/guacd:1.6.0-RC1
 ```
 
-For `armv7`, use the dedicated Compose file. RDP/VNC is disabled on armv7 because guacd does not provide an armv7 image.
+For `armv7`, use [the dedicated Compose file](./docs/arm/docker-compose.yml). RDP/VNC is disabled on armv7 because guacd does not provide an armv7 image.
+
+The Compose file pins all three application images to the same release version. When upgrading, change the frontend, backend, and Remote Gateway image tags together, then review the release notes before pulling the new images.
+
+Source checkout is not required when you only use the published images.
 
 ---
 

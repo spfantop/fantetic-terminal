@@ -27,6 +27,7 @@ export const initializeWebSocket = async (
     sessionParser: RequestHandler,
     clientIpResolver: ClientIpResolver,
     allowedOrigins: ReadonlySet<string>,
+    onActiveConnectionCountChanged?: (count: number) => void,
 ): Promise<WebSocketServer> => {
     // Environment variables are expected to be loaded by index.ts
 
@@ -58,6 +59,12 @@ export const initializeWebSocket = async (
 
     // 3. Initialize Connection Handler (handles 'connection' event and message routing)
     initializeConnectionHandler(wss, sshSuspendService, sftpService); // +++ 传递 sftpService 实例 +++
+    const publishConnectionCount = () => onActiveConnectionCountChanged?.(wss.clients.size);
+    wss.on('connection', ws => {
+        publishConnectionCount();
+        ws.once('close', () => setImmediate(publishConnectionCount));
+    });
+    publishConnectionCount();
 
     // --- WebSocket 服务器关闭处理 ---
     wss.on('close', () => {

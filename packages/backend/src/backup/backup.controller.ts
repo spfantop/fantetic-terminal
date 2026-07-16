@@ -1,16 +1,11 @@
 import { Request, Response } from 'express';
 
-import { createBackupService } from './backup.service';
-import { getAppDataPath } from '../config/app-data-path';
-import { backupDatabaseTo, readDatabaseSchemaVersion } from '../database/connection';
 import { AuditLogService } from '../audit/audit.service';
+import { runAuditProtectedOperation } from '../audit/audit-high-risk';
 import { createLogger } from '../logging/logger';
+import { resolveBackupScheduleConfig } from './backup.scheduler';
+import { getBackupService } from './backup.runtime';
 
-const service = createBackupService({
-  appDataPath: getAppDataPath(),
-  snapshotDatabase: backupDatabaseTo,
-  readSchemaVersion: readDatabaseSchemaVersion,
-});
 const audit = new AuditLogService();
 const logger = createLogger('BackupController');
 
@@ -20,29 +15,30 @@ const fail = (res: Response, error: unknown): void => {
 };
 
 export const listBackups = (_req: Request, res: Response): void => {
-  try { res.json(service.listBackups()); } catch (error) { fail(res, error); }
+  try { res.json(getBackupService().listBackups()); } catch (error) { fail(res, error); }
 };
 
 export const readBackupCount = (_req: Request, res: Response): void => {
-  try { res.json({ total: service.countBackups() }); } catch (error) { fail(res, error); }
+  try { res.json({ total: getBackupService().countBackups() }); } catch (error) { fail(res, error); }
 };
 
 export const createBackup = async (_req: Request, res: Response): Promise<void> => {
   try {
-    const backup = await service.createBackup();
-    await audit.logAction('BACKUP_CREATED', { backupId: backup.id });
+    const backup = await runAuditProtectedOperation(audit, 'BACKUP_CREATED', { phase: 'requested' },
+      () => getBackupService().createBackupWithPolicy(resolveBackupScheduleConfig()));
     res.status(201).json(backup);
   } catch (error) { fail(res, error); }
 };
 
 export const verifyBackup = async (req: Request, res: Response): Promise<void> => {
-  try { res.json(await service.verifyBackup(req.params.backupId)); } catch (error) { fail(res, error); }
+  try { res.json(await getBackupService().verifyBackup(req.params.backupId)); } catch (error) { fail(res, error); }
 };
 
 export const scheduleRestore = async (req: Request, res: Response): Promise<void> => {
   try {
-    await service.scheduleRestore(req.params.backupId);
-    await audit.logAction('BACKUP_RESTORE_SCHEDULED', { backupId: req.params.backupId });
+    await runAuditProtectedOperation(audit, 'BACKUP_RESTORE_SCHEDULED', {
+      backupId: req.params.backupId, phase: 'requested',
+    }, () => getBackupService().scheduleRestore(req.params.backupId));
     res.status(202).json({ code: 'backup.restoreScheduled', restartRequired: true });
   } catch (error) { fail(res, error); }
 };

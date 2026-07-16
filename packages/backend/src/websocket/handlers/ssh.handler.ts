@@ -26,7 +26,7 @@ export async function handleSshConnect(
     const existingState = sessionId ? clientStates.get(sessionId) : undefined;
 
     if (sessionId && existingState) {
-        console.warn(`WebSocket: 用户 ${ws.username} (会话: ${sessionId}) 已有活动连接，忽略新的连接请求。`);
+        logger.warn('SSH 连接请求被忽略：已存在活动会话', { userId: ws.userId, sessionId });
         if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ssh:error', payload: '已存在活动的 SSH 连接。' }));
         return;
     }
@@ -52,7 +52,7 @@ export async function handleSshConnect(
         return;
     }
 
-    console.log(`WebSocket: 用户 ${ws.username} 请求连接到数据库 ID: ${dbConnectionId}`);
+    logger.info('收到 SSH 连接请求', { userId: ws.userId, connectionId: dbConnectionId });
     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ssh:status', payload: '正在处理连接请求...' }));
 
     const clientIp = (request as any).clientIpAddress || 'unknown';
@@ -70,7 +70,7 @@ export async function handleSshConnect(
 
         const dbConnectionIdAsNumber = parseInt(dbConnectionId, 10);
         if (isNaN(dbConnectionIdAsNumber)) {
-            console.error(`WebSocket: 无效的 dbConnectionId '${dbConnectionId}' (非数字)，无法创建会话 ${newSessionId}。`);
+            logger.error('无法创建 SSH 会话：连接 ID 无效', { userId: ws.userId, sessionId: newSessionId });
             if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ssh:error', payload: '无效的连接 ID。' }));
             sshClient.end();
             ws.close(1008, 'Invalid Connection ID');
@@ -106,7 +106,7 @@ export async function handleSshConnect(
                 reason: error instanceof Error ? error.message : String(error),
             });
         }
-        console.log(`WebSocket: 为用户 ${ws.username} (IP: ${clientIp}) 创建新会话 ${newSessionId} (DB ID: ${dbConnectionIdAsNumber}, 连接名称: ${newState.connectionName})`);
+        logger.info('已创建 SSH 会话', { userId: ws.userId, sessionId: newSessionId, connectionId: dbConnectionIdAsNumber });
 
         if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ssh:status', payload: 'SSH 连接成功，正在打开 Shell...' }));
         try {
@@ -114,7 +114,7 @@ export async function handleSshConnect(
             const defaultRows = payload?.rows || 24; // Use provided rows or default
             sshClient.shell({ term: payload?.term || 'xterm-256color', cols: defaultCols, rows: defaultRows }, (err, stream) => {
                 if (err) {
-                    console.error(`SSH: 会话 ${newSessionId} 打开 Shell 失败:`, err);
+                    logger.error('SSH 会话打开 Shell 失败', { sessionId: newSessionId, connectionId: dbConnectionIdAsNumber, error: err });
                     auditLogService.logAction('SSH_SHELL_FAILURE', {
                         connectionName: newState.connectionName,
                         userId: ws.userId,
@@ -139,7 +139,7 @@ export async function handleSshConnect(
                     return;
                 }
 
-                console.log(`WebSocket: 会话 ${newSessionId} Shell 打开成功 (尺寸 ${defaultCols}x${defaultRows})。`);
+                logger.info('SSH 会话 Shell 已打开', { sessionId: newSessionId, cols: defaultCols, rows: defaultRows });
                 newState.sshShellStream = stream;
                 newState.isShellReady = true;
 
@@ -154,9 +154,7 @@ export async function handleSshConnect(
                     }
                 });
                 stream.stderr.on('data', (data: Buffer) => {
-                    if (process.env.DEBUG_SSH_STDERR === 'true') {
-                        console.error(`SSH Stderr (会话: ${newSessionId}): ${data.toString('utf8').substring(0, 100)}...`);
-                    }
+                    if (process.env.DEBUG_SSH_STDERR === 'true') logger.debug('收到 SSH 标准错误输出', { sessionId: newSessionId, byteLength: data.byteLength });
                     newState.sessionRecorder?.recordOutput(data);
                     scheduleSshOutput(newState, data);
                     // 同样，如果会话被标记为待挂起，则将 stderr 输出写入日志
@@ -170,10 +168,10 @@ export async function handleSshConnect(
                     flushSshOutput(newState, { force: true });
                     if (newState.suspendLogPath) {
                         flushSuspendLogBatcher(newState.suspendLogPath).catch(err => {
-                            console.error(`[SSH Handler] 刷新标记会话 ${newSessionId} 的日志失败 (路径: ${newState.suspendLogPath}):`, err);
+                            logger.error('刷新挂起 SSH 会话记录失败', { sessionId: newSessionId, error: err });
                         });
                     }
-                    console.log(`SSH: 会话 ${newSessionId} 的 Shell 通道已关闭。`);
+                    logger.info('SSH 会话 Shell 通道已关闭', { sessionId: newSessionId });
                     if (ws.readyState === WebSocket.OPEN) {
                         ws.send(JSON.stringify({ type: 'ssh:disconnected', payload: 'Shell 通道已关闭。' }));
                     }
@@ -188,7 +186,7 @@ export async function handleSshConnect(
                         serverCapabilities: { sshBinaryInput: true, sshBinaryOutput: newState.supportsSshBinaryOutput === true }
                     }
                 }));
-                console.log(`WebSocket: 会话 ${newSessionId} SSH 连接和 Shell 建立成功。`);
+                logger.info('SSH 连接和 Shell 已建立', { sessionId: newSessionId, connectionId: dbConnectionIdAsNumber });
                 auditLogService.logAction('SSH_CONNECT_SUCCESS', {
                     userId: ws.userId,
                     username: ws.username,
@@ -205,16 +203,15 @@ export async function handleSshConnect(
                     ip: newState.ipAddress
                 });
 
-                console.log(`WebSocket: 会话 ${newSessionId} 正在异步初始化 SFTP...`);
                 sftpService.initializeSftpSession(newSessionId)
-                    .then(() => console.log(`SFTP: 会话 ${newSessionId} 异步初始化成功。`))
-                    .catch(sftpInitError => console.error(`WebSocket: 会话 ${newSessionId} 异步初始化 SFTP 失败:`, sftpInitError));
+                    .then(() => logger.info('SSH 会话的 SFTP 初始化成功', { sessionId: newSessionId }))
+                    .catch(sftpInitError => logger.error('SSH 会话的 SFTP 初始化失败', { sessionId: newSessionId, error: sftpInitError }));
 
                 statusMonitorService.startStatusPolling(newSessionId);
                 startDockerStatusPolling(newSessionId); // Start Docker polling
             });
         } catch (shellError: any) {
-            console.error(`SSH: 会话 ${newSessionId} 打开 Shell 时发生意外错误:`, shellError);
+            logger.error('SSH 会话打开 Shell 时发生异常', { sessionId: newSessionId, error: shellError });
             if (ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'ssh:error', payload: `打开 Shell 时发生意外错误: ${shellError.message}` }));
             }
@@ -225,20 +222,20 @@ export async function handleSshConnect(
             flushSshOutput(newState, { force: true });
             if (newState.suspendLogPath) {
                 flushSuspendLogBatcher(newState.suspendLogPath).catch(err => {
-                    console.error(`[SSH Handler] 刷新标记会话 ${newSessionId} 的日志失败 (路径: ${newState.suspendLogPath}):`, err);
+                    logger.error('刷新挂起 SSH 会话记录失败', { sessionId: newSessionId, error: err });
                 });
             }
-            console.log(`SSH: 会话 ${newSessionId} 的客户端连接已关闭。`);
+            logger.info('SSH 客户端连接已关闭', { sessionId: newSessionId });
             cleanupClientConnection(newSessionId);
         });
         sshClient.on('error', (err: Error) => {
             flushSshOutput(newState, { force: true });
             if (newState.suspendLogPath) {
                 flushSuspendLogBatcher(newState.suspendLogPath).catch(flushError => {
-                    console.error(`[SSH Handler] 刷新标记会话 ${newSessionId} 的日志失败 (路径: ${newState.suspendLogPath}):`, flushError);
+                    logger.error('刷新挂起 SSH 会话记录失败', { sessionId: newSessionId, error: flushError });
                 });
             }
-            console.error(`SSH: 会话 ${newSessionId} 的客户端连接错误:`, err);
+            logger.error('SSH 客户端连接发生错误', { sessionId: newSessionId, error: err });
             if (ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'ssh:error', payload: `SSH 连接错误: ${err.message}` }));
             }
@@ -246,7 +243,7 @@ export async function handleSshConnect(
         });
 
     } catch (connectError: any) {
-        console.error(`WebSocket: 用户 ${ws.username} (IP: ${clientIp}) 连接到数据库 ID ${dbConnectionId} 失败:`, connectError);
+        logger.error('SSH 连接失败', { userId: ws.userId, connectionId: dbConnectionId, error: connectError });
         auditLogService.logAction('SSH_CONNECT_FAILURE', {
             userId: ws.userId,
             username: ws.username,
@@ -272,14 +269,14 @@ export function handleSshInput(ws: AuthenticatedWebSocket, payload: any): void {
     const state = sessionId ? clientStates.get(sessionId) : undefined;
 
     if (!state || !state.sshShellStream) {
-        console.warn(`WebSocket: 收到来自 ${ws.username} (会话: ${sessionId}) 的 SSH 输入，但无活动 Shell。`);
+        logger.warn('收到 SSH 输入但无活动 Shell', { userId: ws.userId, sessionId });
         return;
     }
     const data = payload?.data;
     if (typeof data === 'string' && state.isShellReady) {
         writeSshInput(state, data);
     } else if (!state.isShellReady) {
-        console.warn(`WebSocket: 会话 ${sessionId} 收到 SSH 输入，但 Shell 尚未就绪。`);
+        logger.warn('收到 SSH 输入但 Shell 尚未就绪', { userId: ws.userId, sessionId });
     }
 }
 
@@ -288,19 +285,19 @@ export function handleSshResize(ws: AuthenticatedWebSocket, payload: any): void 
     const state = sessionId ? clientStates.get(sessionId) : undefined;
 
     if (!state || !state.sshClient) { // sshClient is enough, stream might not be ready for resize yet
-        console.warn(`WebSocket: 收到来自 ${ws.username} 的调整大小请求，但无有效会话或 SSH 客户端。`);
+        logger.warn('收到终端调整大小请求但无有效 SSH 会话', { userId: ws.userId, sessionId });
         return;
     }
 
     const { cols, rows } = payload || {};
     if (typeof cols !== 'number' || typeof rows !== 'number' || cols <= 0 || rows <= 0) {
-        console.warn(`WebSocket: 收到来自 ${ws.username} (会话: ${sessionId}) 的无效调整大小请求:`, payload);
+        logger.warn('收到无效的终端调整大小请求', { userId: ws.userId, sessionId });
         return;
     }
 
     if (state.isShellReady && state.sshShellStream) {
         if (process.env.DEBUG_TERMINAL_RESIZE === 'true') {
-            console.log(`SSH: 会话 ${sessionId} 调整终端大小: ${cols}x${rows}`);
+            logger.debug('调整 SSH 终端大小', { sessionId, cols, rows });
         }
         state.sshShellStream.setWindow(rows, cols, 0, 0);
         state.sessionRecorder?.recordResize(cols, rows);
@@ -308,7 +305,7 @@ export function handleSshResize(ws: AuthenticatedWebSocket, payload: any): void 
         // Store intended size if shell not ready, apply when shell is ready.
         // This part is a bit more complex as it requires modifying the shell opening logic.
         // For now, we just log if shell is not ready.
-        console.warn(`WebSocket: 会话 ${sessionId} 收到调整大小请求，但 Shell 尚未就绪或流不存在 (isShellReady: ${state.isShellReady})。尺寸将不会立即应用。`);
+        logger.warn('SSH 会话 Shell 未就绪，未立即应用终端尺寸', { sessionId, shellReady: state.isShellReady });
         // A more robust solution would queue the resize or store it in ClientState to be applied later.
     }
 }
@@ -321,6 +318,6 @@ export function handleSshResumeSuccess(sessionId: string): void {
         // 如果 Docker 状态也需要恢复，可以在这里添加
         // startDockerStatusPolling(sessionId);
     } else {
-        console.error(`[SSH Handler ${sessionId}] 无法为恢复的会话启动状态轮询：未找到会话状态或 SSH 客户端。`);
+        logger.error('无法为恢复的 SSH 会话启动状态轮询', { sessionId });
     }
 }

@@ -23,6 +23,11 @@ import { usePathHistoryStore } from '../stores/pathHistory.store';
 import FavoritePathsModal from './FavoritePathsModal.vue';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
 import { formatDateTimeWithSettings } from '../utils/dateTimeFormat';
+import {
+  formatFileSize,
+  formatUnixFileMode,
+  resolveFileIconClass,
+} from '../features/file-manager/file-presentation';
 import { debugLog, debugLogLazy } from '../composables/useDebugLog';
 import {
   createLongPressContextMenuEvent,
@@ -222,152 +227,8 @@ let pendingColumnResize: { key: keyof typeof colWidths.value; width: number } | 
 const generateRequestId = (): string => `req-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
 
-// UI 格式化函数保持不变
-const formatSize = (size: number): string => {
-    if (size < 1024) return `${size} B`;
-    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-    if (size < 1024 * 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
-    return `${(size / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-};
-
-const formatMode = (mode: number): string => {
-    const perm = mode & 0o777; let str = '';
-    str += (perm & 0o400) ? 'r' : '-'; str += (perm & 0o200) ? 'w' : '-'; str += (perm & 0o100) ? 'x' : '-';
-    str += (perm & 0o040) ? 'r' : '-'; str += (perm & 0o020) ? 'w' : '-'; str += (perm & 0o010) ? 'x' : '-';
-    str += (perm & 0o004) ? 'r' : '-'; str += (perm & 0o002) ? 'w' : '-'; str += (perm & 0o001) ? 'x' : '-';
-    return str;
-};
-
 const formatMtime = (mtime: string | number | Date): string => {
     return formatDateTimeWithSettings(mtime, locale, settingsStore.timezone);
-};
-
-const getFileIconClassBase = (filename: string): string => {
-  const lowerFilename = filename.toLowerCase();
-  let extension = '';
-  const lastDotIndex = lowerFilename.lastIndexOf('.');
-
-  if (lastDotIndex > 0 && lastDotIndex < lowerFilename.length - 1) { // e.g. file.txt
-    extension = lowerFilename.substring(lastDotIndex + 1);
-  } else if (lastDotIndex === 0 && lowerFilename.length > 1) { // e.g. .bashrc, .gitignore
-    extension = lowerFilename.substring(1); // use 'bashrc' or 'gitignore' as extension
-  }
-  // Handle specific full filenames first for higher precedence
-  if (lowerFilename === 'makefile') return 'fas fa-cogs';
-  if (lowerFilename === 'dockerfile') return 'fab fa-docker';
-  if (lowerFilename.endsWith('docker-compose.yml') || lowerFilename.endsWith('docker-compose.yaml')) return 'fab fa-docker';
-  if (lowerFilename === 'package.json') return 'fab fa-npm';
-  if (lowerFilename === 'package-lock.json') return 'fab fa-npm';
-  if (lowerFilename === 'yarn.lock') return 'fab fa-yarn';
-  if (lowerFilename === 'composer.json') return 'fab fa-php';
-  if (lowerFilename === 'composer.lock') return 'fab fa-php';
-  if (lowerFilename === 'gemfile') return 'fas fa-gem';
-  if (lowerFilename === 'gemfile.lock') return 'fas fa-gem';
-  if (lowerFilename.startsWith('.env')) return 'fas fa-shield-alt';
-  if (lowerFilename === '.git') return 'fab fa-git-alt';
-  if (lowerFilename === '.gitignore') return 'fab fa-git-alt';
-  if (lowerFilename === '.gitattributes') return 'fab fa-git-alt';
-  if (lowerFilename === '.gitmodules') return 'fab fa-git-alt';
-  if (lowerFilename === 'readme' || lowerFilename.startsWith('readme.')) return 'fas fa-book-reader';
-  if (lowerFilename === 'license' || lowerFilename.startsWith('license.')) return 'fas fa-balance-scale';
-  if (lowerFilename === 'contributing' || lowerFilename.startsWith('contributing.')) return 'fas fa-users-cog';
-  if (lowerFilename === 'code_of_conduct' || lowerFilename.startsWith('code_of_conduct.')) return 'fas fa-gavel';
-  if (lowerFilename === 'changelog' || lowerFilename.startsWith('changelog.')) return 'fas fa-list-alt';
-  if (lowerFilename === 'favicon.ico') return 'fas fa-icons';
-
-
-  const iconMap: { [key: string]: string } = {
-    // Images
-    'jpg': 'fas fa-file-image', 'jpeg': 'fas fa-file-image', 'png': 'fas fa-file-image',
-    'gif': 'fas fa-file-image', 'bmp': 'fas fa-file-image', 'svg': 'fas fa-file-image',
-    'webp': 'fas fa-file-image', 'ico': 'fas fa-file-image', 'tiff': 'fas fa-file-image',
-    // Videos
-    'mp4': 'fas fa-file-video', 'mkv': 'fas fa-file-video', 'avi': 'fas fa-file-video',
-    'mov': 'fas fa-file-video', 'wmv': 'fas fa-file-video', 'flv': 'fas fa-file-video', 'webm': 'fas fa-file-video',
-    // Audio
-    'mp3': 'fas fa-file-audio', 'wav': 'fas fa-file-audio', 'ogg': 'fas fa-file-audio',
-    'flac': 'fas fa-file-audio', 'aac': 'fas fa-file-audio', 'm4a': 'fas fa-file-audio',
-    // Documents
-    'doc': 'fas fa-file-word', 'docx': 'fas fa-file-word',
-    'xls': 'fas fa-file-excel', 'xlsx': 'fas fa-file-excel',
-    'ppt': 'fas fa-file-powerpoint', 'pptx': 'fas fa-file-powerpoint',
-    'pdf': 'fas fa-file-pdf', 'odt': 'fas fa-file-alt', 'ods': 'fas fa-file-alt', 'odp': 'fas fa-file-alt',
-    'rtf': 'fas fa-file-alt',
-    'csv': 'fas fa-file-csv', 'tsv': 'fas fa-file-csv',
-    // Archives
-    'zip': 'fas fa-file-archive', 'rar': 'fas fa-file-archive', 'tar': 'fas fa-file-archive',
-    'gz': 'fas fa-file-archive', '7z': 'fas fa-file-archive', 'bz2': 'fas fa-file-archive', 'xz': 'fas fa-file-archive',
-    'iso': 'fas fa-compact-disc',
-    // Code & Config
-    'js': 'fab fa-js-square', 'mjs': 'fab fa-js-square', 'cjs': 'fab fa-js-square',
-    'jsx': 'fab fa-react',
-    'ts': 'fas fa-file-code',
-    'tsx': 'fab fa-react',
-    'vue': 'fab fa-vuejs',
-    'svelte': 'fas fa-file-code',
-    'py': 'fab fa-python', 'pyc': 'fab fa-python', 'pyd': 'fab fa-python', 'pyw': 'fab fa-python', 'ipynb': 'fab fa-python',
-    'java': 'fab fa-java', 'jar': 'fab fa-java', 'class': 'fab fa-java',
-    'kt': 'fas fa-file-code', 'kts': 'fas fa-file-code',
-    'cs': 'fas fa-file-code',
-    'fs': 'fas fa-file-code',
-    'go': 'fas fa-file-code',
-    'rs': 'fas fa-file-code',
-    'c': 'fas fa-file-code', 'h': 'fas fa-file-code',
-    'cpp': 'fas fa-file-code', 'hpp': 'fas fa-file-code', 'cxx': 'fas fa-file-code', 'hxx': 'fas fa-file-code',
-    'rb': 'fas fa-gem', 'erb': 'fas fa-gem',
-    'php': 'fab fa-php',
-    'swift': 'fab fa-swift',
-    'scala': 'fas fa-file-code',
-    'perl': 'fas fa-file-code', 'pl': 'fas fa-file-code',
-    'lua': 'fas fa-file-code',
-    'dart': 'fas fa-file-code',
-    'r': 'fas fa-file-code',
-    'html': 'fab fa-html5', 'htm': 'fab fa-html5', 'xhtml': 'fab fa-html5',
-    'css': 'fab fa-css3-alt',
-    'scss': 'fab fa-sass', 'sass': 'fab fa-sass',
-    'less': 'fab fa-less',
-    'styl': 'fas fa-file-code',
-    'json': 'fas fa-file-code', 'webmanifest': 'fas fa-file-code', 'jsonc': 'fas fa-file-code',
-    'xml': 'fas fa-file-code', 'xsl': 'fas fa-file-code', 'xsd': 'fas fa-file-code',
-    'yml': 'fas fa-cog', 'yaml': 'fas fa-cog',
-    'ini': 'fas fa-cog', 'conf': 'fas fa-cog', 'cfg': 'fas fa-cog', 'config': 'fas fa-cog',
-    'toml': 'fas fa-cog',
-    'md': 'fab fa-markdown', 'markdown': 'fab fa-markdown',
-    'sql': 'fas fa-database', 'ddl': 'fas fa-database',
-    'db': 'fas fa-database', 'sqlite': 'fas fa-database', 'mdb': 'fas fa-database',
-    'lock': 'fas fa-lock',
-    'gitignore': 'fab fa-git-alt', /* 'gitattributes': 'fab fa-git-alt', */ /* 'gitmodules': 'fab fa-git-alt', */ 'gitkeep': 'fab fa-git-alt', // Removed duplicate gitattributes and gitmodules
-    /* 'dockerfile': 'fab fa-docker', */ 'dockerignore': 'fab fa-docker', // Removed duplicate dockerfile
-    'npmrc': 'fab fa-npm', 'yarnrc': 'fab fa-yarn', 'pnpmfile.js': 'fas fa-cogs',
-    'babelrc': 'fas fa-cogs', 'eslintrc': 'fas fa-cogs', 'prettierrc': 'fas fa-cogs', 'stylelintrc': 'fas fa-cogs',
-    'browserslistrc': 'fas fa-cogs', 'editorconfig': 'fas fa-cog',
-    'tsconfig.json': 'fas fa-cogs', 'jsconfig.json': 'fas fa-cogs',
-    'webpack.config.js': 'fas fa-cogs', 'vite.config.js': 'fas fa-cogs', 'vite.config.ts': 'fas fa-cogs',
-    'rollup.config.js': 'fas fa-cogs', 'postcss.config.js': 'fas fa-cogs',
-    'jest.config.js': 'fas fa-cogs', 'cypress.json': 'fas fa-cogs', 'playwright.config.ts': 'fas fa-cogs',
-    // Text & Others
-    'txt': 'fas fa-file-alt', 'text': 'fas fa-file-alt',
-    'log': 'fas fa-file-alt', 'out': 'fas fa-file-alt', 'err': 'fas fa-file-alt',
-    'key': 'fas fa-key', 'pem': 'fas fa-key', 'pub': 'fas fa-key', 'asc': 'fas fa-key',
-    'crt': 'fas fa-certificate', 'cer': 'fas fa-certificate', 'csr': 'fas fa-certificate', 'pfx': 'fas fa-certificate', 'p12': 'fas fa-certificate',
-    // Executables & scripts
-    'exe': 'fas fa-cogs', 'msi': 'fas fa-cogs', 'app': 'fas fa-cogs', 'com': 'fas fa-cogs',
-    'sh': 'fas fa-terminal', 'bash': 'fas fa-terminal', 'zsh': 'fas fa-terminal', 'fish': 'fas fa-terminal', 'csh': 'fas fa-terminal', 'ksh': 'fas fa-terminal',
-    'bat': 'fas fa-terminal', 'cmd': 'fas fa-terminal', 'ps1': 'fas fa-terminal', 'psm1': 'fas fa-terminal',
-    'vb': 'fas fa-file-code', 'vbs': 'fas fa-file-code',
-    'deb': 'fas fa-archive', 'rpm': 'fas fa-archive', 'pkg': 'fas fa-archive',
-    'dmg': 'fas fa-compact-disc',  'img': 'fas fa-compact-disc', 
-    // Fonts
-    'ttf': 'fas fa-font', 'otf': 'fas fa-font', 'woff': 'fas fa-font', 'woff2': 'fas fa-font', 'eot': 'fas fa-font',
-    // Special hidden files (extension is the part after dot)
-    'bashrc': 'fas fa-cog', 'zshrc': 'fas fa-cog', 'profile': 'fas fa-cog', 'bash_profile': 'fas fa-cog',
-    'vimrc': 'fas fa-cog', 'screenrc': 'fas fa-cog', 'tmux.conf': 'fas fa-cog',
-    'gitconfig': 'fab fa-git-alt', 'npmignore': 'fab fa-npm',
-    'htaccess': 'fas fa-cog', 'htpasswd': 'fas fa-lock',
-    // Default
-    'default': 'far fa-file'
-  };
-  return iconMap[extension] || iconMap['default'];
 };
 
 // --- 排序与过滤逻辑 ---
@@ -1436,6 +1297,16 @@ const handleResize = (event: MouseEvent) => {
     }
 };
 
+const resizeColumnByKeyboard = (index: number, direction: -1 | 1) => {
+    const colKey = getColumnKeyByIndex(index);
+    if (!colKey) return;
+    colWidths.value = {
+        ...colWidths.value,
+        [colKey]: Math.max(30, colWidths.value[colKey] + direction * 10),
+    };
+    saveLayoutSettings();
+};
+
 const stopResize = () => {
     if (isResizing.value) {
         flushPendingColumnResize();
@@ -1781,6 +1652,7 @@ const handleOpenEditorClick = () => {
                 @click.stop="sendCdCommandToTerminal"
                 :disabled="!currentSftpManager || !props.wsDeps.isConnected.value || isEditingPath"
                 :title="t('fileManager.actions.cdToTerminal', 'Change terminal directory to current path')"
+                :aria-label="t('fileManager.actions.cdToTerminal')"
               >
                 <i class="fas fa-terminal text-base"></i>
               </button>
@@ -1790,6 +1662,7 @@ const handleOpenEditorClick = () => {
                 @click.stop="currentSftpManager?.loadDirectory(currentSftpManager?.currentPath?.value ?? '/', true)"
                 :disabled="!currentSftpManager || !props.wsDeps.isConnected.value || isEditingPath"
                 :title="t('fileManager.actions.refresh')"
+                :aria-label="t('fileManager.actions.refresh')"
               >
                 <i class="fas fa-sync-alt text-base"></i>
               </button>
@@ -1798,6 +1671,7 @@ const handleOpenEditorClick = () => {
                 @click.stop="handleItemClick($event, { filename: '..', longname: '..', attrs: { isDirectory: true, isFile: false, isSymbolicLink: false, size: 0, uid: 0, gid: 0, mode: 0, atime: 0, mtime: 0 } })"
                 :disabled="!currentSftpManager || !props.wsDeps.isConnected.value || currentSftpManager?.currentPath?.value === '/' || isEditingPath"
                 :title="t('fileManager.actions.parentDirectory')"
+                :aria-label="t('fileManager.actions.parentDirectory')"
               >
                 <i class="fas fa-arrow-up text-base"></i>
               </button>
@@ -1809,6 +1683,7 @@ const handleOpenEditorClick = () => {
                      @click.stop="activateSearch"
                      :disabled="!currentSftpManager || !props.wsDeps.isConnected.value"
                      :title="t('fileManager.searchPlaceholder')"
+                     :aria-label="t('fileManager.searchPlaceholder')"
                  >
                      <i class="fas fa-search text-base"></i>
                  </button>
@@ -1819,6 +1694,7 @@ const handleOpenEditorClick = () => {
                          type="text"
                          v-model="searchQuery"
                          :placeholder="t('fileManager.searchPlaceholder')"
+                         :aria-label="t('fileManager.searchPlaceholder')"
                          class="flex-grow bg-background border border-border rounded pl-7 pr-2 py-1 text-foreground text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary min-w-[10px] transition-colors duration-200"
                          data-focus-id="fileManagerSearch"
                          @blur="deactivateSearch"
@@ -1837,6 +1713,7 @@ const handleOpenEditorClick = () => {
                   ref="favoritePathsButtonRef"
                   class="flex items-center justify-center w-7 h-7 text-text-secondary rounded transition-colors duration-200 hover:enabled:bg-black/10 hover:enabled:text-foreground"
                   @click="toggleFavoritePathsModal"
+                  :aria-label="t('favoritePaths.open')"
               >
                   <i class="fas fa-star text-base"></i>
               </button>
@@ -1855,7 +1732,14 @@ const handleOpenEditorClick = () => {
            
             <div ref="pathInputWrapperRef" class="relative flex items-center bg-background border border-border rounded px-1.5 py-0.5"
                  :class="{ 'flex-grow min-w-0': isEditingPath || showPathHistoryDropdown, 'w-fit max-w-full': !isEditingPath && !showPathHistoryDropdown }">
-              <span v-show="!isEditingPath && !showPathHistoryDropdown" @click="startPathEdit" class="text-text-secondary pr-2 cursor-text truncate">
+              <button
+                v-show="!isEditingPath && !showPathHistoryDropdown"
+                type="button"
+                @click="startPathEdit"
+                :aria-label="t('fileManager.editPathTooltip')"
+                :disabled="!currentSftpManager || !props.wsDeps.isConnected.value"
+                class="min-w-0 border-0 bg-transparent p-0 text-left text-text-secondary pr-2 cursor-text truncate disabled:cursor-not-allowed disabled:opacity-60"
+              >
                 <strong
                   :title="t('fileManager.editPathTooltip')"
                   class="font-medium text-link px-1 rounded transition-colors duration-200"
@@ -1866,12 +1750,13 @@ const handleOpenEditorClick = () => {
                 >
                   {{ currentSftpManager?.currentPath?.value ?? '/' }}
                 </strong>
-              </span>
+              </button>
               <input
                 v-show="isEditingPath || showPathHistoryDropdown"
                 ref="pathInputRef"
                 type="text"
                 v-model="editablePath"
+                :aria-label="t('fileManager.currentPath')"
                 class="flex-grow bg-transparent text-foreground p-0.5 outline-none min-w-[100px]"
                 data-focus-id="fileManagerPathInput"
                 @focus="handlePathInputFocus"
@@ -1939,6 +1824,7 @@ const handleOpenEditorClick = () => {
               v-if="props.isMobile"
               @click="toggleMultiSelectMode"
               :title="isMultiSelectMode ? t('fileManager.actions.exitMultiSelect', 'Exit Multi-Select Mode') : t('fileManager.actions.multiSelect', 'Enter Multi-Select Mode')"
+              :aria-label="isMultiSelectMode ? t('fileManager.actions.exitMultiSelect') : t('fileManager.actions.multiSelect')"
               class="flex items-center gap-1 px-1.5 py-1 bg-background border border-border rounded text-foreground text-xs transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
               :class="{
                 'hover:bg-header hover:border-primary hover:text-primary': !isMultiSelectMode,
@@ -1954,6 +1840,7 @@ const handleOpenEditorClick = () => {
     <!-- File List Container -->
     <div
       ref="fileListContainerRef"
+      :aria-label="t('fileManager.fileList')"
       class="flex-grow overflow-y-auto relative outline-none"
       @dragenter.prevent="handleDragEnter"
       @dragover.prevent="handleDragOver"
@@ -1985,6 +1872,7 @@ const handleOpenEditorClick = () => {
 
         <!-- File Table -->
         <table ref="tableRef" class="w-full border-collapse table-fixed border-border rounded" :class="{'pointer-events-none': showExternalDropOverlay}" @contextmenu.prevent>
+            <caption class="sr-only">{{ t('fileManager.fileList') }}</caption>
             <colgroup>
                  <col :style="{ width: `${colWidths.type}px` }">
                 <col :style="{ width: `${colWidths.name}px` }">
@@ -1995,46 +1883,54 @@ const handleOpenEditorClick = () => {
           <thead class="sticky top-0 z-10 bg-header">
             <tr>
               <th
-                @click="handleSort('type')"
-                class="relative px-2 py-1 border-b-2 border-border text-left text-xs font-medium text-text-secondary uppercase tracking-wider cursor-pointer select-none hover:bg-black/5"
+                :aria-sort="sortKey === 'type' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'"
+                class="relative px-2 py-1 border-b-2 border-border text-left text-xs font-medium text-text-secondary uppercase tracking-wider select-none"
                 :style="{ paddingLeft: `calc(1rem * var(--row-size-multiplier))`, paddingRight: `calc(0.5rem * var(--row-size-multiplier))` }"
               >
-                {{ t('fileManager.headers.type') }}
-                <span v-if="sortKey === 'type'" class="ml-1">{{ sortDirection === 'asc' ? '▲' : '▼' }}</span>
-                <span class="absolute top-0 right-[-3px] w-1.5 h-full cursor-col-resize z-20 hover:bg-primary/20" @mousedown.prevent="startResize($event, 0)" @click.stop></span>
+                <button type="button" @click="handleSort('type')" class="w-full text-left hover:text-foreground" :aria-label="t('fileManager.accessibility.sortColumn', { column: t('fileManager.headers.type') })">
+                  {{ t('fileManager.headers.type') }}
+                  <span v-if="sortKey === 'type'" class="ml-1" aria-hidden="true">{{ sortDirection === 'asc' ? '▲' : '▼' }}</span>
+                </button>
+                <button type="button" class="absolute top-0 right-[-3px] w-1.5 h-full cursor-col-resize z-20 border-0 bg-transparent p-0 hover:bg-primary/20 focus-visible:outline focus-visible:outline-2" @mousedown.prevent="startResize($event, 0)" @click.stop :aria-label="t('fileManager.accessibility.resizeColumn', { column: t('fileManager.headers.type') })" @keydown.left.prevent="resizeColumnByKeyboard(0, -1)" @keydown.right.prevent="resizeColumnByKeyboard(0, 1)"></button>
               </th>
               <th
-                @click="handleSort('filename')"
-                class="relative px-2 py-1 border-b-2 border-border text-left text-xs font-medium text-text-secondary uppercase tracking-wider cursor-pointer select-none hover:bg-black/5"
+                :aria-sort="sortKey === 'filename' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'"
+                class="relative px-2 py-1 border-b-2 border-border text-left text-xs font-medium text-text-secondary uppercase tracking-wider select-none"
                 :style="{ padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))` }"
               >
-                {{ t('fileManager.headers.name') }}
-                <span v-if="sortKey === 'filename'" class="ml-1">{{ sortDirection === 'asc' ? '▲' : '▼' }}</span>
-                <span class="absolute top-0 right-[-3px] w-1.5 h-full cursor-col-resize z-20 hover:bg-primary/20" @mousedown.prevent="startResize($event, 1)" @click.stop></span>
+                <button type="button" @click="handleSort('filename')" class="w-full text-left hover:text-foreground" :aria-label="t('fileManager.accessibility.sortColumn', { column: t('fileManager.headers.name') })">
+                  {{ t('fileManager.headers.name') }}
+                  <span v-if="sortKey === 'filename'" class="ml-1" aria-hidden="true">{{ sortDirection === 'asc' ? '▲' : '▼' }}</span>
+                </button>
+                <button type="button" class="absolute top-0 right-[-3px] w-1.5 h-full cursor-col-resize z-20 border-0 bg-transparent p-0 hover:bg-primary/20 focus-visible:outline focus-visible:outline-2" @mousedown.prevent="startResize($event, 1)" @click.stop :aria-label="t('fileManager.accessibility.resizeColumn', { column: t('fileManager.headers.name') })" @keydown.left.prevent="resizeColumnByKeyboard(1, -1)" @keydown.right.prevent="resizeColumnByKeyboard(1, 1)"></button>
               </th>
               <th
-                @click="handleSort('size')"
-                class="relative px-2 py-1 border-b-2 border-border text-left text-xs font-medium text-text-secondary uppercase tracking-wider cursor-pointer select-none hover:bg-black/5"
+                :aria-sort="sortKey === 'size' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'"
+                class="relative px-2 py-1 border-b-2 border-border text-left text-xs font-medium text-text-secondary uppercase tracking-wider select-none"
                 :style="{ padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))` }"
               >
-                {{ t('fileManager.headers.size') }}
-                <span v-if="sortKey === 'size'" class="ml-1">{{ sortDirection === 'asc' ? '▲' : '▼' }}</span>
-                <span class="absolute top-0 right-[-3px] w-1.5 h-full cursor-col-resize z-20 hover:bg-primary/20" @mousedown.prevent="startResize($event, 2)" @click.stop></span>
+                <button type="button" @click="handleSort('size')" class="w-full text-left hover:text-foreground" :aria-label="t('fileManager.accessibility.sortColumn', { column: t('fileManager.headers.size') })">
+                  {{ t('fileManager.headers.size') }}
+                  <span v-if="sortKey === 'size'" class="ml-1" aria-hidden="true">{{ sortDirection === 'asc' ? '▲' : '▼' }}</span>
+                </button>
+                <button type="button" class="absolute top-0 right-[-3px] w-1.5 h-full cursor-col-resize z-20 border-0 bg-transparent p-0 hover:bg-primary/20 focus-visible:outline focus-visible:outline-2" @mousedown.prevent="startResize($event, 2)" @click.stop :aria-label="t('fileManager.accessibility.resizeColumn', { column: t('fileManager.headers.size') })" @keydown.left.prevent="resizeColumnByKeyboard(2, -1)" @keydown.right.prevent="resizeColumnByKeyboard(2, 1)"></button>
               </th>
               <th
                 class="relative px-2 py-1 border-b-2 border-border text-left text-xs font-medium text-text-secondary uppercase tracking-wider select-none"
                 :style="{ padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))` }"
               >
                 {{ t('fileManager.headers.permissions') }}
-                <span class="absolute top-0 right-[-3px] w-1.5 h-full cursor-col-resize z-20 hover:bg-primary/20" @mousedown.prevent="startResize($event, 3)" @click.stop></span>
+                <button type="button" class="absolute top-0 right-[-3px] w-1.5 h-full cursor-col-resize z-20 border-0 bg-transparent p-0 hover:bg-primary/20 focus-visible:outline focus-visible:outline-2" @mousedown.prevent="startResize($event, 3)" @click.stop :aria-label="t('fileManager.accessibility.resizeColumn', { column: t('fileManager.headers.permissions') })" @keydown.left.prevent="resizeColumnByKeyboard(3, -1)" @keydown.right.prevent="resizeColumnByKeyboard(3, 1)"></button>
               </th>
               <th
-                @click="handleSort('mtime')"
-                class="relative px-2 py-1 border-b-2 border-border text-left text-xs font-medium text-text-secondary uppercase tracking-wider cursor-pointer select-none hover:bg-black/5"
+                :aria-sort="sortKey === 'mtime' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'"
+                class="relative px-2 py-1 border-b-2 border-border text-left text-xs font-medium text-text-secondary uppercase tracking-wider select-none"
                 :style="{ padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))` }"
               >
-                {{ t('fileManager.headers.modified') }}
-                <span v-if="sortKey === 'mtime'" class="ml-1">{{ sortDirection === 'asc' ? '▲' : '▼' }}</span>
+                <button type="button" @click="handleSort('mtime')" class="w-full text-left hover:text-foreground" :aria-label="t('fileManager.accessibility.sortColumn', { column: t('fileManager.headers.modified') })">
+                  {{ t('fileManager.headers.modified') }}
+                  <span v-if="sortKey === 'mtime'" class="ml-1" aria-hidden="true">{{ sortDirection === 'asc' ? '▲' : '▼' }}</span>
+                </button>
                 <!-- No resizer on the last column -->
               </th>
             </tr>
@@ -2119,7 +2015,7 @@ const handleOpenEditorClick = () => {
                     ? 'fas fa-folder text-primary'
                     : item.attrs.isSymbolicLink
                       ? 'fas fa-link text-cyan-500'
-                      : `${getFileIconClassBase(item.filename)} text-text-secondary`,
+                      : `${resolveFileIconClass(item.filename)} text-text-secondary`,
                   {
                     'text-white': selectedItems.has(item.filename) || (index + (currentSftpManager?.currentPath.value !== '/' ? 1 : 0) === selectedIndex)
                   }
@@ -2129,10 +2025,10 @@ const handleOpenEditorClick = () => {
               <td class="border-b border-border truncate align-middle" :class="{'font-medium': item.attrs.isDirectory}" :style="{ padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`, fontSize: `calc(0.8rem * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))` }">{{ item.filename }}</td>
               <td class="border-b border-border truncate align-middle" :class="[
                 selectedItems.has(item.filename) || (index + (currentSftpManager?.currentPath.value !== '/' ? 1 : 0) === selectedIndex) ? 'text-white' : 'text-text-secondary'
-              ]" :style="{ padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`, fontSize: `calc(0.72rem * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))` }">{{ item.attrs.isFile ? formatSize(item.attrs.size) : '' }}</td> 
+              ]" :style="{ padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`, fontSize: `calc(0.72rem * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))` }">{{ item.attrs.isFile ? formatFileSize(item.attrs.size) : '' }}</td>
               <td class="border-b border-border truncate font-mono align-middle" :class="[
                 selectedItems.has(item.filename) || (index + (currentSftpManager?.currentPath.value !== '/' ? 1 : 0) === selectedIndex) ? 'text-white' : 'text-text-secondary'
-              ]" :style="{ padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`, fontSize: `calc(0.72rem * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))` }">{{ formatMode(item.attrs.mode) }}</td>
+              ]" :style="{ padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`, fontSize: `calc(0.72rem * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))` }">{{ formatUnixFileMode(item.attrs.mode) }}</td>
               <td class="border-b border-border truncate align-middle" :class="[
                 selectedItems.has(item.filename) || (index + (currentSftpManager?.currentPath.value !== '/' ? 1 : 0) === selectedIndex) ? 'text-white' : 'text-text-secondary'
               ]" :style="{ padding: `calc(0.4rem * var(--row-size-multiplier)) calc(0.8rem * var(--row-size-multiplier))`, fontSize: `calc(0.72rem * max(0.85, var(--row-size-multiplier) * 0.5 + 0.5))` }">{{ formatMtime(item.attrs.mtime) }}</td>

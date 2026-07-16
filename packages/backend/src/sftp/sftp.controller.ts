@@ -5,7 +5,11 @@ import * as archiver from 'archiver';
 import { SFTPWrapper, Stats } from 'ssh2';
 import { WebSocket } from 'ws';
 import { ClientState, AuthenticatedWebSocket } from '../websocket/types';
+import { createLogger } from '../logging/logger';
+import { quotePosixShellArgument } from '../utils/posix-shell-quote';
 import { SftpCompressRequestPayload, SftpDecompressRequestPayload, SftpCompressSuccessPayload, SftpCompressErrorPayload, SftpDecompressSuccessPayload, SftpDecompressErrorPayload } from '../websocket/types'; // Import payload types
+
+const logger = createLogger('SftpController');
 /**
  * 处理文件下载请求 (GET /api/v1/sftp/download)
  */
@@ -24,7 +28,7 @@ export const downloadFile = async (req: Request, res: Response): Promise<void> =
         return;
     }
 
-    console.log(`SFTP 下载请求：用户 ${userId}, 连接 ${connectionId}, 路径 ${remotePath}`);
+    logger.info('Received SFTP file download request');
 
     // --- 修改：查找与 userId 和 connectionId 匹配的活动 SFTP 会话 ---
     let targetState: ClientState | null = null;
@@ -35,18 +39,18 @@ export const downloadFile = async (req: Request, res: Response): Promise<void> =
         return;
     }
 
-    console.log(`SFTP 下载：正在查找用户 ${userId} 且连接 ID 为 ${targetDbConnectionId} 的会话...`);
+    logger.debug('Locating active SFTP session for file download');
     for (const [sessionId, state] of clientStates.entries()) {
         // 检查 userId 和 dbConnectionId 是否都匹配，并且 sftp 实例存在
         if (state.ws.userId === userId && state.dbConnectionId === targetDbConnectionId && state.sftp) {
             targetState = state;
-            console.log(`SFTP 下载：找到匹配的会话 (Session ID: ${sessionId})。`);
+            logger.debug('Located active SFTP session for file download');
             break;
         }
     }
 
     if (!targetState || !targetState.sftp) {
-        console.warn(`SFTP 下载失败：未找到用户 ${userId} 且连接 ID 为 ${targetDbConnectionId} 的活动 SFTP 会话。`);
+        logger.warn('No active SFTP session available for file download');
         res.status(404).json({ message: '未找到指定的活动 SFTP 会话。请确保目标连接处于活动状态。' });
         return;
     }
@@ -80,7 +84,7 @@ export const downloadFile = async (req: Request, res: Response): Promise<void> =
         const readStream = userSftpSession.createReadStream(remotePath);
 
         readStream.on('error', (err: Error) => { // 添加 Error 类型注解
-            console.error(`SFTP 读取流错误 (用户 ${userId}, 路径 ${remotePath}):`, err);
+            logger.error('SFTP file download stream error', { errorName: err.name });
             // 如果响应头还没发送，可以发送错误状态码
             if (!res.headersSent) {
                 res.status(500).json({ message: `读取远程文件失败: ${err.message}` });
@@ -94,14 +98,14 @@ export const downloadFile = async (req: Request, res: Response): Promise<void> =
 
         // 监听响应对象的 close 事件，确保流被正确关闭 (虽然 pipe 通常会处理)
         res.on('close', () => {
-            console.log(`SFTP 下载流关闭 (用户 ${userId}, 路径 ${remotePath})`);
+            logger.debug('SFTP file download stream closed');
 
         });
 
-        console.log(`SFTP 开始下载 (用户 ${userId}, 路径 ${remotePath})`);
+        logger.info('Started SFTP file download');
 
     } catch (error: any) {
-        console.error(`SFTP 下载处理失败 (用户 ${userId}, 路径 ${remotePath}):`, error);
+        logger.error('SFTP file download failed', { errorName: error instanceof Error ? error.name : 'UnknownError' });
         if (!res.headersSent) {
             if (error.message?.includes('No such file')) {
                  res.status(404).json({ message: '远程文件未找到。' });
@@ -131,7 +135,7 @@ export const downloadDirectory = async (req: Request, res: Response): Promise<vo
         return;
     }
 
-    console.log(`SFTP 文件夹下载请求：用户 ${userId}, 连接 ${connectionId}, 路径 ${remotePath}`);
+    logger.info('Received SFTP directory download request');
 
     // --- 修改：查找与 userId 和 connectionId 匹配的活动 SFTP 会话 ---
     let targetState: ClientState | null = null;
@@ -142,18 +146,18 @@ export const downloadDirectory = async (req: Request, res: Response): Promise<vo
         return;
     }
 
-    console.log(`SFTP 文件夹下载：正在查找用户 ${userId} 且连接 ID 为 ${targetDbConnectionId} 的会话...`);
+    logger.debug('Locating active SFTP session for directory download');
     for (const [sessionId, state] of clientStates.entries()) {
         // 检查 userId 和 dbConnectionId 是否都匹配，并且 sftp 实例存在
         if (state.ws.userId === userId && state.dbConnectionId === targetDbConnectionId && state.sftp) {
             targetState = state;
-            console.log(`SFTP 文件夹下载：找到匹配的会话 (Session ID: ${sessionId})。`);
+            logger.debug('Located active SFTP session for directory download');
             break;
         }
     }
 
     if (!targetState || !targetState.sftp) {
-        console.warn(`SFTP 文件夹下载失败：未找到用户 ${userId} 且连接 ID 为 ${targetDbConnectionId} 的活动 SFTP 会话。`);
+        logger.warn('No active SFTP session available for directory download');
         res.status(404).json({ message: '未找到指定的活动 SFTP 会话。请确保目标连接处于活动状态。' });
         return;
     }
@@ -197,10 +201,10 @@ export const downloadDirectory = async (req: Request, res: Response): Promise<vo
 
         // 监听错误事件
         archive.on('warning', (err: Error) => {
-            console.warn(`Archiver warning (用户 ${userId}, 路径 ${remotePath}):`, err);
+            logger.warn('SFTP directory archive warning', { errorName: err.name });
         });
         archive.on('error', (err: Error) => {
-            console.error(`Archiver error (用户 ${userId}, 路径 ${remotePath}):`, err);
+            logger.error('SFTP directory archive error', { errorName: err.name });
             // 尝试发送错误响应，如果头还没发送
             if (!res.headersSent) {
                 res.status(500).json({ message: `创建压缩文件时出错: ${err.message}` });
@@ -239,7 +243,7 @@ export const downloadDirectory = async (req: Request, res: Response): Promise<vo
                     archive.append(fileStream, { name: currentArchivePath });
                     // 注意：需要处理 fileStream 的错误事件吗？Archiver 应该会处理？待验证。
                      fileStream.on('error', (streamErr: Error) => { // 添加类型注解
-                         console.error(`Error reading file stream ${currentRemotePath}:`, streamErr);
+                         logger.error('SFTP directory entry stream error', { errorName: streamErr.name });
                          // 如何通知 Archiver 或中断？ Archiver 的 error 事件应该会捕获？
                          if (!archive.destroyed) { // 检查 archive 是否已被销毁
                             archive.abort(); // 尝试终止 archive
@@ -255,10 +259,10 @@ export const downloadDirectory = async (req: Request, res: Response): Promise<vo
         // 5. 完成归档
         await archive.finalize();
 
-        console.log(`SFTP 文件夹下载完成 (用户 ${userId}, 路径 ${remotePath})`);
+        logger.info('Completed SFTP directory download');
 
     } catch (error: any) {
-        console.error(`SFTP 文件夹下载处理失败 (用户 ${userId}, 路径 ${remotePath}):`, error);
+        logger.error('SFTP directory download failed', { errorName: error instanceof Error ? error.name : 'UnknownError' });
         if (!res.headersSent) {
             if (error.code === 'ENOENT' || error.message?.includes('No such file')) { // 检查 SFTP 错误码或消息
                  res.status(404).json({ message: '远程目录未找到。' });
@@ -336,7 +340,7 @@ const isErrorInStdErr = (stderr: string): boolean => {
  * @param ws WebSocket 连接实例
  * @param payload 消息负载
  */
-export const handleCompressRequest = async (ws: AuthenticatedWebSocket, payload: SftpCompressRequestPayload): Promise<void> => {
+const handleCompressRequest = async (ws: AuthenticatedWebSocket, payload: SftpCompressRequestPayload): Promise<void> => {
     const { sources, destinationArchiveName, format, targetDirectory, requestId } = payload;
     const sessionId = ws.sessionId; // 从 AuthenticatedWebSocket 获取 sessionId
 
@@ -366,10 +370,10 @@ export const handleCompressRequest = async (ws: AuthenticatedWebSocket, payload:
     let command: string;
     // 确保源路径被正确引用，特别是包含空格或特殊字符时
     // 注意：源路径是相对于 targetDirectory 的
-    const quotedSources = sources.map((s: string) => `"${s.replace(/"/g, '\\"')}"`).join(' ');
+    const quotedSources = sources.map(quotePosixShellArgument).join(' ');
     // 确保目标目录和压缩包名称被正确引用
-    const quotedTargetDir = `"${targetDirectory.replace(/"/g, '\\"')}"`;
-    const quotedDestName = `"${destinationArchiveName.replace(/"/g, '\\"')}"`;
+    const quotedTargetDir = quotePosixShellArgument(targetDirectory);
+    const quotedDestName = quotePosixShellArgument(destinationArchiveName);
 
     const cdCommand = `cd ${quotedTargetDir}`;
 
@@ -455,7 +459,7 @@ export const handleCompressRequest = async (ws: AuthenticatedWebSocket, payload:
  * @param ws WebSocket 连接实例
  * @param payload 消息负载
  */
-export const handleDecompressRequest = async (ws: AuthenticatedWebSocket, payload: SftpDecompressRequestPayload): Promise<void> => {
+const handleDecompressRequest = async (ws: AuthenticatedWebSocket, payload: SftpDecompressRequestPayload): Promise<void> => {
     const { archivePath, requestId } = payload;
     const sessionId = ws.sessionId;
 
@@ -484,8 +488,8 @@ export const handleDecompressRequest = async (ws: AuthenticatedWebSocket, payloa
     // --- 构建 Shell 命令 ---
     let command: string;
     // 确保路径被正确引用
-    const quotedExtractDir = `"${extractDir.replace(/"/g, '\\"')}"`;
-    const quotedArchiveBasename = `"${archiveBasename.replace(/"/g, '\\"')}"`;
+    const quotedExtractDir = quotePosixShellArgument(extractDir);
+    const quotedArchiveBasename = quotePosixShellArgument(archiveBasename);
 
     const cdCommand = `cd ${quotedExtractDir}`;
 

@@ -4,6 +4,8 @@ import apiClient from '../utils/apiClient';
 import router from '../router'; 
 import { isAccountFeatureAvailable } from '../utils/runtimeConfig';
 import { activateUserCacheScope, clearUserCacheScope } from '../utils/userCacheScope';
+import { classifyAuthBootstrapFailure } from '../utils/authBootstrap';
+import { resolveLoginErrorKey, resolvePasskeyErrorKey, resolvePasswordChangeErrorKey } from '../utils/apiError';
 
 // 扩展的用户信息接口，包含 2FA 状态和语言偏好
 export type SystemRole = 'super_admin' | 'admin' | 'user' | 'auditor';
@@ -82,6 +84,8 @@ interface AuthState {
     passkeys: PasskeyInfo[] | null; 
     passkeysLoading: boolean; 
     hasPasskeysAvailable: boolean; 
+    bootstrapStatus: 'idle' | 'checking' | 'ready' | 'unavailable';
+    bootstrapError: string | null;
 }
 
 export const useAuthStore = defineStore('auth', {
@@ -97,6 +101,8 @@ export const useAuthStore = defineStore('auth', {
         passkeys: null, // Initialize passkeys as null
         passkeysLoading: false, // Initialize passkeysLoading as false
         hasPasskeysAvailable: false, // Initialize as false
+        bootstrapStatus: 'idle',
+        bootstrapError: null,
     }),
     getters: {
         // 可以添加一些 getter，例如获取用户名
@@ -146,7 +152,7 @@ export const useAuthStore = defineStore('auth', {
                 this.isAuthenticated = false;
                 this.user = null;
                 this.loginRequires2FA = false;
-                this.error = err.response?.data?.message || err.message || '登录时发生未知错误。';
+                this.error = resolveLoginErrorKey(err);
                 return { success: false, error: this.error };
             } finally {
                 this.isLoading = false;
@@ -174,7 +180,7 @@ export const useAuthStore = defineStore('auth', {
             } catch (err: any) {
                 console.error('2FA 验证失败:', err);
                 // 不清除 isAuthenticated 或 user，因为用户可能只是输错了验证码
-                this.error = err.response?.data?.message || err.message || '2FA 验证时发生未知错误。';
+                this.error = resolveLoginErrorKey(err);
                 return { success: false, error: this.error };
             } finally {
                 this.isLoading = false;
@@ -234,10 +240,14 @@ export const useAuthStore = defineStore('auth', {
                 activateCacheForUser(APP_LOCAL_USER, 'desktop');
                 this.loginRequires2FA = false;
                 this.isLoading = false;
+                this.bootstrapStatus = 'ready';
+                this.bootstrapError = null;
                 return;
             }
 
             this.isLoading = true;
+            this.bootstrapStatus = 'checking';
+            this.bootstrapError = null;
             try {
                 const response = await apiClient.get<{ isAuthenticated: boolean; user: UserInfo }>('/auth/status'); // 使用 apiClient
                 if (response.data.isAuthenticated && response.data.user) {
@@ -253,18 +263,27 @@ export const useAuthStore = defineStore('auth', {
                     clearUserCacheScope(localStorage);
                     // Removed passkeys clear on unauthenticated
                 }
+                this.bootstrapStatus = 'ready';
             } catch (error: any) {
-                // 如果获取状态失败 (例如 session 过期)，则认为未认证
                 console.warn('检查认证状态失败:', error.response?.data?.message || error.message);
                 this.isAuthenticated = false;
                 this.user = null;
                 this.loginRequires2FA = false;
-                clearUserCacheScope(localStorage);
-                // Removed passkeys clear on error
-                // 可选：如果不是 401 错误，可以记录更详细的日志
+                if (classifyAuthBootstrapFailure(error) === 'unauthenticated') {
+                    clearUserCacheScope(localStorage);
+                    this.bootstrapStatus = 'ready';
+                } else {
+                    this.bootstrapStatus = 'unavailable';
+                    this.bootstrapError = 'login.error.serviceUnavailable';
+                }
             } finally {
                 this.isLoading = false;
             }
+        },
+
+        async retryAuthBootstrap() {
+            await this.checkAuthStatus();
+            return this.bootstrapStatus !== 'unavailable';
         },
 
         // 修改密码 Action
@@ -284,9 +303,9 @@ export const useAuthStore = defineStore('auth', {
                 return true;
             } catch (err: any) {
                 console.error('修改密码失败:', err);
-                this.error = err.response?.data?.message || err.message || '修改密码时发生未知错误。';
+                this.error = resolvePasswordChangeErrorKey(err);
                 // 抛出错误，以便组件可以捕获并显示 (提供默认消息以防 this.error 为 null)
-                throw new Error(this.error ?? '修改密码时发生未知错误。');
+                throw new Error(this.error);
             } finally {
                 this.isLoading = false;
             }
@@ -417,7 +436,7 @@ export const useAuthStore = defineStore('auth', {
                 console.error('Passkey 登录失败:', err);
                 this.isAuthenticated = false;
                 this.user = null;
-                this.error = err.response?.data?.message || err.message || 'Passkey 登录时发生未知错误。';
+                this.error = resolveLoginErrorKey(err);
                 return { success: false, error: this.error };
             } finally {
                 this.isLoading = false;
@@ -432,8 +451,8 @@ export const useAuthStore = defineStore('auth', {
                 return response.data; // Returns FIDO2 creation options
             } catch (err: any) {
                 console.error('获取 Passkey 注册选项失败:', err);
-                this.error = err.response?.data?.message || err.message || '获取 Passkey 注册选项失败。';
-                throw new Error(this.error ?? '获取 Passkey 注册选项失败。');
+                this.error = resolvePasskeyErrorKey(err);
+                throw err;
             } finally {
                 this.isLoading = false;
             }
@@ -452,8 +471,8 @@ export const useAuthStore = defineStore('auth', {
                 return { success: true };
             } catch (err: any) {
                 console.error('Passkey 注册失败:', err);
-                this.error = err.response?.data?.message || err.message || 'Passkey 注册失败。';
-                throw new Error(this.error ?? 'Passkey 注册失败。');
+                this.error = resolvePasskeyErrorKey(err);
+                throw err;
             } finally {
                 this.isLoading = false;
             }
@@ -493,7 +512,7 @@ export const useAuthStore = defineStore('auth', {
                 debugLog('Passkeys fetched and mapped successfully:', this.passkeys);
             } catch (err: any) {
                 console.error('Failed to fetch passkeys:', err);
-                this.error = err.response?.data?.message || err.message || 'Failed to load passkeys.';
+                this.error = resolvePasskeyErrorKey(err);
                 this.passkeys = null; // Clear passkeys on error
             } finally {
                 this.passkeysLoading = false;
@@ -515,8 +534,8 @@ export const useAuthStore = defineStore('auth', {
                 return { success: true };
             } catch (err: any) {
                 console.error(`Failed to delete passkey ${credentialID}:`, err);
-                this.error = err.response?.data?.message || err.message || 'Failed to delete passkey.';
-                throw new Error(this.error ?? 'Failed to delete passkey.');
+                this.error = resolvePasskeyErrorKey(err);
+                throw err;
             } finally {
                 this.isLoading = false;
             }
@@ -537,8 +556,8 @@ export const useAuthStore = defineStore('auth', {
                 return { success: true };
             } catch (err: any) {
                 console.error(`Failed to update passkey ${credentialID} name:`, err);
-                this.error = err.response?.data?.message || err.message || 'Failed to update passkey name.';
-                throw new Error(this.error ?? 'Failed to update passkey name.');
+                this.error = resolvePasskeyErrorKey(err);
+                throw err;
             } finally {
                 // if using specific loading state: this.passkeyNameUpdateLoading = false;
             }
@@ -555,7 +574,7 @@ export const useAuthStore = defineStore('auth', {
                 debugLog(`[AuthStore] Passkeys available for ${username || 'any user'}: ${this.hasPasskeysAvailable}`);
                 return this.hasPasskeysAvailable;
             } catch (error: any) {
-                console.error('Failed to check if passkeys are configured:', error.response?.data?.message || error.message);
+                console.error('Failed to check if passkeys are configured.');
                 this.hasPasskeysAvailable = false; // Default to false on error
                 return false;
             }

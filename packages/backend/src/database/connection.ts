@@ -4,11 +4,15 @@ import path from 'path';
 import { tableDefinitions } from './schema.registry';
 import { runMigrations } from './migrations'; // +++ Import runMigrations +++
 import { getAppDataPath } from '../config/app-data-path';
+import { createLogger } from '../logging/logger';
+import { backendMetrics } from '../observability/metrics';
 
 const dbFilename = 'fantetic-terminal.db';
+const logger = createLogger('Database');
 
 const verboseSqlite3 = sqlite3.verbose();
 let dbInstancePromise: Promise<sqlite3.Database> | null = null;
+const transactionTailMap = new WeakMap<sqlite3.Database, Promise<void>>();
 
 interface RunResult {
     lastID: number;
@@ -34,7 +38,8 @@ export const runDb = (db: sqlite3.Database, sql: string, params: any[] = []): Pr
     return new Promise((resolve, reject) => {
         db.run(sql, params, function (err: Error | null) {
             if (err) {
-                console.error(describeDatabaseError(sql, params.length, err));
+                observeSqliteError(err);
+                logger.error(describeDatabaseError(sql, params.length, err));
                 reject(err);
             } else {
                 resolve({ lastID: this.lastID, changes: this.changes });
@@ -48,7 +53,8 @@ export const getDb = <T = any>(db: sqlite3.Database, sql: string, params: any[] 
     return new Promise((resolve, reject) => {
         db.get(sql, params, (err: Error | null, row: T) => {
             if (err) {
-                console.error(describeDatabaseError(sql, params.length, err));
+                observeSqliteError(err);
+                logger.error(describeDatabaseError(sql, params.length, err));
                 reject(err);
             } else {
                 resolve(row);
@@ -62,13 +68,64 @@ export const allDb = <T = any>(db: sqlite3.Database, sql: string, params: any[] 
     return new Promise((resolve, reject) => {
         db.all(sql, params, (err: Error | null, rows: T[]) => {
             if (err) {
-                console.error(describeDatabaseError(sql, params.length, err));
+                observeSqliteError(err);
+                logger.error(describeDatabaseError(sql, params.length, err));
                 reject(err);
             } else {
                 resolve(rows);
             }
         });
     });
+};
+
+const observeSqliteError = (error: Error): void => {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'SQLITE_BUSY' || code === 'SQLITE_LOCKED') backendMetrics.recordSqliteBusyError();
+};
+
+export interface TransactionOptions {
+    mode?: 'deferred' | 'immediate';
+    reportRollbackFailure?: (rollbackError: Error, originalError: unknown) => void;
+}
+
+export const withTransaction = async <T>(
+    db: sqlite3.Database,
+    callback: (transactionDb: sqlite3.Database) => Promise<T>,
+    {
+        mode = 'deferred',
+        reportRollbackFailure = (rollbackError, originalError) => {
+            logger.error('数据库事务回滚失败，保留原始业务错误', { rollbackError, originalError });
+        },
+    }: TransactionOptions = {},
+): Promise<T> => {
+    const previousTail = transactionTailMap.get(db) ?? Promise.resolve();
+    let releaseTurn!: () => void;
+    const turn = new Promise<void>(resolve => { releaseTurn = resolve; });
+    const currentTail = previousTail.then(() => turn);
+    transactionTailMap.set(db, currentTail);
+
+    await previousTail;
+    try {
+        await runDb(db, mode === 'immediate' ? 'BEGIN IMMEDIATE TRANSACTION' : 'BEGIN TRANSACTION');
+        try {
+            const result = await callback(db);
+            await runDb(db, 'COMMIT');
+            return result;
+        } catch (error) {
+            try {
+                await runDb(db, 'ROLLBACK');
+            } catch (rollbackError) {
+                reportRollbackFailure(
+                    rollbackError instanceof Error ? rollbackError : new Error(String(rollbackError)),
+                    error,
+                );
+            }
+            throw error;
+        }
+    } finally {
+        releaseTurn();
+        if (transactionTailMap.get(db) === currentTail) transactionTailMap.delete(db);
+    }
 };
 
 
@@ -92,7 +149,7 @@ const runDatabaseInitializations = async (db: sqlite3.Database): Promise<void> =
             }
         }
     } catch (error) {
-        console.error('[DB Init] 数据库初始化序列失败:', error);
+        logger.error('数据库初始化序列失败', { error });
         throw error;
     }
 };
@@ -106,7 +163,7 @@ export const getDbInstance = (): Promise<sqlite3.Database> => {
             const db = new verboseSqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, async (err) => { // Mark callback as async
 
                 if (err) {
-                    console.error(`[数据库连接] 打开数据库文件 ${dbPath} 时出错:`, err.message);
+                    logger.error('打开数据库文件时出错', { error: err, dbFilename });
                     dbInstancePromise = null;
                     reject(err);
                     return;
@@ -120,13 +177,13 @@ export const getDbInstance = (): Promise<sqlite3.Database> => {
                     await runDatabaseInitializations(db);
                     // +++ 运行数据库迁移 +++
                     await runMigrations(db);
-                    console.log('[数据库] 初始化和迁移完成。'); 
+                    logger.info('数据库初始化和迁移完成');
                     resolve(db);
                 } catch (initError) {
-                    console.error('[数据库] 连接后初始化失败，正在关闭连接...');
+                    logger.error('数据库连接后初始化失败，正在关闭连接', { error: initError });
                     dbInstancePromise = null;
                     db.close((closeErr) => {
-                        if (closeErr) console.error('[数据库] 初始化失败后关闭连接时出错:', closeErr.message);
+                        if (closeErr) logger.error('初始化失败后关闭连接时出错', { error: closeErr });
                         reject(initError);
                     });
 

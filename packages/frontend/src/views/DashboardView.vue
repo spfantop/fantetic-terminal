@@ -16,6 +16,7 @@ import type { SortField, SortOrder } from '../stores/settings.store';
 import type { ConnectionInfo } from '../stores/connections.store';
 import type { AuditLogEntry } from '../types/server.types';
 import { canConnectConnection } from '../features/connections/connection-permissions';
+import { readUserScopedItem, writeUserScopedItem } from '../utils/userCacheScope';
 
 type DashboardTone = 'neutral' | 'success' | 'warning' | 'danger';
 
@@ -53,7 +54,7 @@ const maxDashboardConnections = 8;
 const localSortBy = ref<SortField>((localStorage.getItem(LS_SORT_BY_KEY) as SortField) || 'last_connected_at');
 const localSortOrder = ref<SortOrder>((localStorage.getItem(LS_SORT_ORDER_KEY) as SortOrder) || 'desc');
 const getInitialSelectedTagId = (): number | null => {
-  const storedValue = localStorage.getItem(LS_FILTER_TAG_KEY);
+  const storedValue = readUserScopedItem(localStorage, LS_FILTER_TAG_KEY);
   return storedValue && storedValue !== 'null' ? parseInt(storedValue, 10) : null;
 };
 const selectedTagId = ref<number | null>(getInitialSelectedTagId());
@@ -330,7 +331,7 @@ watch(localSortOrder, newValue => {
 });
 
 watch(selectedTagId, newValue => {
-  localStorage.setItem(LS_FILTER_TAG_KEY, newValue === null ? 'null' : String(newValue));
+  writeUserScopedItem(localStorage, LS_FILTER_TAG_KEY, newValue === null ? 'null' : String(newValue));
 });
 
 const refreshDashboard = async () => {

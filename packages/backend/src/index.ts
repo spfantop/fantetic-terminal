@@ -73,11 +73,18 @@ import { installProcessLifecycle } from './config/process-lifecycle';
 import { auditContextMiddleware } from './audit/audit-context';
 import backupRouter from './backup/backup.routes';
 import { applyScheduledRestore } from './backup/backup.service';
+import { getBackupService } from './backup/backup.runtime';
+import { resolveBackupScheduleConfig, startBackupScheduler } from './backup/backup.scheduler';
 import { createLogger } from './logging/logger';
 import { apiErrorHandler, securityHeaders, validateJsonComplexity, validateMutationOrigin } from './security/web-security.middleware';
+import { normalizeLegacyApiErrorResponse } from './security/legacy-api-error-normalizer.middleware';
 import { resolveSessionCookieSecure } from './config/session-cookie';
 import { ensureElectronRuntimeUser } from './config/electron-runtime-user';
 import { isElectronAppMode } from './config/app-mode';
+import { createHealthHandlers } from './health/health.controller';
+import { createFilesystemReadinessChecks } from './health/filesystem-readiness';
+import { backendMetrics, createMetricsHandlers } from './observability/metrics';
+import { acquireSingleNodeLease, resolveSingleNodeLeaseEnabled, type SingleNodeLease } from './config/single-node-lease';
 
 
 import './services/event.service'; 
@@ -93,15 +100,52 @@ const app = express();
 app.disable('x-powered-by');
 const server = http.createServer(app);
 const clientIpResolver = createClientIpResolver();
+const filesystemReadiness = createFilesystemReadinessChecks({
+  appDataPath: getAppDataPath(),
+  backupDirectoryPath: path.join(getAppDataPath(), 'backups'),
+});
+const healthHandlers = createHealthHandlers({
+  checkDatabase: async () => {
+    const db = await getDbInstance();
+    await new Promise<void>((resolve, reject) => db.get('SELECT 1', error => error ? reject(error) : resolve()));
+  },
+  ...filesystemReadiness,
+});
+const metricsHandlers = createMetricsHandlers({ registry: backendMetrics, token: process.env.METRICS_TOKEN });
 
 // --- 信任代理设置 ---
 app.set('trust proxy', (address: string) => clientIpResolver.isTrustedProxy(address));
+// Establish the correlation ID before any API security middleware can reject a request.
+app.use(auditContextMiddleware);
+app.use(normalizeLegacyApiErrorResponse);
+app.use((request, response, next) => {
+    if (request.path === '/metrics') {
+        next();
+        return;
+    }
+    const startedAt = process.hrtime.bigint();
+    response.once('finish', () => backendMetrics.recordHttpRequest(
+        request.method,
+        response.statusCode,
+        Number(process.hrtime.bigint() - startedAt) / 1_000_000,
+    ));
+    next();
+});
 
 // --- 中间件 ---
 app.use(ipWhitelistMiddleware as RequestHandler);
 app.use(securityHeaders);
 app.use(express.json({ limit: '100kb', strict: true }));
 app.use(validateJsonComplexity({ maxDepth: 20, maxKeys: 2_000, maxStringLength: 65_536 }));
+app.use((request, response, next) => {
+    const loginPathSet = new Set(['/api/v1/auth/login', '/api/v1/auth/login/2fa', '/api/v1/auth/passkey/authenticate']);
+    if (loginPathSet.has(request.path)) {
+        response.once('finish', () => backendMetrics.recordLoginAttempt(
+            response.statusCode >= 200 && response.statusCode < 300 ? 'success' : 'failure',
+        ));
+    }
+    next();
+});
 
 const allowedCorsOrigins = parseCorsOrigins(
     process.env.RP_ORIGIN || 'http://localhost:5173',
@@ -187,7 +231,6 @@ const startServer = async (): Promise<WebSocketServer> => {
         }
     });
     app.use(sessionMiddleware);
-    app.use(auditContextMiddleware);
     // --- 结束会话中间件配置 ---
 
 
@@ -216,10 +259,11 @@ const startServer = async (): Promise<WebSocketServer> => {
     app.use('/api/v1/backups', backupRouter);
     app.use('/api/v1/session-recordings', sessionRecordingRoutes);
     
-    // 状态检查接口
-    app.get('/api/v1/status', (req: Request, res: Response) => {
-      res.json({ status: '后端服务运行中！' });
-    });
+    app.get('/api/v1/health/live', healthHandlers.live);
+    app.get('/api/v1/health/ready', healthHandlers.ready);
+    // Backwards-compatible status endpoint now uses readiness semantics.
+    app.get('/api/v1/status', healthHandlers.ready);
+    app.get('/metrics', metricsHandlers.prometheus);
     app.use('/api/v1', apiErrorHandler);
     // --- 结束 API 路由 ---
 
@@ -232,13 +276,18 @@ const startServer = async (): Promise<WebSocketServer> => {
             resolve();
         });
     });
-    const webSocketServer = await initializeWebSocket(server, sessionMiddleware as RequestHandler, clientIpResolver, allowedCorsOrigins);
+    const webSocketServer = await initializeWebSocket(
+        server, sessionMiddleware as RequestHandler, clientIpResolver, allowedCorsOrigins,
+        count => backendMetrics.setActiveWebSocketCount(count),
+    );
     console.log(`后端服务器正在监听 http://${serverBinding.host}:${serverBinding.port}`);
     return webSocketServer;
 };
 
 let webSocketServer: WebSocketServer | null = null;
 let shutdownPromise: Promise<void> | null = null;
+let stopBackupScheduler: (() => void) | null = null;
+let singleNodeLease: SingleNodeLease | null = null;
 
 const closeWebSocketServer = async (): Promise<void> => {
     if (!webSocketServer) return;
@@ -257,9 +306,13 @@ const shutdown = (reason: string): Promise<void> => {
     if (shutdownPromise) return shutdownPromise;
     shutdownPromise = (async () => {
         console.log(`[Lifecycle] 正在关闭服务，原因: ${reason}`);
+        stopBackupScheduler?.();
+        stopBackupScheduler = null;
         await closeWebSocketServer();
         await closeHttpServer();
         await closeDbInstance();
+        singleNodeLease?.release();
+        singleNodeLease = null;
         console.log('[Lifecycle] 服务已安全关闭。');
     })();
     return shutdownPromise;
@@ -273,6 +326,11 @@ installProcessLifecycle({
 
 // --- 主程序启动流程 ---
 const main = async () => {
+    singleNodeLease = acquireSingleNodeLease({
+        appDataPath: getAppDataPath(),
+        enabled: resolveSingleNodeLeaseEnabled(),
+    });
+    if (singleNodeLease.enabled) logger.info('已获取单节点运行租约');
     const secrets = initializeRuntimeSecrets(dataEnvPathGlobal);
     if (secrets.generated) {
         console.warn(`[ENV Init] 已为当前运行模式生成并安全保存缺失密钥到 ${dataEnvPathGlobal}`);
@@ -285,6 +343,12 @@ const main = async () => {
         logger.warn('检测到异常中断的会话录像', { interruptedRecordingCount });
     }
     webSocketServer = await startServer();
+    const scheduler = startBackupScheduler({
+        config: resolveBackupScheduleConfig(),
+        backupService: getBackupService(),
+        logError: error => logger.error('自动备份失败', { error }),
+    });
+    stopBackupScheduler = scheduler.stop;
 };
 
 main().catch(async error => {

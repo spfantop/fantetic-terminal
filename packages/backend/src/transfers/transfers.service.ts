@@ -1,10 +1,11 @@
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid'; 
-import { Client, ConnectConfig, SFTPWrapper } from 'ssh2';
+import { Client, SFTPWrapper } from 'ssh2';
 import { InitiateTransferPayload, TransferTask, TransferSubTask } from './transfers.types';
 import { getConnectionWithDecryptedCredentials } from '../connections/connection.service';
 import type { ConnectionWithTags, DecryptedConnectionCredentials } from '../types/connection.types';
+import { buildTransferSshConnectConfig } from './ssh-connect-config';
 
 
 export class TransfersService {
@@ -95,28 +96,6 @@ export class TransfersService {
     return false;
   }
 
-  private buildSshConnectConfig(
-    connectionInfo: ConnectionWithTags,
-    credentials: DecryptedConnectionCredentials
-  ): ConnectConfig {
-    const config: ConnectConfig = {
-      host: connectionInfo.host,
-      port: connectionInfo.port || 22,
-      username: connectionInfo.username,
-      readyTimeout: 20000, // 20 seconds
-      keepaliveInterval: 10000, // 10 seconds
-    };
-    if (connectionInfo.auth_method === 'password' && credentials.decryptedPassword) {
-      config.password = credentials.decryptedPassword;
-    } else if (connectionInfo.auth_method === 'key' && credentials.decryptedPrivateKey) {
-      config.privateKey = credentials.decryptedPrivateKey;
-      if (credentials.decryptedPassphrase) {
-        config.passphrase = credentials.decryptedPassphrase;
-      }
-    }
-    return config;
-  }
-
   private async processTransferTask(taskId: string, signal: AbortSignal): Promise<void> { // +++ 接收 AbortSignal +++
     const task = this.transferTasks.get(taskId);
     if (!task) {
@@ -145,7 +124,7 @@ export class TransfersService {
       const { connection: sourceConnection, ...sourceCredentials } = sourceConnectionResult;
 
       sourceSshClient = new Client();
-      const sourceConnectConfig = this.buildSshConnectConfig(sourceConnection, sourceCredentials);
+      const sourceConnectConfig = buildTransferSshConnectConfig(sourceConnection, sourceCredentials);
 
       await new Promise<void>((resolve, reject) => {
         if (signal.aborted) return reject(new DOMException('Transfer cancelled by user.', 'AbortError'));
@@ -371,7 +350,7 @@ export class TransfersService {
 
   private async checkCommandOnTargetServer(targetConnection: ConnectionWithTags, targetCredentials: DecryptedConnectionCredentials, command: string): Promise<string | null> {
     const targetClient = new Client();
-    const connectConfig = this.buildSshConnectConfig(targetConnection, targetCredentials);
+    const connectConfig = buildTransferSshConnectConfig(targetConnection, targetCredentials);
     let foundCommandPath: string | null = null;
 
 
@@ -637,7 +616,7 @@ private async executeRemoteTransferOnSource(
       // +++ 自动创建目标目录 +++
       this.updateSubTaskStatus(taskId, subTaskId, 'transferring', 6, `Ensuring target directory ${this.escapeShellArg(remoteTargetPathOnTarget)} exists on ${targetConnection.host}.`);
       const targetClientForMkdir = new Client();
-      const targetConnectConfigForMkdir = this.buildSshConnectConfig(targetConnection, targetCredentials);
+      const targetConnectConfigForMkdir = buildTransferSshConnectConfig(targetConnection, targetCredentials);
       try {
         if (signal.aborted) throw new DOMException('Transfer cancelled by user (before mkdir).', 'AbortError');
         await new Promise<void>((resolveMkdir, rejectMkdir) => {
@@ -656,7 +635,7 @@ private async executeRemoteTransferOnSource(
               targetClientForMkdir.end();
               return rejectMkdir(new DOMException('Mkdir operation cancelled by user (on ready).', 'AbortError'));
             }
-            const mkdirCommand = `mkdir -p ${this.escapeShellArg(remoteTargetPathOnTarget)}`;
+            const mkdirCommand = `mkdir -p -- ${this.escapeShellArg(remoteTargetPathOnTarget)}`;
             targetClientForMkdir.exec(mkdirCommand, (err, stream) => {
               if (err) {
                 signal.removeEventListener('abort', onAbortMkdir);

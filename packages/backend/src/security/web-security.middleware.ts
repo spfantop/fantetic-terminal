@@ -1,5 +1,6 @@
 import { NextFunction, Request, RequestHandler, Response } from 'express';
 import { readForwardedHost } from '../config/cors-origin';
+import { sendApiError } from './api-error-envelope';
 
 interface RateLimiterOptions {
   windowMs: number;
@@ -33,7 +34,7 @@ export const createFixedWindowRateLimiter = ({
     response.setHeader('X-RateLimit-Remaining', String(Math.max(0, maxRequests - entry.count)));
     if (entry.count > maxRequests) {
       response.setHeader('Retry-After', String(Math.max(1, Math.ceil((entry.resetAt - currentTime) / 1_000))));
-      response.status(429).json({ code: 'security.rateLimitExceeded' });
+      sendApiError(response, 429, 'security.rateLimitExceeded');
       return;
     }
     while (entryMap.size > maxEntries) entryMap.delete(entryMap.keys().next().value as string);
@@ -59,7 +60,7 @@ export const validateMutationOrigin = (allowedOriginSet: Set<string>): RequestHa
       next();
       return;
     }
-    response.status(403).json({ code: 'security.untrustedOrigin' });
+    sendApiError(response, 403, 'security.untrustedOrigin');
   };
 };
 
@@ -79,18 +80,18 @@ export const validateJsonComplexity = (options: JsonComplexityOptions): RequestH
   while (stack.length > 0) {
     const current = stack.pop()!;
     if (current.depth > options.maxDepth) {
-      response.status(413).json({ code: 'security.payloadTooComplex' });
+      sendApiError(response, 413, 'security.payloadTooComplex');
       return;
     }
     if (typeof current.value === 'string' && current.value.length > options.maxStringLength) {
-      response.status(413).json({ code: 'security.payloadTooComplex' });
+      sendApiError(response, 413, 'security.payloadTooComplex');
       return;
     }
     if (!current.value || typeof current.value !== 'object') continue;
     const childList = Array.isArray(current.value) ? current.value : Object.values(current.value);
     keyCount += childList.length;
     if (keyCount > options.maxKeys) {
-      response.status(413).json({ code: 'security.payloadTooComplex' });
+      sendApiError(response, 413, 'security.payloadTooComplex');
       return;
     }
     for (const child of childList) stack.push({ value: child, depth: current.depth + 1 });
@@ -113,17 +114,17 @@ export const apiErrorHandler = (
   error: Error & { status?: number; type?: string },
   _request: Request,
   response: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): void => {
   if (error.status === 413 || error.type === 'entity.too.large') {
-    response.status(413).json({ code: 'security.payloadTooLarge' });
+    sendApiError(response, 413, 'security.payloadTooLarge');
     return;
   }
   if (error instanceof SyntaxError && error.status === 400) {
-    response.status(400).json({ code: 'security.invalidJson' });
+    sendApiError(response, 400, 'security.invalidJson');
     return;
   }
-  next(error);
+  sendApiError(response, 500, 'system.internalError');
 };
 
 export const authenticationRateLimitKey = (request: Request): string => {

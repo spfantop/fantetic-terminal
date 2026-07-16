@@ -5,6 +5,9 @@ import { INotificationSender } from "../notification.dispatcher.service";
 import { ProcessedNotification } from "../notification.processor.service";
 import { EmailConfig } from "../../types/notification.types";
 import { settingsService } from "../../settings/settings.service";
+import { createLogger } from "../../logging/logger";
+
+const logger = createLogger("EmailSender");
 
 class EmailSenderService implements INotificationSender {
   async send(notification: ProcessedNotification): Promise<void> {
@@ -15,9 +18,7 @@ class EmailSenderService implements INotificationSender {
     const body = notification.body;
 
     if (!to) {
-      console.error(
-        "[EmailSender] Missing recipient address (to) in configuration."
-      );
+      logger.error("Email notification is missing a recipient");
       throw new Error(
         "Email configuration is incomplete (missing recipient address)."
       );
@@ -44,16 +45,12 @@ class EmailSenderService implements INotificationSender {
         from || globalSmtpFrom || "noreply@fantetic-terminal.local";
 
       if (!finalSmtpHost) {
-        console.error(
-          "[EmailSender] SMTP host is not configured (neither channel-specific nor global)."
-        );
+        logger.error("Email notification SMTP host is not configured");
         throw new Error("SMTP host configuration is missing.");
       }
 
       if (isNaN(finalSmtpPort) || finalSmtpPort <= 0) {
-        console.error(
-          `[EmailSender] Invalid SMTP port configured: ${finalSmtpPort}. Using default 587.`
-        );
+        logger.error("Email notification SMTP port is invalid");
 
         throw new Error(`Invalid SMTP port configured: ${finalSmtpPort}`);
       }
@@ -86,18 +83,11 @@ class EmailSenderService implements INotificationSender {
         html: body,
       };
 
-      console.log(
-        `[EmailSender] Sending email notification to: ${to} with subject: "${subject}"`
-      );
+      logger.info("Sending email notification");
       const info = await transporter.sendMail(mailOptions);
-      console.log(
-        `[EmailSender] Email sent successfully. Message ID: ${info.messageId}`
-      );
+      logger.info("Email notification sent", { messageId: info.messageId });
     } catch (error: any) {
-      console.error(
-        `[EmailSender] Error sending email notification to ${to}:`,
-        error
-      );
+      logger.error("Failed to send email notification", { errorName: error instanceof Error ? error.name : 'UnknownError' });
 
       throw new Error(
         `Failed to send email notification: ${error.message || error}`

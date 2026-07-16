@@ -22,7 +22,9 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     source_ip TEXT NULL,
     asset_id INTEGER NULL,
     session_id TEXT NULL,
-    result TEXT NOT NULL DEFAULT 'success'
+    result TEXT NOT NULL DEFAULT 'success',
+    previous_hash TEXT NULL,
+    entry_hash TEXT NULL
 );
 `;
 

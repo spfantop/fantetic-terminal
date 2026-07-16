@@ -15,6 +15,9 @@ import Mail from "nodemailer/lib/mailer";
 import i18next, { defaultLng, supportedLngs } from "../i18n";
 import { settingsService } from "../settings/settings.service";
 import { formatInTimeZone } from "date-fns-tz";
+import { createLogger } from "../logging/logger";
+
+const logger = createLogger("NotificationService");
 
 const testSubjectKey = "testNotification.subject";
 const testEmailBodyKey = "testNotification.email.body";
@@ -69,7 +72,7 @@ export class NotificationService {
       case "telegram":
         return this._testTelegramSetting(config as TelegramConfig);
       default:
-        console.warn(`[通知测试] 不支持的测试渠道类型: ${channelType}`);
+        logger.warn("Unsupported notification test channel", { channelType });
         return {
           success: false,
           message: `不支持测试此渠道类型 (${channelType})`,
@@ -80,9 +83,9 @@ export class NotificationService {
   private async _testEmailSetting(
     config: EmailConfig
   ): Promise<{ success: boolean; message: string }> {
-    console.log("[通知测试 - 邮件] 开始测试...");
+    logger.info("Email notification test started");
     if (!config.to || !config.smtpHost || !config.smtpPort || !config.from) {
-      console.error("[通知测试 - 邮件] 缺少必要的配置。");
+      logger.error("Email notification test is missing required configuration");
       return {
         success: false,
         message:
@@ -96,12 +99,9 @@ export class NotificationService {
       if (langSetting && supportedLngs.includes(langSetting)) {
         userLang = langSetting;
       }
-      console.log(`[通知测试 - 邮件] 使用语言: ${userLang}`);
+      logger.debug("Email notification test language resolved", { userLang });
     } catch (error) {
-      console.error(
-        `[通知测试 - 邮件] 获取语言设置时出错，使用默认 (${defaultLng}):`,
-        error
-      );
+      logger.error("Failed to resolve email notification test language", { error });
     }
 
     const transporterOptions = {
@@ -147,14 +147,12 @@ export class NotificationService {
     };
 
     try {
-      console.log(
-        `[通知测试 - 邮件] 尝试通过 ${config.smtpHost}:${config.smtpPort} 发送测试邮件至 ${config.to}`
-      );
+      logger.info("Sending email notification test");
       const info = await transporter.sendMail(mailOptions);
-      console.log(`[通知测试 - 邮件] 测试邮件发送成功: ${info.messageId}`);
+      logger.info("Email notification test sent", { messageId: info.messageId });
       return { success: true, message: "测试邮件发送成功！请检查收件箱。" };
     } catch (error: any) {
-      console.error(`[通知测试 - 邮件] 发送测试邮件时出错:`, error);
+      logger.error("Failed to send email notification test", { error });
       return {
         success: false,
         message: `测试邮件发送失败: ${error.message || "未知错误"}`,
@@ -165,9 +163,9 @@ export class NotificationService {
   private async _testWebhookSetting(
     config: WebhookConfig
   ): Promise<{ success: boolean; message: string }> {
-    console.log("[通知测试 - Webhook] 开始测试...");
+    logger.info("Webhook notification test started");
     if (!config.url) {
-      console.error("[通知测试 - Webhook] 缺少 URL。");
+      logger.error("Webhook notification test is missing URL");
       return { success: false, message: "测试 Webhook 失败：缺少 URL。" };
     }
 
@@ -177,12 +175,9 @@ export class NotificationService {
       if (langSetting && supportedLngs.includes(langSetting)) {
         userLang = langSetting;
       }
-      console.log(`[通知测试 - Webhook] 使用语言: ${userLang}`);
+      logger.debug("Webhook notification test language resolved", { userLang });
     } catch (error) {
-      console.error(
-        `[通知测试 - Webhook] 获取语言设置时出错，使用默认 (${defaultLng}):`,
-        error
-      );
+      logger.error("Failed to resolve webhook notification test language", { error });
     }
 
     const testPayload: NotificationPayload = {
@@ -196,15 +191,6 @@ export class NotificationService {
         }),
       },
     };
-    const translatedWebhookMessage =
-      typeof testPayload.details === "object" && testPayload.details?.message
-        ? testPayload.details.message
-        : "Details 不是带有 message 属性的对象";
-    console.log(
-      `[通知测试 - Webhook] 测试负载已创建。翻译后的 details.message:`,
-      translatedWebhookMessage
-    );
-
     const eventDisplayName = i18next.t(`event.${testPayload.event}`, {
       lng: userLang,
       defaultValue: testPayload.event,
@@ -242,11 +228,9 @@ export class NotificationService {
     };
 
     try {
-      console.log(`[通知测试 - Webhook] 发送测试 Webhook 到 ${config.url}`);
+      logger.info("Sending webhook notification test", { method: requestConfig.method });
       const response = await axios(requestConfig);
-      console.log(
-        `[通知测试 - Webhook] 测试 Webhook 成功发送到 ${config.url}。状态: ${response.status}`
-      );
+      logger.info("Webhook notification test sent", { status: response.status });
       return {
         success: true,
         message: `测试 Webhook 发送成功 (状态码: ${response.status})。`,
@@ -257,10 +241,7 @@ export class NotificationService {
         error.response?.data ||
         error.message ||
         "未知错误";
-      console.error(
-        `[通知测试 - Webhook] 发送测试 Webhook 到 ${config.url} 时出错:`,
-        errorMessage
-      );
+      logger.error("Failed to send webhook notification test", { error });
       return {
         success: false,
         message: `测试 Webhook 发送失败: ${errorMessage}`,
@@ -271,9 +252,9 @@ export class NotificationService {
   private async _testTelegramSetting(
     config: TelegramConfig
   ): Promise<{ success: boolean; message: string }> {
-    console.log("[通知测试 - Telegram] 开始测试...");
+    logger.info("Telegram notification test started");
     if (!config.botToken || !config.chatId) {
-      console.error("[通知测试 - Telegram] 缺少 botToken 或 chatId。");
+      logger.error("Telegram notification test is missing required configuration");
       return {
         success: false,
         message: "测试 Telegram 失败：缺少机器人 Token 或聊天 ID。",
@@ -286,12 +267,9 @@ export class NotificationService {
       if (langSetting && supportedLngs.includes(langSetting)) {
         userLang = langSetting;
       }
-      console.log(`[通知测试 - Telegram] 使用语言: ${userLang}`);
+      logger.debug("Telegram notification test language resolved", { userLang });
     } catch (error) {
-      console.error(
-        `[通知测试 - Telegram] 获取语言设置时出错，使用默认 (${defaultLng}):`,
-        error
-      );
+      logger.error("Failed to resolve Telegram notification test language", { error });
     }
 
     const testPayload: NotificationPayload = {
@@ -317,24 +295,15 @@ export class NotificationService {
       typeof testPayload.details === "object" && testPayload.details?.message
         ? testPayload.details.message
         : "Details is not an object with message property";
-    console.log(
-      `[Notification Test - Telegram] Test payload created. Final details.message in payload:`,
-      messageFromPayload
-    );
 
     const templateKeyWithNamespace = `notifications:${testTelegramBodyTemplateKey}`;
     const defaultMessageTemplateFromI18n = i18next.t(templateKeyWithNamespace, {
       lng: userLang,
       defaultValue: `Fallback Template: *Fantetic Terminal Test Notification*\nEvent: \`{event}\`\nTimestamp: {timestamp}\nDetails:\n\`\`\`\n{details}\n\`\`\``,
     });
-    console.log(
-      `[通知测试 - Telegram] 来自 i18n 的默认模板 (使用语言 '${userLang}', 键 '${templateKeyWithNamespace}'):`,
-      defaultMessageTemplateFromI18n
-    );
 
     const templateToUse =
       config.messageTemplate || defaultMessageTemplateFromI18n;
-    console.log(`[通知测试 - Telegram] 要渲染的模板:`, templateToUse);
 
     const eventDisplayName = i18next.t(`event.${testPayload.event}`, {
       lng: userLang,
@@ -354,24 +323,21 @@ export class NotificationService {
       templateDataTelegramTest,
       defaultMessageTemplateFromI18n
     );
-    console.log(`[通知测试 - Telegram] 渲染的消息文本:`, messageText);
 
     let baseApiUrl = "https://api.telegram.org";
     if (config.customDomain) {
         try {
             const url = new URL(config.customDomain);
             baseApiUrl = `${url.protocol}//${url.host}`;
-            console.log(`[通知测试 - Telegram] 使用自定义域名: ${baseApiUrl}`);
+            logger.info("Telegram notification test custom domain accepted");
         } catch (e) {
-            console.warn(`[通知测试 - Telegram] 无效的自定义域名 URL: ${config.customDomain}。将回退到默认 Telegram API。`);
+            logger.warn("Telegram notification test custom domain is invalid");
         }
     }
     const telegramApiUrl = `${baseApiUrl}/bot${config.botToken}/sendMessage`;
 
     try {
-      console.log(
-        `[通知测试 - Telegram] 发送测试 Telegram 消息到聊天 ID ${config.chatId}`
-      );
+      logger.info("Sending Telegram notification test");
       const response = await axios.post(
         telegramApiUrl,
         {
@@ -383,13 +349,10 @@ export class NotificationService {
       );
 
       if (response.data?.ok) {
-        console.log(`[通知测试 - Telegram] 测试 Telegram 消息发送成功。`);
+        logger.info("Telegram notification test sent");
         return { success: true, message: "测试 Telegram 消息发送成功！" };
       } else {
-        console.error(
-          `[通知测试 - Telegram] Telegram API 返回错误:`,
-          response.data?.description
-        );
+        logger.error("Telegram notification test API reported failure");
         return {
           success: false,
           message: `测试 Telegram 发送失败: ${
@@ -403,10 +366,7 @@ export class NotificationService {
         error.response?.data ||
         error.message ||
         "未知错误";
-      console.error(
-        `[通知测试 - Telegram] 发送测试 Telegram 消息时出错:`,
-        errorMessage
-      );
+      logger.error("Failed to send Telegram notification test", { error });
       return {
         success: false,
         message: `测试 Telegram 发送失败: ${errorMessage}`,
@@ -418,8 +378,6 @@ export class NotificationService {
     event: NotificationEvent,
     details?: Record<string, any> | string
   ): Promise<void> {
-    // console.log(`[通知] 事件触发: ${event}`, details || "");
-
     let userLang = defaultLng;
     let userTimezone = "UTC";
     try {
@@ -435,11 +393,9 @@ export class NotificationService {
         userTimezone = timezoneSetting;
       }
     } catch (error) {
-      console.error(`[通知] 获取事件 ${event} 的语言或时区设置时出错:`, error);
+      logger.error("Failed to resolve notification locale settings", { event, error });
     }
-    console.log(
-      `[通知] 事件 ${event} 使用语言 '${userLang}', 时区 '${userTimezone}'`
-    );
+    logger.debug("Notification locale settings resolved", { event, userLang, userTimezone });
 
     const payload: NotificationPayload = {
       event,
@@ -449,9 +405,7 @@ export class NotificationService {
 
     try {
       const applicableSettings = await this.repository.getEnabledByEvent(event);
-      console.log(
-        `[通知] 找到 ${applicableSettings.length} 个适用于事件 ${event} 的设置`
-      );
+      logger.info("Notification settings resolved for event", { event, settingCount: applicableSettings.length });
 
       if (applicableSettings.length === 0) {
         return; // 此事件没有启用的设置
@@ -466,17 +420,15 @@ export class NotificationService {
           case "telegram":
             return this._sendTelegram(setting, payload, userLang, userTimezone);
           default:
-            console.warn(
-              `[通知] 未知渠道类型: ${setting.channel_type} (设置 ID: ${setting.id})`
-            );
+            logger.warn("Unsupported notification channel", { settingId: setting.id, channelType: setting.channel_type });
             return Promise.resolve();
         }
       });
 
       await Promise.allSettled(sendPromises);
-      console.log(`[通知] 完成尝试发送事件 ${event} 的通知`);
+      logger.info("Notification dispatch attempts completed", { event });
     } catch (error) {
-      console.error(`[通知] 获取或处理事件 ${event} 的设置时出错:`, error);
+      logger.error("Failed to process notification settings", { event, error });
     }
   }
 
@@ -507,7 +459,7 @@ export class NotificationService {
   ): Promise<void> {
     const config = setting.config as WebhookConfig;
     if (!config.url) {
-      console.error(`[通知] Webhook 设置 ID ${setting.id} 缺少 URL。`);
+      logger.error("Webhook notification setting is missing URL", { settingId: setting.id });
       return;
     }
 
@@ -547,23 +499,12 @@ export class NotificationService {
     let isCustomTemplate = !!config.bodyTemplate;
 
     if (isCustomTemplate) {
-      console.log(
-        `[_sendWebhook] Original custom body template for event ${payload.event}:`,
-        templateToRender
-      );
-
       templateToRender = templateToRender.replace(
         /\{event\}/g,
         "{eventDisplay}"
       );
-      console.log(
-        `[_sendWebhook] Pre-processed body template (replaced {event} with {eventDisplay}):`,
-        templateToRender
-      );
     } else {
-      console.log(
-        `[_sendWebhook] No custom body template found. Using default template for event ${payload.event}`
-      );
+      logger.debug("Webhook notification is using the default template", { event: payload.event, settingId: setting.id });
     }
 
     const requestBody = this._renderTemplate(
@@ -584,20 +525,13 @@ export class NotificationService {
     };
 
     try {
-      console.log(
-        `[通知] 发送 Webhook 到 ${config.url} (事件: ${payload.event})`
-      );
+      logger.info("Sending webhook notification", { event: payload.event, settingId: setting.id, method: requestConfig.method });
       const response = await axios(requestConfig);
-      console.log(
-        `[通知] Webhook 成功发送到 ${config.url}。状态: ${response.status}`
-      );
+      logger.info("Webhook notification sent", { event: payload.event, settingId: setting.id, status: response.status });
     } catch (error: any) {
       const errorMessage =
         error.response?.data?.message || error.response?.data || error.message;
-      console.error(
-        `[通知] 发送 Webhook 到 ${config.url} (设置 ID: ${setting.id}) 时出错:`,
-        errorMessage
-      );
+      logger.error("Failed to send webhook notification", { event: payload.event, settingId: setting.id, error });
     }
   }
 
@@ -609,9 +543,7 @@ export class NotificationService {
   ): Promise<void> {
     const config = setting.config as EmailConfig;
     if (!config.to || !config.smtpHost || !config.smtpPort || !config.from) {
-      console.error(
-        `[通知] 邮件设置 ID ${setting.id} 缺少必要的 SMTP 配置 (to, smtpHost, smtpPort, from)。`
-      );
+      logger.error("Email notification setting is missing required configuration", { settingId: setting.id });
       return;
     }
 
@@ -643,9 +575,6 @@ export class NotificationService {
     });
 
     const subject = eventDisplayName;
-    console.log(
-      `[_sendEmail] Using fixed subject for event ${payload.event}: ${subject}`
-    );
 
     const formattedTimestampForEmail = formatInTimeZone(
       new Date(payload.timestamp),
@@ -670,44 +599,25 @@ export class NotificationService {
         return acc;
       }, {} as Record<string, string>),
     };
-    console.log(
-      `[_sendEmail] Prepared templateDataEmailBody for event ${payload.event}:`,
-      templateDataEmailBody
-    );
 
     let body = "";
     const defaultBodyText = `Event: ${eventDisplayName}\nTimestamp: ${formattedTimestampForEmail}\nDetails:\n${detailsString}`;
 
     if (config.bodyTemplate) {
       let templateToRender = config.bodyTemplate;
-      console.log(
-        `[_sendEmail] Original custom body template for event ${payload.event}:`,
-        templateToRender
-      );
-
       templateToRender = templateToRender.replace(
         /\{event\}/g,
         "{eventDisplay}"
       );
-      console.log(
-        `[_sendEmail] Pre-processed body template (replaced {event} with {eventDisplay}):`,
-        templateToRender
-      );
-
       body = this._renderTemplate(
         templateToRender,
         templateDataEmailBody,
         defaultBodyText
       );
     } else {
-      console.log(
-        `[_sendEmail] No custom body template found. Using default constructed body text for event ${payload.event}`
-      );
+      logger.debug("Email notification is using the default template", { event: payload.event, settingId: setting.id });
       body = defaultBodyText;
     }
-    console.log(
-      `[_sendEmail] Final email body for event ${payload.event}:\n${body}`
-    );
 
     const mailOptions: Mail.Options = {
       from: config.from,
@@ -717,18 +627,11 @@ export class NotificationService {
     };
 
     try {
-      console.log(
-        `[通知] 通过 ${config.smtpHost}:${config.smtpPort} 发送邮件至 ${config.to} (事件: ${payload.event}, 主题: ${subject})`
-      );
+      logger.info("Sending email notification", { event: payload.event, settingId: setting.id });
       const info = await transporter.sendMail(mailOptions);
-      console.log(
-        `[通知] 邮件成功发送至 ${config.to} (设置 ID: ${setting.id})。消息 ID: ${info.messageId}`
-      );
+      logger.info("Email notification sent", { event: payload.event, settingId: setting.id, messageId: info.messageId });
     } catch (error: any) {
-      console.error(
-        `[通知] 通过 ${config.smtpHost} 发送邮件 (设置 ID: ${setting.id}) 时出错:`,
-        error
-      );
+      logger.error("Failed to send email notification", { event: payload.event, settingId: setting.id, error });
     }
   }
 
@@ -738,18 +641,10 @@ export class NotificationService {
     userLang: string,
     userTimezone: string
   ): Promise<void> {
-    console.log(
-      `[_sendTelegram] Initiating for event: ${payload.event}, Setting ID: ${setting.id}, Lang: ${userLang}, Timezone: ${userTimezone}`
-    );
-    console.log(
-      `[_sendTelegram] Received payload:`,
-      JSON.stringify(payload, null, 2)
-    );
+    logger.debug("Preparing Telegram notification", { event: payload.event, settingId: setting.id, userLang, userTimezone });
     const config = setting.config as TelegramConfig;
     if (!config.botToken || !config.chatId) {
-      console.error(
-        `[通知] Telegram 设置 ID ${setting.id} 缺少 botToken 或 chatId。`
-      );
+      logger.error("Telegram notification setting is missing required configuration", { settingId: setting.id });
       return;
     }
 
@@ -767,7 +662,6 @@ export class NotificationService {
         detailsText = JSON.stringify(payload.details);
       }
     }
-    console.log(`[_sendTelegram] Formatted detailsText:`, detailsText);
 
     const translatedEventName = i18next.t(`event.${payload.event}`, {
       lng: userLang,
@@ -783,17 +677,9 @@ export class NotificationService {
       ),
       details: detailsText,
     };
-    console.log(
-      `[_sendTelegram] Prepared templateData (NO escaping):`,
-      JSON.stringify(templateData, null, 2)
-    );
 
     let messageText = "";
     if (config.messageTemplate) {
-      console.log(
-        `[_sendTelegram] Using custom template:`,
-        config.messageTemplate
-      );
       const fallbackForCustom = `Event: ${templateData.event}, Details: ${templateData.details}`;
       messageText = this._renderTemplate(
         config.messageTemplate,
@@ -802,7 +688,6 @@ export class NotificationService {
       );
     } else {
       const i18nKey = `eventBody.${payload.event}`;
-      console.log(`[_sendTelegram] Using i18n template key:`, i18nKey);
       const fallbackBody = `*Fallback Notification*\nEvent: ${templateData.event}\nTime: \`${templateData.timestamp}\`\nDetails: ${templateData.details}`;
       messageText = i18next.t(i18nKey, {
         lng: userLang,
@@ -810,46 +695,36 @@ export class NotificationService {
         defaultValue: fallbackBody,
       });
     }
-    console.log(`[_sendTelegram] Final message text to send:`, messageText);
 
     let baseApiUrlSend = "https://api.telegram.org";
     if (config.customDomain) {
         try {
             const url = new URL(config.customDomain);
             baseApiUrlSend = `${url.protocol}//${url.host}`;
-            console.log(`[_sendTelegram] 使用自定义域名: ${baseApiUrlSend} (事件: ${payload.event})`);
+            logger.info("Telegram notification custom domain accepted", { event: payload.event, settingId: setting.id });
         } catch (e) {
-            console.warn(`[_sendTelegram] 无效的自定义域名 URL: ${config.customDomain} (事件: ${payload.event})。将回退到默认 Telegram API。`);
+            logger.warn("Telegram notification custom domain is invalid", { event: payload.event, settingId: setting.id });
         }
     }
     const telegramApiUrl = `${baseApiUrlSend}/bot${config.botToken}/sendMessage`;
 
     try {
-      console.log(
-        `[通知] 发送 Telegram 消息到聊天 ID ${config.chatId} (事件: ${payload.event})`
-      );
+      logger.info("Sending Telegram notification", { event: payload.event, settingId: setting.id });
       const requestBody = {
         chat_id: config.chatId,
         text: messageText,
         parse_mode: "Markdown",
       };
-      console.log(
-        `[_sendTelegram] Sending request to Telegram API:`,
-        JSON.stringify(requestBody, null, 2)
-      );
       const response = await axios.post(telegramApiUrl, requestBody, {
         timeout: 10000,
       });
-      console.log(`[通知] Telegram 消息发送成功。响应 OK:`, response.data?.ok);
+      logger.info("Telegram notification sent", { event: payload.event, settingId: setting.id, ok: response.data?.ok === true });
     } catch (error: any) {
       const errorMessage =
         error.response?.data?.description ||
         error.response?.data ||
         error.message;
-      console.error(
-        `[通知] 发送 Telegram 消息 (设置 ID: ${setting.id}) 时出错:`,
-        errorMessage
-      );
+      logger.error("Failed to send Telegram notification", { event: payload.event, settingId: setting.id, error });
     }
   }
 

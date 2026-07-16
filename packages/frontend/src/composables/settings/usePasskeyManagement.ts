@@ -5,6 +5,7 @@ import { startRegistration } from '@simplewebauthn/browser';
 import { storeToRefs } from 'pinia';
 import { useSettingsStore } from '../../stores/settings.store';
 import { formatDateTimeWithSettings } from '../../utils/dateTimeFormat';
+import { resolvePasskeyErrorKey } from '../../utils/apiError';
 
 export function usePasskeyManagement() {
   const authStore = useAuthStore();
@@ -49,7 +50,7 @@ export function usePasskeyManagement() {
       if (error.name === 'InvalidStateError' || error.message.includes('cancelled') || error.message.includes('excludeCredentials')) {
         passkeyMessage.value = t('settings.passkey.error.registrationCancelledOrExists'); // 您可能需要添加或修改此翻译
       } else {
-        passkeyMessage.value = error.response?.data?.message || error.message || t('settings.passkey.error.registrationFailed');
+        passkeyMessage.value = t(resolvePasskeyErrorKey(error));
       }
       passkeySuccess.value = false;
     } finally {
@@ -86,7 +87,7 @@ export function usePasskeyManagement() {
       cancelEditPasskeyName();
     } catch (error: any) {
       console.error(`更新 Passkey ${credentialID} 名称失败:`, error);
-      passkeyMessage.value = error.response?.data?.message || error.message || t('settings.passkey.error.nameUpdateFailed', '更新 Passkey 名称失败。');
+      passkeyMessage.value = t(resolvePasskeyErrorKey(error));
       passkeySuccess.value = false;
     } finally {
       passkeyEditLoadingStates[credentialID] = false;
@@ -116,7 +117,7 @@ export function usePasskeyManagement() {
       // authStore.fetchPasskeys() is usually called within deletePasskey in the store
     } catch (error: any) {
       console.error(`删除 Passkey ${credentialID} 失败:`, error);
-      passkeyDeleteError.value = error.response?.data?.message || error.message || t('settings.passkey.error.deleteFailedGeneral');
+      passkeyDeleteError.value = t(resolvePasskeyErrorKey(error));
       passkeySuccess.value = false;
     } finally {
       passkeyDeleteLoadingStates[credentialID] = false;

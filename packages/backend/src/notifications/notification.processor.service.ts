@@ -3,6 +3,9 @@ import { NotificationSettingsRepository } from '../notifications/notification.re
 import { NotificationSetting, NotificationEvent, NotificationChannelType, WebhookConfig, EmailConfig, TelegramConfig, NotificationChannelConfig } from '../types/notification.types';
 import i18next, { i18nInitializationPromise } from '../i18n';
 import { EventEmitter } from 'events';
+import { createLogger } from '../logging/logger';
+
+const logger = createLogger('NotificationProcessor');
 
 // 定义处理后的通知数据结构
 export interface ProcessedNotification {
@@ -27,21 +30,21 @@ class NotificationProcessorService extends EventEmitter {
 
     private async initialize(): Promise<void> {
         try {
-            console.log('[NotificationProcessor] 等待 i18n 初始化...');
+            logger.info('Waiting for i18n initialization');
             await i18nInitializationPromise;
-            console.log('[NotificationProcessor] i18n 初始化完成。正在注册事件监听器...');
+            logger.info('i18n initialized; registering event listeners');
             this.registerEventListeners();
             this.isInitialized = true;
-            console.log('[NotificationProcessor] 初始化完成。');
+            logger.info('Notification processor initialized');
         } catch (error) {
-            console.error('[NotificationProcessor] 因 i18n 错误导致初始化失败:', error);
+            logger.error('Notification processor initialization failed', { error });
         }
     }
 
 
     private registerEventListeners() {
         if (this.isInitialized) {
-             console.warn('[NotificationProcessor] 尝试多次注册监听器。');
+             logger.warn('Notification event listeners were already registered');
              return;
         }
         // 监听所有 AppEventType 事件
@@ -51,7 +54,7 @@ class NotificationProcessorService extends EventEmitter {
                     // 使用 setImmediate 或 process.nextTick 避免阻塞事件循环
                     setImmediate(() => {
                         this.processStandardEvent(eventType, payload).catch(error => {
-                            console.error(`[NotificationProcessor] 处理事件 ${eventType} 时出错:`, error);
+                            logger.error('Failed to process notification event', { eventType, error });
                         });
                     });
                 });
@@ -60,24 +63,24 @@ class NotificationProcessorService extends EventEmitter {
          eventService.onEvent(AppEventType.TestNotification, (payload) => {
              setImmediate(() => {
                  this.processTestEvent(payload).catch(error => {
-                     console.error(`[NotificationProcessor] 处理测试事件时出错:`, error);
+                     logger.error('Failed to process notification test event', { error });
                  });
              });
         });
-        console.log('[NotificationProcessor] 已注册监听器。');
+        logger.info('Notification event listeners registered');
     }
 
      private async processStandardEvent(eventType: AppEventType, payload: AppEventPayload) {
          if (!this.isInitialized) {
-             console.warn(`[NotificationProcessor] 在初始化完成前收到事件 ${eventType}。跳过处理。`);
+             logger.warn('Notification event received before initialization', { eventType });
              return;
          }
-        console.log(`[NotificationProcessor] 收到标准事件: ${eventType}`, payload);
+        logger.info('Notification event received', { eventType });
         const eventKey = eventType as NotificationEvent; // 类型转换，假设 AppEventType 和 NotificationEvent 对应
 
         try {
             const applicableSettings = await this.repository.getEnabledByEvent(eventKey);
-            console.log(`[NotificationProcessor] 找到 ${applicableSettings.length} 个适用于事件 ${eventKey} 的设置`);
+            logger.info('Notification settings resolved for event', { eventType: eventKey, settingCount: applicableSettings.length });
 
             if (applicableSettings.length === 0) {
                 return; // 没有配置需要处理
@@ -94,20 +97,20 @@ class NotificationProcessorService extends EventEmitter {
                  this.processSingleSetting(setting, eventType, payload, translatedEvent, userLang);
             }
         } catch (error) {
-            console.error(`[NotificationProcessor] 获取事件 ${eventKey} 的设置失败:`, error);
+            logger.error('Failed to resolve notification settings', { eventType: eventKey, error });
         }
     }
 
     private async processTestEvent(payload: AppEventPayload) {
          if (!this.isInitialized) {
-             console.warn(`[NotificationProcessor] 在初始化完成前收到测试事件。跳过处理。`);
+             logger.warn('Notification test event received before initialization');
              return;
          }
-        console.log(`[NotificationProcessor] 收到测试事件`, payload);
+        logger.info('Notification test event received');
         const { testTargetConfig, testTargetChannelType } = payload.details || {};
 
         if (!testTargetConfig || !testTargetChannelType) {
-            console.error('[NotificationProcessor] 测试事件负载缺少 testTargetConfig 或 testTargetChannelType。');
+            logger.error('Notification test event is missing target configuration');
             return;
         }
 
@@ -146,10 +149,10 @@ class NotificationProcessorService extends EventEmitter {
 
             if (processedNotification) {
                 this.emit('sendNotification', processedNotification);
-                console.log(`[NotificationProcessor] 正在为 ${setting.channel_type} 发送 sendNotification (设置 ID: ${setting.id}, 事件: ${eventType})`);
+                logger.info('Notification dispatch queued', { settingId: setting.id, channelType: setting.channel_type, eventType });
             }
         } catch (error) {
-            console.error(`[NotificationProcessor] 为设置 ID ${setting.id} 和事件 ${eventType} 准备通知时出错:`, error);
+            logger.error('Failed to prepare notification dispatch', { settingId: setting.id, eventType, error });
         }
     }
 
@@ -206,7 +209,7 @@ class NotificationProcessorService extends EventEmitter {
                 break;
 
             default:
-                console.warn(`[NotificationProcessor] 不支持的通道类型: ${setting.channel_type}`);
+                logger.warn('Unsupported notification channel type', { channelType: setting.channel_type });
                 return null;
         }
 

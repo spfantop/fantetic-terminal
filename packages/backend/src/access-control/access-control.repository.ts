@@ -1,6 +1,6 @@
 import { Database } from 'sqlite3';
 
-import { allDb, getDb, getDbInstance, runDb } from '../database/connection';
+import { allDb, getDb, getDbInstance, runDb, withTransaction } from '../database/connection';
 import {
   AccessControlRepository,
   ConnectionGroupGrant,
@@ -17,8 +17,7 @@ export class SqliteAccessControlRepository implements AccessControlRepository {
 
   async createGroup(input: CreateGroupRecord): Promise<UserGroup> {
     const db = await this.getDatabase();
-    await runDb(db, 'BEGIN IMMEDIATE TRANSACTION');
-    try {
+    return withTransaction(db, async () => {
       const result = await runDb(db, `
         INSERT INTO user_groups(name, description, created_by)
         VALUES (?, ?, ?)
@@ -27,12 +26,8 @@ export class SqliteAccessControlRepository implements AccessControlRepository {
         INSERT INTO user_group_members(group_id, user_id, role)
         VALUES (?, ?, 'owner')
       `, [result.lastID, input.createdBy]);
-      await runDb(db, 'COMMIT');
       return { id: result.lastID, ...input };
-    } catch (error) {
-      await runDb(db, 'ROLLBACK');
-      throw error;
-    }
+    }, { mode: 'immediate' });
   }
 
   async readGroup(groupId: number): Promise<UserGroup | null> {
@@ -68,8 +63,7 @@ export class SqliteAccessControlRepository implements AccessControlRepository {
 
   async saveMembership(input: GroupMembership): Promise<GroupMembership> {
     const db = await this.getDatabase();
-    await runDb(db, 'BEGIN IMMEDIATE TRANSACTION');
-    try {
+    return withTransaction(db, async () => {
       const current = await getDb<{ role: GroupMembership['role'] }>(db, `
         SELECT role FROM user_group_members WHERE group_id = ? AND user_id = ?
       `, [input.groupId, input.userId]);
@@ -84,23 +78,17 @@ export class SqliteAccessControlRepository implements AccessControlRepository {
         ON CONFLICT(group_id, user_id) DO UPDATE SET
           role = excluded.role, updated_at = strftime('%s', 'now')`,
       [input.groupId, input.userId, input.role]);
-      await runDb(db, 'COMMIT');
       return input;
-    } catch (error) {
-      await runDb(db, 'ROLLBACK');
-      throw error;
-    }
+    }, { mode: 'immediate' });
   }
 
   async deleteMembership(groupId: number, userId: number): Promise<boolean> {
     const db = await this.getDatabase();
-    await runDb(db, 'BEGIN IMMEDIATE TRANSACTION');
-    try {
+    return withTransaction(db, async () => {
       const current = await getDb<{ role: GroupMembership['role'] }>(db, `
         SELECT role FROM user_group_members WHERE group_id = ? AND user_id = ?
       `, [groupId, userId]);
       if (!current) {
-        await runDb(db, 'ROLLBACK');
         return false;
       }
       if (current.role === 'owner') {
@@ -110,12 +98,8 @@ export class SqliteAccessControlRepository implements AccessControlRepository {
         if ((owners?.count ?? 0) <= 1) throw new Error('A group must retain at least one owner.');
       }
       await runDb(db, 'DELETE FROM user_group_members WHERE group_id = ? AND user_id = ?', [groupId, userId]);
-      await runDb(db, 'COMMIT');
       return true;
-    } catch (error) {
-      await runDb(db, 'ROLLBACK');
-      throw error;
-    }
+    }, { mode: 'immediate' });
   }
 
   async readConnectionAccess(userId: number, connectionId: number): Promise<{
@@ -188,8 +172,7 @@ export class SqliteAccessControlRepository implements AccessControlRepository {
 
   async saveConnectionGrants(input: ConnectionGroupGrant[]): Promise<ConnectionGroupGrant[]> {
     const db = await this.getDatabase();
-    await runDb(db, 'BEGIN IMMEDIATE TRANSACTION');
-    try {
+    return withTransaction(db, async () => {
       for (const grant of input) {
         await runDb(db, `
           INSERT INTO connection_group_permissions(connection_id, group_id, permission)
@@ -199,12 +182,8 @@ export class SqliteAccessControlRepository implements AccessControlRepository {
             updated_at = strftime('%s', 'now')
         `, [grant.connectionId, grant.groupId, grant.permission]);
       }
-      await runDb(db, 'COMMIT');
       return input;
-    } catch (error) {
-      await runDb(db, 'ROLLBACK');
-      throw error;
-    }
+    }, { mode: 'immediate' });
   }
 
   async deleteConnectionGrant(connectionId: number, groupId: number): Promise<boolean> {

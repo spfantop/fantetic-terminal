@@ -7,6 +7,9 @@ import {
     migrateTagsToOwnerScopedNamesSQL,
     migrateUserPrivateResourcesSQL,
 } from '../access-control/access-control.schema';
+import { createLogger } from '../logging/logger';
+
+const logger = createLogger('DatabaseMigrations');
 
 // 1. 定义 migrations 表 SQL
 const createMigrationsTableSQL = `
@@ -26,6 +29,7 @@ interface Migration {
     name: string;
     sql: string; // 可以是多条 SQL 语句，用 ; 分隔。db.exec 会处理。
     check?: (db: Database) => Promise<boolean>; // 可选的前置检查函数
+    apply?: (db: Database) => Promise<void>; // 需要按对象精确修复的迁移使用自定义执行逻辑
 }
 
 // 辅助函数：检查表是否存在
@@ -46,6 +50,41 @@ const columnExists = async (db: Database, tableName: string, columnName: string)
             else resolve(columns.some(col => col.name === columnName));
         });
     });
+};
+
+const indexExists = async (db: Database, indexName: string): Promise<boolean> => {
+    return new Promise((resolve, reject) => {
+        db.get("SELECT name FROM sqlite_master WHERE type='index' AND name=?", [indexName], (err, row) => {
+            if (err) reject(err);
+            else resolve(!!row);
+        });
+    });
+};
+
+const triggerExists = async (db: Database, triggerName: string): Promise<boolean> => {
+    return new Promise((resolve, reject) => {
+        db.get("SELECT name FROM sqlite_master WHERE type='trigger' AND name=?", [triggerName], (err, row) => {
+            if (err) reject(err);
+            else resolve(!!row);
+        });
+    });
+};
+
+const execMigrationSql = async (db: Database, sql: string): Promise<void> => {
+    await new Promise<void>((resolve, reject) => {
+        db.exec(sql, error => error ? reject(error) : resolve());
+    });
+};
+
+const addColumnIfMissing = async (
+    db: Database,
+    tableName: string,
+    columnName: string,
+    columnDefinition: string,
+): Promise<void> => {
+    if (!(await columnExists(db, tableName, columnName))) {
+        await execMigrationSql(db, `ALTER TABLE ${tableName} ADD COLUMN ${columnDefinition}`);
+    }
 };
 
 // 辅助函数：获取表的创建 SQL
@@ -81,9 +120,8 @@ const definedMigrations: Migration[] = [
                 updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
             );
 
-            -- 为 connections 表添加 ssh_key_id 列及外键 (如果列不存在)
-            -- 注意: 直接 ALTER TABLE 添加列在列已存在时会抛出 "duplicate column name" 错误。
-            --       迁移运行器 (runMigrations) 已配置为忽略此特定错误。
+            -- 为 connections 表添加 ssh_key_id 列及外键。
+            -- check 会在列已存在时跳过此单列 ALTER。
             ALTER TABLE connections ADD COLUMN ssh_key_id INTEGER NULL REFERENCES ssh_keys(id) ON DELETE SET NULL;
 
             -- 可选: 对旧数据进行清理或更新
@@ -160,10 +198,10 @@ const definedMigrations: Migration[] = [
                     return !allowedTypes.includes('vnc'); // 如果 'vnc' 不在允许类型中，则需要运行迁移
                 }
                 // 如果没有找到明确的 CHECK 约束或格式不匹配，保守地运行迁移
-                console.warn('[Migrations] Check for VNC in connections.type: Could not parse CHECK constraint from SQL. Assuming migration is needed.');
+                logger.warn('无法解析 connections.type 的 VNC CHECK 约束，将执行迁移');
                 return true;
             }
-            console.warn('[Migrations] Check for VNC in connections.type: Could not get table create SQL. Assuming migration is needed.');
+            logger.warn('无法读取 connections 表定义，将执行 VNC 迁移');
             return true; // 如果表不存在或无法获取 SQL，则运行迁移
         },
         sql: `
@@ -302,7 +340,11 @@ const definedMigrations: Migration[] = [
             const jumpChainColumnExists = await columnExists(db, 'connections', 'jump_chain');
             const proxyTypeColumnExists = await columnExists(db, 'connections', 'proxy_type');
             return !jumpChainColumnExists || !proxyTypeColumnExists;
-        }
+        },
+        apply: async (db: Database): Promise<void> => {
+            await addColumnIfMissing(db, 'connections', 'jump_chain', 'jump_chain TEXT NULL');
+            await addColumnIfMissing(db, 'connections', 'proxy_type', 'proxy_type TEXT NULL');
+        },
     },
     {
         id: 10,
@@ -332,7 +374,23 @@ const definedMigrations: Migration[] = [
             );
 
             ALTER TABLE connections ADD COLUMN folder_id INTEGER NULL REFERENCES connection_folders(id) ON DELETE SET NULL;
-        `
+        `,
+        apply: async (db: Database): Promise<void> => {
+            await execMigrationSql(db, `
+                CREATE TABLE IF NOT EXISTS connection_folders (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT UNIQUE NOT NULL,
+                    created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                    updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+                );
+            `);
+            await addColumnIfMissing(
+                db,
+                'connections',
+                'folder_id',
+                'folder_id INTEGER NULL REFERENCES connection_folders(id) ON DELETE SET NULL',
+            );
+        },
     },
     {
         id: 12,
@@ -364,7 +422,20 @@ const definedMigrations: Migration[] = [
             UPDATE connection_folders
             SET sort_order = id
             WHERE sort_order = 0;
-        `
+        `,
+        apply: async (db: Database): Promise<void> => {
+            await addColumnIfMissing(db, 'connections', 'sort_order', 'sort_order INTEGER NOT NULL DEFAULT 0');
+            await addColumnIfMissing(
+                db,
+                'connection_folders',
+                'sort_order',
+                'sort_order INTEGER NOT NULL DEFAULT 0',
+            );
+            await execMigrationSql(db, `
+                UPDATE connections SET sort_order = id WHERE sort_order = 0;
+                UPDATE connection_folders SET sort_order = id WHERE sort_order = 0;
+            `);
+        },
     },
     {
         id: 14,
@@ -496,11 +567,127 @@ const definedMigrations: Migration[] = [
         id: 18,
         name: 'Add ownership for user-private resources and preferences',
         check: async (db: Database): Promise<boolean> => {
-            const userSettingsExist = await tableExists(db, 'user_settings');
-            const quickCommandOwnerExists = await columnExists(db, 'quick_commands', 'owner_user_id');
-            return !userSettingsExist || !quickCommandOwnerExists;
+            const requiredColumnList: Array<[string, string]> = [
+                ['command_history', 'owner_user_id'],
+                ['path_history', 'owner_user_id'],
+                ['quick_commands', 'owner_user_id'],
+                ['quick_command_tags', 'owner_user_id'],
+                ['favorite_paths', 'owner_user_id'],
+                ['terminal_themes', 'owner_user_id'],
+                ['audit_logs', 'actor_user_id'],
+            ];
+            const columnExistenceList = await Promise.all(
+                requiredColumnList.map(([tableName, columnName]) => columnExists(db, tableName, columnName)),
+            );
+            const tableExistenceList = await Promise.all([
+                tableExists(db, 'user_settings'),
+                tableExists(db, 'user_appearance_settings'),
+            ]);
+            const indexExistenceList = await Promise.all([
+                'idx_command_history_owner',
+                'idx_path_history_owner',
+                'idx_quick_commands_owner',
+                'idx_favorite_paths_owner',
+                'idx_terminal_themes_owner',
+                'idx_audit_logs_actor',
+            ].map(indexName => indexExists(db, indexName)));
+            return columnExistenceList.some(exists => !exists)
+                || tableExistenceList.some(exists => !exists)
+                || indexExistenceList.some(exists => !exists);
         },
         sql: migrateUserPrivateResourcesSQL,
+        apply: async (db: Database): Promise<void> => {
+            await addColumnIfMissing(
+                db,
+                'command_history',
+                'owner_user_id',
+                'owner_user_id INTEGER NULL REFERENCES users(id) ON DELETE CASCADE',
+            );
+            await addColumnIfMissing(
+                db,
+                'path_history',
+                'owner_user_id',
+                'owner_user_id INTEGER NULL REFERENCES users(id) ON DELETE CASCADE',
+            );
+            await addColumnIfMissing(
+                db,
+                'quick_commands',
+                'owner_user_id',
+                'owner_user_id INTEGER NULL REFERENCES users(id) ON DELETE CASCADE',
+            );
+            await addColumnIfMissing(
+                db,
+                'quick_command_tags',
+                'owner_user_id',
+                'owner_user_id INTEGER NULL REFERENCES users(id) ON DELETE CASCADE',
+            );
+            await addColumnIfMissing(
+                db,
+                'favorite_paths',
+                'owner_user_id',
+                'owner_user_id INTEGER NULL REFERENCES users(id) ON DELETE CASCADE',
+            );
+            await addColumnIfMissing(
+                db,
+                'terminal_themes',
+                'owner_user_id',
+                'owner_user_id INTEGER NULL REFERENCES users(id) ON DELETE CASCADE',
+            );
+            await addColumnIfMissing(
+                db,
+                'audit_logs',
+                'actor_user_id',
+                'actor_user_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL',
+            );
+            await execMigrationSql(db, `
+                UPDATE command_history SET owner_user_id = (SELECT MIN(id) FROM users) WHERE owner_user_id IS NULL;
+                UPDATE path_history SET owner_user_id = (SELECT MIN(id) FROM users) WHERE owner_user_id IS NULL;
+                UPDATE quick_commands SET owner_user_id = (SELECT MIN(id) FROM users) WHERE owner_user_id IS NULL;
+                UPDATE quick_command_tags SET owner_user_id = (SELECT MIN(id) FROM users) WHERE owner_user_id IS NULL;
+                UPDATE favorite_paths SET owner_user_id = (SELECT MIN(id) FROM users) WHERE owner_user_id IS NULL;
+                UPDATE terminal_themes SET owner_user_id = (SELECT MIN(id) FROM users)
+                WHERE owner_user_id IS NULL AND theme_type = 'user';
+
+                CREATE TABLE IF NOT EXISTS user_settings (
+                    user_id INTEGER NOT NULL,
+                    key TEXT NOT NULL,
+                    value TEXT NOT NULL,
+                    created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                    updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                    PRIMARY KEY (user_id, key),
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                );
+                CREATE TABLE IF NOT EXISTS user_appearance_settings (
+                    user_id INTEGER NOT NULL,
+                    key TEXT NOT NULL,
+                    value TEXT NOT NULL,
+                    created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                    updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                    PRIMARY KEY (user_id, key),
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                );
+
+                INSERT OR IGNORE INTO user_settings(user_id, key, value, created_at, updated_at)
+                SELECT users.id, settings.key, settings.value,
+                       COALESCE(settings.created_at, strftime('%s', 'now')),
+                       COALESCE(settings.updated_at, strftime('%s', 'now'))
+                FROM users CROSS JOIN settings
+                WHERE users.id = (SELECT MIN(id) FROM users);
+                INSERT OR IGNORE INTO user_appearance_settings(user_id, key, value, created_at, updated_at)
+                SELECT users.id, appearance.key, appearance.value,
+                       COALESCE(appearance.created_at, strftime('%s', 'now')),
+                       COALESCE(appearance.updated_at, strftime('%s', 'now'))
+                FROM users CROSS JOIN appearance_settings appearance
+                WHERE users.id = (SELECT MIN(id) FROM users);
+
+                CREATE INDEX IF NOT EXISTS idx_command_history_owner ON command_history(owner_user_id, timestamp);
+                CREATE INDEX IF NOT EXISTS idx_path_history_owner ON path_history(owner_user_id, timestamp);
+                CREATE INDEX IF NOT EXISTS idx_quick_commands_owner ON quick_commands(owner_user_id);
+                CREATE INDEX IF NOT EXISTS idx_favorite_paths_owner ON favorite_paths(owner_user_id);
+                CREATE INDEX IF NOT EXISTS idx_terminal_themes_owner ON terminal_themes(owner_user_id, theme_type);
+                CREATE INDEX IF NOT EXISTS idx_audit_logs_actor ON audit_logs(actor_user_id, timestamp);
+            `);
+        },
     },
     {
         id: 19,
@@ -538,7 +725,28 @@ const definedMigrations: Migration[] = [
     {
         id: 23,
         name: 'Add structured audit event fields',
-        check: async (db: Database): Promise<boolean> => !(await columnExists(db, 'audit_logs', 'request_id')),
+        check: async (db: Database): Promise<boolean> => {
+            const columnNameList = [
+                'request_id',
+                'actor_username',
+                'actor_role',
+                'source_ip',
+                'asset_id',
+                'session_id',
+                'result',
+            ];
+            const existenceList = await Promise.all(
+                columnNameList.map(columnName => columnExists(db, 'audit_logs', columnName)),
+            );
+            const indexNameList = [
+                'idx_audit_logs_actor_time',
+                'idx_audit_logs_asset_time',
+                'idx_audit_logs_session',
+                'idx_audit_logs_request',
+            ];
+            const indexExistenceList = await Promise.all(indexNameList.map(indexName => indexExists(db, indexName)));
+            return existenceList.some(exists => !exists) || indexExistenceList.some(exists => !exists);
+        },
         sql: `
             ALTER TABLE audit_logs ADD COLUMN request_id TEXT NULL;
             ALTER TABLE audit_logs ADD COLUMN actor_username TEXT NULL;
@@ -552,6 +760,21 @@ const definedMigrations: Migration[] = [
             CREATE INDEX IF NOT EXISTS idx_audit_logs_session ON audit_logs(session_id);
             CREATE INDEX IF NOT EXISTS idx_audit_logs_request ON audit_logs(request_id);
         `,
+        apply: async (db: Database): Promise<void> => {
+            await addColumnIfMissing(db, 'audit_logs', 'request_id', 'request_id TEXT NULL');
+            await addColumnIfMissing(db, 'audit_logs', 'actor_username', 'actor_username TEXT NULL');
+            await addColumnIfMissing(db, 'audit_logs', 'actor_role', 'actor_role TEXT NULL');
+            await addColumnIfMissing(db, 'audit_logs', 'source_ip', 'source_ip TEXT NULL');
+            await addColumnIfMissing(db, 'audit_logs', 'asset_id', 'asset_id INTEGER NULL');
+            await addColumnIfMissing(db, 'audit_logs', 'session_id', 'session_id TEXT NULL');
+            await addColumnIfMissing(db, 'audit_logs', 'result', "result TEXT NOT NULL DEFAULT 'success'");
+            await execMigrationSql(db, `
+                CREATE INDEX IF NOT EXISTS idx_audit_logs_actor_time ON audit_logs(actor_user_id, timestamp DESC);
+                CREATE INDEX IF NOT EXISTS idx_audit_logs_asset_time ON audit_logs(asset_id, timestamp DESC);
+                CREATE INDEX IF NOT EXISTS idx_audit_logs_session ON audit_logs(session_id);
+                CREATE INDEX IF NOT EXISTS idx_audit_logs_request ON audit_logs(request_id);
+            `);
+        },
     },
     {
         id: 24,
@@ -604,6 +827,164 @@ const definedMigrations: Migration[] = [
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             );
         `,
+    },
+    {
+        id: 26,
+        name: 'Add append-only audit hash chain',
+        sql: '',
+        check: async (db: Database): Promise<boolean> => {
+            if (!(await tableExists(db, 'audit_logs'))) return false;
+            const existenceList = await Promise.all([
+                columnExists(db, 'audit_logs', 'previous_hash'),
+                columnExists(db, 'audit_logs', 'entry_hash'),
+                triggerExists(db, 'audit_logs_prevent_update'),
+                triggerExists(db, 'audit_logs_prevent_delete'),
+            ]);
+            return existenceList.some(exists => !exists);
+        },
+        apply: async (db: Database): Promise<void> => {
+            await addColumnIfMissing(db, 'audit_logs', 'previous_hash', 'previous_hash TEXT NULL');
+            await addColumnIfMissing(db, 'audit_logs', 'entry_hash', 'entry_hash TEXT NULL');
+            await execMigrationSql(db, `
+                CREATE INDEX IF NOT EXISTS idx_audit_logs_entry_hash ON audit_logs(entry_hash);
+                CREATE TRIGGER IF NOT EXISTS audit_logs_prevent_update
+                BEFORE UPDATE ON audit_logs
+                BEGIN
+                    SELECT RAISE(ABORT, 'audit_logs are append-only');
+                END;
+                CREATE TRIGGER IF NOT EXISTS audit_logs_prevent_delete
+                BEFORE DELETE ON audit_logs
+                BEGIN
+                    SELECT RAISE(ABORT, 'audit_logs are append-only');
+                END;
+            `);
+        },
+    },
+    {
+        id: 27,
+        name: 'Allow encrypted Guacamole protocol recordings for remote desktop sessions',
+        sql: '',
+        check: async (db: Database): Promise<boolean> => {
+            const tableSql = await getTableCreateSQL(db, 'session_recordings');
+            return !tableSql || !(/protocol\s+TEXT[^)]*'RDP'[^)]*'VNC'/i.test(tableSql));
+        },
+        apply: async (db: Database): Promise<void> => {
+            if (!(await tableExists(db, 'session_recordings'))) {
+                await execMigrationSql(db, `
+                    CREATE TABLE session_recordings (
+                        id TEXT PRIMARY KEY,
+                        user_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL,
+                        username TEXT NULL,
+                        connection_id INTEGER NOT NULL,
+                        connection_name TEXT NOT NULL,
+                        protocol TEXT NOT NULL CHECK(protocol IN ('SSH', 'TELNET', 'RDP', 'VNC')),
+                        started_at INTEGER NOT NULL,
+                        ended_at INTEGER NULL,
+                        status TEXT NOT NULL CHECK(status IN ('active', 'completed', 'incomplete', 'failed')),
+                        relative_path TEXT NOT NULL UNIQUE,
+                        event_count INTEGER NOT NULL DEFAULT 0,
+                        byte_count INTEGER NOT NULL DEFAULT 0
+                    );
+                    CREATE INDEX idx_session_recordings_user_time
+                        ON session_recordings(user_id, started_at DESC);
+                    CREATE INDEX idx_session_recordings_asset_time
+                        ON session_recordings(connection_id, started_at DESC);
+                `);
+                return;
+            }
+            await execMigrationSql(db, `
+                CREATE TABLE session_recordings_next (
+                    id TEXT PRIMARY KEY,
+                    user_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL,
+                    username TEXT NULL,
+                    connection_id INTEGER NOT NULL,
+                    connection_name TEXT NOT NULL,
+                    protocol TEXT NOT NULL CHECK(protocol IN ('SSH', 'TELNET', 'RDP', 'VNC')),
+                    started_at INTEGER NOT NULL,
+                    ended_at INTEGER NULL,
+                    status TEXT NOT NULL CHECK(status IN ('active', 'completed', 'incomplete', 'failed')),
+                    relative_path TEXT NOT NULL UNIQUE,
+                    event_count INTEGER NOT NULL DEFAULT 0,
+                    byte_count INTEGER NOT NULL DEFAULT 0
+                );
+                INSERT INTO session_recordings_next (
+                    id, user_id, username, connection_id, connection_name, protocol,
+                    started_at, ended_at, status, relative_path, event_count, byte_count
+                ) SELECT
+                    id, user_id, username, connection_id, connection_name, protocol,
+                    started_at, ended_at, status, relative_path, event_count, byte_count
+                FROM session_recordings;
+                DROP TABLE session_recordings;
+                ALTER TABLE session_recordings_next RENAME TO session_recordings;
+                CREATE INDEX idx_session_recordings_user_time
+                    ON session_recordings(user_id, started_at DESC);
+                CREATE INDEX idx_session_recordings_asset_time
+                    ON session_recordings(connection_id, started_at DESC);
+            `);
+        },
+    },
+    {
+        id: 28,
+        name: 'Add full-text index for append-only audit log search',
+        sql: '',
+        check: async (db: Database): Promise<boolean> => {
+            if (!(await tableExists(db, 'audit_logs'))) return false;
+            return !(await tableExists(db, 'audit_logs_fts'))
+                || !(await triggerExists(db, 'audit_logs_fts_after_insert'));
+        },
+        apply: async (db: Database): Promise<void> => {
+            // Some early partially-applied databases recorded migration 23 even
+            // though their audit table missed optional searchable columns.
+            // Repair them before creating an external-content FTS index.
+            await addColumnIfMissing(db, 'audit_logs', 'details', 'details TEXT NULL');
+            await addColumnIfMissing(db, 'audit_logs', 'actor_username', 'actor_username TEXT NULL');
+            await addColumnIfMissing(db, 'audit_logs', 'source_ip', 'source_ip TEXT NULL');
+            await addColumnIfMissing(db, 'audit_logs', 'request_id', 'request_id TEXT NULL');
+            await addColumnIfMissing(db, 'audit_logs', 'session_id', 'session_id TEXT NULL');
+            await execMigrationSql(db, `
+                CREATE VIRTUAL TABLE IF NOT EXISTS audit_logs_fts USING fts5(
+                    details,
+                    actor_username,
+                    source_ip,
+                    request_id,
+                    session_id,
+                    content='audit_logs',
+                    content_rowid='id'
+                );
+                INSERT INTO audit_logs_fts(
+                    rowid, details, actor_username, source_ip, request_id, session_id
+                )
+                SELECT id, details, actor_username, source_ip, request_id, session_id
+                FROM audit_logs
+                WHERE NOT EXISTS (SELECT 1 FROM audit_logs_fts LIMIT 1);
+                CREATE TRIGGER IF NOT EXISTS audit_logs_fts_after_insert
+                AFTER INSERT ON audit_logs
+                BEGIN
+                    INSERT INTO audit_logs_fts(
+                        rowid, details, actor_username, source_ip, request_id, session_id
+                    ) VALUES (
+                        NEW.id, NEW.details, NEW.actor_username, NEW.source_ip, NEW.request_id, NEW.session_id
+                    );
+                END;
+            `);
+        },
+    },
+    {
+        id: 29,
+        name: 'Anchor session recording batch hash chains in the recording index',
+        sql: '',
+        check: async (db: Database): Promise<boolean> => {
+            if (!(await tableExists(db, 'session_recordings'))) return false;
+            const columnList = await Promise.all([
+                columnExists(db, 'session_recordings', 'recording_chain_hash'),
+                columnExists(db, 'session_recordings', 'recording_batch_count'),
+            ]);
+            return columnList.some(exists => !exists);
+        },
+        apply: async (db: Database): Promise<void> => {
+            await addColumnIfMissing(db, 'session_recordings', 'recording_chain_hash', 'recording_chain_hash TEXT NULL');
+            await addColumnIfMissing(db, 'session_recordings', 'recording_batch_count', 'recording_batch_count INTEGER NOT NULL DEFAULT 0');
+        },
     }
 ];
 
@@ -614,49 +995,58 @@ const definedMigrations: Migration[] = [
  */
 export const runMigrations = (db: Database): Promise<void> => {
     return new Promise((resolve, reject) => {
-        console.log('[Migrations] 开始检查和应用数据库迁移...');
+        logger.info('开始检查和应用数据库迁移');
 
         db.serialize(() => {
             // 步骤 1: 确保 migrations 表存在
             db.run(createMigrationsTableSQL, (err) => {
                 if (err) {
-                    console.error('[Migrations] 创建 migrations 表失败:', err);
+                    logger.error('创建 migrations 表失败', { error: err });
                     return reject(new Error(`创建 migrations 表失败: ${err.message}`));
                 }
-                console.log('[Migrations] migrations 表已确保存在。');
+                logger.info('migrations 表已确保存在');
 
-                // 步骤 2: 获取当前数据库版本 (已应用的最大迁移 ID)
-                db.get('SELECT MAX(id) as currentVersion FROM migrations', (err, row: { currentVersion: number | null }) => {
+                // 步骤 2: 读取全部已应用迁移。不能仅依赖最大 ID；历史恢复可能缺少中间记录。
+                db.all('SELECT id FROM migrations', (err, rowList: Array<{ id: number }>) => {
                     if (err) {
-                        console.error('[Migrations] 查询当前数据库版本失败:', err);
+                        logger.error('查询当前数据库版本失败', { error: err });
                         return reject(new Error(`查询当前数据库版本失败: ${err.message}`));
                     }
 
-                    const currentVersion = row?.currentVersion ?? 0; // 如果表为空或没有记录，则认为版本为 0
-                    console.log(`[Migrations] 当前数据库版本: ${currentVersion}`);
+                    const appliedMigrationIdSet = new Set(rowList.map(row => row.id));
+                    const currentVersion = Math.max(0, ...appliedMigrationIdSet);
+                    // Early releases recorded only their latest baseline version. Preserve that
+                    // format while still detecting every gap introduced after the baseline.
+                    const legacyBaselineVersion = rowList.length > 0
+                        ? Math.min(...appliedMigrationIdSet)
+                        : 0;
+                    logger.info('当前数据库版本', { currentVersion });
 
                     // 步骤 3: 确定需要应用的迁移
                     const migrationsToApply = definedMigrations
-                        .filter(m => m.id > currentVersion)
+                        .filter(m => m.id > legacyBaselineVersion && !appliedMigrationIdSet.has(m.id))
                         .sort((a, b) => a.id - b.id); // 确保按 ID 升序应用
 
                     if (migrationsToApply.length === 0) {
-                        console.log('[Migrations] 数据库已是最新版本，无需迁移。');
+                        logger.info('数据库已是最新版本，无需迁移');
                         return resolve();
                     }
 
-                    console.log(`[Migrations] 发现 ${migrationsToApply.length} 个新迁移需要应用:`, migrationsToApply.map(m => `  #${m.id}: ${m.name}`));
+                    logger.info('发现待应用迁移', {
+                        count: migrationsToApply.length,
+                        migrationList: migrationsToApply.map(m => ({ id: m.id, name: m.name })),
+                    });
 
                     // 步骤 4: 使用 async/await 方式按顺序应用迁移
                     const applyMigrationsSequentially = async () => {
                         for (const migration of migrationsToApply) { // 使用 for...of 循环
-                            console.log(`[Migrations] 应用迁移 #${migration.id}: ${migration.name}...`);
+                            logger.info('应用迁移', { migrationId: migration.id, migrationName: migration.name });
 
                             // 开始事务
                             await new Promise<void>((resolveTx, rejectTx) => {
                                 db.run('BEGIN TRANSACTION', (beginErr) => {
                                     if (beginErr) {
-                                        console.error(`[Migrations] 开始迁移 #${migration.id} 事务失败:`, beginErr);
+                                        logger.error('开始迁移事务失败', { migrationId: migration.id, error: beginErr });
                                         rejectTx(new Error(`开始迁移 #${migration.id} 事务失败: ${beginErr.message}`));
                                     } else {
                                         resolveTx();
@@ -668,39 +1058,30 @@ export const runMigrations = (db: Database): Promise<void> => {
                                 // 步骤 4.1: 执行前置检查 (如果存在)
                                 let needsSqlExecution = true;
                                 if (migration.check) {
-                                    console.log(`[Migrations] 执行迁移 #${migration.id} 的前置检查...`);
+                                    logger.info('执行迁移前置检查', { migrationId: migration.id });
                                     needsSqlExecution = await migration.check(db);
-                                    console.log(`[Migrations] 迁移 #${migration.id} 前置检查结果: ${needsSqlExecution ? '需要执行 SQL' : '跳过 SQL 执行'}`);
+                                    logger.info('迁移前置检查完成', { migrationId: migration.id, needsSqlExecution });
                                 }
 
                                 if (needsSqlExecution) {
                                     // 步骤 4.2: 执行迁移 SQL
-                                    console.log(`[Migrations] 执行迁移 #${migration.id} 的 SQL...`);
-                                    await new Promise<void>((resolveSql, rejectSql) => {
-                                        db.exec(migration.sql, (execErr) => {
-                                            if (execErr) {
-                                                // 特别处理 "duplicate column name" 错误
-                                                if (execErr.message.includes('duplicate column name')) {
-                                                    console.warn(`[Migrations] 迁移 #${migration.id} SQL 执行时出现 'duplicate column name' 错误，视为可接受并继续。`);
-                                                    resolveSql();
-                                                } else {
-                                                    console.error(`[Migrations] 执行迁移 #${migration.id} SQL 失败:`, execErr);
-                                                    rejectSql(execErr);
-                                                }
-                                            } else {
-                                                resolveSql();
-                                            }
-                                        });
-                                    });
+                                    logger.info('执行迁移 SQL', { migrationId: migration.id });
+                                    try {
+                                        if (migration.apply) await migration.apply(db);
+                                        else await execMigrationSql(db, migration.sql);
+                                    } catch (execError) {
+                                        logger.error('执行迁移 SQL 失败', { migrationId: migration.id, error: execError });
+                                        throw execError;
+                                    }
                                 }
 
                                 // 步骤 4.3: 记录迁移到 migrations 表
-                                console.log(`[Migrations] 记录迁移 #${migration.id} 到 migrations 表...`);
+                                logger.info('记录迁移到 migrations 表', { migrationId: migration.id });
                                 const insertSQL = 'INSERT INTO migrations (id, name, applied_at) VALUES (?, ?, strftime(\'%s\', \'now\'))';
                                 await new Promise<void>((resolveInsert, rejectInsert) => {
                                     db.run(insertSQL, [migration.id, migration.name], (insertErr) => {
                                         if (insertErr) {
-                                            console.error(`[Migrations] 记录迁移 #${migration.id} 到 migrations 表失败:`, insertErr);
+                                            logger.error('记录迁移到 migrations 表失败', { migrationId: migration.id, error: insertErr });
                                             rejectInsert(insertErr);
                                         } else {
                                             resolveInsert();
@@ -709,14 +1090,14 @@ export const runMigrations = (db: Database): Promise<void> => {
                                 });
 
                                 // 步骤 4.4: 提交事务
-                                console.log(`[Migrations] 提交迁移 #${migration.id} 事务...`);
+                                logger.info('提交迁移事务', { migrationId: migration.id });
                                 await new Promise<void>((resolveCommit, rejectCommit) => {
                                     db.run('COMMIT', (commitErr) => {
                                         if (commitErr) {
-                                            console.error(`[Migrations] 提交迁移 #${migration.id} 事务失败:`, commitErr);
+                                            logger.error('提交迁移事务失败', { migrationId: migration.id, error: commitErr });
                                             rejectCommit(commitErr);
                                         } else {
-                                            console.log(`[Migrations] 迁移 #${migration.id}: ${migration.name} 应用成功 (SQL 可能已跳过)。`);
+                                            logger.info('迁移应用成功', { migrationId: migration.id, migrationName: migration.name });
                                             resolveCommit();
                                         }
                                     });
@@ -724,10 +1105,10 @@ export const runMigrations = (db: Database): Promise<void> => {
 
                             } catch (migrationStepError: any) {
                                 // 捕获 check, exec, insert 或 commit 中的任何错误
-                                console.error(`[Migrations] 迁移 #${migration.id} 步骤失败，正在回滚事务...`);
+                                logger.error('迁移步骤失败，正在回滚事务', { migrationId: migration.id, error: migrationStepError });
                                 await new Promise<void>((resolveRollback) => { // No reject needed for rollback itself
                                     db.run('ROLLBACK', (rollbackErr) => {
-                                        if (rollbackErr) console.error(`[Migrations] 回滚迁移 #${migration.id} 事务失败:`, rollbackErr);
+                                        if (rollbackErr) logger.error('回滚迁移事务失败', { migrationId: migration.id, error: rollbackErr });
                                         // 拒绝整个迁移过程
                                         reject(new Error(`迁移 #${migration.id} 失败: ${migrationStepError.message}`));
                                         resolveRollback(); // Indicate rollback attempt finished
@@ -738,7 +1119,7 @@ export const runMigrations = (db: Database): Promise<void> => {
                         } 
 
                         // 所有迁移成功应用
-                        console.log('[Migrations] 所有新迁移已成功应用！');
+                        logger.info('所有新迁移已成功应用');
                         resolve();
 
                     };

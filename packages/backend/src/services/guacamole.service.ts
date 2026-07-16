@@ -1,15 +1,13 @@
 import axios from 'axios';
 import { ConnectionWithTags } from '../types/connection.types';
+import { createLogger } from '../logging/logger';
+
+const logger = createLogger('GuacamoleService');
 
 // 统一远程桌面网关服务的 Base URL
 const REMOTE_GATEWAY_API_BASE = process.env.DEPLOYMENT_MODE === 'local'
     ? process.env.REMOTE_GATEWAY_API_BASE_LOCAL || 'http://localhost:9090'
     : process.env.REMOTE_GATEWAY_API_BASE_DOCKER || 'http://remote-gateway:9090';
-
-console.log(`[GuacamoleService] DEPLOYMENT_MODE: ${process.env.DEPLOYMENT_MODE}`);
-console.log(`[GuacamoleService] Using Remote Gateway API Base (Local): ${process.env.REMOTE_GATEWAY_API_BASE_LOCAL}`);
-console.log(`[GuacamoleService] Using Remote Gateway API Base (Docker): ${process.env.REMOTE_GATEWAY_API_BASE_DOCKER}`);
-console.log(`[GuacamoleService] Effective Remote Gateway API Base: ${REMOTE_GATEWAY_API_BASE}`);
 
 interface TokenResponse {
     token: string;
@@ -37,14 +35,15 @@ export const getRemoteDesktopToken = async (
     width?: number,
     height?: number,
     dpi?: string, // DPI 主要用于 RDP
-    displayOptions: RemoteDesktopDisplayOptions = {}
+    displayOptions: RemoteDesktopDisplayOptions = {},
+    requestId?: string,
 ): Promise<string> => {
     const gatewaySharedSecret = process.env.REMOTE_GATEWAY_SHARED_SECRET;
     if (!gatewaySharedSecret || gatewaySharedSecret.length < 32) {
         throw new Error('REMOTE_GATEWAY_SHARED_SECRET 未配置或长度不足。');
     }
     if ((protocol === 'rdp' || protocol === 'vnc') && connection.auth_method === 'password' && !decryptedPassword) {
-        console.warn(`[GuacamoleService:getRemoteDesktopToken] ${protocol.toUpperCase()} connection ${connection.id} uses password auth but password decryption failed or password not provided.`);
+        logger.warn('远程桌面连接缺少密码认证信息', { protocol, connectionId: connection.id });
         throw new Error(`${protocol.toUpperCase()} 连接使用密码认证，但密码解密失败或未提供密码。`);
     }
     
@@ -63,7 +62,7 @@ export const getRemoteDesktopToken = async (
 
     if (protocol === 'rdp') {
         if (!connection.username) {
-             console.warn(`[GuacamoleService:getRemoteDesktopToken] RDP connection ${connection.id} is missing username.`);
+             logger.warn('RDP 连接缺少用户名', { connectionId: connection.id });
              // 对于RDP，用户名通常是必需的，但让网关决定是否可以为空
         }
         connectionConfig.username = connection.username || ''; // RDP 通常需要用户名
@@ -87,22 +86,25 @@ export const getRemoteDesktopToken = async (
     };
 
     const tokenUrl = `${REMOTE_GATEWAY_API_BASE}/api/remote-desktop/token`;
-    console.log(`[GuacamoleService:getRemoteDesktopToken] Calling Remote Gateway API: ${tokenUrl} for protocol ${protocol}, connection ${connection.id}`);
+    logger.info('正在请求远程桌面网关令牌', { protocol, connectionId: connection.id });
 
     try {
         const response = await axios.post<TokenResponse>(tokenUrl, requestBody, {
             timeout: 10000,
-            headers: { 'x-fantetic-gateway-secret': gatewaySharedSecret },
+            headers: {
+                'x-fantetic-gateway-secret': gatewaySharedSecret,
+                ...(requestId ? { 'x-request-id': requestId } : {}),
+            },
         });
 
         if (response.status !== 200 || !response.data?.token) {
-            console.error(`[GuacamoleService:getRemoteDesktopToken] ${protocol.toUpperCase()} backend API call failed or returned invalid data. Status: ${response.status}`, response.data);
+            logger.error('远程桌面网关返回了无效令牌', { protocol, connectionId: connection.id, status: response.status });
             throw new Error(`从 ${protocol.toUpperCase()} 后端获取令牌失败。`);
         }
-        console.log(`[GuacamoleService:getRemoteDesktopToken] Received Guacamole token from ${protocol.toUpperCase()} backend for connection ${connection.id}`);
+        logger.info('已取得远程桌面网关令牌', { protocol, connectionId: connection.id });
         return response.data.token;
     } catch (error: any) {
-        console.error(`[GuacamoleService:getRemoteDesktopToken] Error calling ${protocol.toUpperCase()} backend for connection ${connection.id}:`, error.message);
+        logger.error('调用远程桌面网关失败', { protocol, connectionId: connection.id, error });
         if (axios.isAxiosError(error) && error.response) {
             throw new Error(`调用 ${protocol.toUpperCase()} 后端服务失败 (状态: ${error.response.status}): ${error.response.data?.message || error.message}`);
         }

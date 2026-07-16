@@ -84,6 +84,7 @@ import apiClient from '../utils/apiClient'; // 使用统一的 apiClient
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '../stores/auth.store'; // *** 导入 Auth Store ***
+import { resolveSetupErrorKey } from '../utils/apiError';
 
 const { t } = useI18n();
 const router = useRouter();
@@ -132,15 +133,8 @@ const handleSetup = async () => {
     router.push('/login');
   } catch (err: any) {
     console.error('Setup failed:', err);
-    if (err.response?.data?.message) {
-      // 尝试从后端响应中获取更具体的错误信息
-      error.value = err.response.data.message;
-    } else if (err.message) {
-       error.value = err.message;
-    } else {
-       error.value = t('setup.error.generic');
-    }
-     isLoading.value = false; // Re-enable button on error
+    error.value = t(resolveSetupErrorKey(err));
+    isLoading.value = false; // Re-enable button on error
   }
   // Removed finally block setting isLoading to false on success to keep button disabled
 };

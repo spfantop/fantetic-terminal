@@ -19,6 +19,9 @@ export type AuditLogActionType =
   | 'CONNECTION_GRANT_DELETED'
   | 'BACKUP_CREATED'
   | 'BACKUP_RESTORE_SCHEDULED'
+  | 'SSH_KEY_CREATED'
+  | 'SSH_KEY_UPDATED'
+  | 'SSH_KEY_DELETED'
   | '2FA_ENABLED'
   | '2FA_DISABLED'
   // Passkey Events

@@ -239,8 +239,21 @@
         "captchaRequired": "请完成 CAPTCHA 验证。",
         "usernameRequiredForPasskey": "使用 Passkey 需要输入用户名。",
         "passkeyAuthOptionsFailed": "从服务器获取 Passkey 认证选项失败。",
-        "passkeyAuthFailed": "Passkey 认证失败。请重试或使用密码登录。"
+        "passkeyAuthFailed": "Passkey 认证失败。请重试或使用密码登录。",
+        "serviceUnavailable": "暂时无法连接服务，请检查网络后重试。",
+        "usernamePasswordRequired": "请输入用户名和密码。",
+        "captchaRejected": "CAPTCHA 验证失败，请重试。",
+        "captchaVerificationUnavailable": "CAPTCHA 验证服务暂不可用，请稍后重试。",
+        "invalidCredentials": "用户名或密码错误。",
+        "accountDisabled": "该账号已被禁用。",
+      "requestFailed": "登录请求失败，请稍后重试。",
+      "twoFactorChallengeInvalid": "验证会话无效，请重新登录。",
+      "twoFactorTokenRequired": "请输入两步验证码。",
+      "twoFactorTokenInvalid": "两步验证码无效，请重试。",
+      "twoFactorVerificationFailed": "两步验证失败，请稍后重试。"
     },
+    "retry": "重试",
+    "retrying": "正在重试...",
     "recaptchaV3Notice": "此网站受 reCAPTCHA 保护，并适用 Google 隐私政策和服务条款。"
   },
   "connections": {
@@ -532,6 +545,11 @@
     "title": "文件编辑器"
   },
   "fileManager": {
+    "fileList": "文件列表",
+    "accessibility": {
+      "sortColumn": "按{column}排序",
+      "resizeColumn": "调整{column}列宽"
+    },
     "modalTitle": "文件管理器",
     "currentPath": "当前路径",
     "loading": "正在加载目录...",
@@ -560,7 +578,9 @@
       "cut": "剪切",
       "paste": "粘贴",
       "openEditor": "打开编辑器",
-      "copyPath": "复制路径"
+      "copyPath": "复制路径",
+      "multiSelect": "进入多选模式",
+      "exitMultiSelect": "退出多选模式"
     },
 "contextMenu": {
       "compress": "压缩",
@@ -842,6 +862,12 @@
       "success": "密码修改成功！",
       "error": {
         "passwordsDoNotMatch": "新密码和确认密码不匹配。",
+        "fieldsRequired": "请输入当前密码和新密码。",
+        "unauthenticated": "登录状态无效，请重新登录。",
+        "tooShort": "新密码至少需要 8 位。",
+        "mustDiffer": "新密码不能与当前密码相同。",
+        "userNotFound": "用户不存在，请重新登录。",
+        "currentPasswordInvalid": "当前密码不正确。",
         "generic": "修改密码失败，请稍后重试。"
       }
     },
@@ -870,9 +896,15 @@
       },
       "error": {
         "setupFailed": "获取两步验证设置信息失败。",
+        "unauthenticated": "登录状态无效，请重新登录。",
+        "alreadyEnabled": "两步验证已启用。如需重置，请先禁用。",
+        "setupMissing": "未找到待验证的设置，请重新开始。",
         "codeRequired": "请输入验证码。",
         "verificationFailed": "验证码无效或已过期。",
+        "activationFailed": "启用两步验证失败，请稍后重试。",
         "passwordRequiredForDisable": "需要输入当前密码才能禁用。",
+        "userNotFound": "用户不存在，请重新登录。",
+        "currentPasswordInvalid": "当前密码不正确。",
         "disableFailed": "禁用两步验证失败。"
       }
     },
@@ -943,6 +975,8 @@
         "userNotLoggedIn": "用户未登录或用户名不可用。",
         "registrationCancelled": "Passkey 注册已取消。",
         "registrationFailed": "Passkey 注册失败。",
+        "nameUpdateFailed": "更新 Passkey 名称失败，请重试。",
+        "deleteFailedInvalidId": "删除失败：凭据 ID 无效。",
         "deleteFailedGeneral": "删除 Passkey 失败。请重试。"
       },
       "success": {
@@ -1082,6 +1116,17 @@
       "error": {
         "saveFailed": "保存状态监控设置失败。",
         "invalidInterval": "刷新间隔必须是正整数。"
+      }
+    },
+    "sessionRecording": {
+      "title": "会话录像",
+      "description": "关闭后不再为新建立的 SSH、Telnet、RDP 和 VNC 会话采集录像；已存录像不受影响。",
+      "enableLabel": "启用新会话录像",
+      "success": {
+        "saved": "会话录像设置已保存。"
+      },
+      "error": {
+        "saveFailed": "保存会话录像设置失败。"
       }
     },
     "workspace": {
@@ -1402,6 +1447,7 @@
     "title": "审计日志",
     "searchPlaceholder": "搜索详细信息...",
     "noLogs": "未找到审计日志记录。",
+    "errors": { "fetchFailed": "获取审计日志失败。" },
     "startDate": "开始时间", "endDate": "结束时间", "total": "共 {count} 条", "detailTitle": "审计详情", "openRelatedRecordings": "查看同一操作者附近的录像", "correlationHint": "录像与会话 ID 尚无直接键关联，将按操作者和事件时间窗口筛选。", "selectHint": "选择一条日志查看完整上下文。",
     "table": {
       "timestamp": "时间戳",
@@ -1528,7 +1574,7 @@
     "textInputPlaceholder": "在此输入文本以发送到 VNC",
     "sendButtonTitle": "将文本发送到 VNC (模拟键盘输入)",
     "errors": {
-      "simulateInputError": "模拟键盘输入时出错: {error}"
+      "simulateInputError": "模拟键盘输入时出错。"
     }
   },
   "commandInputBar": {
@@ -1684,7 +1730,9 @@
     "error": {
       "passwordsDoNotMatch": "两次输入的密码不一致。",
       "fieldsRequired": "用户名和密码不能为空。",
-      "generic": "设置过程中发生错误，请检查服务器日志。"
+      "passwordTooShort": "密码至少需要 8 位。",
+      "alreadyCompleted": "初始设置已完成，不能重复创建管理员账号。",
+      "generic": "设置过程中发生错误，请稍后重试。"
     }
   },
   "focusSwitcher": {
@@ -2009,6 +2057,7 @@
     }
   },
 "favoritePaths": {
+    "open": "打开收藏路径",
     "addEditForm": {
       "validation": {
         "pathRequired": "路径不能为空。"
@@ -2053,10 +2102,12 @@
     "empty": "暂无会话录像。",
     "loadFailed": "加载会话录像失败。",
     "playFailed": "读取或回放会话录像失败。",
+    "remoteDesktopPlaybackFailed": "远程桌面协议录像无法回放。",
     "play": "回放", "delete": "删除录像", "confirmDelete": "确定删除“{name}”的会话录像吗？此操作不可恢复。", "deleteFailed": "删除会话录像失败。",
     "stop": "停止",
     "speed": "速度",
     "player": "终端会话回放器", "searchPlaceholder": "连接或用户名", "startedAfter": "开始时间", "total": "共 {count} 条", "duration": "时长", "events": "事件", "eventCount": "{count} 个事件", "size": "大小", "preparing": "正在准备回放…", "timeline": "回放时间轴", "selectHint": "选择一条录像查看详情并回放。",
+    "integrity": { "invalid": "录像完整性校验失败，已禁止回放。" },
     "status": { "active": "进行中", "completed": "已完成", "incomplete": "不完整", "failed": "失败" }
   }
 }

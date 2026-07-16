@@ -5,7 +5,12 @@ import * as GuacamoleService from '../services/guacamole.service';
 import * as ImportExportService from '../services/import-export.service';
 import * as ConnectionRepository from './connection.repository';
 import { remoteDesktopGrantRegistry } from '../websocket/remote-desktop-grant';
+import { sendApiError } from '../security/api-error-envelope';
+import { resolveRemoteDesktopTokenFailure } from './remote-desktop-token-error';
+import { createLogger } from '../logging/logger';
+import { readAuditContext } from '../audit/audit-context';
 
+const logger = createLogger('ConnectionsController');
 
 
 /**
@@ -18,7 +23,7 @@ export const createConnection = async (req: Request, res: Response): Promise<voi
         res.status(201).json({ message: '连接创建成功。', connection: newConnection });
 
     } catch (error: any) {
-        console.error('Controller: 创建连接时发生错误:', error);
+        logger.error('创建连接时发生错误', { error });
         if (error.message.includes('缺少') || error.message.includes('需要提供')) {
              res.status(400).json({ message: error.message });
         } else {
@@ -35,7 +40,7 @@ export const getConnections = async (req: Request, res: Response): Promise<void>
         const connections = await ConnectionService.getAllConnections(req.authorization);
         res.status(200).json(connections);
     } catch (error: any) {
-        console.error('Controller: 获取连接列表时发生错误:', error);
+        logger.error('获取连接列表时发生错误', { error });
         res.status(500).json({ message: error.message || '获取连接列表时发生内部服务器错误。' });
     }
 };
@@ -45,7 +50,7 @@ export const getConnectionFolders = async (req: Request, res: Response): Promise
         const folders = await ConnectionService.getAllConnectionFolders(req.authorization!);
         res.status(200).json(folders);
     } catch (error: any) {
-        console.error('Controller: 获取连接文件夹列表时发生错误:', error);
+        logger.error('获取连接文件夹列表时发生错误', { error });
         res.status(500).json({ message: error.message || '获取连接文件夹列表时发生内部服务器错误。' });
     }
 };
@@ -60,7 +65,7 @@ export const createConnectionFolder = async (req: Request, res: Response): Promi
         const folder = await ConnectionService.createConnectionFolder(name, parent_id, req.authorization!);
         res.status(201).json({ message: '文件夹创建成功。', folder });
     } catch (error: any) {
-        console.error('Controller: 创建连接文件夹时发生错误:', error);
+        logger.error('创建连接文件夹时发生错误', { error });
         res.status(500).json({ message: error.message || '创建连接文件夹时发生内部服务器错误。' });
     }
 };
@@ -84,7 +89,7 @@ export const updateConnectionFolder = async (req: Request, res: Response): Promi
         }
         res.status(200).json({ message: '文件夹更新成功。', folder });
     } catch (error: any) {
-        console.error(`Controller: 更新连接文件夹 ${req.params.folderId} 时发生错误:`, error);
+        logger.error('更新连接文件夹时发生错误', { folderId: req.params.folderId, error });
         res.status(500).json({ message: error.message || '更新连接文件夹时发生内部服务器错误。' });
     }
 };
@@ -103,7 +108,7 @@ export const deleteConnectionFolder = async (req: Request, res: Response): Promi
         }
         res.status(200).json({ message: '文件夹删除成功。' });
     } catch (error: any) {
-        console.error(`Controller: 删除连接文件夹 ${req.params.folderId} 时发生错误:`, error);
+        logger.error('删除连接文件夹时发生错误', { folderId: req.params.folderId, error });
         res.status(500).json({ message: error.message || '删除连接文件夹时发生内部服务器错误。' });
     }
 };
@@ -114,7 +119,7 @@ export const reorderConnectionFolders = async (req: Request, res: Response): Pro
         const folders = await ConnectionService.reorderConnectionFolders(items, req.authorization!);
         res.status(200).json({ message: '文件夹排序更新成功。', folders });
     } catch (error: any) {
-        console.error('Controller: 更新连接文件夹排序时发生错误:', error);
+        logger.error('更新连接文件夹排序时发生错误', { error });
         const status = error.message?.includes('无效') || error.message?.includes('需要提供') ? 400 : 500;
         res.status(status).json({ message: error.message || '更新文件夹排序时发生内部服务器错误。' });
     }
@@ -126,7 +131,7 @@ export const reorderConnections = async (req: Request, res: Response): Promise<v
         const connections = await ConnectionService.reorderConnections(items, req.authorization!);
         res.status(200).json({ message: '服务器排序更新成功。', connections });
     } catch (error: any) {
-        console.error('Controller: 更新连接排序时发生错误:', error);
+        logger.error('更新连接排序时发生错误', { error });
         const status = error.message?.includes('无效') || error.message?.includes('需要提供') ? 400 : 500;
         res.status(status).json({ message: error.message || '更新服务器排序时发生内部服务器错误。' });
     }
@@ -151,7 +156,7 @@ export const getConnectionById = async (req: Request, res: Response): Promise<vo
             res.status(200).json(connection);
         }
     } catch (error: any) {
-        console.error(`Controller: 获取连接 ${req.params.id} 时发生错误:`, error);
+        logger.error('获取连接时发生错误', { connectionId: req.params.id, error });
         res.status(500).json({ message: error.message || '获取连接信息时发生内部服务器错误。' });
     }
 };
@@ -176,7 +181,7 @@ export const updateConnection = async (req: Request, res: Response): Promise<voi
             res.status(200).json({ message: '连接更新成功。', connection: updatedConnection });
         }
     } catch (error: any) {
-        console.error(`Controller: 更新连接 ${req.params.id} 时发生错误:`, error);
+        logger.error('更新连接时发生错误', { connectionId: req.params.id, error });
          if (error.message.includes('需要提供')) {
               res.status(400).json({ message: error.message });
          } else {
@@ -204,7 +209,7 @@ export const deleteConnection = async (req: Request, res: Response): Promise<voi
             res.status(200).json({ message: '连接删除成功。' });
         }
     } catch (error: any) {
-        console.error(`Controller: 删除连接 ${req.params.id} 时发生错误:`, error);
+        logger.error('删除连接时发生错误', { connectionId: req.params.id, error });
         res.status(500).json({ message: error.message || '删除连接时发生内部服务器错误。' });
     }
 };
@@ -226,7 +231,7 @@ export const testConnection = async (req: Request, res: Response): Promise<void>
         res.status(200).json({ success: true, message: '连接测试成功。', latency }); // 返回延迟
 
     } catch (error: any) {
-        console.error(`Controller: 测试连接 ${req.params.id} 时发生错误:`, error);
+        logger.error('测试连接时发生错误', { connectionId: req.params.id, error });
         res.status(500).json({ success: false, message: error.message || '测试连接时发生内部服务器错误。' });
     }
 };
@@ -262,7 +267,7 @@ export const testUnsavedConnection = async (req: Request, res: Response): Promis
         }
         // 如果同时提供了 ssh_key_id 和 private_key，优先使用 ssh_key_id (或者可以报错，这里选择优先)
         if (auth_method === 'key' && ssh_key_id && private_key) {
-             console.warn('[testUnsavedConnection] 同时提供了 ssh_key_id 和 private_key，将优先使用 ssh_key_id。');
+             logger.warn('测试未保存连接同时提供 SSH 密钥 ID 和私钥，将优先使用 SSH 密钥 ID');
              // 不需要额外操作，后续逻辑会处理
         }
 
@@ -303,7 +308,7 @@ export const testUnsavedConnection = async (req: Request, res: Response): Promis
         res.status(200).json({ success: true, message: '连接测试成功。', latency });
 
     } catch (error: any) {
-        console.error(`Controller: 测试未保存连接时发生错误:`, error);
+        logger.error('测试未保存连接时发生错误', { error });
         // SshService 会抛出包含具体原因的 Error
         res.status(500).json({ success: false, message: error.message || '测试连接时发生内部服务器错误。' });
     }
@@ -326,7 +331,7 @@ export const exportConnections = async (req: Request, res: Response): Promise<vo
         res.status(200).send(exportedData);
 
     } catch (error: any) {
-        console.error('Controller: 导出连接时发生错误:', error);
+        logger.error('导出连接时发生错误', { error });
         res.status(500).json({ message: error.message || '导出连接时发生内部服务器错误。' });
     }
 };
@@ -359,7 +364,7 @@ export const importConnections = async (req: Request, res: Response): Promise<vo
             });
         }
     } catch (error: any) {
-        console.error('Controller: 导入连接时发生错误:', error);
+        logger.error('导入连接时发生错误', { error });
         if (error.message.includes('解析 JSON 文件失败')) {
              res.status(400).json({ message: error.message });
         } else {
@@ -367,8 +372,6 @@ export const importConnections = async (req: Request, res: Response): Promise<vo
         }
     }
 };
-import axios from 'axios'; // axios 仍可能用于错误检查类型
-
 // RDP_BACKEND_API_BASE and VNC_BACKEND_API_BASE are now handled in GuacamoleService
 
 const ALLOWED_REMOTE_DESKTOP_COLOR_DEPTHS = new Set(['16', '24']);
@@ -391,6 +394,7 @@ const readRemoteDesktopDisplayOptions = (query: Request['query']) => ({
     forceLossless: normalizeRemoteDesktopBoolean(query.forceLossless),
 });
 
+
 /**
  * 获取 RDP 会话的 Guacamole 令牌 (通过调用 RDP 后端)
  * GET /api/v1/connections/:id/rdp-session
@@ -399,7 +403,7 @@ export const getRdpSessionToken = async (req: Request, res: Response): Promise<v
     try {
         const connectionId = parseInt(req.params.id, 10);
         if (isNaN(connectionId)) {
-            res.status(400).json({ message: '无效的连接 ID。' });
+            sendApiError(res, 400, 'connection.invalidId');
             return;
         }
 
@@ -407,7 +411,7 @@ export const getRdpSessionToken = async (req: Request, res: Response): Promise<v
         const connectionData = await ConnectionService.getConnectionWithDecryptedCredentials(connectionId);
 
         if (!connectionData) {
-            res.status(404).json({ message: '连接未找到。' });
+            sendApiError(res, 404, 'connection.notFound');
             return;
         }
 
@@ -415,7 +419,7 @@ export const getRdpSessionToken = async (req: Request, res: Response): Promise<v
 
         // 2. 验证连接类型是否为 RDP
         if (connection.type !== 'RDP') {
-            res.status(400).json({ message: '此连接类型不是 RDP。' });
+            sendApiError(res, 400, 'remoteDesktop.protocolMismatch');
             return;
         }
 
@@ -423,17 +427,17 @@ export const getRdpSessionToken = async (req: Request, res: Response): Promise<v
         try {
             const currentTimeSeconds = Math.floor(Date.now() / 1000);
             await ConnectionRepository.updateLastConnected(connectionId, currentTimeSeconds);
-            console.log(`[Controller:getRdpSessionToken] 已更新 RDP 连接 ${connectionId} 的 last_connected_at 为 ${currentTimeSeconds}`);
+            logger.info('已更新 RDP 连接最后连接时间', { connectionId, currentTimeSeconds });
         } catch (updateError) {
             // 记录更新时间戳的错误，但不阻止获取令牌的流程
-            console.error(`[Controller:getRdpSessionToken] 更新 RDP 连接 ${connectionId} 的 last_connected_at 时出错:`, updateError);
+            logger.error('更新 RDP 连接最后连接时间时出错', { connectionId, error: updateError });
         }
         // +++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
         // 3. 验证 RDP 连接是否使用密码认证
         if (connection.auth_method !== 'password' || !decryptedPassword) {
-             console.warn(`[Controller:getRdpSessionToken] RDP connection ${connectionId} does not use password auth or password decryption failed.`);
-             res.status(400).json({ message: 'RDP 连接需要使用密码认证，或密码解密失败。' });
+             logger.warn('RDP 连接未使用密码认证或密码解密失败', { connectionId });
+             sendApiError(res, 400, 'remoteDesktop.connectionConfigurationInvalid');
              return;
         }
 
@@ -445,47 +449,22 @@ export const getRdpSessionToken = async (req: Request, res: Response): Promise<v
         const rdpDpi = dpi ? dpi as string : undefined;
         const displayOptions = readRemoteDesktopDisplayOptions(req.query);
 
-        const guacamoleToken = await GuacamoleService.getRemoteDesktopToken('rdp', connection, decryptedPassword, rdpWidth, rdpHeight, rdpDpi, displayOptions);
+        const guacamoleToken = await GuacamoleService.getRemoteDesktopToken('rdp', connection, decryptedPassword, rdpWidth, rdpHeight, rdpDpi, displayOptions, readAuditContext()?.requestId);
         
-        console.log(`[Controller:getRdpSessionToken] Received Guacamole token via GuacamoleService for RDP connection ${connectionId}`);
+        logger.info('已为 RDP 连接获取 Guacamole 令牌', { connectionId });
 
         // 5. 将 Guacamole 令牌返回给前端
-        remoteDesktopGrantRegistry.register(guacamoleToken, req.authorization!.userId, connectionId);
+        remoteDesktopGrantRegistry.register(guacamoleToken, req.authorization!.userId, connectionId, {
+            protocol: 'RDP',
+            connectionName: connection.name || `RDP ${connectionId}`,
+            requestId: readAuditContext()?.requestId,
+        });
         res.status(200).json({ token: guacamoleToken });
 
-    } catch (error: any) {
-        console.error(`Controller: 获取 RDP 会话令牌时发生错误 (ID: ${req.params.id}):`, error.message);
-
-        let statusCode = 500;
-        let responseMessage = '获取 RDP 会话令牌时发生内部服务器错误。';
-
-        if (error.message.includes('调用 RDP 后端服务失败') || error.message.includes('从 RDP 后端获取令牌失败') || error.message.includes('调用 Remote Gateway API 时出错 (RDP)')) {
-            responseMessage = error.message;
-            if (error.message.includes('(状态: 4')) statusCode = 400;
-            else if (error.message.includes('(状态: 5')) statusCode = 502;
-            else statusCode = 503;
-        } else if (error.message.includes('RDP 连接需要使用密码认证') || error.message.includes('密码解密失败') || error.message.includes('RDP 连接使用密码认证，但密码解密失败或未提供密码')) {
-            responseMessage = error.message;
-            statusCode = 400;
-        } else if (error.message.includes('连接类型必须是 RDP')) {
-            responseMessage = error.message;
-            statusCode = 400;
-        }
-        else if (axios.isAxiosError(error)) {
-            responseMessage = '调用远程桌面网关服务时发生网络或请求错误。';
-            if (error.response) {
-                console.error('[Controller:getRdpSessionToken] Remote Gateway error response:', error.response.data);
-                responseMessage += ` (状态: ${error.response.status})`;
-                statusCode = error.response.status >= 500 ? 502 : 400;
-            } else if (error.request) {
-                 console.error('[Controller:getRdpSessionToken] No response from Remote Gateway.');
-                 responseMessage += ' (无法连接或超时)';
-                 statusCode = 504;
-            }
-        } else if (error.message.includes('解密失败')) {
-             responseMessage = '获取 RDP 会话令牌时发生内部错误（凭证处理失败）。';
-        }
-        res.status(statusCode).json({ message: responseMessage });
+    } catch (error: unknown) {
+        logger.error('获取 RDP 会话令牌时发生错误', { connectionId: req.params.id, error });
+        const failure = resolveRemoteDesktopTokenFailure(error);
+        sendApiError(res, failure.status, failure.code);
     }
 };
 
@@ -497,35 +476,35 @@ export const getVncSessionToken = async (req: Request, res: Response): Promise<v
     try {
         const connectionId = parseInt(req.params.id, 10);
         if (isNaN(connectionId)) {
-            res.status(400).json({ message: '无效的连接 ID。' });
+            sendApiError(res, 400, 'connection.invalidId');
             return;
         }
 
         const connectionData = await ConnectionService.getConnectionWithDecryptedCredentials(connectionId);
 
         if (!connectionData) {
-            res.status(404).json({ message: '连接未找到。' });
+            sendApiError(res, 404, 'connection.notFound');
             return;
         }
 
         const { connection, decryptedPassword } = connectionData;
 
         if (connection.type !== 'VNC') {
-            res.status(400).json({ message: '此连接类型不是 VNC。' });
+            sendApiError(res, 400, 'remoteDesktop.protocolMismatch');
             return;
         }
 
         try {
             const currentTimeSeconds = Math.floor(Date.now() / 1000);
             await ConnectionRepository.updateLastConnected(connectionId, currentTimeSeconds);
-            console.log(`[Controller:getVncSessionToken] 已更新 VNC 连接 ${connectionId} 的 last_connected_at 为 ${currentTimeSeconds}`);
+            logger.info('已更新 VNC 连接最后连接时间', { connectionId, currentTimeSeconds });
         } catch (updateError) {
-            console.error(`[Controller:getVncSessionToken] 更新 VNC 连接 ${connectionId} 的 last_connected_at 时出错:`, updateError);
+            logger.error('更新 VNC 连接最后连接时间时出错', { connectionId, error: updateError });
         }
 
         if (connection.auth_method !== 'password' || !decryptedPassword) {
-             console.warn(`[Controller:getVncSessionToken] VNC connection ${connectionId} does not use password auth or password decryption failed.`);
-             res.status(400).json({ message: 'VNC 连接需要使用密码认证，或密码解密失败。' });
+             logger.warn('VNC 连接未使用密码认证或密码解密失败', { connectionId });
+             sendApiError(res, 400, 'remoteDesktop.connectionConfigurationInvalid');
              return;
         }
 
@@ -534,46 +513,21 @@ export const getVncSessionToken = async (req: Request, res: Response): Promise<v
         const initialHeight = height ? parseInt(height as string, 10) : undefined;
         const displayOptions = readRemoteDesktopDisplayOptions(req.query);
 
-        const guacamoleToken = await GuacamoleService.getRemoteDesktopToken('vnc', connection, decryptedPassword, initialWidth, initialHeight, undefined, displayOptions);
+        const guacamoleToken = await GuacamoleService.getRemoteDesktopToken('vnc', connection, decryptedPassword, initialWidth, initialHeight, undefined, displayOptions, readAuditContext()?.requestId);
 
-        console.log(`[Controller:getVncSessionToken] Received Guacamole token via GuacamoleService for VNC connection ${connectionId} with size ${initialWidth}x${initialHeight}`);
+        logger.info('已为 VNC 连接获取 Guacamole 令牌', { connectionId, initialWidth, initialHeight });
         
-        remoteDesktopGrantRegistry.register(guacamoleToken, req.authorization!.userId, connectionId);
+        remoteDesktopGrantRegistry.register(guacamoleToken, req.authorization!.userId, connectionId, {
+            protocol: 'VNC',
+            connectionName: connection.name || `VNC ${connectionId}`,
+            requestId: readAuditContext()?.requestId,
+        });
         res.status(200).json({ token: guacamoleToken });
 
-    } catch (error: any) {
-        console.error(`Controller: 获取 VNC 会话令牌时发生错误 (ID: ${req.params.id}):`, error.message);
-
-        let statusCode = 500;
-        let responseMessage = '获取 VNC 会话令牌时发生内部服务器错误。';
-
-        if (error.message.includes('调用 VNC 后端服务失败') || error.message.includes('从 VNC 后端获取令牌失败') || error.message.includes('调用 Remote Gateway API 时出错 (VNC)')) {
-            responseMessage = error.message;
-            if (error.message.includes('(状态: 4')) statusCode = 400;
-            else if (error.message.includes('(状态: 5')) statusCode = 502;
-            else statusCode = 503;
-        } else if (error.message.includes('VNC 连接需要使用密码认证') || error.message.includes('密码解密失败') || error.message.includes('VNC 连接使用密码认证，但密码解密失败或未提供密码')) {
-            responseMessage = error.message;
-            statusCode = 400;
-        } else if (error.message.includes('连接类型必须是 VNC')) {
-            responseMessage = error.message;
-            statusCode = 400;
-        }
-        else if (axios.isAxiosError(error)) {
-            responseMessage = '调用远程桌面网关服务时发生网络或请求错误。';
-            if (error.response) {
-                console.error('[Controller:getVncSessionToken] Remote Gateway error response:', error.response.data);
-                responseMessage += ` (状态: ${error.response.status})`;
-                statusCode = error.response.status >= 500 ? 502 : 400;
-            } else if (error.request) {
-                 console.error('[Controller:getVncSessionToken] No response from Remote Gateway.');
-                 responseMessage += ' (无法连接或超时)';
-                 statusCode = 504;
-            }
-        } else if (error.message.includes('解密失败')) {
-             responseMessage = '获取 VNC 会话令牌时发生内部错误（凭证处理失败）。';
-        }
-        res.status(statusCode).json({ message: responseMessage });
+    } catch (error: unknown) {
+        logger.error('获取 VNC 会话令牌时发生错误', { connectionId: req.params.id, error });
+        const failure = resolveRemoteDesktopTokenFailure(error);
+        sendApiError(res, failure.status, failure.code);
     }
 };
 /**
@@ -598,7 +552,7 @@ export const cloneConnection = async (req: Request, res: Response): Promise<void
         res.status(201).json({ message: '连接克隆成功。', connection: clonedConnection });
 
     } catch (error: any) {
-        console.error(`Controller: 克隆连接 ${req.params.id} 时发生错误:`, error);
+        logger.error('克隆连接时发生错误', { connectionId: req.params.id, error });
         if (error.message.includes('未找到')) {
              res.status(404).json({ message: error.message });
         } else if (error.message.includes('名称已存在')) {
@@ -636,7 +590,7 @@ export const addTagToConnections = async (req: Request, res: Response): Promise<
         res.status(200).json({ message: '标签已成功添加到指定连接。' });
 
     } catch (error: any) {
-        console.error(`Controller: 为多个连接添加标签 ${req.body?.tag_id} 时发生错误:`, error);
+        logger.error('为多个连接添加标签时发生错误', { tagId: req.body?.tag_id, error });
         // 可以根据服务层抛出的错误类型返回更具体的错误码
         if (error.message.includes('标签 ID') && error.message.includes('不存在')) {
              res.status(400).json({ message: error.message }); // Bad request if tag doesn't exist
@@ -673,7 +627,7 @@ export const updateConnectionTags = async (req: Request, res: Response): Promise
             res.status(200).json({ message: '连接标签更新成功。' });
         }
     } catch (error: any) {
-        console.error(`Controller: 更新连接 ${req.params.id} 的标签时发生错误:`, error);
+        logger.error('更新连接标签时发生错误', { connectionId: req.params.id, error });
         if (error.message.includes('未找到')) {
              res.status(404).json({ message: error.message });
         } else {

@@ -15,6 +15,7 @@ const qualityWorkflow = read('.github/workflows/quality.yml');
 const releaseGuide = read('docs/RELEASE.md');
 const dockerCompose = read('docker-compose.yml');
 const electronPackage = JSON.parse(read('electron-app/package.json'));
+const rootPackage = JSON.parse(read('package.json'));
 
 assert.match(
   workflow,
@@ -30,6 +31,11 @@ assert.match(workflow, /Validate Electron packaging behavior/);
 assert.match(workflow, /release-assets\/SHA256SUMS\.txt/);
 assert.match(workflow, /SIGNING_CSC_LINK:/);
 assert.match(workflow, /if \(\$env:SIGNING_CSC_LINK\)/);
+assert.match(workflow, /Verify production signing and notarization credentials/);
+assert.match(workflow, /APPLE_API_KEY:/);
+assert.match(workflow, /APPLE_API_KEY_ID:/);
+assert.match(workflow, /APPLE_API_ISSUER:/);
+assert.match(workflow, /APPLE_TEAM_ID:/);
 assert.doesNotMatch(workflow, /^\s*CSC_LINK:\s*\$\{\{[^\n]*\|\|\s*''/m);
 
 assert.doesNotMatch(frontendDockerfile, /COPY\s+\.env\s/);
@@ -48,6 +54,9 @@ assert.match(backendDockerfile, /COPY packages\/remote-gateway\/patches \.\/pack
 assert.match(backendDockerfile, /COPY --from=builder \/app\/packages\/backend\/dist \.\/packages\/backend\/dist/);
 assert.match(backendDockerfile, /npm ci --omit=dev --workspace=@fantetic-terminal\/backend[\s\S]*npm cache clean --force[\s\S]*apk del \.build-deps/);
 assert.match(backendDockerfile, /CMD \["node", "packages\/backend\/dist\/index\.js"\]/);
+assert.match(backendDockerfile, /ENTRYPOINT \["\/entrypoint\.sh"\]/);
+assert.match(backendDockerfile, /apk add --no-cache su-exec/);
+assert.match(read('packages\/backend\/entrypoint\.sh'), /exec su-exec node/);
 assert.match(backendDockerfile, /HEALTHCHECK/);
 assert.match(frontendDockerfile, /HEALTHCHECK/);
 assert.match(gatewayDockerfile, /COPY package\.json package-lock\.json/);
@@ -65,11 +74,17 @@ assert.match(gatewayDockerfile, /apk add --no-cache nodejs curl bash netcat-open
 assert.doesNotMatch(gatewayDockerfile, /USER guacd/);
 
 assert.match(qualityWorkflow, /pull_request:/);
-assert.match(qualityWorkflow, /npm run test:delivery/);
+assert.match(qualityWorkflow, /Run full behavior suite/);
+assert.match(qualityWorkflow, /run: npm test/);
+assert.match(qualityWorkflow, /npm audit --audit-level=high/);
+assert.match(qualityWorkflow, /npm audit --prefix electron-app --package-lock-only --audit-level=high/);
+assert.match(rootPackage.scripts.test, /workspace-test-suite\.behavior-test\.js/);
+assert.match(rootPackage.scripts.test, /workspace-test-suite\.js/);
 assert.match(qualityWorkflow, /npm run build --workspace=@fantetic-terminal\/backend/);
 assert.match(qualityWorkflow, /npm run build --workspace=@fantetic-terminal\/frontend/);
 assert.match(qualityWorkflow, /npm run build --workspace=@fantetic-terminal\/remote-gateway/);
-assert.match(qualityWorkflow, /npm run test:guacamole-lite-patch --workspace=@fantetic-terminal\/remote-gateway/);
+assert.doesNotMatch(qualityWorkflow, /test:guacamole-lite-patch/);
+assert.match(rootPackage.scripts.test, /workspace-test-suite/);
 
 assert.match(releaseGuide, /Release Assets/);
 assert.match(releaseGuide, /v\$\{version\}/);
@@ -79,6 +94,8 @@ assert.match(workflow, /electron-app\/dist_electron\/\*\.zip/);
 assert.match(workflow, /release-assets\/\*\.zip/);
 assert.match(electronPackage.scripts['build:windows'], /electron-builder --win --x64/);
 assert.ok(electronPackage.build.files.includes('service-readiness.js'));
+assert.equal(electronPackage.build.mac.notarize, true);
+assert.equal(electronPackage.build.mac.hardenedRuntime, true);
 assert.doesNotMatch(dockerCompose, /:\?Set (ENCRYPTION_KEY|SESSION_SECRET|REMOTE_GATEWAY_SHARED_SECRET)/);
 assert.match(dockerCompose, /APP_BACKEND_DATA_PATH: \/app\/data/);
 assert.match(dockerCompose, /\.\/data:\/app\/data:ro/);

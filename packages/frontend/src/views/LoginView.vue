@@ -1,16 +1,25 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'; // computed 不再直接使用，移除
+import { computed, reactive, ref, onMounted } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useI18n } from 'vue-i18n';
 import { startAuthentication } from '@simplewebauthn/browser';
 import { useAuthStore } from '../stores/auth.store';
+import { resolveLoginErrorKey } from '../utils/apiError';
 import VueHcaptcha from '@hcaptcha/vue3-hcaptcha';
 import VueRecaptcha from 'vue3-recaptcha2'; // 使用默认导入
 
 const { t } = useI18n();
 const authStore = useAuthStore();
 // 获取 loginRequires2FA 状态
-const { isLoading, error, loginRequires2FA, publicCaptchaConfig, hasPasskeysAvailable } = storeToRefs(authStore); // Get publicCaptchaConfig and hasPasskeysAvailable
+const {
+  isLoading,
+  error,
+  loginRequires2FA,
+  publicCaptchaConfig,
+  hasPasskeysAvailable,
+  bootstrapStatus,
+  bootstrapError,
+} = storeToRefs(authStore);
 
 // 表单数据
 const credentials = reactive({
@@ -23,6 +32,7 @@ const captchaToken = ref<string | null>(null); //  Store CAPTCHA token
 const captchaError = ref<string | null>(null); //  Store CAPTCHA specific error
 const hcaptchaWidget = ref<InstanceType<typeof VueHcaptcha> | null>(null); //  Ref for hCaptcha component instance
 const recaptchaWidget = ref<InstanceType<typeof VueRecaptcha> | null>(null); // 更新 Ref 类型以匹配新导入
+const displayError = computed(() => error.value?.startsWith('login.') ? t(error.value) : error.value);
 
 // --- reCAPTCHA v3 Initialization ---
 // const recaptchaInstance = useReCaptcha(); // 移除 v3 实例，因为我们将使用 v2 组件
@@ -117,8 +127,9 @@ const handlePasskeyLogin = async () => {
     });
 
     if (!optionsResponse.ok) {
-      const errData = await optionsResponse.json();
-      throw new Error(errData.message || t('login.error.passkeyAuthOptionsFailed'));
+      const errorData = await optionsResponse.json().catch(() => undefined);
+      error.value = t(resolveLoginErrorKey({ response: { data: errorData } }));
+      return;
     }
     const authOptions = await optionsResponse.json();
 
@@ -130,17 +141,27 @@ const handlePasskeyLogin = async () => {
     // For simplicity, we'll pass the username if available, or an empty string if not.
     // The store action `loginWithPasskey` expects a string.
     // The backend should ideally identify the user from the assertion if an empty username is provided.
-    await authStore.loginWithPasskey(credentials.username || '', authenticationResult);
+    const loginResult = await authStore.loginWithPasskey(credentials.username || '', authenticationResult);
+    if (!loginResult.success) {
+      error.value = t(loginResult.error || 'login.error.passkeyAuthFailed');
+    }
 
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Passkey login error:', err);
-    error.value = err.message || t('login.error.passkeyAuthFailed');
+    error.value = t('login.error.passkeyAuthFailed');
     // Potentially reset CAPTCHA if it was involved, though typically not for passkey flows directly
     // if (publicCaptchaConfig.value?.enabled) {
     //   resetCaptchaWidget();
     // }
   } finally {
     isLoading.value = false;
+  }
+};
+
+const handleRetryBootstrap = async () => {
+  const recovered = await authStore.retryAuthBootstrap();
+  if (recovered && authStore.isAuthenticated) {
+    window.location.href = '/';
   }
 };
 
@@ -164,7 +185,14 @@ const handlePasskeyLogin = async () => {
           <h2>{{ t('login.title') }}</h2>
         </div>
 
-        <form @submit.prevent="handleSubmit" class="auth-form">
+        <div v-if="bootstrapStatus === 'unavailable'" class="auth-form" role="alert">
+          <p class="auth-error">{{ t(bootstrapError || 'login.error.serviceUnavailable') }}</p>
+          <button type="button" :disabled="isLoading" class="auth-submit" @click="handleRetryBootstrap">
+            {{ isLoading ? t('login.retrying') : t('login.retry') }}
+          </button>
+        </div>
+
+        <form v-else @submit.prevent="handleSubmit" class="auth-form">
           <div v-if="!loginRequires2FA" class="auth-fields">
             <label class="auth-field" for="username">
               <span>{{ t('login.username') }}</span>
@@ -213,7 +241,7 @@ const handlePasskeyLogin = async () => {
           </div>
 
           <div v-if="error" class="auth-error">
-            {{ error }}
+            {{ displayError }}
           </div>
 
           <button type="submit" :disabled="isLoading" class="auth-submit">

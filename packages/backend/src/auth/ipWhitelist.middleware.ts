@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import ipaddr from 'ipaddr.js';
 import { isIpWhitelistEnabled } from '../config/ip-whitelist';
 import { settingsService } from '../settings/settings.service';
+import { sendApiError } from '../security/api-error-envelope';
 
 const IP_WHITELIST_SETTING_KEY = 'ipWhitelist';
 const IP_WHITELIST_ENABLED_SETTING_KEY = 'ipWhitelistEnabled';
@@ -27,7 +28,8 @@ export const ipWhitelistMiddleware = async (req: Request, res: Response, next: N
 
         if (!requestIpString) {
             console.warn('无法获取请求 IP 地址，已拒绝访问。');
-            return res.status(403).json({ message: '禁止访问：无法识别来源 IP。' });
+            sendApiError(res, 403, 'auth.sourceIpUnavailable');
+            return;
         }
 
         // 检查是否是本地开发环境的 IP
@@ -67,7 +69,8 @@ export const ipWhitelistMiddleware = async (req: Request, res: Response, next: N
             requestIp = ipaddr.parse(requestIpString);
         } catch (e) {
             console.warn(`无法解析请求 IP 地址 "${requestIpString}"，已拒绝访问。`);
-            return res.status(403).json({ message: '禁止访问：无效的来源 IP 格式。' });
+            sendApiError(res, 403, 'auth.sourceIpInvalid');
+            return;
         }
 
         // 检查 IP 是否匹配白名单中的任何条目
@@ -106,12 +109,13 @@ export const ipWhitelistMiddleware = async (req: Request, res: Response, next: N
         } else {
             // IP 不在白名单内，拒绝访问
             console.warn(`已拒绝来自 IP ${requestIpString} 的访问 (不在白名单内)。`);
-            return res.status(403).json({ message: '禁止访问：您的 IP 地址不在允许列表中。' });
+            sendApiError(res, 403, 'auth.sourceIpNotAllowed');
+            return;
         }
 
     } catch (error: any) {
         console.error('IP 白名单中间件执行出错:', error);
-        // 中间件出错时，为安全起见，默认拒绝访问
-        return res.status(500).json({ message: '服务器内部错误 (IP 校验失败)。' });
+        sendApiError(res, 500, 'auth.ipWhitelistVerificationFailed');
+        return;
     }
 };

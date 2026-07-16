@@ -46,6 +46,7 @@
             "PASSKEY_NAME_UPDATE_UNAUTHORIZED": "パスキー名更新権限なし"
         },
         "noLogs": "監査ログが見つかりませんでした。",
+        "errors": { "fetchFailed": "監査ログの読み込みに失敗しました。" },
         "startDate": "開始日時", "endDate": "終了日時", "total": "全 {count} 件", "detailTitle": "監査詳細", "openRelatedRecordings": "同じ実行者の近接録画を表示", "correlationHint": "録画とセッション ID には直接キーがないため、実行者とイベント時刻の範囲で絞り込みます。", "selectHint": "ログを選択して完全なコンテキストを確認します。",
         "paginationInfo": "{currentPage} ページ / 全 {totalPages} ページ ({totalLogs} 件のログ)",
         "searchPlaceholder": "詳細を",
@@ -505,6 +506,11 @@
     "title": "ファイルエディタ"
   },
     "fileManager": {
+        "fileList": "ファイル一覧",
+        "accessibility": {
+            "sortColumn": "{column}で並べ替え",
+            "resizeColumn": "{column}列の幅を変更"
+        },
         "modalTitle": "ファイルマネージャー",
         "actions": {
             "cancel": "キャンセル",
@@ -529,7 +535,9 @@
             "save": "保存",
             "upload": "アップロード",
             "uploadFile": "ファイルをアップロード",
-            "copyPath": "パスをコピー"
+            "copyPath": "パスをコピー",
+            "multiSelect": "複数選択モードに切り替える",
+            "exitMultiSelect": "複数選択モードを終了"
         },
 "contextMenu": {
       "compress": "圧縮",
@@ -753,8 +761,21 @@
             "captchaRequired": "CAPTCHA を完了してください。",
             "usernameRequiredForPasskey": "Passkey を使用するにはユーザー名が必要です。",
             "passkeyAuthOptionsFailed": "サーバーから Passkey 認証オプションを取得できませんでした。",
-            "passkeyAuthFailed": "Passkey 認証に失敗しました。もう一度試すか、パスワードを使用してください。"
+            "passkeyAuthFailed": "Passkey 認証に失敗しました。もう一度試すか、パスワードを使用してください。",
+            "serviceUnavailable": "サービスに接続できません。ネットワークを確認して再試行してください。",
+            "usernamePasswordRequired": "ユーザー名とパスワードを入力してください。",
+            "captchaRejected": "CAPTCHA 認証に失敗しました。もう一度お試しください。",
+            "captchaVerificationUnavailable": "CAPTCHA 認証サービスを利用できません。しばらくしてから再試行してください。",
+            "invalidCredentials": "ユーザー名またはパスワードが正しくありません。",
+            "accountDisabled": "このアカウントは無効です。",
+      "requestFailed": "ログイン要求に失敗しました。しばらくしてから再試行してください。",
+      "twoFactorChallengeInvalid": "認証セッションが無効です。もう一度ログインしてください。",
+      "twoFactorTokenRequired": "二要素認証コードを入力してください。",
+      "twoFactorTokenInvalid": "二要素認証コードが無効です。もう一度お試しください。",
+      "twoFactorVerificationFailed": "二要素認証に失敗しました。しばらくしてから再試行してください。"
         },
+        "retry": "再試行",
+        "retrying": "再試行中...",
         "loggingIn": "ログイン中...",
         "loginButton": "ログイン",
         "loginWithPasskey": "Passkeyでログイン",
@@ -961,7 +982,7 @@
         "textInputPlaceholder": "VNC に送信するテキストをここに入力",
         "sendButtonTitle": "VNC にテキストを送信 (キーボード入力をシミュレート)",
         "errors": {
-          "simulateInputError": "キーボード入力のシミュレート中にエラーが発生しました: {error}"
+      "simulateInputError": "キーボード入力をシミュレートできません。"
         }
     },
     "settings": {
@@ -1037,7 +1058,13 @@
             "currentPassword": "現在のパスワード:",
             "error": {
                 "generic": "パスワードの変更に失敗しました。後でもう一度お試しください。",
-                "passwordsDoNotMatch": "新しいパスワードと確認用パスワードが一致しません。"
+                "passwordsDoNotMatch": "新しいパスワードと確認用パスワードが一致しません。",
+                "fieldsRequired": "現在のパスワードと新しいパスワードを入力してください。",
+                "unauthenticated": "ログイン状態が無効です。もう一度ログインしてください。",
+                "tooShort": "新しいパスワードは 8 文字以上にしてください。",
+                "mustDiffer": "新しいパスワードは現在のパスワードと異なる必要があります。",
+                "userNotFound": "ユーザーが見つかりません。もう一度ログインしてください。",
+                "currentPasswordInvalid": "現在のパスワードが正しくありません。"
             },
             "newPassword": "新しいパスワード:",
             "submit": "変更を確定",
@@ -1230,6 +1257,8 @@
                 "userNotLoggedIn": "ユーザーがログインしていないか、ユーザー名が利用できません。",
                 "registrationCancelled": "Passkey の登録がキャンセルされました。",
                 "registrationFailed": "Passkey の登録に失敗しました。",
+                "nameUpdateFailed": "Passkey 名の更新に失敗しました。もう一度お試しください。",
+                "deleteFailedInvalidId": "認証情報 ID が無効なため削除できませんでした。",
                 "deleteFailedGeneral": "Passkey の削除に失敗しました。もう一度お試しください。"
             },
             "success": {
@@ -1276,6 +1305,17 @@
             "enabledLabel": "サーバーステータス監視を有効にする",
             "enabledHint": "無効にすると、サーバーステータス、ルート、リソース監視データの取得を停止します。"
         },
+        "sessionRecording": {
+            "title": "セッション録画",
+            "description": "無効にすると、新しい SSH、Telnet、RDP、VNC セッションは録画されません。既存の録画は保持されます。",
+            "enableLabel": "新しいセッションを録画する",
+            "success": {
+                "saved": "セッション録画の設定を保存しました。"
+            },
+            "error": {
+                "saveFailed": "セッション録画の設定の保存に失敗しました。"
+            }
+        },
         "title": "設定",
         "twoFactor": {
             "disable": {
@@ -1288,8 +1328,14 @@
             "error": {
                 "codeRequired": "コードを入力してください。",
                 "disableFailed": "2段階認証の無効化に失敗しました。",
+                "unauthenticated": "ログイン状態が無効です。もう一度ログインしてください。",
+                "alreadyEnabled": "2段階認証はすでに有効です。再設定するには先に無効にしてください。",
+                "setupMissing": "確認待ちの設定が見つかりません。もう一度開始してください。",
                 "passwordRequiredForDisable": "無効にするには、現在のパスワードを入力する必要があります。",
                 "setupFailed": "2段階認証の設定情報の取得に失敗しました。",
+                "activationFailed": "2段階認証を有効にできませんでした。しばらくしてからもう一度お試しください。",
+                "userNotFound": "ユーザーが見つかりません。もう一度ログインしてください。",
+                "currentPasswordInvalid": "現在のパスワードが正しくありません。",
                 "verificationFailed": "無効なコードまたは期限切れのコードです。"
             },
             "setup": {
@@ -1474,8 +1520,10 @@
         "description": "最初の管理者アカウントを作成します。",
         "error": {
             "fieldsRequired": "ユーザー名とパスワードは必須です。",
-            "generic": "設定中にエラーが発生しました。サーバーログを確認してください。",
-            "passwordsDoNotMatch": "入力したパスワードが一致しません。"
+            "generic": "設定中にエラーが発生しました。しばらくしてから再試行してください。",
+            "passwordsDoNotMatch": "入力したパスワードが一致しません。",
+            "passwordTooShort": "パスワードは 8 文字以上にしてください。",
+            "alreadyCompleted": "初期設定はすでに完了しているため、再実行できません。"
         },
         "password": "パスワード",
         "passwordPlaceholder": "パスワードを入力",
@@ -1985,6 +2033,7 @@
     "transferFailedError": "転送の開始に失敗しました。もう一度お試しください。"
   },
 "favoritePaths": {
+    "open": "お気に入りのパスを開く",
     "addEditForm": {
       "validation": {
         "pathRequired": "Path is required."
@@ -2029,10 +2078,12 @@
     "empty": "セッション録画はありません。",
     "loadFailed": "セッション録画の読み込みに失敗しました。",
     "playFailed": "セッション録画の読み込みまたは再生に失敗しました。",
+    "remoteDesktopPlaybackFailed": "リモートデスクトップのプロトコル録画を再生できません。",
     "play": "再生", "delete": "録画を削除", "confirmDelete": "{name} のセッション録画を削除しますか？この操作は元に戻せません。", "deleteFailed": "セッション録画の削除に失敗しました。",
     "stop": "停止",
     "speed": "速度",
     "player": "端末セッションプレーヤー", "searchPlaceholder": "接続名またはユーザー名", "startedAfter": "開始日時", "total": "全 {count} 件", "duration": "時間", "events": "イベント", "eventCount": "{count} 件のイベント", "size": "サイズ", "preparing": "再生を準備中…", "timeline": "再生タイムライン", "selectHint": "録画を選択して詳細を確認し、再生します。",
+    "integrity": { "invalid": "録画の完全性検証に失敗したため、再生できません。" },
     "status": { "active": "進行中", "completed": "完了", "incomplete": "不完全", "failed": "失敗" }
   }
 }

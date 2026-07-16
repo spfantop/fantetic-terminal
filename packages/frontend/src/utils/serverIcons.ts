@@ -1,3 +1,51 @@
+import {
+  mdiAccessPoint,
+  mdiApi,
+  mdiApple,
+  mdiAws,
+  mdiCentos,
+  mdiCloud,
+  mdiCodeBraces,
+  mdiConnection,
+  mdiConsole,
+  mdiConsoleLine,
+  mdiCube,
+  mdiDatabase,
+  mdiDebian,
+  mdiDesktopClassic,
+  mdiDigitalOcean,
+  mdiDocker,
+  mdiFedora,
+  mdiFreebsd,
+  mdiGentoo,
+  mdiGit,
+  mdiGithub,
+  mdiGitlab,
+  mdiGoogleCloud,
+  mdiKeyVariant,
+  mdiKubernetes,
+  mdiLanConnect,
+  mdiLaptop,
+  mdiLinux,
+  mdiMicrosoftAzure,
+  mdiMicrosoftWindows,
+  mdiMonitor,
+  mdiNas,
+  mdiNoteEditOutline,
+  mdiRaspberryPi,
+  mdiRedhat,
+  mdiRouter,
+  mdiScriptTextOutline,
+  mdiServer,
+  mdiServerOutline,
+  mdiShieldCheckOutline,
+  mdiSourceBranch,
+  mdiTunnel,
+  mdiUbuntu,
+  mdiWeb,
+  mdiWebhook,
+} from '@mdi/js';
+
 export type ServerIconKey = string;
 
 export interface ServerIconOption {
@@ -8,8 +56,7 @@ export interface ServerIconOption {
   displayName: string;
 }
 
-const DEFAULT_SERVER_OUTLINE_PATH =
-  'M13 19H14A1 1 0 0 0 15 18V16H19A2 2 0 0 0 21 14V6A2 2 0 0 0 19 4H5A2 2 0 0 0 3 6V14A2 2 0 0 0 5 16H9V18A1 1 0 0 0 10 19H11V20H8V22H16V20H13V19M5 6H19V14H5V6Z';
+const DEFAULT_SERVER_OUTLINE_PATH = mdiServerOutline;
 
 const toDisplayName = (name: string) =>
   name.replace(/^mdi/, '').replace(/([A-Z])/g, ' $1').trim().toLowerCase();
@@ -58,14 +105,58 @@ const popularIconNames = [
   'mdiMicrosoftAzure',
   'mdiGoogleCloud',
   'mdiDigitalOcean',
-  'mdiNginx',
   'mdiRedhat',
-  'mdiArchLinux',
   'mdiCentos',
-  'mdiAlpineLinux',
-  'mdiSuse',
   'mdiGentoo',
-];
+] as const;
+
+const staticIconPaths: Record<string, string> = {
+  mdiAccessPoint,
+  mdiApi,
+  mdiApple,
+  mdiAws,
+  mdiCentos,
+  mdiCloud,
+  mdiCodeBraces,
+  mdiConnection,
+  mdiConsole,
+  mdiConsoleLine,
+  mdiCube,
+  mdiDatabase,
+  mdiDebian,
+  mdiDesktopClassic,
+  mdiDigitalOcean,
+  mdiDocker,
+  mdiFedora,
+  mdiFreebsd,
+  mdiGentoo,
+  mdiGit,
+  mdiGithub,
+  mdiGitlab,
+  mdiGoogleCloud,
+  mdiKeyVariant,
+  mdiKubernetes,
+  mdiLanConnect,
+  mdiLaptop,
+  mdiLinux,
+  mdiMicrosoftAzure,
+  mdiMicrosoftWindows,
+  mdiMonitor,
+  mdiNas,
+  mdiNoteEditOutline,
+  mdiRaspberryPi,
+  mdiRedhat,
+  mdiRouter,
+  mdiScriptTextOutline,
+  mdiServer,
+  mdiServerOutline,
+  mdiShieldCheckOutline,
+  mdiSourceBranch,
+  mdiTunnel,
+  mdiUbuntu,
+  mdiWeb,
+  mdiWebhook,
+};
 
 const legacyIconMap: Record<string, ServerIconKey> = {
   'fa-server': 'mdiServerOutline',
@@ -93,12 +184,11 @@ const legacyIconMap: Record<string, ServerIconKey> = {
 
 let allIconOptionsPromise: Promise<ServerIconOption[]> | null = null;
 let allIconOptionMapPromise: Promise<Map<string, ServerIconOption>> | null = null;
-let popularIconOptionsPromise: Promise<ServerIconOption[]> | null = null;
-let popularIconOptionMapPromise: Promise<Map<string, ServerIconOption>> | null = null;
 
 const loadAllIconOptions = async () => {
   if (!allIconOptionsPromise) {
-    allIconOptionsPromise = import('@mdi/js').then((mdi) => {
+    // @ts-expect-error Vite resource query keeps the searchable namespace in a lazy chunk.
+    allIconOptionsPromise = import('@mdi/js?server-icon-catalog').then((mdi) => {
       const options: ServerIconOption[] = [];
       for (const [name, path] of Object.entries(mdi) as Array<[string, unknown]>) {
         if (name.startsWith('mdi') && isMdiPath(path)) {
@@ -120,29 +210,17 @@ const loadAllIconOptionMap = async () => {
   return allIconOptionMapPromise;
 };
 
+export const serverIconOptions: ServerIconOption[] = popularIconNames.map(
+  (name) => createIconOption(name, staticIconPaths[name])
+);
+
+const staticIconOptionMap = new Map(
+  Object.entries(staticIconPaths).map(([name, iconPath]) => [name, createIconOption(name, iconPath)])
+);
+
 export const loadServerIconOptions = async () => {
-  if (!popularIconOptionsPromise) {
-    popularIconOptionsPromise = loadAllIconOptionMap().then((optionMap) =>
-      popularIconNames
-        .map((name) => optionMap.get(name))
-        .filter((option): option is ServerIconOption => Boolean(option))
-    );
-  }
-  return popularIconOptionsPromise;
+  return serverIconOptions;
 };
-
-const loadPopularIconOptionMap = async () => {
-  if (!popularIconOptionMapPromise) {
-    popularIconOptionMapPromise = loadServerIconOptions().then(
-      (options) => new Map(options.map((option) => [option.key, option]))
-    );
-  }
-  return popularIconOptionMapPromise;
-};
-
-export const serverIconOptions: ServerIconOption[] = [
-  createIconOption('mdiServerOutline', DEFAULT_SERVER_OUTLINE_PATH),
-];
 
 export const getDefaultServerIconKey = (type?: 'SSH' | 'RDP' | 'VNC' | 'TELNET'): ServerIconKey => {
   if (type === 'RDP') return 'mdiMicrosoftWindows';
@@ -168,7 +246,12 @@ export const isDefaultServerIconForType = (
 export const getServerIconOption = (
   icon?: string | null,
   type?: 'SSH' | 'RDP' | 'VNC' | 'TELNET',
-) => createIconOption(normalizeServerIconKey(icon, type), DEFAULT_SERVER_OUTLINE_PATH);
+) => {
+  const normalized = normalizeServerIconKey(icon, type);
+  return staticIconOptionMap.get(normalized)
+    ?? staticIconOptionMap.get(getDefaultServerIconKey(type))
+    ?? createIconOption('mdiServerOutline', DEFAULT_SERVER_OUTLINE_PATH);
+};
 
 export const getServerIconPath = (
   icon?: string | null,
@@ -180,12 +263,13 @@ export const readServerIconOption = async (
   type?: 'SSH' | 'RDP' | 'VNC' | 'TELNET',
 ) => {
   const normalized = normalizeServerIconKey(icon, type);
-  const popularIconOptionMap = await loadPopularIconOptionMap();
+  const staticOption = staticIconOptionMap.get(normalized);
+  if (staticOption) return staticOption;
+
   const allIconOptionMap = await loadAllIconOptionMap();
   return (
-    popularIconOptionMap.get(normalized) ??
     allIconOptionMap.get(normalized) ??
-    createIconOption(getDefaultServerIconKey(type), DEFAULT_SERVER_OUTLINE_PATH)
+    getServerIconOption(undefined, type)
   );
 };
 

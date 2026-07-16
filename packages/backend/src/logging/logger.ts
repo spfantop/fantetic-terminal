@@ -1,3 +1,5 @@
+import { readAuditContext } from '../audit/audit-context';
+
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 interface LoggerOptions {
@@ -7,10 +9,21 @@ interface LoggerOptions {
 }
 
 const SENSITIVE_KEY = /password|passwd|secret|token|authorization|cookie|private.?key|passphrase|credential/i;
+const SENSITIVE_VALUE = /\b(password|passwd|secret|token|authorization|cookie|private[_-]?key|passphrase|credential)\s*([=:])\s*(?:bearer\s+)?([^\s,;]+)/gi;
+
+const redactText = (value: string): string => value.replace(
+  SENSITIVE_VALUE,
+  (_match, key: string, separator: string) => `${key}${separator}[REDACTED]`,
+);
 
 const sanitize = (value: unknown, seen = new WeakSet<object>(), depth = 0): unknown => {
   if (depth > 8) return '[TRUNCATED]';
-  if (value instanceof Error) return { name: value.name, message: value.message, stack: value.stack };
+  if (value instanceof Error) return {
+    name: value.name,
+    message: redactText(value.message),
+    ...(value.stack ? { stack: redactText(value.stack) } : {}),
+  };
+  if (typeof value === 'string') return redactText(value);
   if (!value || typeof value !== 'object') return value;
   if (seen.has(value)) return '[CIRCULAR]';
   seen.add(value);
@@ -32,11 +45,17 @@ export const createLogger = (component: string, options: LoggerOptions = {}) => 
   const now = options.now ?? (() => new Date());
   const write = options.write ?? defaultWrite;
   const log = (level: LogLevel, message: string, context?: Record<string, unknown>): void => {
+    const auditContext = readAuditContext();
     const record = {
       timestamp: now().toISOString(),
       level,
       component,
       message,
+      ...(auditContext ? {
+        requestId: auditContext.requestId,
+        ...(auditContext.actorUserId === undefined ? {} : { actorUserId: auditContext.actorUserId }),
+        ...(auditContext.actorRole === undefined ? {} : { actorRole: auditContext.actorRole }),
+      } : {}),
       ...(context ? { context: sanitize(context) } : {}),
     };
     write(level, production

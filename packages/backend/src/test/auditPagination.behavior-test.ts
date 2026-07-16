@@ -8,5 +8,9 @@ const controllerSource = fs.readFileSync(path.join(sourceRoot, 'audit/audit.cont
 assert.match(controllerSource, /MAX_AUDIT_PAGE_SIZE\s*=\s*200/);
 assert.match(controllerSource, /limit\s*>\s*MAX_AUDIT_PAGE_SIZE/);
 assert.match(controllerSource, /MAX_AUDIT_SEARCH_LENGTH\s*=\s*200/);
+assert.match(controllerSource, /sendApiError\(res, 400, 'validation\.invalidLimit'\)/);
+assert.match(controllerSource, /sendApiError\(res, 500, 'audit\.logListFailed'\)/);
+assert.doesNotMatch(controllerSource, /json\(\{ message:/);
+assert.doesNotMatch(controllerSource, /error:\s*error\.message/);
 
 console.log('audit pagination behavior ok');

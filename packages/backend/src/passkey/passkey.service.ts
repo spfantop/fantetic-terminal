@@ -21,10 +21,12 @@ import type {
 import { passkeyRepository, Passkey, NewPasskey } from './passkey.repository';
 import { userRepository, User } from '../user/user.repository';
 import { config } from '../config/app.config';
+import { createLogger } from '../logging/logger';
 
 const RP_ID = config.rpId;
 const RP_ORIGIN = config.rpOrigin;
 const RP_NAME = config.appName;
+const logger = createLogger('PasskeyService');
 
 const textEncoder = new TextEncoder();
 
@@ -33,8 +35,8 @@ function base64UrlToUint8Array(base64urlString: string): Uint8Array {
   // Buffer.from will handle padding correctly for base64
   try {
     return Buffer.from(base64, 'base64');
-  } catch (e) {
-    console.error("Failed to decode base64url string to Buffer:", base64urlString, e);
+  } catch (error) {
+    logger.error('Failed to decode base64url data', { error });
     throw new Error("Invalid base64url string for Buffer conversion");
   }
 }
@@ -98,7 +100,7 @@ export class PasskeyService {
 
     // Add a check for the presence of credential ID before calling the library
     if (!actualRegistrationResponse || !actualRegistrationResponse.id) {
-      console.error('Missing credential ID in actualRegistrationResponse from client:', registrationResponseJSON);
+      logger.error('Passkey registration response is missing a credential ID', { userId });
       throw new Error('Registration failed: Missing or malformed credential ID from client.');
     }
 
@@ -122,7 +124,7 @@ export class PasskeyService {
       const credentialBackedUp = (regInfo as any).credentialBackedUp; // This seems to be at the top level
 
       if (!credentialDetails || typeof credentialDetails.publicKey !== 'object' || typeof credentialDetails.id !== 'string' || typeof credentialDetails.counter !== 'number') {
-        console.error('Verification successful, but registrationInfo.credential structure is unexpected or missing:', regInfo);
+        logger.error('Passkey registration verification returned unexpected credential metadata', { userId });
         throw new Error('Failed to process registration info due to unexpected credential structure.');
       }
 
@@ -182,33 +184,33 @@ export class PasskeyService {
       try {
         const authenticatorDataBytes = base64UrlToUint8Array(authenticationResponseJSON.response.authenticatorData);
         if (authenticatorDataBytes.length < 37) {
-          // console.warn(`[PasskeyService] WARNING: Decoded authenticatorData length (${authenticatorDataBytes.length} bytes) is less than the expected minimum of 37 bytes. This may lead to CBOR parsing errors and subsequent failures (e.g., 'cannot read counter').`);
+          logger.warn('Passkey authenticator data is shorter than the expected minimum', { byteLength: authenticatorDataBytes.length });
         }
-      } catch (e: any) {
-        console.error('[PasskeyService] Error decoding authenticatorData from client response:', e.message);
+      } catch (error) {
+        logger.error('Failed to decode Passkey authenticator data', { error });
         // Potentially re-throw or handle as a critical error, as this is unexpected.
       }
     } else {
-      console.warn('[PasskeyService] authenticatorData is missing in the client response.');
+      logger.warn('Passkey authenticator data is missing from the client response');
     }
 
     const credentialIdFromResponse = authenticationResponseJSON.id;
     if (!credentialIdFromResponse) {
-        console.error('[PasskeyService] Credential ID missing from authentication response.');
+        logger.error('Passkey authentication response is missing a credential ID');
         throw new Error('Credential ID missing from authentication response.');
     }
 
     const passkey = await this.passkeyRepo.getPasskeyByCredentialId(credentialIdFromResponse);
     if (!passkey) {
-      console.error('[PasskeyService] Passkey not found for credential ID:', credentialIdFromResponse);
+      logger.error('Passkey authentication credential was not found');
       throw new Error('Authentication failed. Passkey not found.');
     }
 
     let authenticatorCredentialID: Uint8Array;
     try {
         authenticatorCredentialID = base64UrlToUint8Array(passkey.credential_id);
-    } catch (e: any) {
-        console.error('[PasskeyService] Error decoding credential_id to Uint8Array:', passkey.credential_id, e.message);
+    } catch (error) {
+        logger.error('Failed to decode stored Passkey credential ID', { userId: passkey.user_id, error });
         throw new Error('Failed to decode credential_id.');
     }
 
@@ -217,16 +219,16 @@ export class PasskeyService {
         const pkBuffer = Buffer.from(passkey.public_key, 'base64');
         // Ensure it's a plain Uint8Array instance
         authenticatorPublicKey = new Uint8Array(pkBuffer.buffer, pkBuffer.byteOffset, pkBuffer.byteLength);
-    } catch (e: any) {
-        console.error('[PasskeyService] Error decoding public_key to Uint8Array:', passkey.public_key, e.message);
+    } catch (error) {
+        logger.error('Failed to decode stored Passkey public key', { userId: passkey.user_id, error });
         throw new Error('Failed to decode public_key.');
     }
     
     let authenticatorTransports: AuthenticatorTransportFuture[] | undefined;
     try {
         authenticatorTransports = passkey.transports ? JSON.parse(passkey.transports) as AuthenticatorTransportFuture[] : undefined;
-    } catch (e: any) {
-        console.error('[PasskeyService] Error parsing transports JSON:', passkey.transports, e.message);
+    } catch (error) {
+        logger.error('Failed to parse stored Passkey transports', { userId: passkey.user_id, error });
         authenticatorTransports = undefined;
     }
 

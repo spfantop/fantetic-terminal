@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 
+import { runWithAuditContext, setAuditActor } from '../audit/audit-context';
 import { createLogger } from '../logging/logger';
 
 const outputList: string[] = [];
@@ -15,6 +16,7 @@ logger.info('request accepted', {
   encrypted_password: 'encrypted-password',
   encrypted_private_key: 'encrypted-private-key',
   encrypted_passphrase: 'encrypted-passphrase',
+  error: new Error('request failed with authorization=Bearer top-secret'),
 });
 
 const record = JSON.parse(outputList[0]);
@@ -28,5 +30,15 @@ assert.equal(record.context.nested.safe, 'value');
 assert.equal(record.context.encrypted_password, '[REDACTED]');
 assert.equal(record.context.encrypted_private_key, '[REDACTED]');
 assert.equal(record.context.encrypted_passphrase, '[REDACTED]');
+assert.doesNotMatch(record.context.error.message, /top-secret/);
+
+await runWithAuditContext({ requestId: 'req-trace-1', sourceIp: '10.0.0.1' }, async () => {
+  setAuditActor({ userId: 7, username: 'operator', systemRole: 'admin' });
+  logger.info('correlated request');
+});
+const correlatedRecord = JSON.parse(outputList[1]);
+assert.equal(correlatedRecord.requestId, 'req-trace-1');
+assert.equal(correlatedRecord.actorUserId, 7);
+assert.equal(correlatedRecord.actorRole, 'admin');
 
 console.log('structured logger behavior ok');

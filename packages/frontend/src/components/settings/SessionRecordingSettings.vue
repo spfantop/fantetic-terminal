@@ -27,9 +27,11 @@
       <div v-if="selectedRecording" ref="recordingDialogRootRef" class="recording-modal" role="dialog" aria-modal="true" :aria-label="t('sessionRecording.player')" @click.self="closePlayer">
         <article ref="recordingDialogRef" class="recording-player">
           <header class="recording-detail recording-drag-handle" @pointerdown="startRecordingDialogDrag"><div><h3>{{ selectedRecording.connection_name }}</h3><p>{{ selectedRecording.username || '-' }} · {{ selectedRecording.protocol }}</p></div><dl><div><dt>{{ t('sessionRecording.duration') }}</dt><dd>{{ formatDuration(playbackDurationMs) }}</dd></div><div><dt>{{ t('sessionRecording.events') }}</dt><dd>{{ selectedRecording.event_count }}</dd></div><div><dt>{{ t('sessionRecording.size') }}</dt><dd>{{ formatBytes(selectedRecording.byte_count) }}</dd></div></dl><button type="button" class="modal-close" :aria-label="t('common.close')" @click="closePlayer"><i class="fas fa-xmark"></i></button></header>
-          <div class="player-toolbar"><button type="button" :disabled="preparing" @click="playing ? stop() : play()"><i :class="playing ? 'fas fa-pause' : 'fas fa-play'"></i>{{ playing ? t('sessionRecording.stop') : t('sessionRecording.play') }}</button><label>{{ t('sessionRecording.speed') }}<select v-model.number="speed"><option :value="1">1×</option><option :value="2">2×</option><option :value="4">4×</option><option :value="8">8×</option></select></label><span v-if="preparing">{{ t('sessionRecording.preparing', '正在准备回放…') }}</span></div>
-          <div ref="terminalHost" class="terminal-host" :aria-label="t('sessionRecording.player')"></div>
-          <div class="timeline"><input v-model.number="timelineOffset" type="range" min="0" :max="Math.max(1, playbackDurationMs)" step="100" :disabled="preparing" :aria-label="t('sessionRecording.timeline', '回放时间轴')" @input="seekTo(timelineOffset)"><span>{{ formatDuration(timelineOffset) }} / {{ formatDuration(playbackDurationMs) }}</span></div>
+          <div class="player-toolbar"><button type="button" :disabled="preparing || hasInvalidRecordingIntegrity()" @click="playing ? stop() : play()"><i :class="playing ? 'fas fa-pause' : 'fas fa-play'"></i>{{ playing ? t('sessionRecording.stop') : t('sessionRecording.play') }}</button><label>{{ t('sessionRecording.speed') }}<select v-model.number="speed" :disabled="isRemoteDesktopRecording"><option :value="1">1×</option><option :value="2">2×</option><option :value="4">4×</option><option :value="8">8×</option></select></label><span v-if="preparing">{{ t('sessionRecording.preparing', '正在准备回放…') }}</span></div>
+          <p v-if="recordingIntegrity?.status === 'invalid'" role="alert" class="recording-message">{{ t('sessionRecording.integrity.invalid') }}</p>
+          <div v-if="isRemoteDesktopRecording" ref="remoteDesktopRecordingHost" class="terminal-host" :aria-label="t('sessionRecording.player')"></div>
+          <div v-else ref="terminalHost" class="terminal-host" :aria-label="t('sessionRecording.player')"></div>
+          <div class="timeline"><input v-model.number="timelineOffset" type="range" min="0" :max="Math.max(1, playbackDurationMs)" step="100" :disabled="preparing || hasInvalidRecordingIntegrity()" :aria-label="t('sessionRecording.timeline', '回放时间轴')" @input="seekTo(timelineOffset)"><span>{{ formatDuration(timelineOffset) }} / {{ formatDuration(playbackDurationMs) }}</span></div>
         </article>
       </div>
     </div>
@@ -43,7 +45,9 @@ import { useRoute } from 'vue-router';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
-import { sessionRecordingApi, type SessionRecording, type SessionRecordingEvent, type SessionRecordingListQuery } from '../../services/sessionRecording.api';
+// @ts-ignore - guacamole-common-js does not publish TypeScript declarations.
+import Guacamole from 'guacamole-common-js';
+import { sessionRecordingApi, type SessionRecording, type SessionRecordingEvent, type SessionRecordingIntegrity, type SessionRecordingListQuery } from '../../services/sessionRecording.api';
 import AdminPagination from '../admin/AdminPagination.vue';
 import AdminDateRange from '../admin/AdminDateRange.vue';
 import { useConfirmDialog } from '../../composables/useConfirmDialog';
@@ -70,9 +74,12 @@ const filterStartedAfter = ref('');
 const filterStartedBefore = ref('');
 const timelineOffset = ref(0);
 const terminalHost = ref<HTMLElement>();
+const remoteDesktopRecordingHost = ref<HTMLElement>();
 const recordingDialogRootRef = ref<HTMLElement | null>(null);
 const recordingDialogRef = ref<HTMLElement | null>(null);
 const cachedEvents = ref<SessionRecordingEvent[]>([]);
+const recordingIntegrity = ref<SessionRecordingIntegrity>();
+const hasInvalidRecordingIntegrity = () => recordingIntegrity.value?.status === 'invalid';
 const { centerDialog: centerRecordingDialog, startDialogDrag: startRecordingDialogDrag } = useDraggableDialog({
   rootRef: recordingDialogRootRef,
   dialogRef: recordingDialogRef,
@@ -88,10 +95,15 @@ let recordedTerminalSize: { cols: number; rows: number } | undefined;
 let nextEventCursor: number | null = 0;
 let cacheStartCursor = 0;
 let recordingAbortController: AbortController | undefined;
+let remoteDesktopRecording: any | undefined;
+const remoteDesktopPlaybackDurationMs = ref(0);
 
 const selectedRecording = computed(() => recordingList.value.find(item => item.id === selectedId.value));
+const isRemoteDesktopRecording = computed(() => ['RDP', 'VNC'].includes(selectedRecording.value?.protocol ?? ''));
 const durationMs = computed(() => selectedRecording.value ? Math.max(0, (selectedRecording.value.ended_at ?? Date.now()) - selectedRecording.value.started_at) : 0);
-const playbackDurationMs = computed(() => cachedEvents.value[cachedEvents.value.length - 1]?.offsetMs ?? durationMs.value);
+const playbackDurationMs = computed(() => isRemoteDesktopRecording.value
+  ? Math.max(remoteDesktopPlaybackDurationMs.value, durationMs.value)
+  : cachedEvents.value[cachedEvents.value.length - 1]?.offsetMs ?? durationMs.value);
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)));
 const formatTime = (value: number) => new Date(value).toLocaleString();
 const formatDuration = (value: number) => `${Math.floor(value / 60000).toString().padStart(2, '0')}:${Math.floor(value % 60000 / 1000).toString().padStart(2, '0')}`;
@@ -146,6 +158,25 @@ const ensureTerminal = async () => {
   await nextTick(); fitAddon.fit();
   resizeObserver = new ResizeObserver(syncTerminalViewport); resizeObserver.observe(terminalHost.value);
 };
+const ensureRemoteDesktopRecording = async () => {
+  if (!isRemoteDesktopRecording.value || !remoteDesktopRecordingHost.value || remoteDesktopRecording) return;
+  const tunnelUrl = new URL(`/api/v1/session-recordings/${selectedId.value}/guacamole`, window.location.origin).toString();
+  const tunnel = new Guacamole.StaticHTTPTunnel(tunnelUrl);
+  const recording = new Guacamole.SessionRecording(tunnel);
+  remoteDesktopRecording = recording;
+  remoteDesktopRecordingHost.value.replaceChildren(recording.getDisplay().getElement());
+  recording.onprogress = (duration: number) => { remoteDesktopPlaybackDurationMs.value = duration; };
+  recording.onload = () => { remoteDesktopPlaybackDurationMs.value = recording.getDuration(); preparing.value = false; };
+  recording.onplay = () => { playing.value = true; };
+  recording.onpause = () => { playing.value = false; };
+  recording.onseek = (position: number) => { timelineOffset.value = position; };
+  recording.onerror = () => {
+    playing.value = false;
+    preparing.value = false;
+    error.value = t('sessionRecording.remoteDesktopPlaybackFailed');
+  };
+  recording.connect();
+};
 const renderEvent = (event: SessionRecordingEvent) => {
   if (event.type === 'output') {
     terminal?.write(decode(event.data));
@@ -165,6 +196,8 @@ const loadNextEventPage = async (reset = false) => {
   recordingAbortController ??= new AbortController();
   const page = await sessionRecordingApi.read(recordingId, cursor, recordingAbortController.signal);
   if (recordingId !== selectedId.value) return false;
+  recordingIntegrity.value = page.integrity;
+  if (page.integrity.status === 'invalid') return false;
   cachedEvents.value.push(...page.eventList);
   nextEventCursor = page.nextCursor;
   if (cachedEvents.value.length > MAX_CACHED_EVENTS) {
@@ -181,12 +214,18 @@ const loadEvents = async () => {
   catch (requestError) { const canceled = requestError instanceof DOMException && requestError.name === 'AbortError' || Boolean(requestError && typeof requestError === 'object' && 'code' in requestError && requestError.code === 'ERR_CANCELED'); if (!canceled) error.value = t('sessionRecording.playFailed'); }
   finally { preparing.value = false; }
 };
-const selectRecording = async (id: string) => { stop(); recordingAbortController?.abort(); recordingAbortController = new AbortController(); selectedId.value = id; cachedEvents.value = []; nextEventCursor = 0; cacheStartCursor = 0; timelineOffset.value = 0; recordedTerminalSize = undefined; await nextTick(); await centerRecordingDialog(); await ensureTerminal(); clearTerminalViewportStyles(); fitAddon?.fit(); terminal?.reset(); void loadEvents(); };
-const closePlayer = () => { stop(); recordingAbortController?.abort(); recordingAbortController=undefined; selectedId.value=''; cachedEvents.value=[]; nextEventCursor=0; cacheStartCursor=0; recordedTerminalSize=undefined; resizeObserver?.disconnect(); resizeObserver=undefined; terminal?.dispose(); terminal=undefined; fitAddon=undefined; };
+const selectRecording = async (id: string) => { stop(); remoteDesktopRecording?.abort(); remoteDesktopRecording = undefined; recordingAbortController?.abort(); recordingAbortController = new AbortController(); selectedId.value = id; cachedEvents.value = []; recordingIntegrity.value = undefined; remoteDesktopPlaybackDurationMs.value = 0; nextEventCursor = 0; cacheStartCursor = 0; timelineOffset.value = 0; recordedTerminalSize = undefined; await nextTick(); await centerRecordingDialog(); if (isRemoteDesktopRecording.value) { await loadEvents(); if (!hasInvalidRecordingIntegrity()) await ensureRemoteDesktopRecording(); return; } await ensureTerminal(); clearTerminalViewportStyles(); fitAddon?.fit(); terminal?.reset(); void loadEvents(); };
+const closePlayer = () => { stop(); remoteDesktopRecording?.abort(); remoteDesktopRecording=undefined; remoteDesktopRecordingHost.value?.replaceChildren(); recordingAbortController?.abort(); recordingAbortController=undefined; selectedId.value=''; cachedEvents.value=[]; recordingIntegrity.value=undefined; remoteDesktopPlaybackDurationMs.value=0; nextEventCursor=0; cacheStartCursor=0; recordedTerminalSize=undefined; resizeObserver?.disconnect(); resizeObserver=undefined; terminal?.dispose(); terminal=undefined; fitAddon=undefined; };
 const deleteRecording = async (recording: SessionRecording) => { if(recording.status==='active'||!await showConfirmDialog({message:t('sessionRecording.confirmDelete',{name:recording.connection_name})}))return; deletingId.value=recording.id; try{await sessionRecordingApi.delete(recording.id);if(selectedId.value===recording.id)closePlayer();await loadList();}catch{error.value=t('sessionRecording.deleteFailed');}finally{deletingId.value='';} };
-const seekTo = async (offset: number) => { stop(); if (cacheStartCursor > 0 && offset < (cachedEvents.value[0]?.offsetMs ?? 0)) { preparing.value = true; try { await loadNextEventPage(true); while (nextEventCursor !== null && (cachedEvents.value[cachedEvents.value.length - 1]?.offsetMs ?? 0) < offset) await loadNextEventPage(); } finally { preparing.value = false; } } terminal?.reset(); primeTerminalForReplay(); for (const event of cachedEvents.value) { if (event.offsetMs > offset) break; renderEvent(event); } timelineOffset.value = offset; syncTerminalViewport(); };
+const seekTo = async (offset: number) => { stop(); if (isRemoteDesktopRecording.value) { remoteDesktopRecording?.seek(offset); timelineOffset.value = offset; return; } if (cacheStartCursor > 0 && offset < (cachedEvents.value[0]?.offsetMs ?? 0)) { preparing.value = true; try { await loadNextEventPage(true); while (nextEventCursor !== null && (cachedEvents.value[cachedEvents.value.length - 1]?.offsetMs ?? 0) < offset) await loadNextEventPage(); } finally { preparing.value = false; } } terminal?.reset(); primeTerminalForReplay(); for (const event of cachedEvents.value) { if (event.offsetMs > offset) break; renderEvent(event); } timelineOffset.value = offset; syncTerminalViewport(); };
 const play = async () => {
-  await ensureTerminal(); await loadEvents(); if (!cachedEvents.value.length) return;
+  if (hasInvalidRecordingIntegrity()) return;
+  if (isRemoteDesktopRecording.value) {
+    await ensureRemoteDesktopRecording();
+    remoteDesktopRecording?.play();
+    return;
+  }
+  await ensureTerminal(); await loadEvents(); if (hasInvalidRecordingIntegrity() || !cachedEvents.value.length) return;
   const lastOffset = cachedEvents.value[cachedEvents.value.length - 1]?.offsetMs ?? 0;
   if (timelineOffset.value >= lastOffset && nextEventCursor === null) await seekTo(0);
   else if (timelineOffset.value === 0) { terminal?.reset(); primeTerminalForReplay(); }
@@ -194,7 +233,7 @@ const play = async () => {
   try { let index = cachedEvents.value.findIndex(event => event.offsetMs >= timelineOffset.value); if (index < 0) index = cachedEvents.value.length; while (generation === playGeneration) { if (index >= cachedEvents.value.length) { if (nextEventCursor === null || !await loadNextEventPage()) break; index = Math.max(0, cachedEvents.value.findIndex(event => event.offsetMs >= previous)); continue; } const event = cachedEvents.value[index++]; const delay = Math.min(1000, Math.max(0, event.offsetMs - previous)) / speed.value; if (delay) await sleep(delay); if (generation !== playGeneration) return; renderEvent(event); timelineOffset.value = event.offsetMs; previous = event.offsetMs; } }
   finally { if (generation === playGeneration) playing.value = false; }
 };
-const stop = () => { playGeneration += 1; playing.value = false; };
+const stop = () => { playGeneration += 1; remoteDesktopRecording?.pause(); playing.value = false; };
 const handleEscape = (event: KeyboardEvent) => { if(event.key==='Escape'&&selectedId.value)closePlayer(); };
 onMounted(() => {
   window.addEventListener('keydown', handleEscape);
@@ -208,7 +247,7 @@ onMounted(() => {
   }
   void loadList();
 });
-onBeforeUnmount(() => { window.removeEventListener('keydown', handleEscape); stop(); recordingAbortController?.abort(); resizeObserver?.disconnect(); terminal?.dispose(); });
+onBeforeUnmount(() => { window.removeEventListener('keydown', handleEscape); stop(); remoteDesktopRecording?.abort(); recordingAbortController?.abort(); resizeObserver?.disconnect(); terminal?.dispose(); });
 </script>
 
 <style scoped>

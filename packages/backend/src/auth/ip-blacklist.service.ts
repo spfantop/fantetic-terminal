@@ -2,9 +2,11 @@
 import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
 import { settingsService } from '../settings/settings.service';
 import { NotificationService } from '../notifications/notification.service'; 
+import { createLogger } from '../logging/logger';
 
 
 const notificationService = new NotificationService(); // 实例化 NotificationService
+const logger = createLogger('IpBlacklistService');
 
 // 黑名单相关设置的 Key
 const MAX_LOGIN_ATTEMPTS_KEY = 'maxLoginAttempts';
@@ -40,8 +42,8 @@ export class IpBlacklistService {
             const db = await getDbInstance();
             const row = await getDbRow<DbIpBlacklistRow>(db, 'SELECT * FROM ip_blacklist WHERE ip = ?', [ip]);
             return row; // Returns undefined if not found
-        } catch (err: any) {
-            console.error(`[IP Blacklist] 查询 IP ${ip} 时出错:`, err.message);
+        } catch (error) {
+            logger.error('Failed to query IP blacklist entry', { errorName: error instanceof Error ? error.name : 'UnknownError' });
             throw new Error('数据库查询失败'); // Re-throw error
         }
     }
@@ -54,7 +56,6 @@ export class IpBlacklistService {
      async isBlocked(ip: string): Promise<boolean> {
          // 首先检查功能是否启用
          if (!(await settingsService.isIpBlacklistEnabled())) {
-             // console.log('[IP Blacklist] 功能已禁用，跳过 isBlocked 检查。');
              return false; // 如果禁用，则认为 IP 未被阻止
          }
  
@@ -65,12 +66,12 @@ export class IpBlacklistService {
             }
             // 检查封禁时间是否已过
             if (entry.blocked_until && entry.blocked_until > Math.floor(Date.now() / 1000)) {
-                console.log(`[IP Blacklist] IP ${ip} 当前被封禁，直到 ${new Date(entry.blocked_until * 1000).toISOString()}`);
+                logger.info('IP blacklist entry is currently blocked');
                 return true; // 仍在封禁期内
             }
             return false;
-        } catch (error: any) { // Catch errors from getEntry
-            console.error(`[IP Blacklist] 检查 IP ${ip} 封禁状态时出错:`, error.message);
+        } catch (error) {
+            logger.error('Failed to check IP blacklist status', { errorName: error instanceof Error ? error.name : 'UnknownError' });
             return false; // 出错时默认不封禁
         }
     }
@@ -83,12 +84,11 @@ export class IpBlacklistService {
     async recordFailedAttempt(ip: string): Promise<void> {
         // 首先检查功能是否启用
         if (!(await settingsService.isIpBlacklistEnabled())) {
-            // console.log('[IP Blacklist] 功能已禁用，跳过 recordFailedAttempt。');
             return; // 如果禁用，则不记录失败尝试
         }
 
         if (LOCAL_IPS.includes(ip)) {
-            console.log(`[IP Blacklist] 检测到本地 IP ${ip} 登录失败，跳过黑名单处理。`);
+            logger.debug('Skipping IP blacklist update for a local address');
             return;
         }
 
@@ -111,9 +111,9 @@ export class IpBlacklistService {
                 if (newAttempts >= maxAttempts && !entry.blocked_until) { 
                     blockedUntil = now + banDuration;
                     shouldNotify = true;
-                    console.warn(`[IP Blacklist] IP ${ip} 登录失败次数达到 ${newAttempts} 次 (阈值 ${maxAttempts})，将被封禁 ${banDuration} 秒。`);
+                    logger.warn('IP blacklist threshold reached; address blocked', { attempts: newAttempts, maxAttempts, banDurationSeconds: banDuration });
                 } else if (newAttempts >= maxAttempts && entry.blocked_until) {
-                    console.log(`[IP Blacklist] IP ${ip} 再次登录失败，当前已处于封禁状态。`);
+                    logger.info('Blocked IP recorded another failed login attempt', { attempts: newAttempts, maxAttempts });
                 }
 
                 await runDb(db,
@@ -127,7 +127,7 @@ export class IpBlacklistService {
                         attempts: newAttempts,
                         duration: banDuration,
                         blockedUntil: new Date(blockedUntil * 1000).toISOString()
-                    }).catch(err => console.error(`[IP Blacklist] 发送 IP_BLACKLISTED 通知失败 for IP ${ip}:`, err));
+                    }).catch(error => logger.error('Failed to send IP blacklist notification', { errorName: error instanceof Error ? error.name : 'UnknownError' }));
                 }
 
             } else {
@@ -139,7 +139,7 @@ export class IpBlacklistService {
                 if (attempts >= maxAttempts) {
                     blockedUntil = now + banDuration;
                     shouldNotify = true;
-                    console.warn(`[IP Blacklist] IP ${ip} 首次登录失败即达到阈值 ${maxAttempts}，将被封禁 ${banDuration} 秒。`);
+                    logger.warn('IP blacklist initial attempt reached threshold; address blocked', { attempts, maxAttempts, banDurationSeconds: banDuration });
                 }
 
                 await runDb(db,
@@ -153,11 +153,11 @@ export class IpBlacklistService {
                          attempts: attempts,
                          duration: banDuration,
                          blockedUntil: new Date(blockedUntil * 1000).toISOString()
-                     }).catch(err => console.error(`[IP Blacklist] 发送 IP_BLACKLISTED 通知失败 for IP ${ip}:`, err));
+                     }).catch(error => logger.error('Failed to send IP blacklist notification', { errorName: error instanceof Error ? error.name : 'UnknownError' }));
                  }
             }
-        } catch (error: any) {
-            console.error(`[IP Blacklist] 记录 IP ${ip} 失败尝试时出错:`, error.message);
+        } catch (error) {
+            logger.error('Failed to record IP blacklist login attempt', { errorName: error instanceof Error ? error.name : 'UnknownError' });
         }
     }
 
@@ -169,9 +169,9 @@ export class IpBlacklistService {
         try {
             const db = await getDbInstance();
             await runDb(db, 'DELETE FROM ip_blacklist WHERE ip = ?', [ip]);
-            console.log(`[IP Blacklist] 已重置 IP ${ip} 的失败尝试记录。`);
-        } catch (error: any) {
-            console.error(`[IP Blacklist] 重置 IP ${ip} 尝试次数时出错:`, error.message);
+            logger.info('IP blacklist attempts reset');
+        } catch (error) {
+            logger.error('Failed to reset IP blacklist attempts', { errorName: error instanceof Error ? error.name : 'UnknownError' });
         }
     }
 
@@ -190,8 +190,8 @@ export class IpBlacklistService {
             const countRow = await getDbRow<{ count: number }>(db, 'SELECT COUNT(*) as count FROM ip_blacklist');
             const total = countRow?.count ?? 0;
             return { entries, total };
-        } catch (error: any) {
-             console.error('[IP Blacklist] 获取黑名单列表时出错:', error.message);
+        } catch (error) {
+             logger.error('Failed to retrieve IP blacklist', { errorName: error instanceof Error ? error.name : 'UnknownError' });
              return { entries: [], total: 0 };
         }
     }
@@ -206,14 +206,14 @@ export class IpBlacklistService {
             const db = await getDbInstance();
             const result = await runDb(db, 'DELETE FROM ip_blacklist WHERE ip = ?', [ip]);
             if (result.changes > 0) {
-                console.log(`[IP Blacklist] 已从黑名单中删除 IP ${ip}。`);
+                logger.info('IP blacklist entry removed');
                 return true;
             } else {
-                console.warn(`[IP Blacklist] 尝试删除 IP ${ip}，但该 IP 不在黑名单中。`);
+                logger.warn('Attempted to remove an IP blacklist entry that does not exist');
                 return false;
             }
-        } catch (error: any) {
-            console.error(`[IP Blacklist] 从黑名单删除 IP ${ip} 时出错:`, error.message);
+        } catch (error) {
+            logger.error('Failed to remove IP blacklist entry', { errorName: error instanceof Error ? error.name : 'UnknownError' });
             throw new Error(`从黑名单删除 IP ${ip} 时出错`);
         }
     }

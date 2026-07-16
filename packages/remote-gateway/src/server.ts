@@ -3,8 +3,12 @@ import GuacamoleLite from 'guacamole-lite';
 import express, { Request, Response } from 'express';
 import http from 'http';
 import crypto from 'crypto';
-import { createHealthSnapshot } from './health';
+import { createHealthSnapshot, isGuacdReachable } from './health';
 import { createGatewayTokenClaims, GatewayTokenReplayGuard, isAuthorizedGatewayRequest } from './security';
+import { encryptGatewayToken } from './token';
+import { createGatewayLogger } from './logging';
+
+const logger = createGatewayLogger('RemoteGateway');
 
 // --- 配置 ---
 const REMOTE_GATEWAY_WS_PORT = process.env.REMOTE_GATEWAY_WS_PORT || 8080; // 统一端口，或按需分开
@@ -17,10 +21,10 @@ if (GATEWAY_SHARED_SECRET.length < 32) {
 }
 
 // --- 启动时生成内存加密密钥 ---
-console.log("[Remote Gateway] 正在为此会话生成新的内存加密密钥...");
+logger.info('正在为此会话生成新的内存加密密钥');
 const ENCRYPTION_KEY_STRING = crypto.randomBytes(32).toString('hex');
 const ENCRYPTION_KEY_BUFFER = Buffer.from(ENCRYPTION_KEY_STRING, 'hex');
-console.log("[Remote Gateway] 内存加密密钥已生成。");
+logger.info('内存加密密钥已生成');
 
 // --- Express 应用设置 ---
 const app = express();
@@ -36,18 +40,33 @@ const guacdOptions = {
 const websocketOptions = {
     port: REMOTE_GATEWAY_WS_PORT,
     host: '0.0.0.0', // 监听所有接口
-    verifyClient: ({ req }: { req: http.IncomingMessage }) => isAuthorizedGatewayRequest(
-        typeof req.headers['x-fantetic-gateway-secret'] === 'string'
+    verifyClient: ({ req }: { req: http.IncomingMessage }) => {
+        const requestId = readGatewayRequestId(req);
+        const authorized = isAuthorizedGatewayRequest(
+            typeof req.headers['x-fantetic-gateway-secret'] === 'string'
             ? req.headers['x-fantetic-gateway-secret']
             : undefined,
-        GATEWAY_SHARED_SECRET,
-    ),
+            GATEWAY_SHARED_SECRET,
+        );
+        if (authorized) {
+            logger.info('远程桌面 WebSocket 已授权', requestId ? { requestId } : {});
+        } else {
+            logger.warn('远程桌面 WebSocket 鉴权失败', requestId ? { requestId } : {});
+        }
+        return authorized;
+    },
 };
 
 const clientOptions = {
+    // guacamole-lite DEBUG logs include raw protocol frames. Keep the library at
+    // error-only level so encrypted recording data and remote desktop content
+    // never reach ordinary process logs.
+    log: {
+        level: 'ERRORS',
+    },
     crypt: {
         key: ENCRYPTION_KEY_BUFFER,
-        cypher: 'aes-256-cbc'
+        cypher: 'aes-256-gcm'
     },
     // 默认连接设置将根据协议动态调整
     connectionDefaultSettings: {},
@@ -56,8 +75,15 @@ const clientOptions = {
 let guacServer: any;
 let guacamoleReady = false;
 const tokenReplayGuard = new GatewayTokenReplayGuard();
+const REQUEST_ID_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
 
 type RemoteDesktopConnectionConfig = Record<string, string | number | boolean | null | undefined>;
+
+function readGatewayRequestId(req: Pick<http.IncomingMessage, 'headers'>): string | undefined {
+    const header = req.headers['x-request-id'];
+    const candidate = (Array.isArray(header) ? header[0] : header)?.trim();
+    return candidate && REQUEST_ID_PATTERN.test(candidate) ? candidate : undefined;
+}
 
 const readConfigValue = (connectionConfig: RemoteDesktopConnectionConfig, ...keys: string[]): string | undefined => {
     for (const key of keys) {
@@ -70,7 +96,11 @@ const readConfigValue = (connectionConfig: RemoteDesktopConnectionConfig, ...key
     return undefined;
 };
 
-const logRemoteDesktopSettingsSnapshot = (protocol: 'rdp' | 'vnc', settings: Record<string, unknown>) => {
+const logRemoteDesktopSettingsSnapshot = (
+    protocol: 'rdp' | 'vnc',
+    settings: Record<string, unknown>,
+    requestId?: string,
+) => {
     const safeKeys = protocol === 'rdp'
         ? ['width', 'height', 'dpi', 'security', 'ignore-cert', 'color-depth', 'force-lossless', 'resize-method', 'disable-gfx', 'enable-wallpaper']
         : ['width', 'height', 'color-depth', 'force-lossless'];
@@ -78,11 +108,11 @@ const logRemoteDesktopSettingsSnapshot = (protocol: 'rdp' | 'vnc', settings: Rec
         acc[key] = Object.prototype.hasOwnProperty.call(settings, key) ? settings[key] : '(omitted)';
         return acc;
     }, {});
-    console.log(`[Remote Gateway] ${protocol.toUpperCase()} guacd 参数快照: ${JSON.stringify(snapshot)}`);
+    logger.info('guacd 参数快照', { protocol, settings: snapshot, ...(requestId ? { requestId } : {}) });
 };
 
 try {
-    console.log(`[Remote Gateway] 正在使用选项初始化 GuacamoleLite: WS 端口=${websocketOptions.port}, Guacd=${guacdOptions.host}:${guacdOptions.port}`);
+    logger.info('正在初始化 GuacamoleLite', { websocketPort: websocketOptions.port, guacdHost: guacdOptions.host, guacdPort: guacdOptions.port });
     guacServer = new GuacamoleLite(websocketOptions, guacdOptions, clientOptions, {
         processConnectionSettings: (settings: any, callback: (error?: Error, value?: any) => void) => {
             try {
@@ -96,28 +126,28 @@ try {
         },
     });
     guacamoleReady = true;
-    console.log(`[Remote Gateway] GuacamoleLite 初始化成功。`);
+    logger.info('GuacamoleLite 初始化成功');
 
     if (guacServer.on) {
         guacServer.on('error', (error: Error) => {
-            console.error(`[Remote Gateway] GuacamoleLite 服务器错误:`, error);
+            logger.error('GuacamoleLite 服务器错误', { error });
         });
         guacServer.on('connection', (client: any) => {
             const clientId = client.id || '未知客户端ID';
-            console.log(`[Remote Gateway] Guacd 连接事件触发。客户端 ID: ${clientId}`);
+            logger.info('Guacd 连接已建立', { clientId });
 
             if (client && typeof client.on === 'function') {
-                client.on('disconnect', (reason: string) => {
-                    console.log(`[Remote Gateway] Guacd 连接断开。客户端 ID: ${clientId}, 原因: ${reason || '未知'}`);
+                client.on('disconnect', () => {
+                    logger.info('Guacd 连接已断开', { clientId });
                 });
                 client.on('error', (err: Error) => {
-                     console.error(`[Remote Gateway] Guacd 客户端错误。客户端 ID: ${clientId}, 错误:`, err);
+                     logger.error('Guacd 客户端错误', { clientId, error: err });
                 });
             }
         });
    }
 } catch (error) {
-   console.error(`[Remote Gateway] 初始化 GuacamoleLite 失败:`, error);
+   logger.error('GuacamoleLite 初始化失败', { error });
    process.exit(1);
 }
 
@@ -125,9 +155,10 @@ app.get('/health/live', (_req: Request, res: Response): void => {
     res.status(200).json({ status: 'alive' });
 });
 
-app.get(['/health', '/health/ready'], (_req: Request, res: Response): void => {
-    const snapshot = createHealthSnapshot({ guacamoleReady });
-    res.status(guacamoleReady ? 200 : 503).json(snapshot);
+app.get(['/health', '/health/ready'], async (_req: Request, res: Response): Promise<void> => {
+    const guacdReachable = guacamoleReady && await isGuacdReachable({ host: GUACD_HOST, port: GUACD_PORT });
+    const snapshot = createHealthSnapshot({ guacamoleReady: guacdReachable });
+    res.status(guacdReachable ? 200 : 503).json(snapshot);
 });
 
 const requireBackendAuthentication = (req: Request, res: Response, next: () => void): void => {
@@ -139,25 +170,8 @@ const requireBackendAuthentication = (req: Request, res: Response, next: () => v
     next();
 };
 
-const encryptToken = (data: string, keyBuffer: Buffer): string => {
-    try {
-        const iv = crypto.randomBytes(16);
-        const cipher = crypto.createCipheriv('aes-256-cbc', keyBuffer, iv);
-        let encrypted = cipher.update(data, 'utf8', 'base64');
-        encrypted += cipher.final('base64');
-        const output = {
-            iv: iv.toString('base64'),
-            value: encrypted
-        };
-        const jsonString = JSON.stringify(output);
-        return Buffer.from(jsonString).toString('base64');
-    } catch (e) {
-        console.error("[Remote Gateway] 令牌加密失败:", e);
-        throw new Error("令牌加密失败。");
-    }
-};
-
 app.post('/api/remote-desktop/token', requireBackendAuthentication, (req: Request, res: Response): void => {
+    const requestId = readGatewayRequestId(req);
     const { protocol, connectionConfig } = req.body;
 
     if (!protocol || !connectionConfig) {
@@ -215,7 +229,7 @@ app.post('/api/remote-desktop/token', requireBackendAuthentication, (req: Reques
         settings['force-lossless'] = readConfigValue(connectionConfig, 'forceLossless', 'force-lossless') || 'false';
     }
 
-    logRemoteDesktopSettingsSnapshot(protocol, settings);
+    logRemoteDesktopSettingsSnapshot(protocol, settings, requestId);
 
     const connectionParams = {
         ...createGatewayTokenClaims(),
@@ -227,21 +241,21 @@ app.post('/api/remote-desktop/token', requireBackendAuthentication, (req: Reques
 
     try {
         const tokenData = JSON.stringify(connectionParams);
-        const encryptedToken = encryptToken(tokenData, ENCRYPTION_KEY_BUFFER);
+        const encryptedToken = encryptGatewayToken(tokenData, ENCRYPTION_KEY_BUFFER);
+        logger.info('远程桌面令牌已签发', { protocol, ...(requestId ? { requestId } : {}) });
         res.json({ token: encryptedToken });
     } catch (error) {
-        console.error("[Remote Gateway] /api/remote-desktop/token 接口出错:", error);
+        logger.error('远程桌面令牌生成失败', { ...(requestId ? { requestId } : {}), error });
         res.status(500).json({ error: '生成令牌失败' });
     }
 });
 
 apiServer.listen(REMOTE_GATEWAY_API_PORT, () => {
-    console.log(`[Remote Gateway] API 服务器正在监听端口 ${REMOTE_GATEWAY_API_PORT}`);
-    console.log(`[Remote Gateway] Guacamole WebSocket 服务器应在端口 ${REMOTE_GATEWAY_WS_PORT} 上运行 (由 GuacamoleLite 管理)`);
+    logger.info('API 服务器正在监听', { apiPort: REMOTE_GATEWAY_API_PORT, websocketPort: REMOTE_GATEWAY_WS_PORT });
 });
 
 const gracefulShutdown = (signal: string) => {
-    console.log(`[Remote Gateway] 收到 ${signal} 信号。正在优雅地关闭...`);
+    logger.info('收到关闭信号，开始优雅关闭', { signal });
 
   guacamoleReady = false;
   let guacClosed = false;
@@ -249,36 +263,36 @@ const gracefulShutdown = (signal: string) => {
 
   const tryExit = () => {
     if (guacClosed && apiClosed) {
-      console.log("[Remote Gateway] 所有服务器已关闭。正在退出。");
+      logger.info('所有服务器已关闭，正在退出');
       process.exit(0);
     }
   };
 
   apiServer.close((err) => {
     if (err) {
-        console.error("[Remote Gateway] 关闭 API 服务器时出错:", err);
+        logger.error('关闭 API 服务器时出错', { error: err });
     } else {
-        console.log("[Remote Gateway] API 服务器已关闭。");
+        logger.info('API 服务器已关闭');
     }
     apiClosed = true;
     tryExit();
   });
 
   if (typeof guacServer !== 'undefined' && guacServer && typeof guacServer.close === 'function') {
-    console.log("[Remote Gateway] 正在关闭 Guacamole 服务器...");
+    logger.info('正在关闭 Guacamole 服务器');
     guacServer.close(() => {
-        console.log("[Remote Gateway] Guacamole 服务器已关闭。");
+        logger.info('Guacamole 服务器已关闭');
         guacClosed = true;
         tryExit();
     });
   } else {
-    console.log("[Remote Gateway] Guacamole 服务器未运行或不支持 close() 方法。");
+    logger.info('Guacamole 服务器未运行或不支持 close 方法');
     guacClosed = true;
     tryExit();
   }
 
   setTimeout(() => {
-    console.error("[Remote Gateway] 关闭超时。强制退出。");
+    logger.error('关闭超时，强制退出');
     process.exit(1);
   }, 10000); // 10 秒超时
 };

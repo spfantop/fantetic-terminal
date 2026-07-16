@@ -10,11 +10,11 @@
     "doc": "docs"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node build-tools/test/workspace-test-suite.behavior-test.js && node build-tools/workspace-test-suite.js",
     "build:frontend": "npm --workspace @fantetic-terminal/frontend run build",
     "build:backend": "npm --workspace @fantetic-terminal/backend run build",
     "build:app": "npx cross-env VITE_FANTETIC_APP_MODE=electron npm run build:frontend && npm run build:backend && npm --prefix electron-app run build",
-    "test:delivery": "node build-tools/test/delivery-pipeline.behavior-test.js",
+    "test:delivery": "node build-tools/test/delivery-pipeline.behavior-test.js && node build-tools/test/security-scan.behavior-test.js && node build-tools/security-scan.js && node build-tools/test/supply-chain.behavior-test.js",
     "dev:app": "node electron-app/dev-app.js",
     "postinstall": "node build-tools/apply-patches.js"
   },
@@ -24,7 +24,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "GPL-3.0-only",
   "bugs": {
     "url": "https://github.com/spfantop/fantetic-terminal/issues"
   },

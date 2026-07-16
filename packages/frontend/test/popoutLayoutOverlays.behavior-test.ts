@@ -242,6 +242,15 @@ assert.match(
   'VNC modal clipboard sync should use the modal display document clipboard',
 );
 
+for (const [componentName, source] of [
+  ['RDP modal', remoteDesktopModal],
+  ['remote desktop session', remoteDesktopSession],
+  ['VNC modal', vncModal],
+] as const) {
+  assert.doesNotMatch(source, /status\.message/, `${componentName} must not display raw tunnel or client errors`);
+  assert.doesNotMatch(source, /response\?\.data\?\.message/, `${componentName} must not display backend error messages`);
+}
+
 assert.match(
   commandInputBar,
   /<SuspendedSshSessionsModal[\s\S]*:teleport-target="commandBarTeleportTarget"/,

@@ -1,6 +1,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useAuthStore } from '../../stores/auth.store';
 import apiClient from '../../utils/apiClient';
+import { resolveTwoFactorErrorKey } from '../../utils/apiError';
 import { useI18n } from 'vue-i18n';
 
 export function useTwoFactorAuth() {
@@ -36,7 +37,7 @@ export function useTwoFactorAuth() {
       setupData.value = response.data;
     } catch (error: any) {
       console.error('开始设置 2FA 失败:', error);
-      twoFactorMessage.value = error.response?.data?.message || t('settings.twoFactor.error.setupFailed');
+      twoFactorMessage.value = t(resolveTwoFactorErrorKey(error));
     } finally {
       twoFactorLoading.value = false;
     }
@@ -60,7 +61,7 @@ export function useTwoFactorAuth() {
       await authStore.checkAuthStatus(); // Refresh user data
     } catch (error: any) {
       console.error('验证并激活 2FA 失败:', error);
-      twoFactorMessage.value = error.response?.data?.message || t('settings.twoFactor.error.verificationFailed');
+      twoFactorMessage.value = t(resolveTwoFactorErrorKey(error));
     } finally {
       twoFactorLoading.value = false;
     }
@@ -83,7 +84,7 @@ export function useTwoFactorAuth() {
       await authStore.checkAuthStatus(); // Refresh user data
     } catch (error: any) {
       console.error('禁用 2FA 失败:', error);
-      twoFactorMessage.value = error.response?.data?.message || t('settings.twoFactor.error.disableFailed');
+      twoFactorMessage.value = t(resolveTwoFactorErrorKey(error));
     } finally {
       twoFactorLoading.value = false;
     }

@@ -79,6 +79,7 @@ export const settingsController = {
           'showPopupFileEditor', 'shareFileEditorTabs', 'ipWhitelistEnabled',
           'autoCopyOnSelect', 'dockerManagerEnabled', 'dockerStatusIntervalSeconds', 'dockerDefaultExpand',
           'statusMonitorEnabled', 'statusMonitorIntervalSeconds', // +++ 状态监控设置键 +++
+          'sessionRecordingEnabled', // 会话录像设置键
           'workspaceSidebarPersistent', // +++ 侧边栏固定键 +++
           'showPopupFileManager', // +++ 弹窗文件管理器设置键 +++
           'sidebarPaneWidths', // +++ 侧边栏宽度对象键 +++

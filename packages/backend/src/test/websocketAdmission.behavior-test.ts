@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 
 import {
   FixedWindowAdmissionLimiter,
@@ -23,5 +25,9 @@ assert.equal(limiter.allow('user:1'), true);
 assert.equal(limiter.allow('user:1'), false);
 now = 2001;
 assert.equal(limiter.allow('user:1'), true);
+
+const upgradeSource = fs.readFileSync(path.resolve('src/websocket/upgrade.ts'), 'utf8');
+assert.match(upgradeSource, /createLogger\('WebSocketUpgrade'\)/);
+assert.doesNotMatch(upgradeSource, /\bconsole\.(?:log|info|warn|error|debug)\b/);
 
 console.log('websocket admission behavior ok');

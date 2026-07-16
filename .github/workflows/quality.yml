@@ -20,10 +20,10 @@ jobs:
     timeout-minutes: 25
     steps:
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
           cache: npm
@@ -31,40 +31,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Verify delivery contract
-        run: npm run test:delivery
-
-      - name: Verify frontend architecture
+      - name: Audit dependency locks
         run: |
-          npm run test:runtime-capabilities --workspace=@fantetic-terminal/frontend
-          npm run test:user-cache-scope --workspace=@fantetic-terminal/frontend
-          npm run test:service-worker-policy --workspace=@fantetic-terminal/frontend
-          npm run test:startup-chunking --workspace=@fantetic-terminal/frontend
-          npm run test:access-control-ui --workspace=@fantetic-terminal/frontend
-          npm run test:backup-management --workspace=@fantetic-terminal/frontend
-          npm run test:highlighter --workspace=@fantetic-terminal/frontend
-          npm run test:terminal-render-highlighter --workspace=@fantetic-terminal/frontend
-          npm run test:terminal-local-echo --workspace=@fantetic-terminal/frontend
+          npm audit --audit-level=high
+          npm audit --prefix electron-app --package-lock-only --audit-level=high
 
-      - name: Verify backend architecture
-        run: |
-          npm run test:auth-session --workspace=@fantetic-terminal/backend
-          npm run test:auth-public-role --workspace=@fantetic-terminal/backend
-          npm run test:access-policy --workspace=@fantetic-terminal/backend
-          npm run test:system-role-routes --workspace=@fantetic-terminal/backend
-          npm run test:notification-config-encryption --workspace=@fantetic-terminal/backend
-          npm run test:audit-context --workspace=@fantetic-terminal/backend
-          npm run test:backup-service --workspace=@fantetic-terminal/backend
-          npm run test:database-backup --workspace=@fantetic-terminal/backend
-          npm run test:access-control-migration --workspace=@fantetic-terminal/backend
-          npm run test:process-lifecycle --workspace=@fantetic-terminal/backend
-          npm run test:database-runtime --workspace=@fantetic-terminal/backend
-
-      - name: Verify gateway security
-        run: |
-          npm run test:health --workspace=@fantetic-terminal/remote-gateway
-          npm run test:security --workspace=@fantetic-terminal/remote-gateway
-          npm run test:guacamole-lite-patch --workspace=@fantetic-terminal/remote-gateway
+      - name: Run full behavior suite
+        run: npm test
 
       - name: Build all runtime packages
         run: |

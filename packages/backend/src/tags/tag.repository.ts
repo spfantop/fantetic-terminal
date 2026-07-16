@@ -1,5 +1,5 @@
 import { Database, Statement } from 'sqlite3';
-import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
+import { getDbInstance, runDb, getDb as getDbRow, allDb, withTransaction } from '../database/connection';
 import { AuthorizationSubject } from '../access-control/authorization-subject';
 
 
@@ -138,9 +138,7 @@ export const deleteTag = async (id: number, subject: AuthorizationSubject): Prom
 export const updateTagConnections = async (tagId: number, connectionIds: number[], subject: AuthorizationSubject): Promise<void> => {
     const db = await getDbInstance();
     try {
-        // 开始事务
-        await runDb(db, 'BEGIN TRANSACTION');
-
+      await withTransaction(db, async () => {
         const ownedTag = await getDbRow<{ id: number }>(db, `SELECT id FROM tags WHERE id = ? AND (? = 1 OR owner_user_id = ?)`, [tagId, canWriteAll(subject) ? 1 : 0, subject.userId]);
         if (!ownedTag) throw new Error('标签未找到或无权管理。');
 
@@ -159,11 +157,8 @@ export const updateTagConnections = async (tagId: number, connectionIds: number[
             }
         }
 
-        // 提交事务
-        await runDb(db, 'COMMIT');
+      });
     } catch (err: any) {
-        // 如果发生错误，回滚事务
-        await runDb(db, 'ROLLBACK');
         console.error(`[仓库] 更新标签 ${tagId} 的连接关联时出错:`, err.message);
         throw new Error(`更新标签连接关联失败: ${err.message}`);
     }

@@ -7,10 +7,11 @@ export const insertSessionRecording = async (row: SessionRecordingRow): Promise<
   const db = await getDbInstance();
   await runDb(db, `INSERT INTO session_recordings (
     id, user_id, username, connection_id, connection_name, protocol,
-    started_at, status, relative_path, event_count, byte_count
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+    started_at, status, relative_path, event_count, byte_count, recording_chain_hash, recording_batch_count
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
     row.id, row.user_id, row.username, row.connection_id, row.connection_name, row.protocol,
     row.started_at, row.status, row.relative_path, row.event_count, row.byte_count,
+    row.recording_chain_hash, row.recording_batch_count,
   ]);
 };
 
@@ -20,11 +21,13 @@ export const completeSessionRecording = async (
   status: SessionRecordingRow['status'],
   eventCount: number,
   byteCount: number,
+  recordingChainHash: string | null,
+  recordingBatchCount: number,
 ): Promise<void> => {
   const db = await getDbInstance();
   await runDb(db, `UPDATE session_recordings
-    SET ended_at = ?, status = ?, event_count = ?, byte_count = ? WHERE id = ?`,
-  [endedAt, status, eventCount, byteCount, id]);
+    SET ended_at = ?, status = ?, event_count = ?, byte_count = ?, recording_chain_hash = ?, recording_batch_count = ? WHERE id = ?`,
+  [endedAt, status, eventCount, byteCount, recordingChainHash, recordingBatchCount, id]);
 };
 
 export const listSessionRecordings = async (query: SessionRecordingListQuery & { userId?: number } = {}) => {

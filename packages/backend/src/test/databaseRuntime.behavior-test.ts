@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import sqlite3 from 'sqlite3';
 
 import { configureDatabaseRuntime, getDb, runDb } from '../database/connection';
@@ -20,5 +22,8 @@ try {
 }
 assert.equal(errors.some(message => message.includes('do-not-log-this-secret')), false);
 assert.equal(errors.some(message => message.includes('参数数量: 1')), true);
+
+const connectionModule = readFileSync(resolve('src/database/connection.ts'), 'utf8');
+assert.doesNotMatch(connectionModule, /\bconsole\.(?:log|info|warn|error|debug)\b/);
 
 await new Promise<void>((resolve, reject) => db.close(error => error ? reject(error) : resolve()));

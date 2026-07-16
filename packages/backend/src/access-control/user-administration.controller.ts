@@ -5,6 +5,7 @@ import { SystemRole } from './access-policy';
 import { UserAdministrationApplication } from './user-administration.application';
 import { userAdministrationRepository } from './user-administration.repository';
 import { AuditLogService } from '../audit/audit.service';
+import { runAuditProtectedOperation } from '../audit/audit-high-risk';
 import { deleteUserCustomHtmlThemes } from '../appearance/appearance.service';
 
 const application = new UserAdministrationApplication(
@@ -34,12 +35,14 @@ export const createUser = async (req: Request, res: Response): Promise<void> => 
     res.status(400).json({ code: 'userAdministration.invalidRole' }); return;
   }
   try {
-    const user = await application.createUser(req.authorization!, {
-      username: typeof req.body.username === 'string' ? req.body.username : '',
+    const username = typeof req.body.username === 'string' ? req.body.username : '';
+    const user = await runAuditProtectedOperation(auditLogService, 'USER_CREATED', {
+      username, systemRole, phase: 'requested',
+    }, () => application.createUser(req.authorization!, {
+      username,
       password: typeof req.body.password === 'string' ? req.body.password : '',
       systemRole,
-    });
-    await auditLogService.logAction('USER_CREATED', { targetUserId: user.id, systemRole: user.systemRole });
+    }));
     res.status(201).json(user);
   } catch (error) { handleError(error, res); }
 };
@@ -54,8 +57,9 @@ export const updateUser = async (req: Request, res: Response): Promise<void> => 
     res.status(400).json({ code: 'userAdministration.invalidRequest' }); return;
   }
   try {
-    const user = await application.updateUser(req.authorization!, userId, { systemRole, status });
-    await auditLogService.logAction('USER_UPDATED', { targetUserId: userId, systemRole, status });
+    const user = await runAuditProtectedOperation(auditLogService, 'USER_UPDATED', {
+      targetUserId: userId, systemRole, status, phase: 'requested',
+    }, () => application.updateUser(req.authorization!, userId, { systemRole, status }));
     res.json(user);
   }
   catch (error) { handleError(error, res); }
@@ -68,11 +72,11 @@ export const resetUserPassword = async (req: Request, res: Response): Promise<vo
     res.status(400).json({ code: 'userAdministration.invalidRequest' }); return;
   }
   try {
-    await application.resetPassword(req.authorization!, userId, password);
-    await auditLogService.logAction('USER_PASSWORD_RESET', {
+    await runAuditProtectedOperation(auditLogService, 'USER_PASSWORD_RESET', {
       actorUserId: req.authorization!.userId,
       targetUserId: userId,
-    });
+      phase: 'requested',
+    }, () => application.resetPassword(req.authorization!, userId, password));
     res.status(204).send();
   } catch (error) { handleError(error, res); }
 };
@@ -85,17 +89,17 @@ export const deleteUser = async (req: Request, res: Response): Promise<void> => 
     res.status(400).json({ code: 'userAdministration.invalidRequest' }); return;
   }
   try {
-    await application.deleteUser(req.authorization!, userId, transferToUserId);
+    await runAuditProtectedOperation(auditLogService, 'USER_DELETED', {
+      actorUserId: req.authorization!.userId,
+      targetUserId: userId,
+      transferToUserId,
+      phase: 'requested',
+    }, () => application.deleteUser(req.authorization!, userId, transferToUserId));
     try {
       await deleteUserCustomHtmlThemes(userId);
     } catch (error) {
       console.error(`[UserAdministration] 清理用户 ${userId} 的自定义 HTML 主题失败:`, error);
     }
-    await auditLogService.logAction('USER_DELETED', {
-      actorUserId: req.authorization!.userId,
-      targetUserId: userId,
-      transferToUserId,
-    });
     res.status(204).send();
   } catch (error) { handleError(error, res); }
 };

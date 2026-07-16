@@ -1,5 +1,11 @@
 import { Request, Response } from 'express';
-import { deleteRecordingForSubject, listReadableRecordings, readRecordingForSubject } from './session-recording.service';
+import { sendApiError } from '../security/api-error-envelope';
+import {
+  deleteRecordingForSubject,
+  listReadableRecordings,
+  prepareGuacamoleRecordingStreamForSubject,
+  readRecordingForSubject,
+} from './session-recording.service';
 
 export const listRecordings = async (req: Request, res: Response): Promise<void> => {
   const limit = Number(req.query.limit ?? 25);
@@ -25,6 +31,34 @@ export const readRecording = async (req: Request, res: Response): Promise<void> 
     return;
   }
   res.json(recording);
+};
+
+export const streamGuacamoleRecording = async (req: Request, res: Response): Promise<void> => {
+  const prepared = await prepareGuacamoleRecordingStreamForSubject(req.params.recordingId, req.authorization!);
+  if (prepared.status !== 'ready') {
+    if (prepared.status === 'not_found') { sendApiError(res, 404, 'sessionRecording.notFound'); return; }
+    if (prepared.status === 'forbidden') { sendApiError(res, 403, 'sessionRecording.readForbidden'); return; }
+    if (prepared.status === 'unsupported_protocol') { sendApiError(res, 422, 'sessionRecording.guacamoleProtocolRequired'); return; }
+    if (prepared.status === 'integrity_failed') { sendApiError(res, 409, 'sessionRecording.integrityFailed'); return; }
+    sendApiError(res, 409, 'sessionRecording.notReady');
+    return;
+  }
+
+  res.status(200);
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store');
+  try {
+    for await (const chunk of prepared.chunkIterator) {
+      res.write(chunk);
+    }
+    res.end();
+  } catch {
+    if (!res.headersSent) {
+      sendApiError(res, 500, 'sessionRecording.streamFailed');
+      return;
+    }
+    res.destroy();
+  }
 };
 
 export const deleteRecording = async (req: Request, res: Response): Promise<void> => {

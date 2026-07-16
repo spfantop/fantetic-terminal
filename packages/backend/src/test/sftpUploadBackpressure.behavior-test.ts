@@ -5,6 +5,12 @@ import { resolve } from 'node:path';
 const sftpService = readFileSync(resolve('src/sftp/sftp.service.ts'), 'utf8');
 const sftpHandler = readFileSync(resolve('src/websocket/handlers/sftp.handler.ts'), 'utf8');
 
+assert.doesNotMatch(
+  sftpService,
+  /interface\s+(?:ServerStatus|NetworkStats)|DEFAULT_POLLING_INTERVAL|previousNetStats/,
+  'SFTP upload service should not retain status-monitoring concepts',
+);
+
 assert.match(
   sftpService,
   /chunkQueue:\s*Promise<void>/,
@@ -48,6 +54,18 @@ assert.match(
 );
 
 assert.match(
+  sftpService,
+  /uploadState\.sessionId\s*!==\s*sessionId/,
+  'upload chunks and cancellation must reject a request from another SFTP session',
+);
+
+assert.match(
+  sftpService,
+  /if \(uploadState\?\.sessionId === sessionId\) \{\s*this\.cancelUploadInternal/s,
+  'an unknown session may only clean up an upload that is known to belong to it',
+);
+
+assert.match(
   sftpHandler,
   /typeof payload\?\.data !== 'string'/,
   'upload chunk handler should allow an empty string payload for zero-byte files',
@@ -58,5 +76,9 @@ assert.match(
   /payload\.byteLength/,
   'upload chunk handler should forward byteLength metadata to the SFTP service',
 );
+
+assert.match(sftpHandler, /createLogger\('SftpWebSocketHandler'\)/);
+assert.doesNotMatch(sftpHandler, /\bconsole\.(?:log|info|warn|error|debug)\b/);
+assert.doesNotMatch(sftpHandler, /RemotePath|remotePath: payload/);
 
 console.log('backend sftp upload backpressure behavior ok');

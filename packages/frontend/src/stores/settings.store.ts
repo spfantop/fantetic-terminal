@@ -76,6 +76,7 @@ interface SettingsState {
   dockerDefaultExpand?: string; //  Docker 默认展开详情 'true' or 'false'
   statusMonitorEnabled?: string; // 'true' or 'false' - 状态监控控制开关
   statusMonitorIntervalSeconds?: string; //  状态监控轮询间隔 (秒)
+  sessionRecordingEnabled?: string; // 'true' or 'false' - 会话录像控制开关
   workspaceSidebarPersistent?: string; //  工作区侧边栏是否固定 'true' or 'false'
   sidebarPaneWidths?: string; //  存储各侧边栏组件宽度的 JSON 字符串
   fileManagerRowSizeMultiplier?: string; //  文件管理器行大小乘数 (e.g., '1.0')
@@ -204,6 +205,9 @@ export const useSettingsStore = defineStore('settings', () => {
       }
       if (settings.value.statusMonitorIntervalSeconds === undefined) {
           settings.value.statusMonitorIntervalSeconds = '3'; // 默认 3 秒
+      }
+      if (settings.value.sessionRecordingEnabled === undefined) {
+          settings.value.sessionRecordingEnabled = 'true'; // 默认启用会话录像
       }
       //  Workspace sidebar persistent default
       if (settings.value.workspaceSidebarPersistent === undefined) {
@@ -468,7 +472,7 @@ export const useSettingsStore = defineStore('settings', () => {
         'language', 'ipWhitelist', 'maxLoginAttempts', 'loginBanDuration',
         'showPopupFileEditor', 'showPopupFileManager', 'shareFileEditorTabs', 'ipWhitelistEnabled', // +++  showPopupFileManager +++
         'autoCopyOnSelect', 'dockerManagerEnabled', 'dockerStatusIntervalSeconds', 'dockerDefaultExpand',
-        'statusMonitorEnabled', 'statusMonitorIntervalSeconds', // +++ 状态监控设置键 +++
+        'statusMonitorEnabled', 'statusMonitorIntervalSeconds', 'sessionRecordingEnabled', // +++ 状态监控与会话录像设置键 +++
         'workspaceSidebarPersistent', // +++ 侧边栏固定键 +++
         'sidebarPaneWidths', // +++ 侧边栏宽度对象键 +++
         'fileManagerRowSizeMultiplier', // +++ 文件管理器行大小键 +++
@@ -602,7 +606,7 @@ export const useSettingsStore = defineStore('settings', () => {
         'language', 'ipWhitelist', 'maxLoginAttempts', 'loginBanDuration',
         'showPopupFileEditor', 'showPopupFileManager', 'shareFileEditorTabs', 'ipWhitelistEnabled', // +++  showPopupFileManager +++
         'autoCopyOnSelect', 'dockerManagerEnabled', 'dockerStatusIntervalSeconds', 'dockerDefaultExpand',
-        'statusMonitorEnabled', 'statusMonitorIntervalSeconds', // +++ 状态监控设置键 +++
+        'statusMonitorEnabled', 'statusMonitorIntervalSeconds', 'sessionRecordingEnabled', // +++ 状态监控与会话录像设置键 +++
         'workspaceSidebarPersistent', // +++ 侧边栏固定键 +++
         'sidebarPaneWidths', // +++ 侧边栏宽度对象键 +++
         'fileManagerRowSizeMultiplier', // +++ 文件管理器行大小键 +++

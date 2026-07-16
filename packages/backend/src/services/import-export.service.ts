@@ -4,7 +4,7 @@ import * as ProxyRepository from '../proxies/proxy.repository';
 import * as TagService from '../tags/tag.service'; 
 import * as ConnectionService from '../connections/connection.service';
 import * as SshKeyService from '../ssh_keys/ssh_key.service';
-import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
+import { getDbInstance, runDb, getDb as getDbRow, allDb, withTransaction } from '../database/connection';
 import { decrypt, getEncryptionKeyBuffer as getCryptoKeyBuffer } from '../utils/crypto'; 
 import { getAllDecryptedSshKeys, DecryptedSshKeyDetails } from '../ssh_keys/ssh_key.service'; 
 import { AuthorizationSubject } from '../access-control/authorization-subject';
@@ -488,8 +488,7 @@ export const importConnections = async (
         .map(folder => folder.id));
 
     try {
-        await runDb(db, 'BEGIN TRANSACTION');
-
+      const result = await withTransaction(db, async () => {
         const connectionsToInsert: Array<Omit<ConnectionRepository.FullConnectionData, 'id' | 'created_at' | 'updated_at' | 'last_connected_at'> & { tag_ids?: number[] }> = [];
         const proxyCache: { [key: string]: number } = {}; 
 
@@ -609,18 +608,14 @@ export const importConnections = async (
 
 
 
-        await runDb(db, 'COMMIT');
-        console.log(`Service: 导入事务提交。成功: ${successCount}, 失败: ${failureCount}`);
         return { successCount, failureCount, errors };
+      });
+      console.log(`Service: 导入事务提交。成功: ${successCount}, 失败: ${failureCount}`);
+      return result;
 
     } catch (error: any) {
 
         console.error('Service: 导入事务处理出错，正在回滚:', error);
-        try {
-            await runDb(db, 'ROLLBACK');
-        } catch (rollbackErr: any) {
-            console.error("Service: 回滚事务失败:", rollbackErr);
-        }
         failureCount = importedData.length;
         successCount = 0;
         errors.push({ message: `事务处理失败: ${error.message}` });

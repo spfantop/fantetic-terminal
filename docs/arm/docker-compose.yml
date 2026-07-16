@@ -43,7 +43,7 @@ services:
   #     - backend
 
   # guacd:
-  #   image: guacamole/guacd:latest
+  #   image: guacamole/guacd:1.6.0-RC1
   #   container_name: fantetic-terminal-guacd
   #   networks:
   #     - fantetic-terminal-network

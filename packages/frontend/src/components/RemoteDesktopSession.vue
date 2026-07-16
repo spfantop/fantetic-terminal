@@ -657,10 +657,8 @@ const handleConnection = async () => {
 
     // @ts-ignore
     const tunnel = new Guacamole.WebSocketTunnel(tunnelUrl);
-    tunnel.onerror = (status: any) => {
-      const errorMessage = status.message || 'Unknown tunnel error';
-      const errorCode = status.code || 'N/A';
-      updateStatus('error', `${t('remoteDesktopModal.errors.tunnelError')} (${errorCode}): ${errorMessage}`);
+    tunnel.onerror = () => {
+      updateStatus('error', t('remoteDesktopModal.errors.tunnelError'));
       disconnectGuacamole(true);
     };
 
@@ -709,15 +707,14 @@ const handleConnection = async () => {
       updateStatus(currentStatus, t(`remoteDesktopModal.status.${i18nKeyPart}`, { state }));
     };
 
-    guacClient.value.onerror = (status: any) => {
-      const errorMessage = status.message || 'Unknown client error';
-      updateStatus('error', `${t('remoteDesktopModal.errors.clientError')}: ${errorMessage}`);
+    guacClient.value.onerror = () => {
+      updateStatus('error', t('remoteDesktopModal.errors.clientError'));
       disconnectGuacamole(true);
     };
 
     guacClient.value.connect('');
-  } catch (error: any) {
-    updateStatus('error', `${t('remoteDesktopModal.errors.connectionFailed')}: ${error.response?.data?.message || error.message || String(error)}`);
+  } catch {
+    updateStatus('error', t('remoteDesktopModal.errors.connectionFailed'));
     disconnectGuacamole(true);
   }
 };

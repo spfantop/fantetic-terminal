@@ -1,6 +1,6 @@
 import { Database } from 'sqlite3';
 
-import { allDb, getDb, getDbInstance, runDb } from '../database/connection';
+import { allDb, getDb, getDbInstance, runDb, withTransaction } from '../database/connection';
 import { SystemRole } from './access-policy';
 import {
   ManagedUser,
@@ -78,8 +78,7 @@ export class SqliteUserAdministrationRepository implements UserAdministrationRep
 
   async deleteUser(userId: number, transferToUserId: number): Promise<void> {
     const db = await this.getDatabase();
-    await runDb(db, 'BEGIN IMMEDIATE TRANSACTION');
-    try {
+    await withTransaction(db, async () => {
       await runDb(db, `
         INSERT INTO user_group_members(group_id, user_id, role)
         SELECT group_id, ?, 'owner' FROM user_group_members
@@ -107,11 +106,7 @@ export class SqliteUserAdministrationRepository implements UserAdministrationRep
       }
       const result = await runDb(db, 'DELETE FROM users WHERE id = ?', [userId]);
       if (result.changes === 0) throw new Error('User not found.');
-      await runDb(db, 'COMMIT');
-    } catch (error) {
-      await runDb(db, 'ROLLBACK').catch(() => undefined);
-      throw error;
-    }
+    }, { mode: 'immediate' });
   }
 
   async countActiveSuperAdmins(): Promise<number> {

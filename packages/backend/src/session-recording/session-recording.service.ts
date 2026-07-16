@@ -3,7 +3,13 @@ import path from 'node:path';
 import { v4 as uuidv4 } from 'uuid';
 
 import { getAppDataPath } from '../config/app-data-path';
-import { createSessionRecorder, readRecordingEventPage } from './session-recorder';
+import {
+  createSessionRecorder,
+  readGuacamoleServerRecordingChunks,
+  readRecordingEventPage,
+  verifyRecordingIntegrity,
+} from './session-recorder';
+import { resolveSessionRecordingIntegrity } from './recording-integrity';
 import {
   completeSessionRecording,
   deleteSessionRecording,
@@ -12,17 +18,20 @@ import {
   readSessionRecording,
   SessionRecordingRow,
 } from './session-recording.repository';
+import { settingsRepository } from '../settings/settings.repository';
 import { createLogger } from '../logging/logger';
 import type { SessionRecordingListQuery } from '@fantetic-terminal/contracts';
+import type { SessionRecordingProtocol } from '@fantetic-terminal/contracts';
 
 const logger = createLogger('SessionRecordingService');
+const SESSION_RECORDING_ENABLED_KEY = 'sessionRecordingEnabled';
 
 export interface SessionRecordingIdentity {
   userId?: number;
   username?: string;
   connectionId: number;
   connectionName: string;
-  protocol: 'SSH' | 'TELNET';
+  protocol: SessionRecordingProtocol;
 }
 
 export type ActiveSessionRecorder = ReturnType<typeof createSessionRecorder>;
@@ -31,7 +40,7 @@ const recordingRoot = path.join(getAppDataPath(), 'session-recordings');
 export const startSessionRecording = async (
   identity: SessionRecordingIdentity,
 ): Promise<ActiveSessionRecorder | undefined> => {
-  if (process.env.SESSION_RECORDING_ENABLED === 'false') return undefined;
+  if (await settingsRepository.getSetting(SESSION_RECORDING_ENABLED_KEY) === 'false') return undefined;
   const id = uuidv4();
   const startedAt = Date.now();
   let endedAt = startedAt;
@@ -47,6 +56,8 @@ export const startSessionRecording = async (
         summary.incomplete ? 'incomplete' : 'completed',
         summary.eventCount,
         summary.byteCount,
+        summary.finalHash,
+        summary.batchCount,
       );
     },
   });
@@ -63,6 +74,8 @@ export const startSessionRecording = async (
     relative_path: recorder.relativePath,
     event_count: 0,
     byte_count: 0,
+    recording_chain_hash: null,
+    recording_batch_count: 0,
   });
   const originalFinish = recorder.finish;
   recorder.finish = async finishAt => {
@@ -103,7 +116,39 @@ export const readRecordingForSubject = async (
 ) => {
   const row = await readSessionRecording(id);
   if (!row || !canReadRecording(row, subject)) return undefined;
-  return { metadata: row, ...await readRecordingEventPage(recordingRoot, row.relative_path, cursor, limit) };
+  const integrity = resolveSessionRecordingIntegrity(
+    row,
+    await verifyRecordingIntegrity(recordingRoot, row.relative_path),
+  );
+  if (integrity.status === 'invalid') {
+    return { metadata: row, integrity, eventList: [], nextCursor: null };
+  }
+  return { metadata: row, integrity, ...await readRecordingEventPage(recordingRoot, row.relative_path, cursor, limit) };
+};
+
+export type GuacamoleRecordingStreamPreparation =
+  | { status: 'ready'; chunkIterator: AsyncIterable<Buffer> }
+  | { status: 'not_found' | 'forbidden' | 'unsupported_protocol' | 'integrity_failed' | 'not_ready' };
+
+export const prepareGuacamoleRecordingStreamForSubject = async (
+  id: string,
+  subject: { runtime: string; systemRole: string; userId?: number },
+): Promise<GuacamoleRecordingStreamPreparation> => {
+  const row = await readSessionRecording(id);
+  if (!row) return { status: 'not_found' };
+  if (!canReadRecording(row, subject)) return { status: 'forbidden' };
+  if (row.protocol !== 'RDP' && row.protocol !== 'VNC') return { status: 'unsupported_protocol' };
+
+  const integrity = resolveSessionRecordingIntegrity(
+    row,
+    await verifyRecordingIntegrity(recordingRoot, row.relative_path),
+  );
+  if (integrity.status === 'invalid') return { status: 'integrity_failed' };
+  if (integrity.status === 'unanchored') return { status: 'not_ready' };
+  return {
+    status: 'ready',
+    chunkIterator: readGuacamoleServerRecordingChunks(recordingRoot, row.relative_path),
+  };
 };
 
 export const deleteRecordingForSubject = async (

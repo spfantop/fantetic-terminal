@@ -238,8 +238,21 @@
         "captchaRequired": "Please complete the CAPTCHA verification.",
         "usernameRequiredForPasskey": "Username is required to use a passkey.",
         "passkeyAuthOptionsFailed": "Failed to get passkey authentication options from the server.",
-        "passkeyAuthFailed": "Passkey authentication failed. Please try again or use your password."
+        "passkeyAuthFailed": "Passkey authentication failed. Please try again or use your password.",
+        "serviceUnavailable": "The service is temporarily unavailable. Check your connection and try again.",
+        "usernamePasswordRequired": "Enter a username and password.",
+        "captchaRejected": "CAPTCHA verification failed. Try again.",
+        "captchaVerificationUnavailable": "The CAPTCHA verification service is temporarily unavailable. Try again later.",
+        "invalidCredentials": "The username or password is incorrect.",
+        "accountDisabled": "This account is disabled.",
+      "requestFailed": "The login request failed. Try again later.",
+      "twoFactorChallengeInvalid": "The verification session is invalid. Sign in again.",
+      "twoFactorTokenRequired": "Enter your two-factor verification code.",
+      "twoFactorTokenInvalid": "The two-factor verification code is invalid. Try again.",
+      "twoFactorVerificationFailed": "Two-factor verification failed. Try again later."
     },
+    "retry": "Retry",
+    "retrying": "Retrying...",
     "recaptchaV3Notice": "This site is protected by reCAPTCHA and the Google Privacy Policy and Terms of Service apply."
   },
   "connections": {
@@ -532,6 +545,11 @@
     "title": "File Editor"
   },
   "fileManager": {
+    "fileList": "File list",
+    "accessibility": {
+      "sortColumn": "Sort by {column}",
+      "resizeColumn": "Resize {column} column"
+    },
     "modalTitle": "File Manager",
     "currentPath": "Current Path",
     "loading": "Loading directory...",
@@ -560,7 +578,9 @@
       "cut": "Cut",
       "paste": "Paste",
       "openEditor": "Open Editor",
-      "copyPath": "Copy Path"
+      "copyPath": "Copy Path",
+      "multiSelect": "Enter multi-select mode",
+      "exitMultiSelect": "Exit multi-select mode"
     },
 "contextMenu": {
       "compress": "Compress",
@@ -858,6 +878,12 @@
       "success": "Password changed successfully!",
       "error": {
         "passwordsDoNotMatch": "New password and confirmation do not match.",
+        "fieldsRequired": "Enter your current password and a new password.",
+        "unauthenticated": "Your sign-in session is invalid. Sign in again.",
+        "tooShort": "The new password must be at least 8 characters.",
+        "mustDiffer": "The new password must differ from your current password.",
+        "userNotFound": "The user was not found. Sign in again.",
+        "currentPasswordInvalid": "The current password is incorrect.",
         "generic": "Failed to change password. Please try again later."
       }
     },
@@ -886,9 +912,15 @@
       },
       "error": {
         "setupFailed": "Failed to get two-factor setup information.",
+        "unauthenticated": "Your login session is invalid. Please sign in again.",
+        "alreadyEnabled": "Two-factor authentication is already enabled. Disable it before resetting it.",
+        "setupMissing": "No pending setup was found. Please start again.",
         "codeRequired": "Please enter the verification code.",
         "verificationFailed": "Invalid or expired verification code.",
+        "activationFailed": "Failed to enable two-factor authentication. Please try again later.",
         "passwordRequiredForDisable": "Current password is required to disable.",
+        "userNotFound": "The user no longer exists. Please sign in again.",
+        "currentPasswordInvalid": "The current password is incorrect.",
         "disableFailed": "Failed to disable two-factor authentication."
       }
     },
@@ -959,6 +991,8 @@
         "userNotLoggedIn": "User not logged in or username unavailable.",
         "registrationCancelled": "Passkey registration was cancelled.",
         "registrationFailed": "Passkey registration failed.",
+        "nameUpdateFailed": "Failed to update the Passkey name. Please try again.",
+        "deleteFailedInvalidId": "Deletion failed because the credential ID is invalid.",
         "deleteFailedGeneral": "Failed to delete Passkey. Please try again."
       },
       "success": {
@@ -1097,6 +1131,17 @@
       "error": {
         "saveFailed": "Failed to save status monitor settings.",
         "invalidInterval": "Refresh interval must be a positive integer."
+      }
+    },
+    "sessionRecording": {
+      "title": "Session Recording",
+      "description": "When disabled, new SSH, Telnet, RDP, and VNC sessions are not recorded. Existing recordings remain available.",
+      "enableLabel": "Record new sessions",
+      "success": {
+        "saved": "Session recording setting saved successfully."
+      },
+      "error": {
+        "saveFailed": "Failed to save the session recording setting."
       }
     },
     "workspace": {
@@ -1398,6 +1443,7 @@
     "title": "Audit Logs",
     "searchPlaceholder": "Search details...",
     "noLogs": "No audit logs found.",
+    "errors": { "fetchFailed": "Failed to load audit logs." },
     "startDate": "Start time", "endDate": "End time", "total": "{count} total", "detailTitle": "Audit details", "openRelatedRecordings": "View recordings near this actor", "correlationHint": "Recordings and session IDs do not yet share a direct key; results are filtered by actor and event time window.", "selectHint": "Select a log entry to inspect its full context.",
     "table": {
       "timestamp": "Timestamp",
@@ -1524,7 +1570,7 @@
     "textInputPlaceholder": "Enter text here to send to VNC",
     "sendButtonTitle": "Send text to VNC (simulates keyboard input)",
     "errors": {
-      "simulateInputError": "Error simulating keyboard input: {error}"
+      "simulateInputError": "Unable to simulate keyboard input."
     }
   },
   "commandInputBar": {
@@ -1680,7 +1726,9 @@
     "error": {
       "passwordsDoNotMatch": "Passwords do not match.",
       "fieldsRequired": "Username and password are required.",
-      "generic": "An error occurred during setup. Please check the server logs."
+      "passwordTooShort": "The password must be at least 8 characters.",
+      "alreadyCompleted": "Initial setup is already complete and cannot be repeated.",
+      "generic": "An error occurred during setup. Please try again later."
     }
   },
   "focusSwitcher": {
@@ -2004,6 +2052,7 @@
     "transferFailedError": "Failed to initiate transfer. Please try again."
   },
 "favoritePaths": {
+    "open": "Open favorite paths",
     "addEditForm": {
       "validation": {
         "pathRequired": "Path is required."
@@ -2048,10 +2097,12 @@
     "empty": "No session recordings.",
     "loadFailed": "Failed to load session recordings.",
     "playFailed": "Failed to read or replay the session recording.",
+    "remoteDesktopPlaybackFailed": "The remote desktop protocol recording cannot be replayed.",
     "play": "Replay", "delete": "Delete recording", "confirmDelete": "Delete the session recording for {name}? This cannot be undone.", "deleteFailed": "Failed to delete the session recording.",
     "stop": "Stop",
     "speed": "Speed",
     "player": "Terminal session player", "searchPlaceholder": "Connection or username", "startedAfter": "Started after", "total": "{count} total", "duration": "Duration", "events": "Events", "eventCount": "{count} events", "size": "Size", "preparing": "Preparing replay…", "timeline": "Replay timeline", "selectHint": "Select a recording to inspect and replay.",
+    "integrity": { "invalid": "Recording integrity verification failed. Replay is unavailable." },
     "status": { "active": "Active", "completed": "Completed", "incomplete": "Incomplete", "failed": "Failed" }
   }
 }

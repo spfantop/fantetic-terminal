@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { ipBlacklistService } from '../auth/ip-blacklist.service';
 import { settingsService } from '../settings/settings.service'; 
+import { sendApiError } from '../security/api-error-envelope';
 
 /**
  * IP 黑名单检查中间件
@@ -13,7 +14,7 @@ export const ipBlacklistCheckMiddleware = async (req: Request, res: Response, ne
     if (!clientIp) {
         // 如果无法获取 IP，为安全起见，阻止请求
         console.warn('[IP Blacklist Check] 无法获取请求 IP 地址，已拒绝访问。');
-        res.status(403).json({ message: '禁止访问：无法识别来源 IP。' });
+        sendApiError(res, 403, 'auth.sourceIpUnavailable');
         return; // 显式返回 void
     }
 
@@ -28,17 +29,14 @@ export const ipBlacklistCheckMiddleware = async (req: Request, res: Response, ne
         const isBlocked = await ipBlacklistService.isBlocked(clientIp);
         if (isBlocked) {
             console.warn(`[IP Blacklist Check] 已阻止来自被封禁 IP ${clientIp} 的访问。`);
-            // 可以返回更通用的错误信息，避免泄露封禁状态
-            res.status(403).json({ message: '访问被拒绝。' });
-            // 或者返回更具体的错误
+            sendApiError(res, 403, 'auth.sourceIpBlocked');
             return; // 显式返回 void
         }
         // IP 未被封禁，继续处理请求
         next();
     } catch (error) {
         console.error(`[IP Blacklist Check] 检查 IP ${clientIp} 时发生错误:`, error);
-        // 中间件执行出错，为安全起见，阻止请求
-        res.status(500).json({ message: '服务器内部错误 (IP 黑名单检查失败)。' });
+        sendApiError(res, 500, 'auth.ipBlacklistVerificationFailed');
         return; // 显式返回 void
     }
 };

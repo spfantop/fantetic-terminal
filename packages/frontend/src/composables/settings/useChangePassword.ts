@@ -37,7 +37,10 @@ export function useChangePassword() {
       confirmPassword.value = '';
     } catch (error: any) {
       console.error('修改密码失败:', error);
-      changePasswordMessage.value = error.message || t('settings.changePassword.error.generic');
+      const errorKey = typeof error?.message === 'string' && error.message.startsWith('settings.changePassword.')
+        ? error.message
+        : 'settings.changePassword.error.generic';
+      changePasswordMessage.value = t(errorKey);
       changePasswordSuccess.value = false;
     } finally {
       changePasswordLoading.value = false;

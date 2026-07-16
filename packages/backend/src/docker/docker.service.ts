@@ -1,7 +1,9 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { createLogger } from '../logging/logger';
 
 const execAsync = promisify(exec);
+const logger = createLogger('DockerService');
 
 // --- Interfaces (与前端 DockerManager.vue 中的定义保持一致) ---
 // 理想情况下，这些类型应该放在共享的 types 包中
@@ -96,14 +98,14 @@ export class DockerService {
                       // 初始化 stats 为 null
                       data.stats = null;
                       return data as DockerContainer;
-                  } catch (parseError) {
-                      console.error(`[DockerService] Failed to parse container JSON line: ${line}`, { error: parseError });
+                  } catch (error) {
+                      logger.error('Failed to parse Docker container status output', { error });
                       return null;
                   }
               })
               .filter((container): container is DockerContainer => container !== null);
-      } catch (error: any) {
-          console.error('[DockerService] Failed to execute "docker ps"', { error: error.message, stderr: error.stderr });
+      } catch (error) {
+          logger.error('Failed to retrieve Docker container status', { errorName: error instanceof Error ? error.name : 'UnknownError' });
           this.isDockerAvailableCache = false;
           return { available: false, containers: [] };
       }
@@ -129,13 +131,13 @@ export class DockerService {
                      // 也可以考虑用 Name 匹配作为备选
                      // if (statsData.Name) statsMap.set(statsData.Name, statsData);
                   }
-              } catch (parseError) {
-                  console.error(`[DockerService] Failed to parse stats JSON line: ${line}`, { error: parseError });
+              } catch (error) {
+                  logger.error('Failed to parse Docker statistics output', { error });
               }
           });
-      } catch (error: any) {
+      } catch (error) {
           // 获取 stats 失败不应阻止返回容器列表，只是 stats 会是 null
-          console.warn('[DockerService] Failed to execute "docker stats"', { error: error.message, stderr: error.stderr });
+          logger.warn('Failed to retrieve Docker statistics', { errorName: error instanceof Error ? error.name : 'UnknownError' });
       }
 
       // 3. 合并统计信息到容器列表
@@ -184,26 +186,25 @@ export class DockerService {
         dockerCliCommand = `docker rm -f ${cleanContainerId}`;
         break;
       default:
-        // 防止未知的命令类型
-        console.error(`[DockerService] Received unknown command type: ${command}`); // Use console.error
+        logger.error('Received unsupported Docker command', { command });
         throw new Error(`Unsupported Docker command: ${command}`);
     }
 
-    console.log(`[DockerService] Executing command: ${dockerCliCommand}`); // Use console.log
+    logger.info('Executing Docker container operation', { command });
     try {
       const { stdout, stderr } = await execAsync(dockerCliCommand, { timeout: this.commandTimeout });
       if (stderr) {
         // Docker 命令有时会将正常信息输出到 stderr (例如 rm 返回容器 ID)
         // 但也可能包含错误信息
-        console.warn(`[DockerService] Command "${dockerCliCommand}" produced stderr:`, { stderr }); // Use console.warn
+        logger.warn('Docker container operation produced standard-error output', { command });
         // 可以根据 stderr 内容判断是否真的是错误
         if (stderr.toLowerCase().includes('error') || stderr.toLowerCase().includes('failed')) {
              throw new Error(`Docker command failed: ${stderr}`);
         }
       }
-      console.log(`[DockerService] Command "${dockerCliCommand}" executed successfully.`, { stdout }); // Use console.log
+      logger.info('Docker container operation completed', { command, producedOutput: Boolean(stdout) });
     } catch (error: any) {
-      console.error(`[DockerService] Failed to execute command "${dockerCliCommand}"`, { error: error.message, stderr: error.stderr }); // Use console.error
+      logger.error('Failed to execute Docker container operation', { command, errorName: error instanceof Error ? error.name : 'UnknownError' });
       // 抛出错误，让 Controller 层处理并返回给前端
       throw new Error(`Failed to execute Docker command "${command}": ${error.stderr || error.message}`);
     }

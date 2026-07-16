@@ -17,6 +17,8 @@ assert.match(view, /filterValidationError/);
 assert.match(view, /adminDateRange\.invalidRange/);
 assert.match(view, /aria-current/);
 assert.match(view, /audit-detail-row/);
+assert.match(store, /auditLog\.errors\.fetchFailed/);
+assert.match(view, /t\(store\.error\)/);
 assert.doesNotMatch(view, /<aside class="audit-detail"/);
 
 console.log('audit investigation workspace behavior ok');

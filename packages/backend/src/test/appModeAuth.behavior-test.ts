@@ -45,9 +45,13 @@ const verifyElectronRuntimeUser = async () => {
 };
 
 const createResponseStub = () => {
+  const headers = new Map<string, string>();
   const response = {
     statusCode: 200,
     body: undefined as unknown,
+    setHeader(name: string, value: string) {
+      headers.set(name.toLowerCase(), value);
+    },
     status(code: number) {
       this.statusCode = code;
       return this;
@@ -113,7 +117,8 @@ try {
 
   assert.equal(webNextCalled, false);
   assert.equal(webResponse.statusCode, 401);
-  assert.deepEqual(webResponse.body, { message: '未授权：请先登录。' });
+  assert.deepEqual((webResponse.body as any)?.code, 'auth.authenticationRequired');
+  assert.equal(typeof (webResponse.body as any)?.requestId, 'string');
 } finally {
   if (typeof originalAppMode === 'undefined') {
     delete process.env.FANTETIC_APP_MODE;

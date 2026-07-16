@@ -1,6 +1,10 @@
 import { Request, Response } from 'express';
 import * as SshKeyService from './ssh_key.service';
 import { CreateSshKeyInput, UpdateSshKeyInput } from './ssh_key.service';
+import { AuditLogService } from '../audit/audit.service';
+import { runAuditProtectedOperation } from '../audit/audit-high-risk';
+
+const auditLogService = new AuditLogService();
 
 /**
  * 获取所有 SSH 密钥的名称列表 (GET /api/v1/ssh-keys)
@@ -27,7 +31,9 @@ export const createSshKey = async (req: Request, res: Response): Promise<void> =
             return;
         }
         const ownerUserId = req.authorization?.runtime === 'web' ? req.authorization.userId : null;
-        const newKey = await SshKeyService.createSshKey(input, ownerUserId);
+        const newKey = await runAuditProtectedOperation(auditLogService, 'SSH_KEY_CREATED', {
+            name: input.name, phase: 'requested',
+        }, () => SshKeyService.createSshKey(input, ownerUserId));
         res.status(201).json({ message: 'SSH 密钥创建成功。', key: newKey });
     } catch (error: any) {
         console.error('Controller: 创建 SSH 密钥失败:', error);
@@ -82,7 +88,10 @@ export const updateSshKey = async (req: Request, res: Response): Promise<void> =
              return;
         }
 
-        const updatedKey = await SshKeyService.updateSshKey(keyId, input);
+        const updatedKey = await runAuditProtectedOperation(auditLogService, 'SSH_KEY_UPDATED', {
+            keyId, name: input.name, privateKeyChanged: input.private_key !== undefined,
+            passphraseChanged: input.passphrase !== undefined, phase: 'requested',
+        }, () => SshKeyService.updateSshKey(keyId, input));
         if (!updatedKey) {
             res.status(404).json({ message: 'SSH 密钥未找到。' });
         } else {
@@ -109,7 +118,9 @@ export const deleteSshKey = async (req: Request, res: Response): Promise<void> =
             res.status(400).json({ message: '无效的密钥 ID。' });
             return;
         }
-        const deleted = await SshKeyService.deleteSshKey(keyId);
+        const deleted = await runAuditProtectedOperation(auditLogService, 'SSH_KEY_DELETED', {
+            keyId, phase: 'requested',
+        }, () => SshKeyService.deleteSshKey(keyId));
         if (!deleted) {
             res.status(404).json({ message: 'SSH 密钥未找到。' });
         } else {

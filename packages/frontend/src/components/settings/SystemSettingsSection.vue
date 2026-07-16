@@ -27,6 +27,24 @@
          </form>
       </div>
       <hr class="border-border/50"> <!-- Separator -->
+      <div v-if="isSystemAdministrator" class="settings-section-content">
+         <h3 class="text-base font-semibold text-foreground mb-1">{{ $t('settings.sessionRecording.title') }}</h3>
+         <p class="text-sm text-text-secondary mb-4">{{ $t('settings.sessionRecording.description') }}</p>
+         <form @submit.prevent="handleUpdateSessionRecording" class="space-y-4">
+           <label class="flex items-center gap-2 text-sm text-foreground cursor-pointer select-none">
+             <input v-model="sessionRecordingEnabled" type="checkbox">
+             {{ $t('settings.sessionRecording.enableLabel') }}
+           </label>
+           <div class="flex items-center justify-between">
+              <button type="submit" :disabled="sessionRecordingLoading"
+                      class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium disabled:opacity-50">
+                {{ sessionRecordingLoading ? $t('common.saving') : $t('common.save') }}
+              </button>
+              <p v-if="sessionRecordingMessage" :class="['text-sm', sessionRecordingSuccess ? 'text-success' : 'text-error']">{{ sessionRecordingMessage }}</p>
+           </div>
+         </form>
+      </div>
+      <hr v-if="isSystemAdministrator" class="border-border/50"> <!-- Separator -->
       <!-- Timezone Setting -->
       <div class="settings-section-content">
          <h3 class="text-base font-semibold text-foreground mb-3">{{ $t('settings.timezone.title') }}</h3>
@@ -60,11 +78,42 @@
 import { useSettingsStore } from '../../stores/settings.store';
 import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
+import { computed, ref, watch } from 'vue';
 import { useSystemSettings } from '../../composables/settings/useSystemSettings';
+import { useAuthStore } from '../../stores/auth.store';
+import { isAccountFeatureAvailable } from '../../utils/runtimeConfig';
 
 const settingsStore = useSettingsStore();
 const { settings } = storeToRefs(settingsStore); 
 const { t } = useI18n();
+const authStore = useAuthStore();
+const isSystemAdministrator = computed(() => !isAccountFeatureAvailable()
+  || ['super_admin', 'admin'].includes(authStore.user?.systemRole ?? ''));
+const sessionRecordingEnabled = ref(true);
+const sessionRecordingLoading = ref(false);
+const sessionRecordingMessage = ref('');
+const sessionRecordingSuccess = ref(false);
+
+watch(settings, newSettings => {
+  sessionRecordingEnabled.value = newSettings?.sessionRecordingEnabled !== 'false';
+}, { deep: true, immediate: true });
+
+const handleUpdateSessionRecording = async () => {
+  sessionRecordingLoading.value = true;
+  sessionRecordingMessage.value = '';
+  sessionRecordingSuccess.value = false;
+  try {
+    await settingsStore.updateMultipleSettings({
+      sessionRecordingEnabled: sessionRecordingEnabled.value ? 'true' : 'false',
+    });
+    sessionRecordingMessage.value = t('settings.sessionRecording.success.saved');
+    sessionRecordingSuccess.value = true;
+  } catch (error: any) {
+    sessionRecordingMessage.value = error.message || t('settings.sessionRecording.error.saveFailed');
+  } finally {
+    sessionRecordingLoading.value = false;
+  }
+};
 
 const {
   selectedLanguage,

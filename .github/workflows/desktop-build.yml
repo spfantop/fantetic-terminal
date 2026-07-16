@@ -59,10 +59,10 @@ jobs:
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
           cache: npm
@@ -84,6 +84,24 @@ jobs:
           RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag }}
         run: node build-tools/validate-release-version.js
 
+      - name: Verify production signing and notarization credentials
+        if: ${{ (github.ref_type == 'tag' || inputs.release_tag != '') && (runner.os == 'Windows' || runner.os == 'macOS') }}
+        env:
+          SIGNING_CSC_LINK: ${{ runner.os == 'Windows' && secrets.WINDOWS_CSC_LINK || runner.os == 'macOS' && secrets.MACOS_CSC_LINK || '' }}
+          SIGNING_CSC_KEY_PASSWORD: ${{ runner.os == 'Windows' && secrets.WINDOWS_CSC_KEY_PASSWORD || runner.os == 'macOS' && secrets.MACOS_CSC_KEY_PASSWORD || '' }}
+          APPLE_API_KEY: ${{ runner.os == 'macOS' && secrets.APPLE_API_KEY || '' }}
+          APPLE_API_KEY_ID: ${{ runner.os == 'macOS' && secrets.APPLE_API_KEY_ID || '' }}
+          APPLE_API_ISSUER: ${{ runner.os == 'macOS' && secrets.APPLE_API_ISSUER || '' }}
+          APPLE_TEAM_ID: ${{ runner.os == 'macOS' && secrets.APPLE_TEAM_ID || '' }}
+        shell: pwsh
+        run: |
+          if (-not $env:SIGNING_CSC_LINK -or -not $env:SIGNING_CSC_KEY_PASSWORD) {
+            throw 'Production desktop releases require platform signing credentials.'
+          }
+          if ('${{ runner.os }}' -eq 'macOS' -and (-not $env:APPLE_API_KEY -or -not $env:APPLE_API_KEY_ID -or -not $env:APPLE_API_ISSUER -or -not $env:APPLE_TEAM_ID)) {
+            throw 'Production macOS releases require App Store Connect API-key notarization credentials.'
+          }
+
       - name: Build backend
         run: npm run build --workspace=@fantetic-terminal/backend
 
@@ -96,6 +114,10 @@ jobs:
         env:
           SIGNING_CSC_LINK: ${{ runner.os == 'Windows' && secrets.WINDOWS_CSC_LINK || runner.os == 'macOS' && secrets.MACOS_CSC_LINK || '' }}
           SIGNING_CSC_KEY_PASSWORD: ${{ runner.os == 'Windows' && secrets.WINDOWS_CSC_KEY_PASSWORD || runner.os == 'macOS' && secrets.MACOS_CSC_KEY_PASSWORD || '' }}
+          APPLE_API_KEY: ${{ runner.os == 'macOS' && secrets.APPLE_API_KEY || '' }}
+          APPLE_API_KEY_ID: ${{ runner.os == 'macOS' && secrets.APPLE_API_KEY_ID || '' }}
+          APPLE_API_ISSUER: ${{ runner.os == 'macOS' && secrets.APPLE_API_ISSUER || '' }}
+          APPLE_TEAM_ID: ${{ runner.os == 'macOS' && secrets.APPLE_TEAM_ID || '' }}
         shell: pwsh
         run: |
           if ($env:SIGNING_CSC_LINK) {
@@ -122,7 +144,7 @@ jobs:
           exit $packagingExitCode
 
       - name: Upload desktop packages
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: fantetic-terminal-${{ matrix.artifact }}
           path: ${{ matrix.files }}
@@ -138,7 +160,7 @@ jobs:
       contents: write
     steps:
       - name: Download all desktop packages
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: fantetic-terminal-*
           path: release-assets
@@ -148,8 +170,13 @@ jobs:
         shell: bash
         run: find release-assets -maxdepth 1 -type f -print0 | sort -z | xargs -0 sha256sum > release-assets/SHA256SUMS.txt
 
+      - name: Verify release checksums
+        shell: bash
+        working-directory: release-assets
+        run: sha256sum --check SHA256SUMS.txt
+
       - name: Create release and upload Assets
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@c12583777ecdfd3be55c69cf75464299dc01057e # v3
         with:
           tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag }}
           target_commitish: ${{ github.sha }}

@@ -18,6 +18,7 @@ const PROD_BACKEND_PORT = 22458;
 let mainWindow;
 let frontendServer;
 let backendProcess;
+let productionServicesPromise;
 const electronRuntimeNonce = process.env.FANTETIC_ELECTRON_NONCE || randomBytes(32).toString('hex');
 
 const isDevMode = () => process.argv.includes('--dev');
@@ -126,13 +127,23 @@ const createMainWindow = async () => {
   }
 };
 
-const startProductionServices = async () => {
+const startProductionServices = () => {
+  if (productionServicesPromise) return productionServicesPromise;
+
+  productionServicesPromise = startProductionServicesOnce().catch((error) => {
+    productionServicesPromise = undefined;
+    throw error;
+  });
+  return productionServicesPromise;
+};
+
+const startProductionServicesOnce = async () => {
   const appNameForPath = normalizeAppNameForPath(app.getName());
   const backendDataPath = path.join(app.getPath('userData'), appNameForPath, 'backend-data');
   ensureDirectory(backendDataPath);
 
   startBackendProcess(backendDataPath);
-  await waitForHttp(`http://127.0.0.1:${PROD_BACKEND_PORT}/api/v1/status`, {
+  await waitForHttp(`http://127.0.0.1:${PROD_BACKEND_PORT}/api/v1/health/ready`, {
     label: 'backend',
   });
   await startFrontendServer();

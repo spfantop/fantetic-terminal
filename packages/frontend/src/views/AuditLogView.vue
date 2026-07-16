@@ -8,7 +8,7 @@
       <div class="audit-filter-actions"><button type="submit" :disabled="store.isLoading"><i class="fas fa-filter"></i>{{ t('common.filter') }}</button><button type="button" class="secondary" @click="resetFilters">{{ t('common.reset') }}</button></div>
     </form>
 
-    <p v-if="filterValidationError || store.error" role="alert" class="audit-error">{{ filterValidationError || store.error }}</p>
+    <p v-if="filterValidationError || store.error" role="alert" class="audit-error">{{ filterValidationError || (store.error ? t(store.error) : '') }}</p>
     <div class="audit-layout">
       <div class="audit-list" :aria-busy="store.isLoading">
         <header><strong>{{ t('auditLog.title') }}</strong><span>{{ t('auditLog.total', { count: totalLogs }) }}</span></header>

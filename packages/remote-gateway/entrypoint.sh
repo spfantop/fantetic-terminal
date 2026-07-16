@@ -62,16 +62,30 @@ echo "[entrypoint] Starting remote-gateway..."
 node dist/server.js &
 NODE_PID=$!
 
-cleanup() {
+shutdown() {
+    local exit_code="${1:-0}"
+    trap - SIGTERM SIGINT SIGQUIT
     echo "[entrypoint] Shutting down..."
     kill "$NODE_PID" 2>/dev/null || true
     kill "$GUACD_PID" 2>/dev/null || true
     wait "$NODE_PID" 2>/dev/null || true
     wait "$GUACD_PID" 2>/dev/null || true
-    exit 0
+    exit "$exit_code"
 }
 
-trap cleanup SIGTERM SIGINT SIGQUIT
+trap 'shutdown 0' SIGTERM SIGINT SIGQUIT
 
-wait -n "$GUACD_PID" "$NODE_PID" 2>/dev/null || true
-cleanup
+EXITED_PID=''
+if wait -n -p EXITED_PID "$GUACD_PID" "$NODE_PID" 2>/dev/null; then
+    CHILD_EXIT_CODE=0
+else
+    CHILD_EXIT_CODE=$?
+fi
+
+if [ "$CHILD_EXIT_CODE" -eq 0 ]; then
+    echo "[entrypoint] Child process ${EXITED_PID:-unknown} exited unexpectedly with status 0."
+    CHILD_EXIT_CODE=1
+else
+    echo "[entrypoint] Child process ${EXITED_PID:-unknown} exited with status $CHILD_EXIT_CODE."
+fi
+shutdown "$CHILD_EXIT_CODE"

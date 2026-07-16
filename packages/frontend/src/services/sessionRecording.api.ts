@@ -5,10 +5,11 @@ import type {
   SessionRecordingPage,
   SessionRecordingListPage,
   SessionRecordingListQuery,
+  SessionRecordingIntegrity,
 } from '@fantetic-terminal/contracts';
 
 export type SessionRecording = SessionRecordingMetadata;
-export type { SessionRecordingEvent, SessionRecordingPage, SessionRecordingListPage, SessionRecordingListQuery };
+export type { SessionRecordingEvent, SessionRecordingPage, SessionRecordingListPage, SessionRecordingListQuery, SessionRecordingIntegrity };
 
 export const sessionRecordingApi = {
   async list(query: SessionRecordingListQuery = {}): Promise<SessionRecordingListPage> {

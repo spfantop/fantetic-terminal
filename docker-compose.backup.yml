@@ -1,0 +1,6 @@
+services:
+  backend:
+    environment:
+      BACKUP_ARCHIVE_PATH: /backup-archive
+    volumes:
+      - ${BACKUP_ARCHIVE_HOST_PATH:?Set BACKUP_ARCHIVE_HOST_PATH to an absolute host directory}:/backup-archive

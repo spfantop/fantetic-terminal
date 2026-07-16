@@ -28,6 +28,7 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+RUN apk add --no-cache su-exec
 
 COPY --from=builder /app/packages/backend/dist ./packages/backend/dist
 
@@ -45,10 +46,14 @@ RUN apk add --no-cache --virtual .build-deps python3 py3-setuptools make g++ \
     && npm cache clean --force \
     && apk del .build-deps
 
+COPY packages/backend/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 
 EXPOSE 3001
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-    CMD node -e "fetch('http://127.0.0.1:3001/api/v1/status').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+    CMD node -e "fetch('http://127.0.0.1:3001/api/v1/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["node", "packages/backend/dist/index.js"]

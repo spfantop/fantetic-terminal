@@ -8,6 +8,7 @@ import { createAuthorizationSubject } from '../access-control/authorization-subj
 import { userRepository } from '../user/user.repository';
 import { setAuditActor } from '../audit/audit-context';
 import { isElectronRuntimeNonceValid } from '../security/electron-runtime-nonce';
+import { sendApiError } from '../security/api-error-envelope';
 
 export const sessionMatchesAuthenticationEpoch = (
     sessionEpoch: number | undefined,
@@ -20,7 +21,7 @@ export const sessionMatchesAuthenticationEpoch = (
 export const isAuthenticated = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     if (isElectronAppMode()) {
         if (!isElectronRuntimeNonceValid(req.headers)) {
-            res.status(401).json({ message: 'Unauthorized.' });
+            sendApiError(res, 401, 'auth.electronRuntimeUnauthorized');
             return;
         }
         req.session.userId = ELECTRON_APP_USER_ID;
@@ -44,13 +45,13 @@ export const isAuthenticated = async (req: Request, res: Response, next: NextFun
             }) : null;
 
             if (!authorization) {
-                res.status(401).json({ message: '未授权：用户不存在或已被禁用。' });
+                sendApiError(res, 401, 'auth.sessionUserInvalid');
                 return;
             }
 
             if (!sessionMatchesAuthenticationEpoch(req.session.authEpoch, user!.auth_epoch)) {
                 req.session.destroy(() => undefined);
-                res.status(401).json({ message: '登录状态已失效，请重新登录。' });
+                sendApiError(res, 401, 'auth.sessionExpired');
                 return;
             }
 
@@ -59,11 +60,10 @@ export const isAuthenticated = async (req: Request, res: Response, next: NextFun
             next();
         } catch (error) {
             console.error('认证用户加载失败:', error);
-            res.status(500).json({ message: '服务器内部错误。' });
+            sendApiError(res, 500, 'auth.authenticationVerificationFailed');
         }
     } else {
-        // 用户未登录，返回 401 未授权错误
-        res.status(401).json({ message: '未授权：请先登录。' });
+        sendApiError(res, 401, 'auth.authenticationRequired');
     }
 };
 

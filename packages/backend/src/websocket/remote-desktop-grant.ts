@@ -3,6 +3,9 @@ import { createHash } from 'node:crypto';
 interface RemoteDesktopGrant {
   userId: number;
   connectionId: number;
+  protocol?: 'RDP' | 'VNC';
+  connectionName?: string;
+  requestId?: string;
   expiresAt: number;
 }
 
@@ -22,17 +25,22 @@ export class RemoteDesktopGrantRegistry {
     this.now = options.now ?? Date.now;
   }
 
-  register(token: string, userId: number, connectionId: number): void {
+  register(
+    token: string,
+    userId: number,
+    connectionId: number,
+    metadata?: Pick<RemoteDesktopGrant, 'protocol' | 'connectionName' | 'requestId'>,
+  ): void {
     this.cleanup();
     while (this.grantMap.size >= this.options.maxEntries) {
       const oldestKey = this.grantMap.keys().next().value as string | undefined;
       if (!oldestKey) break;
       this.grantMap.delete(oldestKey);
     }
-    this.grantMap.set(hashToken(token), { userId, connectionId, expiresAt: this.now() + this.options.ttlMs });
+    this.grantMap.set(hashToken(token), { userId, connectionId, ...metadata, expiresAt: this.now() + this.options.ttlMs });
   }
 
-  consume(token: string, userId: number): { connectionId: number } | undefined {
+  consume(token: string, userId: number): Omit<RemoteDesktopGrant, 'userId' | 'expiresAt'> | undefined {
     const key = hashToken(token);
     const grant = this.grantMap.get(key);
     if (!grant) return undefined;
@@ -42,7 +50,12 @@ export class RemoteDesktopGrantRegistry {
     }
     if (grant.userId !== userId) return undefined;
     this.grantMap.delete(key);
-    return { connectionId: grant.connectionId };
+    return {
+      connectionId: grant.connectionId,
+      protocol: grant.protocol,
+      connectionName: grant.connectionName,
+      ...(grant.requestId ? { requestId: grant.requestId } : {}),
+    };
   }
 
   private cleanup(): void {

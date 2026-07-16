@@ -85,5 +85,14 @@ const invalidJsonResponse = createResponse();
 const invalidJsonError = Object.assign(new SyntaxError('invalid json'), { status: 400 });
 apiErrorHandler(invalidJsonError, {} as any, invalidJsonResponse as any, () => assert.fail('invalid JSON must be handled'));
 assert.equal(invalidJsonResponse.statusCode, 400);
+assert.equal((invalidJsonResponse.body as any).code, 'security.invalidJson');
+assert.deepEqual((invalidJsonResponse.body as any).args, []);
+assert.match((invalidJsonResponse.body as any).requestId, /^[A-Za-z0-9._:-]{1,128}$/);
+
+const unexpectedErrorResponse = createResponse();
+apiErrorHandler(new Error('internal detail must not reach the client'), {} as any, unexpectedErrorResponse as any, () => assert.fail('unexpected API errors must use the stable envelope'));
+assert.equal(unexpectedErrorResponse.statusCode, 500);
+assert.equal((unexpectedErrorResponse.body as any).code, 'system.internalError');
+assert.deepEqual((unexpectedErrorResponse.body as any).args, []);
 
 console.log('web security behavior ok');

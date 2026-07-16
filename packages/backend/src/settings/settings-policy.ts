@@ -16,7 +16,7 @@ export const PERSONAL_SETTING_KEYS = new Set([
 export const SYSTEM_MUTABLE_SETTING_KEYS = new Set([
   'ipWhitelist', 'ipWhitelistEnabled', 'ipBlacklistEnabled', 'maxLoginAttempts',
   'loginBanDuration', 'dockerManagerEnabled', 'dockerStatusIntervalSeconds',
-  'statusMonitorEnabled', 'statusMonitorIntervalSeconds',
+  'statusMonitorEnabled', 'statusMonitorIntervalSeconds', 'sessionRecordingEnabled',
 ]);
 
 export const SAFE_GLOBAL_SETTING_KEYS = new Set([

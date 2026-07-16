@@ -15,6 +15,7 @@ import { userRepository } from '../user/user.repository';
 import { sessionMatchesAuthenticationEpoch } from '../auth/auth.middleware';
 import { isElectronRuntimeNonceValid } from '../security/electron-runtime-nonce';
 import { remoteDesktopGrantRegistry } from './remote-desktop-grant';
+import { createLogger } from '../logging/logger';
 import {
     classifyWebSocketPath,
     FixedWindowAdmissionLimiter,
@@ -28,6 +29,7 @@ const upgradeLimiter = new FixedWindowAdmissionLimiter({
     maxEntries: 10_000,
 });
 const MAX_WEBSOCKETS_PER_USER = 12;
+const logger = createLogger('WebSocketUpgrade');
 
 export function initializeUpgradeHandler(
     server: http.Server,
@@ -59,7 +61,7 @@ export function initializeUpgradeHandler(
             return;
         }
 
-        console.log(`WebSocket: 升级请求来自 IP: ${ipAddress}, Path: ${pathname}`); // 使用新获取的 ipAddress
+        logger.info('收到 WebSocket 升级请求', { sourceIp: ipAddress, path: pathname, route });
 
         // @ts-ignore Express-session 类型问题
         sessionParser(request, {} as any, async () => {
@@ -91,7 +93,7 @@ export function initializeUpgradeHandler(
 
             // --- 认证检查 ---
             if (!request.session || !request.session.userId || !authorization) {
-                console.log(`WebSocket 认证失败 (Path: ${pathname})：未找到会话或用户未登录。`);
+                logger.warn('WebSocket 升级认证失败', { sourceIp: ipAddress, path: pathname, route });
                 socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
                 socket.destroy();
                 return;
@@ -109,7 +111,7 @@ export function initializeUpgradeHandler(
                 socket.destroy();
                 return;
             }
-            console.log(`WebSocket 认证成功 (Path: ${pathname})：用户 ${request.session.username} (ID: ${request.session.userId})`);
+            logger.info('WebSocket 升级认证成功', { userId: request.session.userId, path: pathname, route });
 
             // --- 根据路径处理升级 ---
             // 本地调试用/rdp-proxy，nginx反代用/ws/rdp-proxy
@@ -120,13 +122,16 @@ export function initializeUpgradeHandler(
                     return;
                 }
                 const remoteDesktopToken = typeof parsedUrl.query.token === 'string' ? parsedUrl.query.token : undefined;
-                if (!remoteDesktopToken || !remoteDesktopGrantRegistry.consume(remoteDesktopToken, request.session.userId)) {
+                const remoteDesktopGrant = remoteDesktopToken
+                    ? remoteDesktopGrantRegistry.consume(remoteDesktopToken, request.session.userId)
+                    : undefined;
+                if (!remoteDesktopGrant) {
                     socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
                     socket.destroy();
                     return;
                 }
                 // RDP 代理路径 - 直接处理升级，连接逻辑在 'connection' 事件中处理
-                console.log(`WebSocket: Handling RDP proxy upgrade for user ${request.session.username}`);
+                logger.info('处理远程桌面 WebSocket 升级', { userId: request.session.userId, route });
                 wss.handleUpgrade(request, socket, head, (ws) => {
                     const extWs = ws as AuthenticatedWebSocket;
                     extWs.userId = request.session.userId;
@@ -138,6 +143,7 @@ export function initializeUpgradeHandler(
                     (request as any).isRdpProxy = true; // 标记为 RDP 代理连接
                     // 传递 RDP token 和其他参数
                     (request as any).rdpToken = remoteDesktopToken;
+                    (request as any).remoteDesktopRecording = remoteDesktopGrant;
                     (request as any).rdpWidth = parsedUrl.query.width;
                     (request as any).rdpHeight = parsedUrl.query.height;
                     (request as any).rdpDpi = parsedUrl.query.dpi;
@@ -145,7 +151,7 @@ export function initializeUpgradeHandler(
                 });
             } else {
                 // 默认路径 (SSH, SFTP, Docker etc.) - 按原逻辑处理
-                console.log(`WebSocket: Handling standard upgrade for user ${request.session.username}`);
+                logger.info('处理标准 WebSocket 升级', { userId: request.session.userId, route });
                 wss.handleUpgrade(request, socket, head, (ws) => {
                     const extWs = ws as AuthenticatedWebSocket;
                     extWs.userId = request.session.userId;
@@ -159,5 +165,5 @@ export function initializeUpgradeHandler(
             }
         });
     });
-    console.log('WebSocket upgrade handler initialized.');
+    logger.info('WebSocket 升级处理器已初始化');
 }

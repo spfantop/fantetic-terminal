@@ -4,6 +4,7 @@ import {
   verifyLogin2FA,
   changePassword,
   setup2FA,
+  cancel2FASetup,
   verifyAndActivate2FA,
   disable2FA,
   getAuthStatus,
@@ -77,6 +78,7 @@ router.post('/login/2fa', secondFactorRateLimiter, ipBlacklistCheckMiddleware, v
 // --- 2FA 管理接口 (都需要认证) ---
 // POST /api/v1/auth/2fa/setup - 开始 2FA 设置，生成密钥和二维码
 router.post('/2fa/setup', isAuthenticated, setup2FA);
+router.delete('/2fa/setup', isAuthenticated, cancel2FASetup);
 
 // POST /api/v1/auth/2fa/verify - 验证设置时的 TOTP 码并激活
 router.post('/2fa/verify', isAuthenticated, verifyAndActivate2FA);

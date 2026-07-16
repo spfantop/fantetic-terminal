@@ -3,17 +3,19 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "npm run test:health",
-    "test:health": "esbuild src/test/health.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/gateway-health.behavior-test.mjs && node ../../.vite-codex-cache/gateway-health.behavior-test.mjs",
+    "test": "npm run test:health && npm run test:security && npm run test:guacamole-lite-patch && npm run test:logging",
+    "test:health": "esbuild src/test/health.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/gateway-health.behavior-test.mjs && node ../../.vite-codex-cache/gateway-health.behavior-test.mjs && npm run test:process-lifecycle",
     "test:security": "esbuild src/test/security.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/gateway-security.behavior-test.mjs && node ../../.vite-codex-cache/gateway-security.behavior-test.mjs",
     "test:guacamole-lite-patch": "esbuild src/test/guacamoleLitePatch.behavior-test.ts --bundle --platform=node --format=cjs --packages=external --outfile=.vite-codex-cache/guacamoleLitePatch.behavior-test.cjs && node .vite-codex-cache/guacamoleLitePatch.behavior-test.cjs",
+    "test:process-lifecycle": "esbuild src/test/processLifecycle.behavior-test.ts --bundle --platform=node --format=cjs --outfile=.vite-codex-cache/processLifecycle.behavior-test.cjs && node .vite-codex-cache/processLifecycle.behavior-test.cjs",
+    "test:logging": "esbuild src/test/logging.behavior-test.ts --bundle --platform=node --format=esm --outfile=.vite-codex-cache/logging.behavior-test.mjs && node .vite-codex-cache/logging.behavior-test.mjs",
     "build": "tsc",
     "start": "node dist/server.js",
     "dev": "nodemon --exec \"ts-node --files src/server.ts\""
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "GPL-3.0-only",
   "description": "Unified Remote Desktop Gateway for Fantetic Terminal",
   "devDependencies": {
     "@types/cors": "^2.8.17",

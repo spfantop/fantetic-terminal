@@ -1,4 +1,4 @@
-import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
+import { getDbInstance, runDb, getDb as getDbRow, allDb, withTransaction } from '../database/connection';
 import { SidebarConfig, LayoutNode, PaneName } from '../types/settings.types';
 import { CaptchaSettings } from '../types/settings.types';
 import * as sqlite3 from 'sqlite3';
@@ -83,16 +83,15 @@ export const settingsRepository = {
     const db = await getDbInstance();
     const now = Math.floor(Date.now() / 1000);
     try {
-        await runDb(db, 'BEGIN TRANSACTION');
+      await withTransaction(db, async () => {
         for (const [key, value] of Object.entries(settings)) {
           await runDb(db, `INSERT INTO settings(key, value, created_at, updated_at)
             VALUES (?, ?, ?, ?)
             ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
           [key, value, now, now]);
         }
-        await runDb(db, 'COMMIT');
+      });
     } catch (error) {
-        await runDb(db, 'ROLLBACK').catch(() => undefined);
         console.error('[仓库] setMultipleSettings 失败:', error);
         throw new Error('批量设置失败');
     }
@@ -123,19 +122,14 @@ export const userSettingsRepository = {
   async setMultipleSettings(userId: number, settings: Record<string, string>): Promise<void> {
     const db = await getDbInstance();
     const now = Math.floor(Date.now() / 1000);
-    try {
-      await runDb(db, 'BEGIN TRANSACTION');
+    await withTransaction(db, async () => {
       for (const [key, value] of Object.entries(settings)) {
         await runDb(db, `INSERT INTO user_settings(user_id, key, value, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?)
           ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
         [userId, key, value, now, now]);
       }
-      await runDb(db, 'COMMIT');
-    } catch (error) {
-      await runDb(db, 'ROLLBACK').catch(() => undefined);
-      throw error;
-    }
+    });
   },
 };
 
@@ -146,8 +140,7 @@ export const setScopedSettings = async (
 ): Promise<void> => {
   const db = await getDbInstance();
   const now = Math.floor(Date.now() / 1000);
-  try {
-    await runDb(db, 'BEGIN TRANSACTION');
+  await withTransaction(db, async () => {
     for (const [key, value] of Object.entries(personalSettings)) {
       await runDb(db, `INSERT INTO user_settings(user_id, key, value, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?)
@@ -160,11 +153,7 @@ export const setScopedSettings = async (
         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
       [key, value, now, now]);
     }
-    await runDb(db, 'COMMIT');
-  } catch (error) {
-    await runDb(db, 'ROLLBACK').catch(() => undefined);
-    throw error;
-  }
+  });
 };
 
 
@@ -304,6 +293,8 @@ export const ensureDefaultSettingsExist = async (db: sqlite3.Database): Promise<
         dockerDefaultExpand: 'false',
         statusMonitorEnabled: 'true',
         statusMonitorIntervalSeconds: '3',
+        // 兼容原有环境变量：首次升级时将其值迁移为可在系统设置中维护的配置。
+        sessionRecordingEnabled: process.env.SESSION_RECORDING_ENABLED === 'false' ? 'false' : 'true',
         [SIDEBAR_CONFIG_KEY]: JSON.stringify(defaultSidebarPanesStructure),
         [CAPTCHA_CONFIG_KEY]: JSON.stringify(defaultCaptchaSettings),
         [AI_PROVIDER_CONFIG_KEY]: JSON.stringify({

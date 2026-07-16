@@ -11,10 +11,16 @@ export interface BackupManifest {
   files: Array<{ path: string; size: number; sha256: string }>;
 }
 
+export interface BackupRetentionPolicy {
+  retentionCount: number;
+  archiveRootPath?: string;
+}
+
 type BackupServiceDependencies = {
   appDataPath: string;
   snapshotDatabase: (targetPath: string) => Promise<void>;
   readSchemaVersion: () => Promise<number>;
+  encryptionKey?: string;
   now?: () => Date;
 };
 
@@ -29,6 +35,34 @@ const assertInside = (targetPath: string, parentPath: string): string => {
     throw new Error(`Path must be inside ${parent}`);
   }
   return target;
+};
+
+const isInsideOrEqual = (targetPath: string, parentPath: string): boolean => {
+  const relative = path.relative(parentPath, targetPath);
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+};
+
+const resolveArchiveRoot = (archiveRootPath: string, appDataPath: string): string => {
+  if (!path.isAbsolute(archiveRootPath)) {
+    throw new Error('Backup archive path must be absolute.');
+  }
+  const requestedRoot = path.resolve(archiveRootPath);
+  const dataRoot = fs.realpathSync(appDataPath);
+  if (isInsideOrEqual(requestedRoot, dataRoot) || isInsideOrEqual(dataRoot, requestedRoot)) {
+    throw new Error('Backup archive path must not overlap the application data path.');
+  }
+  fs.mkdirSync(requestedRoot, { recursive: true });
+  const archiveRoot = fs.realpathSync(requestedRoot);
+  if (isInsideOrEqual(archiveRoot, dataRoot) || isInsideOrEqual(dataRoot, archiveRoot)) {
+    throw new Error('Backup archive path must not overlap the application data path.');
+  }
+  return archiveRoot;
+};
+
+const assertRetentionCount = (retentionCount: number): void => {
+  if (!Number.isInteger(retentionCount) || retentionCount < 1 || retentionCount > 365) {
+    throw new Error('Backup retention count must be an integer between 1 and 365.');
+  }
 };
 
 const sha256File = (filePath: string): string => {
@@ -50,8 +84,8 @@ const listFiles = (rootPath: string): string[] => {
   return result.sort();
 };
 
-const keyFingerprint = (): string => {
-  const key = process.env.ENCRYPTION_KEY;
+const keyFingerprint = (configuredKey?: string): string => {
+  const key = configuredKey ?? process.env.ENCRYPTION_KEY;
   if (!key) throw new Error('ENCRYPTION_KEY is required to create or restore backups.');
   return crypto.createHash('sha256').update(key, 'utf8').digest('hex');
 };
@@ -65,6 +99,7 @@ export const createBackupService = ({
   appDataPath,
   snapshotDatabase,
   readSchemaVersion,
+  encryptionKey,
   now = () => new Date(),
 }: BackupServiceDependencies) => {
   const backupsPath = path.join(appDataPath, 'backups');
@@ -90,7 +125,7 @@ export const createBackupService = ({
     let manifest: BackupManifest;
     try { manifest = readBackup(backupId); }
     catch (error) { return { valid: false, errors: [error instanceof Error ? error.message : 'Invalid backup.'] }; }
-    if (manifest.encryptionKeyFingerprint !== keyFingerprint()) errors.push('Encryption key fingerprint mismatch.');
+    if (manifest.encryptionKeyFingerprint !== keyFingerprint(encryptionKey)) errors.push('Encryption key fingerprint mismatch.');
     const rootPath = backupPath(backupId);
     const actualFiles = new Set(listFiles(rootPath).map(filePath => path.relative(rootPath, filePath).split(path.sep).join('/')));
     const declaredFiles = new Set(manifest.files.map(file => file.path));
@@ -133,7 +168,7 @@ export const createBackupService = ({
         id,
         createdAt: createdAt.toISOString(),
         schemaVersion: await readSchemaVersion(),
-        encryptionKeyFingerprint: keyFingerprint(),
+        encryptionKeyFingerprint: keyFingerprint(encryptionKey),
         files,
       };
       fs.writeFileSync(path.join(temporaryPath, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
@@ -150,7 +185,44 @@ export const createBackupService = ({
     .map(entry => readBackup(entry.name))
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   const countBackups = (): number => fs.readdirSync(backupsPath, { withFileTypes: true })
-    .filter(entry => entry.isDirectory() && !entry.name.endsWith('.tmp')).length;
+    .filter(entry => entry.isDirectory() && BACKUP_ID_PATTERN.test(entry.name)).length;
+
+  const archiveBackup = (backupId: string, archiveRootPath: string): string => {
+    const archiveRoot = resolveArchiveRoot(archiveRootPath, appDataPath);
+    const sourcePath = backupPath(backupId);
+    const targetPath = assertInside(path.join(archiveRoot, backupId), archiveRoot);
+    if (fs.existsSync(targetPath)) throw new Error('Backup archive target already exists.');
+    const temporaryPath = assertInside(path.join(archiveRoot, `.tmp-${backupId}`), archiveRoot);
+    try {
+      fs.cpSync(sourcePath, temporaryPath, { recursive: true, errorOnExist: true });
+      fs.renameSync(temporaryPath, targetPath);
+      return targetPath;
+    } catch (error) {
+      fs.rmSync(temporaryPath, { recursive: true, force: true });
+      throw error;
+    }
+  };
+
+  const pruneBackups = (retentionCount: number, archiveRootPath?: string): string[] => {
+    assertRetentionCount(retentionCount);
+    const archiveRoot = archiveRootPath ? resolveArchiveRoot(archiveRootPath, appDataPath) : undefined;
+    const expiredBackups = listBackups().slice(retentionCount);
+    for (const backup of expiredBackups) {
+      fs.rmSync(backupPath(backup.id), { recursive: true, force: false });
+      if (archiveRoot) {
+        fs.rmSync(assertInside(path.join(archiveRoot, backup.id), archiveRoot), { recursive: true, force: true });
+      }
+    }
+    return expiredBackups.map(backup => backup.id);
+  };
+
+  const createBackupWithPolicy = async (policy: BackupRetentionPolicy): Promise<BackupManifest> => {
+    assertRetentionCount(policy.retentionCount);
+    const backup = await createBackup();
+    if (policy.archiveRootPath) archiveBackup(backup.id, policy.archiveRootPath);
+    pruneBackups(policy.retentionCount, policy.archiveRootPath);
+    return backup;
+  };
 
   const scheduleRestore = async (backupId: string): Promise<void> => {
     const verification = await verifyBackup(backupId);
@@ -160,10 +232,22 @@ export const createBackupService = ({
     fs.renameSync(temporaryMarker, restoreRequestPath);
   };
 
-  return { createBackup, listBackups, countBackups, readBackup, verifyBackup, scheduleRestore, backupsPath, restoreRequestPath };
+  return {
+    createBackup,
+    createBackupWithPolicy,
+    listBackups,
+    countBackups,
+    readBackup,
+    verifyBackup,
+    scheduleRestore,
+    archiveBackup,
+    pruneBackups,
+    backupsPath,
+    restoreRequestPath,
+  };
 };
 
-export const applyScheduledRestore = async (appDataPath: string): Promise<string | null> => {
+export const applyScheduledRestore = async (appDataPath: string, encryptionKey?: string): Promise<string | null> => {
   const markerPath = path.join(appDataPath, '.restore-request.json');
   if (!fs.existsSync(markerPath)) return null;
   const marker = JSON.parse(fs.readFileSync(markerPath, 'utf8')) as { backupId?: string };
@@ -172,6 +256,7 @@ export const applyScheduledRestore = async (appDataPath: string): Promise<string
     appDataPath,
     snapshotDatabase: async () => { throw new Error('Snapshot is unavailable during restore bootstrap.'); },
     readSchemaVersion: async () => 0,
+    encryptionKey,
   });
   const verification = await service.verifyBackup(marker.backupId);
   if (!verification.valid) throw new Error(`Backup integrity verification failed: ${verification.errors.join('; ')}`);

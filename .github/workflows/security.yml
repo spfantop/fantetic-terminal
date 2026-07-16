@@ -1,0 +1,86 @@
+name: Security gates
+
+on:
+  pull_request:
+  push:
+    branches:
+      - dev
+      - main
+  schedule:
+    - cron: '17 3 * * 1'
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  dependency-and-secret-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install workspace dependencies
+        run: npm ci
+      - name: Install Electron dependencies
+        run: npm ci --prefix electron-app
+      - name: Scan tracked files for secrets
+        run: node build-tools/security-scan.js
+      - name: Generate CycloneDX SBOMs
+        run: |
+          mkdir -p artifacts
+          npm sbom --sbom-format cyclonedx --omit=dev > artifacts/sbom-root.cdx.json
+          npm sbom --prefix electron-app --sbom-format cyclonedx --omit=dev > artifacts/sbom-electron.cdx.json
+      - name: Upload SBOMs
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: cyclonedx-sbom-${{ github.sha }}
+          path: artifacts/*.cdx.json
+          if-no-files-found: error
+
+  codeql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@641a925cfafe92d0fdf8b239ba4053e3f8d99d6d # v3
+        with:
+          languages: javascript-typescript
+          queries: security-and-quality
+          build-mode: none
+      - name: Analyze source
+        uses: github/codeql-action/analyze@641a925cfafe92d0fdf8b239ba4053e3f8d99d6d # v3
+
+  container-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: backend
+            dockerfile: packages/backend/Dockerfile
+          - name: frontend
+            dockerfile: packages/frontend/Dockerfile
+          - name: remote-gateway
+            dockerfile: packages/remote-gateway/Dockerfile
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Build image
+        run: docker build --pull --file ${{ matrix.dockerfile }} --tag fantetic-${{ matrix.name }}:${{ github.sha }} .
+      - name: Scan image
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1
+        with:
+          image-ref: fantetic-${{ matrix.name }}:${{ github.sha }}
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL

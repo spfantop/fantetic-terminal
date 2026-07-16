@@ -37,6 +37,7 @@ import {
   canConnectConnection,
   canManageConnection,
 } from '../features/connections/connection-permissions';
+import { readUserScopedItem, removeUserScopedItem, writeUserScopedItem } from '../utils/userCacheScope';
 
 const { t } = useI18n();
 const { showConfirmDialog } = useConfirmDialog();
@@ -117,13 +118,13 @@ const getInitialServerPanelCollapsed = () => {
 };
 
 const getInitialSelectedFolderId = (): number | null => {
-  const storedValue = localStorage.getItem(LS_FILTER_FOLDER_KEY);
+  const storedValue = readUserScopedItem(localStorage, LS_FILTER_FOLDER_KEY);
   return storedValue && storedValue !== 'null' ? parseInt(storedValue, 10) : null;
 };
 
 const getInitialSelectedTagIds = (): number[] => {
   try {
-    const storedValue = localStorage.getItem(LS_FILTER_TAGS_KEY);
+    const storedValue = readUserScopedItem(localStorage, LS_FILTER_TAGS_KEY);
     if (!storedValue) return [];
     const parsed = JSON.parse(storedValue);
     return Array.isArray(parsed)
@@ -131,7 +132,7 @@ const getInitialSelectedTagIds = (): number[] => {
       : [];
   } catch (error) {
     console.warn('[ConnectionsView] Failed to parse saved tag filters:', error);
-    localStorage.removeItem(LS_FILTER_TAGS_KEY);
+    removeUserScopedItem(localStorage, LS_FILTER_TAGS_KEY);
     return [];
   }
 };
@@ -756,11 +757,11 @@ const connectTo = (connection: ConnectionInfo) => {
 };
 
 watch(selectedFolderId, (newValue) => {
-  localStorage.setItem(LS_FILTER_FOLDER_KEY, newValue === null ? 'null' : String(newValue));
+  writeUserScopedItem(localStorage, LS_FILTER_FOLDER_KEY, newValue === null ? 'null' : String(newValue));
 });
 
 watch(selectedTagIds, (newValue) => {
-  localStorage.setItem(LS_FILTER_TAGS_KEY, JSON.stringify(newValue));
+  writeUserScopedItem(localStorage, LS_FILTER_TAGS_KEY, JSON.stringify(newValue));
 });
 
 const selectedTagCount = computed(() => selectedTagIds.value.length);

@@ -84,7 +84,11 @@ assert.match(commandHistoryView, /connInfo\?\.type === 'SSH' \|\| connInfo\?\.ty
 assert.match(addForm, /if \(!formData\.host \|\| \(formData\.type !== 'TELNET' && !formData\.username\)\)/);
 assert.match(addForm, /username:\s*normalizeConnectionUsername\(formData\.username\)/);
 assert.match(connectionsView, /const isConnectionTestSupported = \(type: ConnectionInfo\['type'\]\) => \['SSH', 'TELNET', 'RDP', 'VNC'\]\.includes\(type\)/);
-assert.match(connectionsView, /const connectionsToTest = filteredAndSortedConnections\.value\.filter\(c => isConnectionTestSupported\(c\.type\) && c\.id != null\)/);
+assert.match(
+  connectionsView,
+  /const connectionsToTest = filteredAndSortedConnections\.value\.filter\(c => canConnectConnection\(c\) && isConnectionTestSupported\(c\.type\) && c\.id != null\)/,
+  'batch tests must include TELNET while excluding connections the user cannot operate',
+);
 assert.doesNotMatch(connectionsView, /conn\.type === 'SSH' && connectionTestStates\.get\(conn\.id\)/);
 const resultVisibilityMatch = connectionsView.match(/CONNECTION_TEST_RESULT_VISIBLE_MS\s*=\s*(\d+)/);
 assert.ok(resultVisibilityMatch, 'connection test results should define an auto-hide duration');

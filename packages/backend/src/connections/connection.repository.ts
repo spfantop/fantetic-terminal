@@ -1,6 +1,6 @@
 import { Database } from 'sqlite3';
 import { createLogger } from '../logging/logger';
-import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
+import { getDbInstance, runDb, getDb as getDbRow, allDb, withTransaction } from '../database/connection';
 import { AuthorizationSubject } from '../access-control/authorization-subject';
 import { CONNECTION_PERMISSION_LEVEL_SQL } from '../access-control/access-policy';
 
@@ -446,8 +446,7 @@ export const updateConnectionTags = async (connectionId: number, tagIds: number[
 
     // 2. 执行标签更新事务
     try {
-        await runDb(db, 'BEGIN TRANSACTION');
-
+      return await withTransaction(db, async () => {
         // 删除旧关联
         await runDb(db, `DELETE FROM connection_tags WHERE connection_id = ?`, [connectionId]);
 
@@ -465,19 +464,10 @@ export const updateConnectionTags = async (connectionId: number, tagIds: number[
             await Promise.all(insertPromises);
         }
 
-        await runDb(db, 'COMMIT');
         return true; // 事务成功提交，返回 true
+      });
     } catch (err: any) {
         console.error(`Repository: 更新连接 ${connectionId} 的标签关联事务出错:`, err.message);
-        try {
-            await runDb(db, 'ROLLBACK');
-            console.log(`Repository: Transaction rolled back for connection ${connectionId} tag update.`);
-        } catch (rollbackErr: any) {
-            console.error(`Repository: 回滚连接 ${connectionId} 的标签更新事务失败:`, rollbackErr.message);
-            // 即使回滚失败，原始错误也更重要
-        }
-        // 直接重新抛出原始事务错误，让上层处理
-        // SQLite 在事务中遇到错误时通常会自动回滚
         throw err;
     }
 };
@@ -580,26 +570,20 @@ export const deleteConnectionFolder = async (id: number, subject: AuthorizationS
     const db = await getDbInstance();
     const canWriteAll = subject.runtime === 'desktop' || subject.systemRole === 'super_admin' || subject.systemRole === 'admin';
     try {
-        await runDb(db, 'BEGIN TRANSACTION');
+      return await withTransaction(db, async () => {
         const ownedFolder = await getDbRow<{ id: number }>(db, `
             SELECT id FROM connection_folders WHERE id = ? AND (? = 1 OR owner_user_id = ?)
         `, [id, canWriteAll ? 1 : 0, subject.userId]);
         if (!ownedFolder) {
-            await runDb(db, 'ROLLBACK');
             return false;
         }
         await runDb(db, `UPDATE connections SET folder_id = NULL WHERE folder_id = ? AND (? = 1 OR owner_user_id = ?)`, [id, canWriteAll ? 1 : 0, subject.userId]);
         await runDb(db, `UPDATE connection_folders SET parent_id = NULL WHERE parent_id = ? AND (? = 1 OR owner_user_id = ?)`, [id, canWriteAll ? 1 : 0, subject.userId]);
         const result = await runDb(db, `DELETE FROM connection_folders WHERE id = ? AND (? = 1 OR owner_user_id = ?)`, [id, canWriteAll ? 1 : 0, subject.userId]);
-        await runDb(db, 'COMMIT');
         return result.changes > 0;
+      });
     } catch (err: any) {
         console.error(`Repository: 删除连接文件夹 ${id} 时出错:`, err.message);
-        try {
-            await runDb(db, 'ROLLBACK');
-        } catch (rollbackErr: any) {
-            console.error(`Repository: 回滚删除连接文件夹 ${id} 事务失败:`, rollbackErr.message);
-        }
         throw new Error('删除连接文件夹失败');
     }
 };
@@ -608,7 +592,7 @@ export const updateConnectionFoldersOrder = async (items: ConnectionFolderOrderI
     const db = await getDbInstance();
     const now = Math.floor(Date.now() / 1000);
     try {
-        await runDb(db, 'BEGIN TRANSACTION');
+      return await withTransaction(db, async () => {
         for (const item of items) {
             await runDb(
                 db,
@@ -616,15 +600,10 @@ export const updateConnectionFoldersOrder = async (items: ConnectionFolderOrderI
                 [item.parent_id, item.sort_order, now, item.id, subject.runtime === 'desktop' || subject.systemRole === 'super_admin' || subject.systemRole === 'admin' ? 1 : 0, subject.userId]
             );
         }
-        await runDb(db, 'COMMIT');
         return true;
+      });
     } catch (err: any) {
         console.error('Repository: 更新连接文件夹排序时出错:', err.message);
-        try {
-            await runDb(db, 'ROLLBACK');
-        } catch (rollbackErr: any) {
-            console.error('Repository: 回滚连接文件夹排序事务失败:', rollbackErr.message);
-        }
         throw new Error('更新连接文件夹排序失败');
     }
 };
@@ -633,7 +612,7 @@ export const updateConnectionsOrder = async (items: ConnectionOrderItem[], subje
     const db = await getDbInstance();
     const now = Math.floor(Date.now() / 1000);
     try {
-        await runDb(db, 'BEGIN TRANSACTION');
+      return await withTransaction(db, async () => {
         for (const item of items) {
             await runDb(
                 db,
@@ -659,15 +638,10 @@ export const updateConnectionsOrder = async (items: ConnectionOrderItem[], subje
                 ]
             );
         }
-        await runDb(db, 'COMMIT');
         return true;
+      });
     } catch (err: any) {
         console.error('Repository: 更新连接排序时出错:', err.message);
-        try {
-            await runDb(db, 'ROLLBACK');
-        } catch (rollbackErr: any) {
-            console.error('Repository: 回滚连接排序事务失败:', rollbackErr.message);
-        }
         throw new Error('更新连接排序失败');
     }
 };
@@ -727,8 +701,7 @@ export const addTagToMultipleConnections = async (connectionIds: number[], tagId
 
     const db = await getDbInstance();
     try {
-        await runDb(db, 'BEGIN TRANSACTION');
-
+      await withTransaction(db, async () => {
         const insertSql = `INSERT OR IGNORE INTO connection_tags (connection_id, tag_id) VALUES (?, ?)`;
         // 使用 Promise.all 确保所有插入完成或失败
         const insertPromises = connectionIds.map(connId =>
@@ -736,14 +709,9 @@ export const addTagToMultipleConnections = async (connectionIds: number[], tagId
         );
         await Promise.all(insertPromises);
 
-        await runDb(db, 'COMMIT');
+      });
     } catch (err: any) {
         console.error(`Repository: 为多个连接添加标签 ${tagId} 时事务出错:`, err.message);
-        try {
-            await runDb(db, 'ROLLBACK');
-        } catch (rollbackErr: any) {
-            console.error(`Repository: 回滚为多个连接添加标签 ${tagId} 的事务失败:`, rollbackErr.message);
-        }
         throw new Error(`为多个连接添加标签失败: ${err.message}`);
     }
 };

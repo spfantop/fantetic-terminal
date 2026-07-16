@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { AuditLogService } from './audit.service';
 import { AuditLogActionType } from '../types/audit.types';
+import { sendApiError } from '../security/api-error-envelope';
 
 const auditLogService = new AuditLogService();
 const MAX_AUDIT_PAGE_SIZE = 200;
@@ -27,23 +28,23 @@ export class AuditController {
 
             // 输入验证 (基本)
             if (isNaN(limit) || limit <= 0 || limit > MAX_AUDIT_PAGE_SIZE) {
-                res.status(400).json({ message: '无效的 limit 参数' });
+                sendApiError(res, 400, 'validation.invalidLimit');
                 return;
             }
             if (isNaN(offset) || offset < 0) {
-                res.status(400).json({ message: '无效的 offset 参数' });
+                sendApiError(res, 400, 'validation.invalidOffset');
                 return;
             }
             if (searchTerm && searchTerm.length > MAX_AUDIT_SEARCH_LENGTH) {
-                res.status(400).json({ message: '无效的 search 参数' });
+                sendApiError(res, 400, 'validation.invalidSearch');
                 return;
             }
             if (startDate && isNaN(startDate)) {
-                 res.status(400).json({ message: '无效的 startDate 参数' });
+                 sendApiError(res, 400, 'validation.invalidDate');
                 return;
             }
              if (endDate && isNaN(endDate)) {
-                 res.status(400).json({ message: '无效的 endDate 参数' });
+                 sendApiError(res, 400, 'validation.invalidDate');
                 return;
             }
 
@@ -73,7 +74,7 @@ export class AuditController {
             });
         } catch (error: any) {
             console.error('获取审计日志时出错:', error);
-            res.status(500).json({ message: '获取审计日志失败', error: error.message });
+            sendApiError(res, 500, 'audit.logListFailed');
         }
     }
 }

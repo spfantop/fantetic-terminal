@@ -1,4 +1,4 @@
-import { getDbInstance, runDb, getDb as getDbRow, allDb } from '../database/connection';
+import { getDbInstance, runDb, getDb as getDbRow, allDb, withTransaction } from '../database/connection';
 
 // 定义 Quick Command Tag 类型
 export interface QuickCommandTag {
@@ -107,7 +107,7 @@ export const setCommandTagAssociations = async (commandId: number, tagIds: numbe
     const insertSql = `INSERT INTO quick_command_tag_associations (quick_command_id, tag_id) VALUES (?, ?)`;
 
     try {
-        await runDb(db, 'BEGIN TRANSACTION');
+      await withTransaction(db, async () => {
         const command = await getDbRow<{ id: number }>(db, `SELECT id FROM quick_commands WHERE id = ? AND owner_user_id = ?`, [commandId, ownerUserId]);
         if (!command) throw new Error('快捷指令未找到或无权管理');
         if (tagIds.length > 0) {
@@ -129,10 +129,9 @@ export const setCommandTagAssociations = async (commandId: number, tagIds: numbe
                 await runDb(db, insertSql, [commandId, tagId]);
             }
         }
-        await runDb(db, 'COMMIT');
+      });
     } catch (err: any) {
         console.error('设置快捷指令标签关联时出错:', err.message);
-        await runDb(db, 'ROLLBACK'); // 出错时回滚
         throw new Error(`无法设置快捷指令标签关联: ${err.message}`);
     }
 };
@@ -151,7 +150,7 @@ export const addTagToCommands = async (commandIds: number[], tagId: number, owne
     const insertSql = `INSERT OR IGNORE INTO quick_command_tag_associations (quick_command_id, tag_id) VALUES (?, ?)`;
 
     try {
-        await runDb(db, 'BEGIN TRANSACTION');
+      await withTransaction(db, async () => {
         const tag = await getDbRow<{ id: number }>(db, `SELECT id FROM quick_command_tags WHERE id = ? AND owner_user_id = ?`, [tagId, ownerUserId]);
         if (!tag) throw new Error('快捷指令标签未找到或无权使用');
         for (const commandId of commandIds) {
@@ -164,11 +163,10 @@ export const addTagToCommands = async (commandIds: number[], tagId: number, owne
             if (!command) throw new Error('快捷指令未找到或无权管理');
             await runDb(db, insertSql, [commandId, tagId]);
         }
-        await runDb(db, 'COMMIT');
+      });
         console.log(`[Repo] addTagToCommands: 成功将标签 ${tagId} 关联到 ${commandIds.length} 个指令。`);
     } catch (err: any) {
         console.error(`[Repo] addTagToCommands: 批量关联标签 ${tagId} 到指令时出错:`, err.message);
-        await runDb(db, 'ROLLBACK');
         throw new Error(`无法批量关联标签到快捷指令: ${err.message}`);
     }
 };

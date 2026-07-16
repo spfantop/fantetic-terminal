@@ -106,7 +106,7 @@ export const useAuditLogStore = defineStore('auditLog', () => {
 
         } catch (err: any) {
             console.error('[AuditLogStore] Error fetching audit logs:', err);
-            error.value = err.response?.data?.message || '获取审计日志失败';
+            error.value = 'auditLog.errors.fetchFailed';
             // 如果是仪表盘请求失败，保留缓存数据；否则清空
             if (!isDashboardRequest) {
                 logs.value = [];
