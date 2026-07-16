@@ -4,11 +4,12 @@ import { CreateTerminalThemeDto, UpdateTerminalThemeDto } from '../types/termina
 import type { ITheme } from 'xterm';
 import multer from 'multer';
 import fs from 'fs';
-import path from 'path';
+import { ensureAndGetPathInAppData } from '../config/app-data-path';
 
 // 配置 multer 用于处理 JSON 文件上传 (导入)
 const upload = multer({
-    dest: path.join(__dirname, '../../temp-uploads/'), // 临时存储目录
+    // Docker 镜像代码目录以非 root 用户运行时不可写，临时文件必须位于数据卷。
+    dest: ensureAndGetPathInAppData('temp-uploads'),
     fileFilter: (req, file, cb) => {
         if (file.mimetype === 'application/json' || file.originalname.endsWith('.json')) {
             cb(null, true);
