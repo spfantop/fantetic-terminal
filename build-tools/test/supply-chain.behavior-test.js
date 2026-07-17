@@ -42,7 +42,8 @@ assert.match(desktopWorkflow, /name: Verify release checksums[\s\S]*sha256sum --
 assert.match(gatewayDockerfile, /FROM guacamole\/guacd:1\.6\.0@sha256:8974eaa9ba32f713daf311e7cc8cd7e4cdfba1edea39eed75524e78ef4b08f4f/);
 assert.match(securityWorkflow, /node build-tools\/security-scan\.js/);
 assert.match(securityWorkflow, /npm sbom --sbom-format cyclonedx --omit=dev/);
-assert.match(securityWorkflow, /aquasecurity\/trivy-action@[a-f0-9]{40}\s+# v0\.33\.1/);
+assert.match(securityWorkflow, /aquasecurity\/trivy-action@[a-f0-9]{40}\s+# v0\.36\.0/);
+assert.match(securityWorkflow, /version:\s*v0\.70\.0/);
 assert.match(securityWorkflow, /github\/codeql-action\/init@[a-f0-9]{40}\s+# v3/);
 for (const workflow of [qualityWorkflow, desktopWorkflow, securityWorkflow]) {
   assert.doesNotMatch(workflow, /uses:\s*[^\s@]+@v\d+/);

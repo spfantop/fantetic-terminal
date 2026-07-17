@@ -77,8 +77,10 @@ jobs:
       - name: Build image
         run: docker build --pull --file ${{ matrix.dockerfile }} --tag fantetic-${{ matrix.name }}:${{ github.sha }} .
       - name: Scan image
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          # v0.65.0 is no longer published upstream; pin a released scanner version explicitly.
+          version: v0.70.0
           image-ref: fantetic-${{ matrix.name }}:${{ github.sha }}
           format: table
           exit-code: '1'
