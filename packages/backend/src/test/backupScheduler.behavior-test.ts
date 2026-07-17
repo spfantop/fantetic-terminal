@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
+import os from 'node:os';
+import path from 'node:path';
 
 const { resolveBackupScheduleConfig, startBackupScheduler } = await import('../backup/backup.scheduler');
+const archiveRootPath = path.join(os.tmpdir(), 'fantetic-backups');
 
 assert.deepEqual(resolveBackupScheduleConfig({}), {
   enabled: false,
@@ -12,16 +15,17 @@ const config = resolveBackupScheduleConfig({
   BACKUP_SCHEDULE_ENABLED: 'true',
   BACKUP_INTERVAL_MINUTES: '30',
   BACKUP_RETENTION_COUNT: '7',
-  BACKUP_ARCHIVE_PATH: 'D:/backups/fantetic-terminal',
+  BACKUP_ARCHIVE_PATH: archiveRootPath,
 });
 assert.deepEqual(config, {
   enabled: true,
   intervalMs: 30 * 60 * 1000,
   retentionCount: 7,
-  archiveRootPath: 'D:/backups/fantetic-terminal',
+  archiveRootPath,
 });
 assert.throws(() => resolveBackupScheduleConfig({ BACKUP_SCHEDULE_ENABLED: 'yes' }), /true or false/);
 assert.throws(() => resolveBackupScheduleConfig({ BACKUP_SCHEDULE_ENABLED: 'true', BACKUP_INTERVAL_MINUTES: '5' }), /between 15 and 10080/);
+assert.throws(() => resolveBackupScheduleConfig({ BACKUP_ARCHIVE_PATH: 'backups/fantetic-terminal' }), /must be absolute/);
 
 let timerCallback: (() => void) | undefined;
 let clearedTimer: unknown;
@@ -45,7 +49,7 @@ timerCallback?.();
 await new Promise(resolve => setImmediate(resolve));
 assert.deepEqual(submittedPolicies, [{
   retentionCount: 7,
-  archiveRootPath: 'D:/backups/fantetic-terminal',
+  archiveRootPath,
 }]);
 scheduler.stop();
 assert.equal(clearedTimer, 'timer-id');
