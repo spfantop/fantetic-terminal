@@ -7,6 +7,7 @@ const read = (relativePath) => fs.readFileSync(path.join(rootDir, relativePath),
 
 const compose = read('docker-compose.yml');
 const desktopWorkflow = read('.github/workflows/desktop-build.yml');
+const dockerPublishWorkflow = read('.github/workflows/docker-publish.yml');
 const qualityWorkflow = read('.github/workflows/quality.yml');
 const securityWorkflow = read('.github/workflows/security.yml');
 const readme = read('README.md');
@@ -45,7 +46,7 @@ assert.match(securityWorkflow, /npm sbom --sbom-format cyclonedx --omit=dev/);
 assert.match(securityWorkflow, /aquasecurity\/trivy-action@[a-f0-9]{40}\s+# v0\.36\.0/);
 assert.match(securityWorkflow, /version:\s*v0\.70\.0/);
 assert.match(securityWorkflow, /github\/codeql-action\/init@[a-f0-9]{40}\s+# v3/);
-for (const workflow of [qualityWorkflow, desktopWorkflow, securityWorkflow]) {
+for (const workflow of [qualityWorkflow, desktopWorkflow, securityWorkflow, dockerPublishWorkflow]) {
   assert.doesNotMatch(workflow, /uses:\s*[^\s@]+@v\d+/);
   assert.match(workflow, /uses:\s*[^\s@]+@[a-f0-9]{40}\s+# v\d+/);
 }
