@@ -17,5 +17,6 @@ assert.match(component, /syncRemoteDesktopReplayDisplay/);
 assert.match(component, /ResizeObserver\(syncRemoteDesktopReplayDisplay\)/);
 assert.match(component, /remoteDesktopRecordingReady\.value = true/);
 assert.match(component, /:disabled="preparing \|\| hasInvalidRecordingIntegrity\(\) \|\| \(isRemoteDesktopRecording && !remoteDesktopRecordingReady\)"/);
+assert.match(component, /\.remote-desktop-recording-host :deep\(div\[style\*="position: absolute"\]:first-child\)\s*\{\s*z-index: 0;/);
 
 console.log('session recording integrity UI behavior ok');
