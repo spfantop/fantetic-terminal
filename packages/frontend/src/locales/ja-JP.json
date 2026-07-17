@@ -2081,7 +2081,7 @@
     "remoteDesktopPlaybackFailed": "リモートデスクトップのプロトコル録画を再生できません。",
     "play": "再生", "delete": "録画を削除", "confirmDelete": "{name} のセッション録画を削除しますか？この操作は元に戻せません。", "deleteFailed": "セッション録画の削除に失敗しました。",
     "stop": "停止",
-    "speed": "速度",
+    "speed": "速度", "expandPlayer": "拡大表示", "restorePlayer": "拡大表示を終了",
     "player": "端末セッションプレーヤー", "searchPlaceholder": "接続名またはユーザー名", "startedAfter": "開始日時", "total": "全 {count} 件", "duration": "時間", "events": "イベント", "eventCount": "{count} 件のイベント", "size": "サイズ", "preparing": "再生を準備中…", "timeline": "再生タイムライン", "selectHint": "録画を選択して詳細を確認し、再生します。",
     "integrity": { "invalid": "録画の完全性検証に失敗したため、再生できません。" },
     "status": { "active": "進行中", "completed": "完了", "incomplete": "不完全", "failed": "失敗" }

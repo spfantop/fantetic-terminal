@@ -2100,7 +2100,7 @@
     "remoteDesktopPlaybackFailed": "The remote desktop protocol recording cannot be replayed.",
     "play": "Replay", "delete": "Delete recording", "confirmDelete": "Delete the session recording for {name}? This cannot be undone.", "deleteFailed": "Failed to delete the session recording.",
     "stop": "Stop",
-    "speed": "Speed",
+    "speed": "Speed", "expandPlayer": "Expand player", "restorePlayer": "Restore player",
     "player": "Terminal session player", "searchPlaceholder": "Connection or username", "startedAfter": "Started after", "total": "{count} total", "duration": "Duration", "events": "Events", "eventCount": "{count} events", "size": "Size", "preparing": "Preparing replay…", "timeline": "Replay timeline", "selectHint": "Select a recording to inspect and replay.",
     "integrity": { "invalid": "Recording integrity verification failed. Replay is unavailable." },
     "status": { "active": "Active", "completed": "Completed", "incomplete": "Incomplete", "failed": "Failed" }

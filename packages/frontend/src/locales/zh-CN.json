@@ -2105,7 +2105,7 @@
     "remoteDesktopPlaybackFailed": "远程桌面协议录像无法回放。",
     "play": "回放", "delete": "删除录像", "confirmDelete": "确定删除“{name}”的会话录像吗？此操作不可恢复。", "deleteFailed": "删除会话录像失败。",
     "stop": "停止",
-    "speed": "速度",
+    "speed": "速度", "expandPlayer": "放大查看", "restorePlayer": "退出放大",
     "player": "终端会话回放器", "searchPlaceholder": "连接或用户名", "startedAfter": "开始时间", "total": "共 {count} 条", "duration": "时长", "events": "事件", "eventCount": "{count} 个事件", "size": "大小", "preparing": "正在准备回放…", "timeline": "回放时间轴", "selectHint": "选择一条录像查看详情并回放。",
     "integrity": { "invalid": "录像完整性校验失败，已禁止回放。" },
     "status": { "active": "进行中", "completed": "已完成", "incomplete": "不完整", "failed": "失败" }
