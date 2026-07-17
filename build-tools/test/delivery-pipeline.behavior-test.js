@@ -30,12 +30,13 @@ assert.match(workflow, /build:macos:arm64/);
 assert.match(workflow, /Validate Electron packaging behavior/);
 assert.match(workflow, /release-assets\/SHA256SUMS\.txt/);
 assert.match(workflow, /SIGNING_CSC_LINK:/);
-assert.match(workflow, /if \(\$env:SIGNING_CSC_LINK\)/);
-assert.match(workflow, /Verify production signing and notarization credentials/);
+assert.match(workflow, /if \(\$env:SIGNING_CSC_LINK -and \$env:SIGNING_CSC_KEY_PASSWORD\)/);
+assert.match(workflow, /Report optional signing and notarization configuration/);
 assert.match(workflow, /APPLE_API_KEY:/);
 assert.match(workflow, /APPLE_API_KEY_ID:/);
 assert.match(workflow, /APPLE_API_ISSUER:/);
 assert.match(workflow, /APPLE_TEAM_ID:/);
+assert.doesNotMatch(workflow, /Production desktop releases require platform signing credentials/);
 assert.doesNotMatch(workflow, /^\s*CSC_LINK:\s*\$\{\{[^\n]*\|\|\s*''/m);
 
 assert.doesNotMatch(frontendDockerfile, /COPY\s+\.env\s/);

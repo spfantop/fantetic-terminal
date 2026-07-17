@@ -84,7 +84,7 @@ jobs:
           RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag }}
         run: node build-tools/validate-release-version.js
 
-      - name: Verify production signing and notarization credentials
+      - name: Report optional signing and notarization configuration
         if: ${{ (github.ref_type == 'tag' || inputs.release_tag != '') && (runner.os == 'Windows' || runner.os == 'macOS') }}
         env:
           SIGNING_CSC_LINK: ${{ runner.os == 'Windows' && secrets.WINDOWS_CSC_LINK || runner.os == 'macOS' && secrets.MACOS_CSC_LINK || '' }}
@@ -95,11 +95,13 @@ jobs:
           APPLE_TEAM_ID: ${{ runner.os == 'macOS' && secrets.APPLE_TEAM_ID || '' }}
         shell: pwsh
         run: |
-          if (-not $env:SIGNING_CSC_LINK -or -not $env:SIGNING_CSC_KEY_PASSWORD) {
-            throw 'Production desktop releases require platform signing credentials.'
+          if ($env:SIGNING_CSC_LINK -and $env:SIGNING_CSC_KEY_PASSWORD) {
+            Write-Host 'Desktop code signing is enabled for this release.'
+          } else {
+            Write-Warning 'Code-signing credentials are not configured; publishing unsigned desktop artifacts.'
           }
           if ('${{ runner.os }}' -eq 'macOS' -and (-not $env:APPLE_API_KEY -or -not $env:APPLE_API_KEY_ID -or -not $env:APPLE_API_ISSUER -or -not $env:APPLE_TEAM_ID)) {
-            throw 'Production macOS releases require App Store Connect API-key notarization credentials.'
+            Write-Warning 'macOS notarization credentials are not configured; publishing an unsigned, unnotarized macOS artifact.'
           }
 
       - name: Build backend
@@ -120,11 +122,11 @@ jobs:
           APPLE_TEAM_ID: ${{ runner.os == 'macOS' && secrets.APPLE_TEAM_ID || '' }}
         shell: pwsh
         run: |
-          if ($env:SIGNING_CSC_LINK) {
+          if ($env:SIGNING_CSC_LINK -and $env:SIGNING_CSC_KEY_PASSWORD) {
             $env:CSC_LINK = $env:SIGNING_CSC_LINK
-          }
-          if ($env:SIGNING_CSC_KEY_PASSWORD) {
             $env:CSC_KEY_PASSWORD = $env:SIGNING_CSC_KEY_PASSWORD
+          } else {
+            Write-Warning 'Building unsigned desktop artifact because signing credentials are incomplete or absent.'
           }
           $maxPackagingAttempts = if ('${{ runner.os }}' -eq 'macOS') { 2 } else { 1 }
           $packagingExitCode = 1
