@@ -50,7 +50,12 @@ COPY --from=builder /usr/local/bin/node /usr/local/bin/node
 COPY packages/remote-gateway/package.json ./package.json
 COPY packages/remote-gateway/entrypoint.sh /entrypoint.sh
 
-RUN chmod +x /entrypoint.sh && chown -R guacd:guacd /app
+# npm workspaces retain root devDependencies even with --omit=dev. esbuild is build-only
+# and ships an outdated Go binary that must not be present in the production image.
+RUN rm -rf ./node_modules/esbuild ./node_modules/@esbuild \
+    && rm -f ./node_modules/.bin/esbuild \
+    && chmod +x /entrypoint.sh \
+    && chown -R guacd:guacd /app
 
 EXPOSE 9090 8081
 

@@ -77,6 +77,8 @@ assert.match(gatewayDockerfile, /apk add --no-cache curl bash netcat-openbsd su-
 assert.doesNotMatch(gatewayDockerfile, /USER guacd/);
 assert.match(gatewayDockerfile, /COPY --from=builder \/usr\/local\/bin\/node \/usr\/local\/bin\/node/);
 assert.doesNotMatch(gatewayDockerfile, /apk add --no-cache nodejs/);
+assert.match(gatewayDockerfile, /rm -rf \.\/node_modules\/esbuild \.\/node_modules\/@esbuild/);
+assert.match(gatewayDockerfile, /rm -f \.\/node_modules\/\.bin\/esbuild/);
 
 assert.match(qualityWorkflow, /pull_request:/);
 assert.match(qualityWorkflow, /Run full behavior suite/);
