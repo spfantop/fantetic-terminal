@@ -12,5 +12,10 @@ assert.match(component, /Guacamole\.StaticHTTPTunnel/);
 assert.match(component, /Guacamole\.SessionRecording/);
 assert.match(component, /session-recordings\/\$\{selectedId\.value\}\/guacamole/);
 assert.match(component, /isRemoteDesktopRecording/);
+assert.match(component, /remoteDesktopRecordingReady/);
+assert.match(component, /syncRemoteDesktopReplayDisplay/);
+assert.match(component, /ResizeObserver\(syncRemoteDesktopReplayDisplay\)/);
+assert.match(component, /remoteDesktopRecordingReady\.value = true/);
+assert.match(component, /:disabled="preparing \|\| hasInvalidRecordingIntegrity\(\) \|\| \(isRemoteDesktopRecording && !remoteDesktopRecordingReady\)"/);
 
 console.log('session recording integrity UI behavior ok');

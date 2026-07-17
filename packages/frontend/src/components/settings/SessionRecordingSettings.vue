@@ -27,9 +27,9 @@
       <div v-if="selectedRecording" ref="recordingDialogRootRef" class="recording-modal" role="dialog" aria-modal="true" :aria-label="t('sessionRecording.player')" @click.self="closePlayer">
         <article ref="recordingDialogRef" class="recording-player">
           <header class="recording-detail recording-drag-handle" @pointerdown="startRecordingDialogDrag"><div><h3>{{ selectedRecording.connection_name }}</h3><p>{{ selectedRecording.username || '-' }} · {{ selectedRecording.protocol }}</p></div><dl><div><dt>{{ t('sessionRecording.duration') }}</dt><dd>{{ formatDuration(playbackDurationMs) }}</dd></div><div><dt>{{ t('sessionRecording.events') }}</dt><dd>{{ selectedRecording.event_count }}</dd></div><div><dt>{{ t('sessionRecording.size') }}</dt><dd>{{ formatBytes(selectedRecording.byte_count) }}</dd></div></dl><button type="button" class="modal-close" :aria-label="t('common.close')" @click="closePlayer"><i class="fas fa-xmark"></i></button></header>
-          <div class="player-toolbar"><button type="button" :disabled="preparing || hasInvalidRecordingIntegrity()" @click="playing ? stop() : play()"><i :class="playing ? 'fas fa-pause' : 'fas fa-play'"></i>{{ playing ? t('sessionRecording.stop') : t('sessionRecording.play') }}</button><label>{{ t('sessionRecording.speed') }}<select v-model.number="speed" :disabled="isRemoteDesktopRecording"><option :value="1">1×</option><option :value="2">2×</option><option :value="4">4×</option><option :value="8">8×</option></select></label><span v-if="preparing">{{ t('sessionRecording.preparing', '正在准备回放…') }}</span></div>
+          <div class="player-toolbar"><button type="button" :disabled="preparing || hasInvalidRecordingIntegrity() || (isRemoteDesktopRecording && !remoteDesktopRecordingReady)" @click="playing ? stop() : play()"><i :class="playing ? 'fas fa-pause' : 'fas fa-play'"></i>{{ playing ? t('sessionRecording.stop') : t('sessionRecording.play') }}</button><label>{{ t('sessionRecording.speed') }}<select v-model.number="speed" :disabled="isRemoteDesktopRecording"><option :value="1">1×</option><option :value="2">2×</option><option :value="4">4×</option><option :value="8">8×</option></select></label><span v-if="preparing">{{ t('sessionRecording.preparing', '正在准备回放…') }}</span></div>
           <p v-if="recordingIntegrity?.status === 'invalid'" role="alert" class="recording-message">{{ t('sessionRecording.integrity.invalid') }}</p>
-          <div v-if="isRemoteDesktopRecording" ref="remoteDesktopRecordingHost" class="terminal-host" :aria-label="t('sessionRecording.player')"></div>
+          <div v-if="isRemoteDesktopRecording" ref="remoteDesktopRecordingHost" class="terminal-host remote-desktop-recording-host" :aria-label="t('sessionRecording.player')"></div>
           <div v-else ref="terminalHost" class="terminal-host" :aria-label="t('sessionRecording.player')"></div>
           <div class="timeline"><input v-model.number="timelineOffset" type="range" min="0" :max="Math.max(1, playbackDurationMs)" step="100" :disabled="preparing || hasInvalidRecordingIntegrity()" :aria-label="t('sessionRecording.timeline', '回放时间轴')" @input="seekTo(timelineOffset)"><span>{{ formatDuration(timelineOffset) }} / {{ formatDuration(playbackDurationMs) }}</span></div>
         </article>
@@ -96,7 +96,9 @@ let nextEventCursor: number | null = 0;
 let cacheStartCursor = 0;
 let recordingAbortController: AbortController | undefined;
 let remoteDesktopRecording: any | undefined;
+let remoteDesktopResizeObserver: ResizeObserver | undefined;
 const remoteDesktopPlaybackDurationMs = ref(0);
+const remoteDesktopRecordingReady = ref(false);
 
 const selectedRecording = computed(() => recordingList.value.find(item => item.id === selectedId.value));
 const isRemoteDesktopRecording = computed(() => ['RDP', 'VNC'].includes(selectedRecording.value?.protocol ?? ''));
@@ -158,21 +160,50 @@ const ensureTerminal = async () => {
   await nextTick(); fitAddon.fit();
   resizeObserver = new ResizeObserver(syncTerminalViewport); resizeObserver.observe(terminalHost.value);
 };
+const syncRemoteDesktopReplayDisplay = () => {
+  const host = remoteDesktopRecordingHost.value;
+  const display = remoteDesktopRecording?.getDisplay?.();
+  if (!host || !display) return;
+
+  const displayWidth = Number(display.getWidth?.() ?? 0);
+  const displayHeight = Number(display.getHeight?.() ?? 0);
+  const hostWidth = host.clientWidth;
+  const hostHeight = host.clientHeight;
+  if (displayWidth <= 0 || displayHeight <= 0 || hostWidth <= 0 || hostHeight <= 0) return;
+
+  display.scale(Math.min(hostWidth / displayWidth, hostHeight / displayHeight));
+  const displayElement = display.getElement?.() as HTMLElement | undefined;
+  if (displayElement) displayElement.style.margin = 'auto';
+};
 const ensureRemoteDesktopRecording = async () => {
   if (!isRemoteDesktopRecording.value || !remoteDesktopRecordingHost.value || remoteDesktopRecording) return;
+  preparing.value = true;
+  remoteDesktopRecordingReady.value = false;
   const tunnelUrl = new URL(`/api/v1/session-recordings/${selectedId.value}/guacamole`, window.location.origin).toString();
   const tunnel = new Guacamole.StaticHTTPTunnel(tunnelUrl);
   const recording = new Guacamole.SessionRecording(tunnel);
   remoteDesktopRecording = recording;
   remoteDesktopRecordingHost.value.replaceChildren(recording.getDisplay().getElement());
-  recording.onprogress = (duration: number) => { remoteDesktopPlaybackDurationMs.value = duration; };
-  recording.onload = () => { remoteDesktopPlaybackDurationMs.value = recording.getDuration(); preparing.value = false; };
+  remoteDesktopResizeObserver?.disconnect();
+  remoteDesktopResizeObserver = new ResizeObserver(syncRemoteDesktopReplayDisplay);
+  remoteDesktopResizeObserver.observe(remoteDesktopRecordingHost.value);
+  recording.onprogress = (duration: number) => {
+    remoteDesktopPlaybackDurationMs.value = duration;
+    syncRemoteDesktopReplayDisplay();
+  };
+  recording.onload = () => {
+    remoteDesktopPlaybackDurationMs.value = recording.getDuration();
+    syncRemoteDesktopReplayDisplay();
+    remoteDesktopRecordingReady.value = true;
+    preparing.value = false;
+  };
   recording.onplay = () => { playing.value = true; };
   recording.onpause = () => { playing.value = false; };
   recording.onseek = (position: number) => { timelineOffset.value = position; };
   recording.onerror = () => {
     playing.value = false;
     preparing.value = false;
+    remoteDesktopRecordingReady.value = false;
     error.value = t('sessionRecording.remoteDesktopPlaybackFailed');
   };
   recording.connect();
@@ -214,8 +245,8 @@ const loadEvents = async () => {
   catch (requestError) { const canceled = requestError instanceof DOMException && requestError.name === 'AbortError' || Boolean(requestError && typeof requestError === 'object' && 'code' in requestError && requestError.code === 'ERR_CANCELED'); if (!canceled) error.value = t('sessionRecording.playFailed'); }
   finally { preparing.value = false; }
 };
-const selectRecording = async (id: string) => { stop(); remoteDesktopRecording?.abort(); remoteDesktopRecording = undefined; recordingAbortController?.abort(); recordingAbortController = new AbortController(); selectedId.value = id; cachedEvents.value = []; recordingIntegrity.value = undefined; remoteDesktopPlaybackDurationMs.value = 0; nextEventCursor = 0; cacheStartCursor = 0; timelineOffset.value = 0; recordedTerminalSize = undefined; await nextTick(); await centerRecordingDialog(); if (isRemoteDesktopRecording.value) { await loadEvents(); if (!hasInvalidRecordingIntegrity()) await ensureRemoteDesktopRecording(); return; } await ensureTerminal(); clearTerminalViewportStyles(); fitAddon?.fit(); terminal?.reset(); void loadEvents(); };
-const closePlayer = () => { stop(); remoteDesktopRecording?.abort(); remoteDesktopRecording=undefined; remoteDesktopRecordingHost.value?.replaceChildren(); recordingAbortController?.abort(); recordingAbortController=undefined; selectedId.value=''; cachedEvents.value=[]; recordingIntegrity.value=undefined; remoteDesktopPlaybackDurationMs.value=0; nextEventCursor=0; cacheStartCursor=0; recordedTerminalSize=undefined; resizeObserver?.disconnect(); resizeObserver=undefined; terminal?.dispose(); terminal=undefined; fitAddon=undefined; };
+const selectRecording = async (id: string) => { stop(); remoteDesktopRecording?.abort(); remoteDesktopRecording = undefined; remoteDesktopResizeObserver?.disconnect(); remoteDesktopResizeObserver = undefined; remoteDesktopRecordingReady.value = false; recordingAbortController?.abort(); recordingAbortController = new AbortController(); selectedId.value = id; cachedEvents.value = []; recordingIntegrity.value = undefined; remoteDesktopPlaybackDurationMs.value = 0; nextEventCursor = 0; cacheStartCursor = 0; timelineOffset.value = 0; recordedTerminalSize = undefined; await nextTick(); await centerRecordingDialog(); if (isRemoteDesktopRecording.value) { await loadEvents(); if (!hasInvalidRecordingIntegrity()) await ensureRemoteDesktopRecording(); return; } await ensureTerminal(); clearTerminalViewportStyles(); fitAddon?.fit(); terminal?.reset(); void loadEvents(); };
+const closePlayer = () => { stop(); remoteDesktopRecording?.abort(); remoteDesktopRecording=undefined; remoteDesktopResizeObserver?.disconnect(); remoteDesktopResizeObserver=undefined; remoteDesktopRecordingReady.value=false; remoteDesktopRecordingHost.value?.replaceChildren(); recordingAbortController?.abort(); recordingAbortController=undefined; selectedId.value=''; cachedEvents.value=[]; recordingIntegrity.value=undefined; remoteDesktopPlaybackDurationMs.value=0; nextEventCursor=0; cacheStartCursor=0; recordedTerminalSize=undefined; resizeObserver?.disconnect(); resizeObserver=undefined; terminal?.dispose(); terminal=undefined; fitAddon=undefined; };
 const deleteRecording = async (recording: SessionRecording) => { if(recording.status==='active'||!await showConfirmDialog({message:t('sessionRecording.confirmDelete',{name:recording.connection_name})}))return; deletingId.value=recording.id; try{await sessionRecordingApi.delete(recording.id);if(selectedId.value===recording.id)closePlayer();await loadList();}catch{error.value=t('sessionRecording.deleteFailed');}finally{deletingId.value='';} };
 const seekTo = async (offset: number) => { stop(); if (isRemoteDesktopRecording.value) { remoteDesktopRecording?.seek(offset); timelineOffset.value = offset; return; } if (cacheStartCursor > 0 && offset < (cachedEvents.value[0]?.offsetMs ?? 0)) { preparing.value = true; try { await loadNextEventPage(true); while (nextEventCursor !== null && (cachedEvents.value[cachedEvents.value.length - 1]?.offsetMs ?? 0) < offset) await loadNextEventPage(); } finally { preparing.value = false; } } terminal?.reset(); primeTerminalForReplay(); for (const event of cachedEvents.value) { if (event.offsetMs > offset) break; renderEvent(event); } timelineOffset.value = offset; syncTerminalViewport(); };
 const play = async () => {
@@ -247,7 +278,7 @@ onMounted(() => {
   }
   void loadList();
 });
-onBeforeUnmount(() => { window.removeEventListener('keydown', handleEscape); stop(); remoteDesktopRecording?.abort(); recordingAbortController?.abort(); resizeObserver?.disconnect(); terminal?.dispose(); });
+onBeforeUnmount(() => { window.removeEventListener('keydown', handleEscape); stop(); remoteDesktopRecording?.abort(); remoteDesktopResizeObserver?.disconnect(); recordingAbortController?.abort(); resizeObserver?.disconnect(); terminal?.dispose(); });
 </script>
 
 <style scoped>
@@ -256,4 +287,5 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', handleEscape); sto
 .recording-workspace button{background:var(--background);color:var(--foreground)}.recording-workspace .recording-filters button[type="submit"],.recording-workspace .player-toolbar button{background:var(--primary);color:var(--primary-foreground)}
 .recording-workspace{display:grid;gap:1rem}.recording-filters{display:flex;align-items:end;gap:.65rem;flex-wrap:wrap;padding:1rem;border:1px solid var(--border);border-radius:.75rem;background:var(--card)}.recording-filters label{display:grid;gap:.3rem;flex:1;min-width:11rem}.recording-filters label span{font-size:.75rem;color:var(--muted-foreground)}input,select,button{border:1px solid var(--border);border-radius:.45rem;padding:.55rem .7rem;background:var(--background);color:var(--foreground)}button{display:inline-flex;align-items:center;justify-content:center;gap:.4rem;background:var(--primary);color:var(--primary-foreground);cursor:pointer}.secondary{background:var(--background);color:var(--foreground)}button:disabled{opacity:.5}.recording-message{padding:.7rem;border:1px solid var(--destructive);border-radius:.5rem;color:var(--destructive)}.recording-layout{display:grid;grid-template-columns:minmax(18rem,.72fr) minmax(28rem,1.28fr);min-height:35rem;border:1px solid var(--border);border-radius:.75rem;overflow:hidden}.recording-list{display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--border);background:var(--background)}.recording-list>header,.recording-list>footer{display:flex;justify-content:space-between;align-items:center;padding:.8rem;border-bottom:1px solid var(--border)}.recording-list>header span,.recording-list small{color:var(--muted-foreground);font-size:.75rem}.recording-list>button{display:grid;gap:.35rem;padding:.8rem;border:0;border-bottom:1px solid var(--border);border-radius:0;background:transparent;color:var(--foreground);text-align:left}.recording-list>button:hover,.recording-list>button.active{background:var(--accent)}.recording-list>button.active{box-shadow:inset 3px 0 var(--primary)}.recording-list>button>span{display:flex;justify-content:space-between}.recording-list em{font-style:normal;color:var(--primary);font-size:.75rem}.status-dot{display:inline-block;width:.45rem;height:.45rem;margin-right:.35rem;border-radius:50%;background:var(--muted-foreground)}.status-dot.completed{background:var(--success)}.status-dot.active{background:var(--primary)}.status-dot.incomplete,.status-dot.failed{background:var(--warning)}.recording-list>footer{margin-top:auto;border-top:1px solid var(--border);border-bottom:0}.recording-list>footer button{padding:.4rem .6rem}.empty-state,.player-placeholder{display:grid;place-content:center;gap:.6rem;min-height:15rem;text-align:center;color:var(--muted-foreground)}.recording-player{display:flex;flex-direction:column;min-width:0;padding:1rem;gap:.8rem}.recording-detail{display:flex;justify-content:space-between;gap:1rem}.recording-detail h3,.recording-detail p{margin:0}.recording-detail p{color:var(--muted-foreground)}.recording-detail dl{display:flex;gap:1.2rem;margin:0}.recording-detail dl div{display:grid}.recording-detail dt{font-size:.7rem;color:var(--muted-foreground)}.recording-detail dd{margin:0}.player-toolbar{display:flex;align-items:center;gap:.7rem}.player-toolbar label{display:flex;align-items:center;gap:.4rem}.terminal-host{height:27rem;min-width:0;padding:.25rem;border:1px solid var(--border);border-radius:.5rem;background:#000}.timeline{display:flex;align-items:center;gap:.8rem}.timeline input{flex:1;padding:0}.timeline span{font-variant-numeric:tabular-nums;font-size:.8rem}@media(max-width:900px){.recording-layout{grid-template-columns:1fr}.recording-list{max-height:25rem;border-right:0;border-bottom:1px solid var(--border)}.recording-detail{flex-direction:column}}@media(max-width:600px){.recording-detail dl{display:grid;grid-template-columns:repeat(3,1fr)}.terminal-host{height:22rem}}
 .recording-workspace .recording-list{align-items:stretch}.recording-item{display:grid;grid-template-columns:minmax(0,1fr) 2.6rem;width:100%}.recording-item .recording-open{display:grid;grid-template-columns:minmax(12rem,1.35fr) minmax(13rem,1fr) minmax(11rem,.85fr);align-items:center;gap:1rem;min-width:0;padding:.75rem .85rem}.recording-open>.recording-primary{display:flex;align-items:center;gap:.55rem;min-width:0}.recording-primary strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.recording-primary em{flex:none;padding:.1rem .38rem;border:1px solid var(--border);border-radius:999px}.recording-open>.recording-owner,.recording-open>.recording-state{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;column-gap:.45rem;min-width:0}.recording-owner>i,.recording-state>.status-dot{grid-row:1/3}.recording-owner small,.recording-state small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.recording-owner>i{color:var(--muted-foreground);font-size:.75rem}.delete-recording{position:static;align-self:center;justify-self:center;width:2rem;height:2rem;padding:0;transform:none}.recording-modal .recording-player{display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;gap:.7rem;box-sizing:border-box;width:min(78rem,calc(100dvw - 3rem));height:min(48rem,calc(100dvh - 3rem));max-height:calc(100dvh - 3rem);min-height:0}.recording-drag-handle{cursor:move;user-select:none}.recording-modal .terminal-host{position:relative;min-height:0;height:auto;overflow:hidden;padding:.25rem}.recording-modal .terminal-host :deep(.xterm){width:100%;height:100%}.recording-modal .timeline{min-width:0}.recording-modal .timeline input{min-width:0}.recording-detail dl{flex-wrap:wrap}.player-toolbar{min-width:0}.player-toolbar>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}@media(max-width:860px){.recording-item .recording-open{grid-template-columns:minmax(10rem,1.2fr) minmax(10rem,1fr) minmax(9rem,.8fr);gap:.65rem}.recording-modal{padding:.75rem}.recording-modal .recording-player{height:calc(100dvh - 1.5rem);max-height:calc(100dvh - 1.5rem)}}@media(max-width:640px){.recording-item{grid-template-columns:minmax(0,1fr) 2.5rem}.recording-item .recording-open{grid-template-columns:1fr;gap:.38rem;padding:.7rem}.recording-open>.recording-owner,.recording-open>.recording-state{display:flex;gap:.4rem}.recording-owner>i,.recording-state>.status-dot{grid-row:auto}.recording-owner small:last-child,.recording-state small:last-child{margin-left:auto}.recording-modal{place-items:stretch;padding:.35rem}.recording-modal .recording-player{width:calc(100dvw - .7rem);height:calc(100dvh - .7rem);max-height:calc(100dvh - .7rem);padding:.6rem;border-radius:.55rem}.recording-modal .recording-detail{display:grid;grid-template-columns:minmax(0,1fr) auto;padding-right:0}.recording-modal .recording-detail>div{min-width:0}.recording-modal .recording-detail h3,.recording-modal .recording-detail p{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.recording-modal .recording-detail dl{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.45rem}.recording-modal .modal-close{position:static;grid-column:2;grid-row:1}.recording-modal .player-toolbar{justify-content:space-between;gap:.45rem}.recording-modal .player-toolbar button{padding:.48rem .6rem}.recording-modal .player-toolbar>span{display:none}.recording-modal .timeline{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.5rem}.recording-modal .terminal-host{min-height:0}.recording-drag-handle{cursor:default}}
+.remote-desktop-recording-host{display:grid;place-items:center}
 </style>
