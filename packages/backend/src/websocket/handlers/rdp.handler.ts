@@ -81,6 +81,7 @@ async function handleRdpProxyConnectionWithAuditContext(
             connectionId: recordingMetadata.connectionId,
             connectionName: recordingMetadata.connectionName!,
             protocol: recordingMetadata.protocol!,
+            ...(ws.isMobileClient ? { clientKind: 'mobile' as const } : {}),
         }),
     });
     const pendingClientFrameList: PendingClientFrame[] = [];

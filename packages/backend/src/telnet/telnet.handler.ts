@@ -96,6 +96,7 @@ export async function handleTelnetConnect(ws: AuthenticatedWebSocket, payload: T
       connectionId,
       connectionName: connection.name || connection.host,
       protocol: 'TELNET',
+      ...(ws.isMobileClient ? { clientKind: 'mobile' as const } : {}),
     });
   } catch (error) {
     logger.error('Telnet 会话启动录像失败', { sessionId, connectionId, error });

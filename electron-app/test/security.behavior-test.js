@@ -41,6 +41,7 @@ assert.match(mainSource, /sandbox:\s*true/);
 assert.match(mainSource, /setWindowOpenHandler/);
 assert.match(mainSource, /will-navigate/);
 assert.match(mainSource, /onBeforeSendHeaders/);
+assert.match(mainSource, /Menu\.setApplicationMenu\(null\)/);
 assert.match(mainSource, /if \(!isTrustedIpcSender\(event\)\) return;/);
 assert.doesNotMatch(mainSource, /OutOfBlinkCors/);
 

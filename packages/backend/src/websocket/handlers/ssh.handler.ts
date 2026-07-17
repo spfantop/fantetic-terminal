@@ -95,6 +95,7 @@ export async function handleSshConnect(
                 connectionId: dbConnectionIdAsNumber,
                 connectionName: connInfo!.name,
                 protocol: 'SSH',
+                ...(ws.isMobileClient ? { clientKind: 'mobile' as const } : {}),
             });
         } catch (error) {
             logger.error('SSH 会话启动录像失败', { sessionId: newSessionId, connectionId: dbConnectionIdAsNumber, error });

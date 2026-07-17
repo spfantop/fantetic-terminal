@@ -43,7 +43,7 @@
         </div>
         <AccessControlSettings v-else-if="activeSection === 'accessControl'" />
         <AuditLogView v-else-if="activeSection === 'auditLogs'" />
-        <SessionRecordingSettings v-else-if="activeSection === 'sessionRecordings'" />
+        <SessionRecordingSettings v-else-if="activeSection === 'sessionRecordings' && !isMobile" />
         <DataManagementSection v-else-if="activeSection === 'dataManagement'" />
       </section>
     </div>
@@ -61,6 +61,7 @@ import { sessionRecordingApi } from '../services/sessionRecording.api';
 import { backupApi } from '../services/backup.api';
 import apiClient from '../utils/apiClient';
 import { useDraggableDialog } from '../composables/useDraggableDialog';
+import { useDeviceDetection } from '../composables/useDeviceDetection';
 
 const AccessControlSettings = defineAsyncComponent(() => import('../components/settings/AccessControlSettings.vue'));
 const SessionRecordingSettings = defineAsyncComponent(() => import('../components/settings/SessionRecordingSettings.vue'));
@@ -91,6 +92,7 @@ const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
+const { isMobile } = useDeviceDetection();
 const administratorRoles: SystemRole[] = ['super_admin', 'admin'];
 const auditRoles: SystemRole[] = [...administratorRoles, 'auditor'];
 type OverviewStatKey = 'users' | 'groups' | 'assets' | 'auditLogs' | 'recordings' | 'backups';
@@ -99,7 +101,7 @@ const overviewStats = ref<Record<OverviewStatKey, number | null>>({ users:null,g
 const visibleStats = computed(() => {
   const common = [
     { key:'auditLogs' as const,section:'auditLogs' as const,label:t('nav.auditLogs'),icon:'fas fa-shield-halved' },
-    { key:'recordings' as const,section:'sessionRecordings' as const,label:t('sessionRecording.title'),icon:'fas fa-video' },
+    ...(!isMobile.value ? [{ key:'recordings' as const,section:'sessionRecordings' as const,label:t('sessionRecording.title'),icon:'fas fa-video' }] : []),
   ];
   if (!administratorRoles.includes(authStore.user?.systemRole ?? 'user')) return common;
   return [
@@ -120,7 +122,7 @@ const allItems = computed<AdminNavigationItem[]>(() => [
 ]);
 const allowedItems = computed(() => {
   const role = authStore.user?.systemRole;
-  return role ? allItems.value.filter(item => item.roles.includes(role)) : [];
+  return role ? allItems.value.filter(item => item.roles.includes(role) && (item.key !== 'sessionRecordings' || !isMobile.value)) : [];
 });
 const requestedSection = computed(() => {
   const value = Array.isArray(route.query.section) ? route.query.section[0] : route.query.section;
@@ -150,7 +152,7 @@ const loadOverviewStats = async () => {
   overviewLoading.value = true;
   const jobs: Array<{key:OverviewStatKey;load:()=>Promise<number>}> = [
     { key:'auditLogs',load:async()=>Number((await apiClient.get<{total:number}>('/audit-logs',{params:{limit:1,offset:0}})).data.total) },
-    { key:'recordings',load:async()=>Number((await sessionRecordingApi.list({limit:1,offset:0})).total) },
+    ...(!isMobile.value ? [{ key:'recordings' as const,load:async()=>Number((await sessionRecordingApi.list({limit:1,offset:0})).total) }] : []),
   ];
   if (administratorRoles.includes(authStore.user?.systemRole ?? 'user')) {
     const summaryPromise = accessControlApi.readSummary();

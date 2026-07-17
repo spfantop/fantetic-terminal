@@ -11,6 +11,7 @@ export interface AuthenticatedWebSocket extends WebSocket {
     username?: string;
     sessionId?: string; 
     missedHeartbeatCount?: number;
+    isMobileClient?: boolean;
     authorization?: AuthorizationSubject;
 }
 

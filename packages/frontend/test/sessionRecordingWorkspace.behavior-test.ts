@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const component = readFileSync(resolve('src/components/settings/SessionRecordingSettings.vue'), 'utf8');
+const adminCenter = readFileSync(resolve('src/views/AdminCenterView.vue'), 'utf8');
 const api = readFileSync(resolve('src/services/sessionRecording.api.ts'), 'utf8');
 const dialogDrag = readFileSync(resolve('src/composables/useDraggableDialog.ts'), 'utf8');
 
@@ -43,6 +44,9 @@ assert.match(component, /useDraggableDialog/);
 assert.match(component, /recording-drag-handle/);
 assert.match(component, /box-sizing:border-box/);
 assert.doesNotMatch(component, /\.recording-modal \.terminal-host\{min-height:12rem\}/);
+assert.match(adminCenter, /useDeviceDetection/);
+assert.match(adminCenter, /item\.key !== 'sessionRecordings' \|\| !isMobile\.value/);
+assert.match(adminCenter, /activeSection === 'sessionRecordings' && !isMobile/);
 assert.match(dialogDrag, /setPointerCapture/);
 assert.match(dialogDrag, /maxLeft/);
 assert.match(dialogDrag, /pointercancel/);

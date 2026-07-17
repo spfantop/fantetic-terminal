@@ -28,6 +28,11 @@ const upgradeLimiter = new FixedWindowAdmissionLimiter({
     maxAttempts: 30,
     maxEntries: 10_000,
 });
+
+const isMobileClient = (userAgent: string | string[] | undefined): boolean => (
+    typeof userAgent === 'string'
+    && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent)
+);
 const MAX_WEBSOCKETS_PER_USER = 12;
 const logger = createLogger('WebSocketUpgrade');
 
@@ -137,6 +142,7 @@ export function initializeUpgradeHandler(
                     extWs.userId = request.session.userId;
                     extWs.username = request.session.username;
                     extWs.authorization = authorization;
+                    extWs.isMobileClient = isMobileClient(request.headers['user-agent']);
                     request.authorization = authorization;
                     // 传递必要信息给 connection 事件
                     (request as any).clientIpAddress = ipAddress;
@@ -157,6 +163,7 @@ export function initializeUpgradeHandler(
                     extWs.userId = request.session.userId;
                     extWs.username = request.session.username;
                     extWs.authorization = authorization;
+                    extWs.isMobileClient = isMobileClient(request.headers['user-agent']);
                     request.authorization = authorization;
                     (request as any).clientIpAddress = ipAddress;
                     (request as any).isRdpProxy = false; // 标记为非 RDP 代理连接

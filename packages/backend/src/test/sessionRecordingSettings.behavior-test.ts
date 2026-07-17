@@ -33,6 +33,16 @@ const run = async () => {
     assert.equal(await startSessionRecording({ connectionId: 1, connectionName: 'disabled', protocol: 'SSH' }), undefined);
 
     await settingsService.setMultipleSettings({ sessionRecordingEnabled: 'true' }, administrator);
+    assert.equal(
+      await startSessionRecording({
+        connectionId: 1,
+        connectionName: 'mobile',
+        protocol: 'SSH',
+        clientKind: 'mobile',
+      }),
+      undefined,
+      'mobile sessions must not create recordings even when the global switch is enabled',
+    );
     const recorder = await startSessionRecording({ connectionId: 1, connectionName: 'enabled', protocol: 'SSH' });
     assert.ok(recorder, 'opening the switch must restore recording for new sessions');
     await finishSessionRecording(recorder);

@@ -32,6 +32,7 @@ export interface SessionRecordingIdentity {
   connectionId: number;
   connectionName: string;
   protocol: SessionRecordingProtocol;
+  clientKind?: 'mobile';
 }
 
 export type ActiveSessionRecorder = ReturnType<typeof createSessionRecorder>;
@@ -40,6 +41,7 @@ const recordingRoot = path.join(getAppDataPath(), 'session-recordings');
 export const startSessionRecording = async (
   identity: SessionRecordingIdentity,
 ): Promise<ActiveSessionRecorder | undefined> => {
+  if (identity.clientKind === 'mobile') return undefined;
   if (await settingsRepository.getSetting(SESSION_RECORDING_ENABLED_KEY) === 'false') return undefined;
   const id = uuidv4();
   const startedAt = Date.now();

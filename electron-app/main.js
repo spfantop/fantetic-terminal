@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, session } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, session } = require('electron');
 const path = require('path');
 const { randomBytes } = require('crypto');
 const express = require('express');
@@ -231,6 +231,7 @@ const stopProductionServices = () => {
 };
 
 app.on('ready', () => {
+  Menu.setApplicationMenu(null);
   createMainWindow().catch((error) => {
     console.error('Error during createMainWindow:', error);
     app.quit();

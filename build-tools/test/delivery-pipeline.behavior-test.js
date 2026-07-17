@@ -29,6 +29,8 @@ assert.match(workflow, /build:macos:x64/);
 assert.match(workflow, /build:macos:arm64/);
 assert.match(workflow, /Validate Electron packaging behavior/);
 assert.match(workflow, /release-assets\/SHA256SUMS\.txt/);
+assert.match(workflow, /cd release-assets[\s\S]*! -name SHA256SUMS\.txt/);
+assert.doesNotMatch(workflow, /find release-assets -maxdepth 1 -type f -print0[\s\S]*> release-assets\/SHA256SUMS\.txt/);
 assert.match(workflow, /SIGNING_CSC_LINK:/);
 assert.match(workflow, /if \(\$env:SIGNING_CSC_LINK -and \$env:SIGNING_CSC_KEY_PASSWORD\)/);
 assert.match(workflow, /Report optional signing and notarization configuration/);
