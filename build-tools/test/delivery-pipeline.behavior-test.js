@@ -174,6 +174,7 @@ assert.equal(
 
 assert.match(singleImageDockerfile, /^FROM guacamole\/guacd:1\.6\.0@sha256:8974eaa9ba32f713daf311e7cc8cd7e4cdfba1edea39eed75524e78ef4b08f4f AS guacd-runtime$/m);
 assert.match(singleImageDockerfile, /COPY --from=guacd-runtime \/ \/opt\/guacd-runtime\//);
+assert.match(singleImageDockerfile, /COPY build-tools \.\/build-tools\//);
 assert.match(singleImageDockerfile, /nginx tini python3 make g\+\+/);
 assert.match(singleImageDockerfile, /REMOTE_GATEWAY_API_BASE_DOCKER=http:\/\/127\.0\.0\.1:9090/);
 assert.match(singleImageDockerfile, /REMOTE_GATEWAY_WS_URL_DOCKER=ws:\/\/127\.0\.0\.1:8080/);

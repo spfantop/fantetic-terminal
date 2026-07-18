@@ -12,6 +12,7 @@ COPY packages/remote-gateway/patches ./packages/remote-gateway/patches
 
 RUN npm ci
 
+COPY build-tools ./build-tools/
 COPY packages/contracts/index.d.ts ./packages/contracts/
 COPY packages/backend/src ./packages/backend/src
 COPY packages/backend/tsconfig.json ./packages/backend/
