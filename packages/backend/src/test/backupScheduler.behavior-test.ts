@@ -53,5 +53,40 @@ assert.deepEqual(submittedPolicies, [{
 }]);
 scheduler.stop();
 assert.equal(clearedTimer, 'timer-id');
+timerCallback?.();
+await new Promise(resolve => setImmediate(resolve));
+assert.equal(submittedPolicies.length, 1, 'a queued timer callback must not start a backup after stop');
+
+let finishBackup!: () => void;
+let backupStarted = false;
+let drainingTimerCallback: (() => void) | undefined;
+const drainingScheduler = startBackupScheduler({
+  config,
+  backupService: {
+    createBackupWithPolicy: async () => {
+      backupStarted = true;
+      await new Promise<void>(resolve => { finishBackup = resolve; });
+    },
+  },
+  setInterval: callback => {
+    drainingTimerCallback = callback;
+    return 'draining-timer' as unknown as NodeJS.Timeout;
+  },
+  clearInterval: () => undefined,
+  logError: error => { throw error; },
+});
+drainingTimerCallback?.();
+await Promise.resolve();
+assert.equal(backupStarted, true);
+
+let stopCompleted = false;
+const stopPromise = Promise.resolve(drainingScheduler.stop()).then(() => {
+  stopCompleted = true;
+});
+await Promise.resolve();
+assert.equal(stopCompleted, false, 'scheduler stop must wait for an in-flight backup');
+finishBackup();
+await stopPromise;
+assert.equal(stopCompleted, true);
 
 console.log('backup scheduler behavior ok');

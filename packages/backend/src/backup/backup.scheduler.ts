@@ -60,27 +60,35 @@ export const startBackupScheduler = ({
   logError?: (error: unknown) => void;
 }) => {
   if (!config.enabled) {
-    return { started: false, intervalMs: config.intervalMs, stop: () => undefined };
+    return { started: false, intervalMs: config.intervalMs, stop: async () => undefined };
   }
-  let running = false;
-  const run = async (): Promise<void> => {
-    if (running) return;
-    running = true;
-    try {
-      await backupService.createBackupWithPolicy({
-        retentionCount: config.retentionCount,
-        ...(config.archiveRootPath ? { archiveRootPath: config.archiveRootPath } : {}),
-      });
-    } catch (error) {
-      logError(error);
-    } finally {
-      running = false;
-    }
+  let activeRun: Promise<void> | null = null;
+  let stopped = false;
+  const run = (): Promise<void> => {
+    if (stopped) return Promise.resolve();
+    if (activeRun) return activeRun;
+    activeRun = (async () => {
+      try {
+        await backupService.createBackupWithPolicy({
+          retentionCount: config.retentionCount,
+          ...(config.archiveRootPath ? { archiveRootPath: config.archiveRootPath } : {}),
+        });
+      } catch (error) {
+        logError(error);
+      } finally {
+        activeRun = null;
+      }
+    })();
+    return activeRun;
   };
   const timer = setInterval(() => { void run(); }, config.intervalMs);
   return {
     started: true,
     intervalMs: config.intervalMs,
-    stop: () => clearInterval(timer),
+    stop: async () => {
+      stopped = true;
+      clearInterval(timer);
+      await activeRun;
+    },
   };
 };

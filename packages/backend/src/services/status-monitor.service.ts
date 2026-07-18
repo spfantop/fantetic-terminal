@@ -2,6 +2,7 @@ import { Client, type ClientChannel } from 'ssh2';
 import { WebSocket } from 'ws';
 import type { ClientState } from '../websocket/types';
 import { settingsService } from '../settings/settings.service';
+import { createConnectionPollingCoordinator } from './status-monitor-polling';
 
 interface ProcessListItem {
   pid: number;
@@ -763,15 +764,26 @@ export class StatusMonitorService {
   private clientStates: Map<string, ClientState>;
   private healthCollector = new HealthCheckCollector();
   private dataAggregator = new StatusDataAggregator();
-  private inFlightSessions = new Set<string>();
+  private inFlightConnections = new Set<number>();
+  private pollingCoordinator: ReturnType<typeof createConnectionPollingCoordinator>;
 
   constructor(clientStates: Map<string, ClientState>) {
     this.clientStates = clientStates;
+    this.pollingCoordinator = createConnectionPollingCoordinator({
+      poll: (connectionId, sessionIdList) => this.fetchAndSendConnectionStatus(connectionId, sessionIdList),
+      onConnectionEmpty: connectionId => {
+        this.inFlightConnections.delete(connectionId);
+        this.dataAggregator.cleanup(String(connectionId));
+      },
+      onPollError: (connectionId, error) => {
+        console.error(`[StatusMonitor connection=${connectionId}] 聚合轮询失败:`, error);
+      },
+    });
   }
 
   async startStatusPolling(sessionId: string): Promise<void> {
     const state = this.clientStates.get(sessionId);
-    if (!state || !state.sshClient || state.statusIntervalId) return;
+    if (!state || !state.sshClient || this.pollingCoordinator.hasSession(sessionId)) return;
 
     const enabled = await settingsService.isStatusMonitorEnabled();
     if (!enabled) {
@@ -789,20 +801,16 @@ export class StatusMonitorService {
       intervalMs = 3000;
     }
 
-    state.statusIntervalId = setInterval(() => {
-      this.fetchAndSendServerStatus(sessionId);
-    }, intervalMs);
-    void this.fetchAndSendServerStatus(sessionId);
+    this.pollingCoordinator.join(state.dbConnectionId, sessionId, intervalMs);
   }
 
   stopStatusPolling(sessionId: string): void {
-    const state = this.clientStates.get(sessionId);
-    if (state?.statusIntervalId) {
-      clearInterval(state.statusIntervalId);
-      state.statusIntervalId = undefined;
-      this.inFlightSessions.delete(sessionId);
-      this.dataAggregator.cleanup(sessionId);
-    }
+    this.pollingCoordinator.leave(sessionId);
+  }
+
+  dispose(): void {
+    this.pollingCoordinator.dispose();
+    this.inFlightConnections.clear();
   }
 
   async syncPollingWithEnabledSetting(): Promise<void> {
@@ -813,45 +821,64 @@ export class StatusMonitorService {
         continue;
       }
 
-      if (state.sshClient && state.ws.readyState === WebSocket.OPEN && !state.statusIntervalId) {
+      if (state.sshClient && state.ws.readyState === WebSocket.OPEN
+        && !this.pollingCoordinator.hasSession(sessionId)) {
         await this.startStatusPolling(sessionId);
       }
     }
   }
 
-  private async fetchAndSendServerStatus(sessionId: string): Promise<void> {
-    if (this.inFlightSessions.has(sessionId)) return;
+  private async fetchAndSendConnectionStatus(
+    connectionId: number,
+    sessionIdList: readonly string[],
+  ): Promise<void> {
+    if (this.inFlightConnections.has(connectionId)) return;
 
-    const state = this.clientStates.get(sessionId);
-    if (!state || !state.sshClient || state.ws.readyState !== WebSocket.OPEN) {
-      this.stopStatusPolling(sessionId);
-      return;
-    }
-    if (state.ws.bufferedAmount > STATUS_UPDATE_BUFFERED_AMOUNT_LIMIT) {
-      return;
-    }
+    const receiverList = sessionIdList.flatMap(sessionId => {
+      const state = this.clientStates.get(sessionId);
+      if (!state || !state.sshClient || state.ws.readyState !== WebSocket.OPEN) {
+        this.stopStatusPolling(sessionId);
+        return [];
+      }
+      if (state.ws.bufferedAmount > STATUS_UPDATE_BUFFERED_AMOUNT_LIMIT) return [];
+      return [{ sessionId, state }];
+    });
+    if (receiverList.length === 0) return;
 
-    this.inFlightSessions.add(sessionId);
+    this.inFlightConnections.add(connectionId);
     try {
-      const status = await this.fetchServerStatus(state.sshClient, sessionId);
-      state.ws.send(
-        JSON.stringify({
+      const status = await this.fetchServerStatus(receiverList[0].state.sshClient, String(connectionId));
+      for (const { sessionId, state } of receiverList) {
+        this.sendPollingMessage(sessionId, state, {
           type: 'status_update',
           payload: { connectionId: state.dbConnectionId, status },
-        })
-      );
+        });
+      }
     } catch (error) {
-      state.ws.send(
-        JSON.stringify({
+      for (const { sessionId, state } of receiverList) {
+        this.sendPollingMessage(sessionId, state, {
           type: 'status:error',
           payload: {
             connectionId: state.dbConnectionId,
             message: `获取状态失败: ${getErrorMessage(error)}`,
           },
-        })
-      );
+        });
+      }
     } finally {
-      this.inFlightSessions.delete(sessionId);
+      this.inFlightConnections.delete(connectionId);
+    }
+  }
+
+  private sendPollingMessage(sessionId: string, state: ClientState, message: unknown): void {
+    if (state.ws.readyState !== WebSocket.OPEN) {
+      this.stopStatusPolling(sessionId);
+      return;
+    }
+    try {
+      state.ws.send(JSON.stringify(message));
+    } catch (error) {
+      console.error(`[StatusMonitor ${sessionId}] 发送聚合状态失败:`, error);
+      this.stopStatusPolling(sessionId);
     }
   }
 

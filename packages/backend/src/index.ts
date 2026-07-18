@@ -85,6 +85,7 @@ import { createHealthHandlers } from './health/health.controller';
 import { createFilesystemReadinessChecks } from './health/filesystem-readiness';
 import { backendMetrics, createMetricsHandlers } from './observability/metrics';
 import { acquireSingleNodeLease, resolveSingleNodeLeaseEnabled, type SingleNodeLease } from './config/single-node-lease';
+import { createGracefulDrainRegistry } from './config/graceful-drain';
 
 
 import './services/event.service'; 
@@ -287,7 +288,7 @@ const startServer = async (): Promise<WebSocketServer> => {
 
 let webSocketServer: WebSocketServer | null = null;
 let shutdownPromise: Promise<void> | null = null;
-let stopBackupScheduler: (() => void) | null = null;
+let stopBackupScheduler: (() => void | Promise<void>) | null = null;
 let singleNodeLease: SingleNodeLease | null = null;
 
 const closeWebSocketServer = async (): Promise<void> => {
@@ -303,17 +304,26 @@ const closeHttpServer = async (): Promise<void> => {
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
 };
 
+const drainRegistry = createGracefulDrainRegistry({
+    onCleanupError: (name, error) => logger.error('关闭资源失败', { name, error }),
+});
+drainRegistry.register('stop', 'backup-scheduler', async () => {
+    await stopBackupScheduler?.();
+    stopBackupScheduler = null;
+});
+drainRegistry.register('connections', 'websocket-server', closeWebSocketServer);
+drainRegistry.register('connections', 'http-server', closeHttpServer);
+drainRegistry.register('storage', 'database', closeDbInstance);
+drainRegistry.register('release', 'single-node-lease', () => {
+    singleNodeLease?.release();
+    singleNodeLease = null;
+});
+
 const shutdown = (reason: string): Promise<void> => {
     if (shutdownPromise) return shutdownPromise;
     shutdownPromise = (async () => {
         console.log(`[Lifecycle] 正在关闭服务，原因: ${reason}`);
-        stopBackupScheduler?.();
-        stopBackupScheduler = null;
-        await closeWebSocketServer();
-        await closeHttpServer();
-        await closeDbInstance();
-        singleNodeLease?.release();
-        singleNodeLease = null;
+        await drainRegistry.drain(reason);
         console.log('[Lifecycle] 服务已安全关闭。');
     })();
     return shutdownPromise;
