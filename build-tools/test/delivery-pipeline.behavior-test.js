@@ -176,6 +176,11 @@ assert.match(singleImageDockerfile, /^FROM guacamole\/guacd:1\.6\.0@sha256:8974e
 assert.match(singleImageDockerfile, /COPY --from=guacd-runtime \/ \/opt\/guacd-runtime\//);
 assert.match(singleImageDockerfile, /COPY build-tools \.\/build-tools\//);
 assert.match(singleImageDockerfile, /nginx tini python3 make g\+\+/);
+assert.match(
+  singleImageDockerfile,
+  /npm_config_build_from_source=true npm ci --omit=dev --workspace=@fantetic-terminal\/backend --workspace=@fantetic-terminal\/remote-gateway/,
+  'The all-in-one image must build native dependencies in its Debian runtime layer to avoid incompatible sqlite3 prebuilt binaries',
+);
 assert.match(singleImageDockerfile, /REMOTE_GATEWAY_API_BASE_DOCKER=http:\/\/127\.0\.0\.1:9090/);
 assert.match(singleImageDockerfile, /REMOTE_GATEWAY_WS_URL_DOCKER=ws:\/\/127\.0\.0\.1:8080/);
 assert.match(singleImageDockerfile, /ENTRYPOINT \["\/usr\/bin\/tini", "--", "node", "\/app\/supervisor\.js"\]/);

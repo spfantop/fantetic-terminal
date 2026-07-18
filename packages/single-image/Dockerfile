@@ -54,12 +54,13 @@ COPY packages/remote-gateway/package.json ./packages/remote-gateway/
 COPY build-tools/apply-patches.js ./build-tools/
 COPY packages/remote-gateway/patches ./packages/remote-gateway/patches
 
-# Build tools are purged in the same layer. The image keeps one Node runtime for
-# both application services, instead of embedding a second runtime for the gateway.
+# Build tools are purged in the same layer. Native modules are compiled against
+# this Debian runtime so sqlite3 cannot pull a prebuilt binary requiring a newer
+# glibc version. The image keeps one Node runtime for both application services.
 RUN apt-get update \
     && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends nginx tini python3 make g++ \
-    && npm ci --omit=dev --workspace=@fantetic-terminal/backend --workspace=@fantetic-terminal/remote-gateway \
+    && npm_config_build_from_source=true npm ci --omit=dev --workspace=@fantetic-terminal/backend --workspace=@fantetic-terminal/remote-gateway \
     && npm cache clean --force \
     && apt-get purge -y --auto-remove python3 make g++ \
     && rm -rf /var/lib/apt/lists/* \
