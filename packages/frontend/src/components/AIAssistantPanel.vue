@@ -25,7 +25,6 @@ const { t } = useI18n();
 const sessionStore = useSessionStore();
 const emitWorkspaceEvent = useWorkspaceEventEmitter();
 const { activeSessionId } = storeToRefs(sessionStore);
-const { updateSessionCommandInput } = sessionStore;
 
 const assistantRootRef = ref<HTMLElement | null>(null);
 const inputRef = ref<HTMLTextAreaElement | null>(null);
@@ -166,12 +165,6 @@ const addDebugEntry = (type: DebugEntry['type'], payload: unknown) => {
   debugEntries.value = debugEntries.value.slice(0, 20);
 };
 
-const applyCommandToSession = (command: string) => {
-  const session = activeSshSession.value;
-  if (!session) return;
-  updateSessionCommandInput(session.sessionId, command);
-};
-
 const submitPrompt = async () => {
   if (!canGenerate.value) return;
 
@@ -198,10 +191,9 @@ const submitPrompt = async () => {
   }
 
   lastGeneratedCommand.value = command;
-  applyCommandToSession(command);
   appendMessage({
     role: 'assistant',
-    content: t('ai.nl2cmd.commandReady', '已生成命令并填入当前终端命令栏。确认无误后再按 Enter 执行。'),
+    content: t('ai.nl2cmd.commandReady', '已生成命令，可复制或直接执行。'),
     command,
     warning: lastResponse.value?.warning,
   });
@@ -213,15 +205,10 @@ const sendSuggestion = async (text: string) => {
   await submitPrompt();
 };
 
-const reuseCommand = (command: string) => {
-  applyCommandToSession(command);
-};
-
 const executeCommand = (command: string) => {
   const session = activeSshSession.value;
   if (!session) return;
   emitWorkspaceEvent('terminal:sendCommand', { command, sessionId: session.sessionId });
-  updateSessionCommandInput(session.sessionId, '');
 };
 
 const copyCommand = async (command: string) => {
@@ -310,10 +297,6 @@ watch(() => messages.value.length, scrollToBottom);
             </div>
             <p v-if="message.warning" class="mt-2 text-xs text-warning">{{ message.warning }}</p>
             <div v-if="message.command" class="mt-2 flex flex-wrap gap-2">
-              <button type="button" class="ai-mini-button" @click="reuseCommand(message.command)">
-                <i class="fas fa-terminal"></i>
-                {{ t('ai.nl2cmd.fillAgain') }}
-              </button>
               <button type="button" class="ai-mini-button ai-mini-button--primary" @click="executeCommand(message.command)">
                 <i class="fas fa-play"></i>
                 {{ t('ai.nl2cmd.executeNow') }}

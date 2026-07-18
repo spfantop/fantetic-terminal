@@ -8,7 +8,6 @@ import { useFileUploader } from '../composables/useFileUploader';
 import { useFileEditorStore, type FileInfo } from '../stores/fileEditor.store';
 import { useSessionStore } from '../stores/session.store';
 import { useSettingsStore } from '../stores/settings.store';
-import { useFocusSwitcherStore } from '../stores/focusSwitcher.store';
 import { useFileManagerContextMenu, type ClipboardState, type CompressFormat } from '../composables/file-manager/useFileManagerContextMenu';
 import { useFileManagerSelection } from '../composables/file-manager/useFileManagerSelection';
 import { useFileManagerDragAndDrop } from '../composables/file-manager/useFileManagerDragAndDrop';
@@ -129,7 +128,6 @@ const {
 const fileEditorStore = useFileEditorStore(); // 实例化 File Editor Store
 // const sessionStore = useSessionStore(); // 已在上面实例化
 const settingsStore = useSettingsStore(); // +++ 实例化 Settings Store +++
-const focusSwitcherStore = useFocusSwitcherStore(); // +++ 实例化焦点切换 Store +++
 const pathHistoryStore = usePathHistoryStore(); // +++ 实例化 PathHistoryStore +++
 const uiNotificationsStore = useUiNotificationsStore(); // +++ 实例化通知 store +++
  
@@ -1117,19 +1115,6 @@ watchEffect((onCleanup) => {
     }
 });
 
-// +++ 监听 Store 中的触发器以激活搜索 +++
-watch(() => focusSwitcherStore.activateFileManagerSearchTrigger, (newValue, oldValue) => { // 修改监听器
-    // 确保只在触发器值增加时执行（避免初始加载或重置时触发）
-    // 并且当前组件的 sessionId 与活动 sessionId 匹配
-    // 检查 newValue > oldValue 确保是递增触发，避免重复执行
-    // 检查是否是当前活动会话的此实例（如果需要区分实例）
-    // 目前假设搜索触发器对会话内的所有 FileManager 生效
-    if (newValue > (oldValue ?? 0) && props.sessionId === sessionStore.activeSessionId) {
-        debugLog(`[FileManager ${props.sessionId}-${props.instanceId}] Received search activation trigger for active session.`);
-        activateSearch(); // 调用组件内部的激活搜索方法
-    }
-}, { immediate: false }); // 添加 immediate: false 避免初始值为 0 时触发
-
 
 // --- 监听 sessionId prop 的变化 ---
 watch(() => props.sessionId, (newSessionId, oldSessionId) => {
@@ -1151,55 +1136,12 @@ watch(() => props.sessionId, (newSessionId, oldSessionId) => {
 
 
 
-// +++ 注册/注销自定义聚焦动作 +++
-let unregisterSearchFocusAction: (() => void) | null = null; // 搜索框注销函数
-let unregisterPathFocusAction: (() => void) | null = null; // 路径编辑框注销函数
-
 onMounted(() => {
-  // 注册搜索框聚焦动作
-  const focusSearchActionWrapper = async (): Promise<boolean | undefined> => {
-    if (props.sessionId === sessionStore.activeSessionId) {
-      debugLog(`[FileManager ${props.sessionId}-${props.instanceId}] Executing search focus action for active session.`);
-      closePathHistory(); // Close path history if open
-      return focusSearchInput();
-    } else {
-      debugLog(`[FileManager ${props.sessionId}-${props.instanceId}] Search focus action skipped for inactive session.`);
-      return undefined;
-    }
-  };
-  unregisterSearchFocusAction = focusSwitcherStore.registerFocusAction('fileManagerSearch', focusSearchActionWrapper, { ownerDocument: readFileManagerDocument() });
-
-  // 注册路径编辑框聚焦动作
-  const focusPathActionWrapper = async (): Promise<boolean | undefined> => {
-     if (props.sessionId === sessionStore.activeSessionId) {
-       debugLog(`[FileManager ${props.sessionId}-${props.instanceId}] Executing path edit focus action for active session.`);
-       // startPathEdit 本身不是 async，但注册时需要包装成 async 以匹配类型
-       startPathEdit(); // 调用暴露的方法
-       return true;
-     } else {
-       debugLog(`[FileManager ${props.sessionId}-${props.instanceId}] Path edit focus action skipped for inactive session.`);
-       return undefined;
-     }
-  };
-  unregisterPathFocusAction = focusSwitcherStore.registerFocusAction('fileManagerPathInput', focusPathActionWrapper, { ownerDocument: readFileManagerDocument() });
   activePathInputDocument = readFileManagerDocument();
   activePathInputDocument.addEventListener('click', handleClickOutsidePathInput);
 });
 
 onBeforeUnmount(() => {
- // 注销搜索框动作
- if (unregisterSearchFocusAction) {
-   unregisterSearchFocusAction();
-   debugLog(`[FileManager ${props.sessionId}-${props.instanceId}] Unregistered search focus action on unmount.`);
- }
- unregisterSearchFocusAction = null;
-
- // 注销路径编辑框动作
- if (unregisterPathFocusAction) {
-   unregisterPathFocusAction();
-   debugLog(`[FileManager ${props.sessionId}-${props.instanceId}] Unregistered path edit focus action on unmount.`);
-  }
-  unregisterPathFocusAction = null;
   activePathInputDocument?.removeEventListener('click', handleClickOutsidePathInput);
   activePathInputDocument = null;
   activeResizeDocument?.removeEventListener('mousemove', handleResize);

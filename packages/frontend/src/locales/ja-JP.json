@@ -80,15 +80,17 @@
           "noActiveSshSessions": "コマンドを送信するアクティブな SSH/Telnet セッションはありません。"
         }
   },
-  "commandInputBar": {
-        "closeSearch": "ターミナル検索を閉じる",
-        "configureFocusSwitch": "フォーカススイッチャーを設定",
-        "findNext": "次を検索",
-        "findPrevious": "前を検索",
-        "openSearch": "ターミナル検索を開く",
-        "placeholder": "ここにコマンドを入力して Enter キーを押すと、ターミナルに送信されます...",
-        "searchPlaceholder": "ターミナル内で検索...",
-        "clearTerminal": "ターミナルをクリア"
+    "terminal": {
+        "search": {
+            "inputLabel": "ターミナル内検索",
+            "placeholder": "ターミナル内容を検索",
+            "previous": "前の一致",
+            "next": "次の一致",
+            "close": "検索を閉じる",
+            "enableCaseSensitive": "大文字と小文字を区別して検索",
+            "disableCaseSensitive": "大文字と小文字の区別を無効にする",
+            "resultCount": "{current}/{total} 件の一致"
+        }
     },
     "ai": {
         "nl2cmd": {
@@ -100,18 +102,16 @@
             "panelPlaceholder": "生成したいターミナルコマンドを説明してください...",
             "noSession": "SSH セッションなし",
             "requiresSshSession": "先に SSH ターミナルセッションをアクティブにしてください。",
-            "fillsCommandInput": "生成されたコマンドはコマンドバーに入力され、自動実行されません",
             "generating": "生成中...",
             "newSession": "新しいチャット",
             "history": "履歴",
             "debug": "デバッグ",
             "emptyTitle": "目的を説明してコマンドを生成",
-            "emptySubtitle": "AI が自然言語をターミナルコマンドに変換し、現在の SSH コマンドバーだけに入力します。",
+            "emptySubtitle": "AI が自然言語をターミナルコマンドに変換し、コピーまたは直接実行できます。",
             "noHistory": "履歴はまだありません",
             "historyMessages": "件のメッセージ",
             "noCommandGenerated": "使用可能なコマンドを生成できませんでした。より具体的に説明してください。",
-            "commandReady": "コマンドを生成し、現在のターミナルコマンドバーに入力しました。Enter を押す前に確認してください。",
-            "fillAgain": "入力",
+            "commandReady": "コマンドを生成しました。コピーまたは直接実行できます。",
             "executeNow": "今すぐ実行",
             "suggestions": {
                 "largeFiles": "現在のディレクトリで最大の 10 ファイルを探す",
@@ -672,28 +672,6 @@
           "chmodHelp": "8進数形式で権限を入力してください (例: 755 または 0755)。"
         }
       },
-      "focusSwitcher": {
-        "allInputsConfigured": "すべての利用可能な入力ソースが設定されました",
-        "altSwitchHint": "ヒント：Alt キーを押すと、設定された入力ソース間でフォーカスを素早く切り替えることができます。",
-        "availableInputs": "利用可能な入力ソース",
-        "configTitle": "フォーカススイッチャーの設定",
-        "configuredSequence": "設定されたシーケンス（ドラッグしてソート）",
-        "confirmClose": "未保存の変更があります。閉じてもよろしいですか？",
-        "dragHere": "左側からここに入力ボックスをドラッグ",
-        "input": {
-            "commandHistorySearch": "コマンド履歴検索",
-            "commandInput": "コマンド入力",
-            "connectionListSearch": "接続リスト検索",
-            "fileEditorActive": "ファイルエディター",
-            "fileManagerPathInput": "ファイルマネージャーパス入力",
-            "fileManagerSearch": "ファイルマネージャー検索",
-            "quickCommandsSearch": "クイックコマンド検索",
-            "terminalSearch": "ターミナル内検索"
-        },
-        "noInputsAvailable": "設定可能な入力項目はありません",
-        "shortcutPlaceholder": "例：Alt + K",
-        "shortcutSettings": "ショートカット設定"
-    },
     "header": {
         "hide": "ナビゲーションを非表示",
         "show": "ナビゲーションを表示"
@@ -708,7 +686,6 @@
             "title": "アクティブなセッションはありません"
         },
         "pane": {
-            "commandBar": "コマンドバー",
             "commandHistory": "コマンド履歴",
             "connections": "接続リスト",
             "dockerManager": "Docker マネージャー",
@@ -1070,21 +1047,6 @@
             "submit": "変更を確定",
             "success": "パスワードの変更に成功しました！",
             "title": "パスワードを変更"
-        },
-        "commandInputSync": {
-            "description": "コマンド入力バーの内容を選択したパネルの検索ボックスにリアルタイムで同期します。上下キーで選択した後、Enter を押してコマンドを実行します。",
-            "error": {
-                "saveFailed": "同期ターゲットの保存に失敗しました。"
-            },
-            "selectLabel": "同期ターゲット:",
-            "success": {
-                "saved": "同期ターゲットを保存しました。"
-            },
-            "targetCommandHistory": "コマンド履歴",
-            "targetNone": "なし",
-            "targetQuickCommands": "クイックコマンド",
-            
-            "title": "コマンド入力同期"
         },
         "docker": {
             "defaultExpandLabel": "デフォルトでコンテナの詳細を展開",

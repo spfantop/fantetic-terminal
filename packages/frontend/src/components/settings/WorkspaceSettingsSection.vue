@@ -215,32 +215,6 @@
            </div>
          </form>
       </div>
-      <hr class="border-border/50">
-      <!-- Command Input Sync Target -->
-      <div class="settings-section-content">
-         <h3 class="text-base font-semibold text-foreground mb-3">{{ $t('settings.commandInputSync.title', '命令输入同步') }}</h3>
-         <form @submit.prevent="handleUpdateCommandInputSyncTarget" class="space-y-4">
-           <div>
-             <label for="commandInputSyncTargetSelect" class="block text-sm font-medium text-text-secondary mb-1">{{ $t('settings.commandInputSync.selectLabel', '同步目标') }}</label>
-             <select id="commandInputSyncTargetSelect" v-model="commandInputSyncTargetLocal"
-                     class="w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary appearance-none bg-no-repeat bg-right pr-8"
-                     style="background-image: url('data:image/svg+xml,%3csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 16 16\'%3e%3cpath fill=\'none\' stroke=\'%236c757d\' stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M2 5l6 6 6-6\'/%3e%3c/svg%3e'); background-position: right 0.75rem center; background-size: 16px 12px;">
-               <option value="none">{{ $t('settings.commandInputSync.targetNone', '无') }}</option>
-               <option value="quickCommands">{{ $t('settings.commandInputSync.targetQuickCommands', '快捷指令') }}</option>
-               <option value="commandHistory">{{ $t('settings.commandInputSync.targetCommandHistory', '历史命令') }}</option>
-             </select>
-             <p class="text-xs text-text-secondary mt-1">{{ $t('settings.commandInputSync.description', '将命令输入框的内容实时同步到所选面板的搜索框。') }}</p>
-           </div>
-           <div class="flex items-center justify-between">
-              <button type="submit"
-                      class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out text-sm font-medium">
-                {{ $t('common.save') }}
-              </button>
-              <p v-if="commandInputSyncMessage" :class="['text-sm', commandInputSyncSuccess ? 'text-success' : 'text-error']">{{ commandInputSyncMessage }}</p>
-           </div>
-         </form>
-      </div>
-      <hr class="border-border/50"> 
       <!-- Show Connection Tags -->
       <div class="settings-section-content">
          <h3 class="text-base font-semibold text-foreground mb-3">{{ $t('settings.workspace.showConnectionTagsTitle', '显示连接标签') }}</h3>
@@ -534,10 +508,6 @@ const {
   workspaceSidebarPersistentMessage,
   workspaceSidebarPersistentSuccess,
   handleUpdateWorkspaceSidebarSetting,
-  commandInputSyncTargetLocal,
-  commandInputSyncMessage,
-  commandInputSyncSuccess,
-  handleUpdateCommandInputSyncTarget,
   showConnectionTagsLocal,
   showConnectionTagsMessage,
   showConnectionTagsSuccess,

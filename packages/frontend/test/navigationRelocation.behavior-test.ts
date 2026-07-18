@@ -15,7 +15,6 @@ const workspaceView = readFileSync(resolve('src/views/WorkspaceView.vue'), 'utf8
 const quickCommandsView = readFileSync(resolve('src/views/QuickCommandsView.vue'), 'utf8');
 const addEditQuickCommandForm = readFileSync(resolve('src/components/AddEditQuickCommandForm.vue'), 'utf8');
 const quickCommandsModal = readFileSync(resolve('src/components/QuickCommandsModal.vue'), 'utf8');
-const focusSwitcherConfigurator = readFileSync(resolve('src/components/FocusSwitcherConfigurator.vue'), 'utf8');
 const draggableDialogComposable = readFileSync(resolve('src/composables/useDraggableDialog.ts'), 'utf8');
 
 const tabKeys = createSettingsTabs((key, fallback) => fallback || key).map(tab => tab.key);
@@ -249,13 +248,6 @@ assert.ok(
 );
 
 assert.ok(
-  focusSwitcherConfigurator.includes("from '../composables/useResizable'")
-    && focusSwitcherConfigurator.includes('useResizable(dialogRef')
-    && focusSwitcherConfigurator.includes('focus-switcher-resize-hint'),
-  'focus switcher configurator should be resizable from its border',
-);
-
-assert.ok(
   draggableDialogComposable.includes("from './useResizable'")
     && draggableDialogComposable.includes('resizable?: boolean | UseResizableOptions')
     && draggableDialogComposable.includes('options.resizable !== false'),
@@ -264,8 +256,7 @@ assert.ok(
 
 assert.ok(
   addEditQuickCommandForm.includes('resizable: false')
-    && quickCommandsModal.includes('resizable: false')
-    && focusSwitcherConfigurator.includes('resizable: false'),
+    && quickCommandsModal.includes('resizable: false'),
   'dialogs with explicit resize handling should disable the draggable default resize listener',
 );
 

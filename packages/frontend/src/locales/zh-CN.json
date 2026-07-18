@@ -1278,21 +1278,6 @@
             "verificationFailed": "CAPTCHA 凭据验证失败。请检查您输入的 Site Key 和 Secret Key 是否正确。"
         }
     },
-    "commandInputSync": {
-      "title": "命令输入同步",
-      "selectLabel": "同步目标:",
-      "targetNone": "无",
-      "targetQuickCommands": "快捷指令",
-      "targetCommandHistory": "命令历史",
-      "description": "将命令输入栏的内容实时同步到所选面板的搜索框。键盘上下选中后使用 Enter 使用指令",
-      "success": {
-        "saved": "同步目标已保存。"
-      },
-      "error": {
-        "saveFailed": "保存同步目标失败。"
-      }
-
-    },
     "about": {
       "version": "版本",
       "unknownVersion": "未知版本",
@@ -1577,15 +1562,17 @@
       "simulateInputError": "模拟键盘输入时出错。"
     }
   },
-  "commandInputBar": {
-    "placeholder": "在此输入命令后按 Enter 发送到终端...",
-    "searchPlaceholder": "在终端中搜索...",
-    "openSearch": "打开终端搜索",
-    "closeSearch": "关闭终端搜索",
-    "findPrevious": "查找上一个",
-    "findNext": "查找下一个",
-    "configureFocusSwitch": "配置焦点切换器",
-    "clearTerminal": "清空终端"
+  "terminal": {
+    "search": {
+      "inputLabel": "终端内搜索",
+      "placeholder": "搜索终端内容",
+      "previous": "上一个匹配项",
+      "next": "下一个匹配项",
+      "close": "关闭搜索",
+      "enableCaseSensitive": "开启大小写匹配",
+      "disableCaseSensitive": "关闭大小写匹配",
+      "resultCount": "{current}/{total} 个匹配项"
+    }
   },
   "ai": {
     "nl2cmd": {
@@ -1597,18 +1584,16 @@
       "panelPlaceholder": "描述你想生成的终端命令...",
       "noSession": "无 SSH 会话",
       "requiresSshSession": "请先激活一个 SSH 终端会话。",
-      "fillsCommandInput": "生成结果会填入命令栏，不会自动执行",
       "generating": "生成中...",
       "newSession": "新建对话",
       "history": "历史记录",
       "debug": "调试信息",
       "emptyTitle": "描述目标，生成命令",
-      "emptySubtitle": "AI 会把自然语言转换成终端命令，并只填入当前 SSH 会话的命令栏。",
+      "emptySubtitle": "AI 会把自然语言转换成终端命令，可复制或直接执行。",
       "noHistory": "暂无历史记录",
       "historyMessages": "条消息",
       "noCommandGenerated": "没有生成可用命令，请换一种更具体的描述。",
-      "commandReady": "已生成命令并填入当前终端命令栏。确认无误后再按 Enter 执行。",
-      "fillAgain": "填入",
+      "commandReady": "已生成命令，可复制或直接执行。",
       "executeNow": "立即执行",
       "suggestions": {
         "largeFiles": "查找当前目录下最大的 10 个文件",
@@ -1630,7 +1615,6 @@
     "pane": {
       "connections": "连接列表",
       "terminal": "终端",
-      "commandBar": "命令栏",
       "fileManager": "文件管理器",
       "editor": "编辑器",
       "statusMonitor": "状态监视器",
@@ -1734,28 +1718,6 @@
       "alreadyCompleted": "初始设置已完成，不能重复创建管理员账号。",
       "generic": "设置过程中发生错误，请稍后重试。"
     }
-  },
-  "focusSwitcher": {
-    "configTitle": "配置焦点切换器",
-    "availableInputs": "可用输入源",
-    "configuredSequence": "已配置序列 (拖拽排序)",
-    "dragHere": "从左侧拖拽输入框到此处",
-    "allInputsConfigured": "所有可用输入源都已配置",
-    "input": {
-      "commandHistorySearch": "命令历史搜索",
-      "quickCommandsSearch": "快捷指令搜索",
-      "fileManagerSearch": "文件管理器搜索",
-      "commandInput": "命令输入",
-      "terminalSearch": "终端内搜索",
-      "connectionListSearch": "连接列表搜索",
-      "fileEditorActive": "文件编辑器",
-      "fileManagerPathInput": "文件管理器路径编辑"
-    },
-    "confirmClose": "有未保存的更改，确定要关闭吗？",
-    "shortcutPlaceholder": "例如 Alt+K",
-    "shortcutSettings": "快捷键设置",
-    "noInputsAvailable": "没有可配置的输入项",
-    "altSwitchHint": "提示：按下 Alt 键可在配置的输入源之间快速切换焦点。"
   },
   "dockerManager": {
     "loading": "正在加载 Docker 容器...",

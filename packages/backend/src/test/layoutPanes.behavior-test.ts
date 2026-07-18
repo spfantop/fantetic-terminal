@@ -4,6 +4,7 @@ import {
   CONFIGURABLE_LAYOUT_PANES,
   isConfigurableLayoutPane,
   normalizeConfigurablePaneList,
+  normalizeLayoutTree,
 } from '../settings/layoutPanes';
 import {
   createDefaultLayoutTreeStructure,
@@ -35,6 +36,17 @@ assert.equal(
   isConfigurableLayoutPane('suspendedSshSessions'),
   false,
   'suspended session manager must not be persisted as a configurable sidebar pane',
+);
+
+assert.deepEqual(
+  normalizeLayoutTree({
+    id: 'root', type: 'container', direction: 'vertical', children: [
+      { id: 'terminal', type: 'pane', component: 'terminal', size: 94 },
+      { id: 'command-bar', type: 'pane', component: 'commandBar', size: 6 },
+    ],
+  }),
+  { id: 'terminal', type: 'pane', component: 'terminal', size: 100 },
+  'legacy command bar layouts should collapse into a full-size terminal pane',
 );
 
 assert.deepEqual(

@@ -341,4 +341,5 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', handleEscape); sto
   z-index: 0;
 }
 .recording-modal .recording-detail{padding-right:0}.modal-actions{display:flex;gap:.35rem;align-items:center}.modal-actions .modal-close{position:static;padding:.4rem .55rem}.recording-modal .recording-player.recording-player--expanded{position:absolute!important;inset:.75rem!important;width:auto!important;height:auto!important;max-height:none!important;border-radius:.55rem}.recording-player--expanded .recording-drag-handle{cursor:default}@media(max-width:640px){.recording-modal .recording-player.recording-player--expanded{inset:.35rem!important}}
+.recording-modal{overflow:auto;overscroll-behavior:contain}.recording-modal .recording-player{height:min(48rem,calc(100dvh - 5rem));max-height:calc(100dvh - 5rem);margin:auto}@media(max-width:860px){.recording-modal .recording-player{height:calc(100dvh - 3rem);max-height:calc(100dvh - 3rem)}}
 </style>

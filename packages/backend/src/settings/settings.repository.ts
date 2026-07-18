@@ -3,7 +3,6 @@ import { SidebarConfig, LayoutNode, PaneName } from '../types/settings.types';
 import { CaptchaSettings } from '../types/settings.types';
 import * as sqlite3 from 'sqlite3';
 import defaultTerminalHighlightRulesDocument from './defaultTerminalHighlightRules.json';
-import { createDefaultFocusSwitcherConfig } from './focusSwitcherConfig';
 import {
     createDefaultLayoutTreeStructure,
     createDefaultSidebarPanesStructure,
@@ -280,7 +279,6 @@ export const ensureDefaultSettingsExist = async (db: sqlite3.Database): Promise<
         ipWhitelist: '',
         maxLoginAttempts: '5',
         loginBanDuration: '300',
-        focusSwitcherSequence: JSON.stringify(createDefaultFocusSwitcherConfig()),
         navBarVisible: 'true',
         layoutTree: JSON.stringify(defaultLayoutTreeStructure),
         autoCopyOnSelect: 'false',
@@ -327,6 +325,16 @@ export const ensureDefaultSettingsExist = async (db: sqlite3.Database): Promise<
     try {
         for (const [key, value] of Object.entries(defaultSettings)) {
             await runDb(db, sqlInsertOrIgnore, [key, value, nowSeconds, nowSeconds]);
+        }
+        // 焦点切换器已移除；启动时一次性清除旧版全局及个人设置。
+        await runDb(db, 'DELETE FROM settings WHERE key = ?', ['focusSwitcherSequence']);
+        const userSettingsTable = await getDbRow<{ name: string }>(
+            db,
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'user_settings'",
+        );
+        if (userSettingsTable) {
+            await runDb(db, 'DELETE FROM user_settings WHERE key = ?', ['focusSwitcherSequence']);
+            await runDb(db, 'DELETE FROM user_settings WHERE key = ?', ['commandInputSyncTarget']);
         }
     } catch (err: any) {
         console.error(`[设置仓库] 确保默认设置时出错:`, err.message);

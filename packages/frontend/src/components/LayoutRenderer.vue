@@ -134,7 +134,6 @@ const customHtmlLayerRef = ref<HTMLElement | null>(null); // +++ Ref for custom 
 const componentMap: Partial<Record<PaneName, Component>> = {
   connections: defineAsyncComponent(() => import('./WorkspaceConnectionList.vue')),
   terminal: defineAsyncComponent(() => import('./Terminal.vue')),
-  commandBar: defineAsyncComponent(() => import('./CommandInputBar.vue')),
   fileManager: defineAsyncComponent(() => import('./FileManager.vue')),
   editor: defineAsyncComponent(() => import('./FileEditorContainer.vue')),
   statusMonitor: defineAsyncComponent(() => import('./StatusMonitor.vue')),
@@ -706,7 +705,6 @@ const hasTerminalSessions = computed(() => {
 const paneLabels = computed(() => ({
   connections: t('layout.pane.connections', '连接列表'),
   terminal: t('layout.pane.terminal', '终端'),
-  commandBar: t('layout.pane.commandBar', '命令栏'),
   fileManager: t('layout.pane.fileManager', '文件管理器'),
   editor: t('layout.pane.editor', '编辑器'),
   statusMonitor: t('layout.pane.statusMonitor', '状态监视器'),
@@ -796,13 +794,6 @@ const componentProps = computed(() => {
         class: 'pane-content',
         // --- 移除事件转发 ---
       };
-    case 'commandBar':
-       return {
-         class: 'pane-content',
-         targetSessionId: props.activeSessionId,
-         isMobile: isMobile.value,
-         // --- 移除事件转发 ---
-       };
     case 'connections':
        return {
          class: 'pane-content',

@@ -81,7 +81,6 @@ interface SettingsState {
   sidebarPaneWidths?: string; //  存储各侧边栏组件宽度的 JSON 字符串
   fileManagerRowSizeMultiplier?: string; //  文件管理器行大小乘数 (e.g., '1.0')
   fileManagerColWidths?: string; //  文件管理器列宽 JSON 字符串 (e.g., '{"name": 300, "size": 100}')
-  commandInputSyncTarget?: 'quickCommands' | 'commandHistory' | 'none'; //  命令输入同步目标
   timezone?: string; //  时区设置 (e.g., 'Asia/Shanghai', 'UTC')
   rdpModalWidth?: string; //  RDP 模态框宽度
   rdpModalHeight?: string; //  RDP 模态框高度
@@ -299,10 +298,6 @@ export const useSettingsStore = defineStore('settings', () => {
       //     await updateSetting('fileManagerColWidths', finalFmWidthsString);
       // }
 
-      //  Command Input Sync Target default
-      if (settings.value.commandInputSyncTarget === undefined) {
-          settings.value.commandInputSyncTarget = 'none'; // 默认不同步
-      }
       //  Timezone default
       settings.value.timezone = normalizeTimezone(settings.value.timezone);
       //  RDP Modal Size defaults
@@ -477,7 +472,6 @@ export const useSettingsStore = defineStore('settings', () => {
         'sidebarPaneWidths', // +++ 侧边栏宽度对象键 +++
         'fileManagerRowSizeMultiplier', // +++ 文件管理器行大小键 +++
         'fileManagerColWidths', // +++ 文件管理器列宽键 +++
-        'commandInputSyncTarget', // +++ 命令输入同步目标键 +++
         'timezone', // 时区键
         'rdpModalWidth', //  RDP 模态框宽度键
         'rdpModalHeight', //  RDP 模态框高度键
@@ -611,7 +605,6 @@ export const useSettingsStore = defineStore('settings', () => {
         'sidebarPaneWidths', // +++ 侧边栏宽度对象键 +++
         'fileManagerRowSizeMultiplier', // +++ 文件管理器行大小键 +++
         'fileManagerColWidths', // +++ 文件管理器列宽键 +++
-        'commandInputSyncTarget', // +++ 命令输入同步目标键 +++
         'timezone', // 时区键
         'rdpModalWidth', //  RDP 模态框宽度键
         'rdpModalHeight', //  RDP 模态框高度键
@@ -914,15 +907,6 @@ export const useSettingsStore = defineStore('settings', () => {
       return parsedFileManagerColWidths.value;
   });
 
-  //  Getter for command input sync target
-  const commandInputSyncTarget = computed(() => {
-      const target = settings.value.commandInputSyncTarget;
-      if (target === 'quickCommands' || target === 'commandHistory') {
-          return target;
-      }
-      return 'none'; // Default to 'none' if invalid or not set
-  });
-
   //  Getter for timezone setting
   const timezone = computed(() => normalizeTimezone(settings.value.timezone));
   
@@ -1044,7 +1028,6 @@ export const useSettingsStore = defineStore('settings', () => {
     updateSidebarPaneWidth, // +++ 暴露更新特定面板宽度的 action +++
     updateFileManagerLayoutSettings, // +++ 暴露更新文件管理器布局的 action +++
     updateQuickCommandRowSizeMultiplier, // +++ 暴露快捷命令大小更新 action +++
-    commandInputSyncTarget, // +++ 暴露命令输入同步目标 getter +++
     timezone,
     quickCommandRowSizeMultiplierNumber, // +++ 暴露快捷命令大小 getter +++
     quickCommandsCompactModeBoolean, // +++ 暴露快捷指令紧凑模式 getter +++

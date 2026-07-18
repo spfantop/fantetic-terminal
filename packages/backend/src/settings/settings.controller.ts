@@ -85,7 +85,6 @@ export const settingsController = {
           'sidebarPaneWidths', // +++ 侧边栏宽度对象键 +++
           'fileManagerRowSizeMultiplier', // +++ 文件管理器行大小键 +++
           'fileManagerColWidths', // +++ 文件管理器列宽键 +++
-          'commandInputSyncTarget', // +++ 命令输入同步目标键 +++
           'timezone', // 时区键
           'rdpModalWidth', //  RDP 模态框宽度键
           'rdpModalHeight', //  RDP 模态框高度键
@@ -137,59 +136,6 @@ export const settingsController = {
       console.error('更新设置时出错:', error);
       const forbidden = error.message?.includes('系统管理员权限');
       res.status(forbidden ? 403 : 500).json({ message: '更新设置失败', error: error.message });
-    }
-  },
-
-  /**
-   * 获取焦点切换顺序
-   */
-  async getFocusSwitcherSequence(req: Request, res: Response): Promise<void> {
-    try {
-      const sequence = await settingsService.getFocusSwitcherSequence(req.authorization!.userId);
-      res.json(sequence);
-    } catch (error: any) {
-      console.error('[控制器] 获取焦点切换顺序时出错:', error);
-      res.status(500).json({ message: '获取焦点切换顺序失败', error: error.message });
-    }
-  },
-
-  /**
-   * 设置焦点切换顺序
-   */
-  async setFocusSwitcherSequence(req: Request, res: Response): Promise<void> {
-    try {
-      // +++ 修改：获取请求体并验证其是否符合 FocusSwitcherFullConfig 结构 +++
-      const fullConfig = req.body;
-      console.log('[控制器] 请求体 fullConfig:', JSON.stringify(fullConfig));
-
-      // +++ 验证 FocusSwitcherFullConfig 结构 +++
-      if (
-          !(typeof fullConfig === 'object' && fullConfig !== null &&
-          Array.isArray(fullConfig.sequence) && fullConfig.sequence.every((item: any) => typeof item === 'string') &&
-          typeof fullConfig.shortcuts === 'object' && fullConfig.shortcuts !== null &&
-          Object.values(fullConfig.shortcuts).every((sc: any) => typeof sc === 'object' && sc !== null && (sc.shortcut === undefined || typeof sc.shortcut === 'string')))
-      ) {
-        console.warn('[控制器] 收到无效的完整焦点配置格式:', fullConfig);
-        res.status(400).json({ message: '无效的请求体，必须是包含 sequence (string[]) 和 shortcuts (Record<string, {shortcut?: string}>) 的对象' });
-        return;
-      }
-
-      
-      // +++ 传递验证后的 fullConfig 给服务层 +++
-      await settingsService.setFocusSwitcherSequence(fullConfig, req.authorization!.userId);
-      
-
-      
-  
-      
-      res.status(200).json({ message: '焦点切换顺序已成功更新' });
-    } catch (error: any) {
-      console.error('[控制器] 设置焦点切换顺序时出错:', error);
-      if (error.message === 'Invalid sequence format provided.') {
-          res.status(400).json({ message: '设置焦点切换顺序失败: 无效的格式', error: error.message });
-      } else {
-          res.status(500).json({ message: '设置焦点切换顺序失败', error: error.message });
-      }
     }
   },
 

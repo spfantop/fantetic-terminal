@@ -26,15 +26,10 @@ import {
 } from '../types/settings.types';
 import {
     isConfigurableLayoutPane,
+    normalizeLayoutTree,
     normalizeConfigurablePaneList,
 } from './layoutPanes';
-import {
-    createDefaultFocusSwitcherConfig,
-    normalizeFocusSwitcherConfig,
-    type FocusSwitcherFullConfig,
-} from './focusSwitcherConfig';
 
-const FOCUS_SEQUENCE_KEY = 'focusSwitcherSequence'; // 设置键保持不变
 const NAV_BAR_VISIBLE_KEY = 'navBarVisible'; // 导航栏可见性设置键
 const LAYOUT_TREE_KEY = 'layoutTree'; // 布局树设置键
 const AUTO_COPY_ON_SELECT_KEY = 'autoCopyOnSelect'; // 终端选中自动复制设置键
@@ -168,58 +163,6 @@ export const settingsService = {
   },
 
   /**
-   * 获取焦点切换顺序
-   * @returns 返回存储的完整焦点切换配置对象，如果未设置或无效则返回默认空配置
-   */
-  async getFocusSwitcherSequence(userId: number): Promise<FocusSwitcherFullConfig> { // +++ 更新返回类型 +++
-    console.log(`[Service] Attempting to get setting for key: ${FOCUS_SEQUENCE_KEY}`);
-    const defaultConfig = createDefaultFocusSwitcherConfig(); // 默认值
-    try {
-      const configJson = await this.getUserSetting(FOCUS_SEQUENCE_KEY, userId);
-      console.log(`[Service] Raw value from repository for ${FOCUS_SEQUENCE_KEY}:`, configJson);
-      if (configJson) {
-        const config = normalizeFocusSwitcherConfig(JSON.parse(configJson));
-        if (config) {
-          console.log('[Service] Fetched and validated full focus switcher config:', JSON.stringify(config));
-          return config;
-        } else {
-          console.warn('[Service] Invalid full focus switcher config format found in settings. Returning default.');
-        }
-      } else {
-        console.log('[Service] No focus switcher config found in settings. Returning default.');
-      }
-    } catch (error) {
-      console.error(`[Service] Error parsing full focus switcher config from settings (key: ${FOCUS_SEQUENCE_KEY}):`, error);
-    }
-    console.log('[Service] Returning default focus config:', JSON.stringify(defaultConfig));
-    return defaultConfig;
-  },
-
-  /**
-   * 设置完整的焦点切换配置
-   * @param fullConfig 包含 sequence 和 shortcuts 的完整配置对象
-   */
-  async setFocusSwitcherSequence(fullConfig: FocusSwitcherFullConfig, userId: number): Promise<void> { // +++ 更新参数类型 +++
-    console.log('[Service] setFocusSwitcherSequence called with full config:', JSON.stringify(fullConfig));
-    const normalizedConfig = normalizeFocusSwitcherConfig(fullConfig);
-    if (!normalizedConfig) {
-      console.error('[Service] Attempted to save invalid full focus switcher config format:', fullConfig);
-      throw new Error('Invalid full config format provided.');
-    }
-    // TODO: 可能需要进一步验证 sequence 中的 id 和 shortcuts 中的 key 是否有效
-
-    try {
-      const configJson = JSON.stringify(normalizedConfig); // +++ 序列化完整结构 +++
-      console.log(`[Service] Attempting to save setting. Key: ${FOCUS_SEQUENCE_KEY}, Value: ${configJson}`);
-      await this.setUserSetting(FOCUS_SEQUENCE_KEY, configJson, userId);
-      console.log(`[Service] Successfully saved setting for key: ${FOCUS_SEQUENCE_KEY}`);
-    } catch (error) {
-      console.error(`[Service] Error calling settingsRepository.setSetting for key ${FOCUS_SEQUENCE_KEY}:`, error);
-      throw new Error('Failed to save focus switcher sequence.');
-    }
-  },
-
-  /**
    * 获取导航栏可见性设置
    * @returns 返回导航栏是否可见 (boolean)，如果未设置则默认为 true
    */
@@ -263,7 +206,14 @@ export const settingsService = {
    try {
      const layoutJson = await this.getUserSetting(LAYOUT_TREE_KEY, userId);
      console.log(`[Service] Raw value from repository for ${LAYOUT_TREE_KEY}:`, layoutJson ? layoutJson.substring(0, 100) + '...' : null); // 只打印部分内容
-     return layoutJson; // 直接返回 JSON 字符串或 null
+     if (!layoutJson) return null;
+     const normalizedLayout = normalizeLayoutTree(JSON.parse(layoutJson));
+     if (!normalizedLayout) return null;
+     const normalizedJson = JSON.stringify(normalizedLayout);
+     if (normalizedJson !== layoutJson) {
+       await this.setUserSetting(LAYOUT_TREE_KEY, normalizedJson, userId);
+     }
+     return normalizedJson;
    } catch (error) {
      console.error(`[Service] Error getting layout tree setting (key: ${LAYOUT_TREE_KEY}):`, error);
      return null; // 出错时返回 null
@@ -278,7 +228,9 @@ export const settingsService = {
    console.log(`[Service] setLayoutTree called with JSON (first 100 chars): ${layoutJson.substring(0, 100)}...`);
    // 可选：在这里添加 JSON 格式验证
    try {
-      JSON.parse(layoutJson); // 尝试解析以验证格式
+      const normalizedLayout = normalizeLayoutTree(JSON.parse(layoutJson));
+      if (!normalizedLayout) throw new Error('Invalid layout tree structure.');
+      layoutJson = JSON.stringify(normalizedLayout);
    } catch (e) {
       console.error('[Service] Invalid JSON format provided for layout tree:', e);
       throw new Error('Invalid layout tree JSON format.');

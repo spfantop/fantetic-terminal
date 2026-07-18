@@ -31,7 +31,6 @@ import * as sessionActions from './session/actions/sessionActions';
 import * as editorActions from './session/actions/editorActions';
 import * as sftpManagerActions from './session/actions/sftpManagerActions';
 import * as modalActions from './session/actions/modalActions';
-import * as commandInputActions from './session/actions/commandInputActions';
 import * as sshSuspendActions from './session/actions/sshSuspendActions'; 
 
 
@@ -104,10 +103,6 @@ export const useSessionStore = defineStore('session', () => {
     editorActions.closeTabsToTheLeftInSession(sessionId, targetTabId);
   const updateTabScrollPositionInSession = (sessionId: string, tabId: string, scrollTop: number, scrollLeft: number) =>
     editorActions.updateTabScrollPositionInSession(sessionId, tabId, scrollTop, scrollLeft);
-
-  // Command Input Actions
-  const updateSessionCommandInput = (sessionId: string, content: string) =>
-    commandInputActions.updateSessionCommandInput(sessionId, content);
 
   const popOutSession = (sessionId: string) => {
     if (!sessions.value.has(sessionId)) return;
@@ -183,7 +178,6 @@ export const useSessionStore = defineStore('session', () => {
     toggleTerminalSingleLineOutput,
     openVncModal,
     closeVncModal,
-    updateSessionCommandInput,
     popOutSession,
     restorePoppedOutSession,
 

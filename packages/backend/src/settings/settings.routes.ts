@@ -35,12 +35,6 @@ router.put('/', settingsController.updateSettings); // PUT /api/v1/settings
 router.get('/appearance', settingsController.getAppearanceSettings);
 // PUT /api/v1/settings/appearance - 更新外观设置
 router.put('/appearance', settingsController.updateAppearanceSettings);
-// +++ 焦点切换顺序路由 +++
-// GET /api/v1/settings/focus-switcher-sequence - 获取焦点切换顺序
-router.get('/focus-switcher-sequence', settingsController.getFocusSwitcherSequence);
-// PUT /api/v1/settings/focus-switcher-sequence - 更新焦点切换顺序
-router.put('/focus-switcher-sequence', settingsController.setFocusSwitcherSequence);
-
 // +++ 导航栏可见性路由 +++
 // GET /api/v1/settings/nav-bar-visibility - 获取导航栏可见性
 router.get('/nav-bar-visibility', settingsController.getNavBarVisibility);

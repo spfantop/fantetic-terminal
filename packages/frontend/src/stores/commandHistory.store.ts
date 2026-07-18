@@ -108,7 +108,7 @@ export const useCommandHistoryStore = defineStore('commandHistory', () => {
         }
     };
 
-    // 添加命令到历史记录 (由 CommandInputBar 调用, 添加后清除缓存)
+    // 添加命令到历史记录后清除缓存。
     const addCommand = async (command: string) => {
         //  Filter out Ctrl+C signal (\x03) from being added to history
         if (command === '\x03') {

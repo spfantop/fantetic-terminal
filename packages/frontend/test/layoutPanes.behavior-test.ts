@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import {
   ACTION_LAYOUT_PANES,
   CONFIGURABLE_LAYOUT_PANES,
+  createLayoutEditorTree,
   normalizeConfigurablePaneList,
+  normalizeLayoutTree,
 } from '../src/utils/layoutPanes';
 import {
   createDefaultLayout,
@@ -34,6 +36,28 @@ assert.equal(
   CONFIGURABLE_LAYOUT_PANES.includes('suspendedSshSessions' as never),
   false,
   'suspended session manager must not be configurable from layout manager',
+);
+
+assert.deepEqual(
+  normalizeLayoutTree({
+    id: 'root', type: 'container', direction: 'vertical', children: [
+      { id: 'terminal', type: 'pane', component: 'terminal', size: 94 },
+      { id: 'command-bar', type: 'pane', component: 'commandBar', size: 6 },
+    ],
+  }),
+  { id: 'terminal', type: 'pane', component: 'terminal', size: 100 },
+  'legacy command bar layouts should be collapsed before rendering',
+);
+
+assert.deepEqual(
+  createLayoutEditorTree({ id: 'terminal', type: 'pane', component: 'terminal', size: 100 }, () => 'editor-root'),
+  {
+    id: 'editor-root',
+    type: 'container',
+    direction: 'vertical',
+    children: [{ id: 'terminal', type: 'pane', component: 'terminal', size: 100 }],
+  },
+  'a single-pane layout needs an editor-only root container so the preview can accept additional panes',
 );
 
 assert.deepEqual(

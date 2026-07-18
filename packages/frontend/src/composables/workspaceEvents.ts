@@ -8,7 +8,7 @@ export type WorkspaceEventPayloads = {
   // Terminal Events
   'terminal:input': { sessionId: string; data: string; batched?: boolean };
   'terminal:resize': { sessionId: string; dims: { cols: number; rows: number } };
-  'terminal:ready': { sessionId: string; terminal: XtermTerminal; searchAddon?: any; ensureSearchAddonLoaded?: () => any };
+  'terminal:ready': { sessionId: string; terminal: XtermTerminal };
   'terminal:sendCommand': { command: string; sessionId?: string }; // sessionId 可选，用于指定目标，默认为 active
   'terminal:clear': { sessionId?: string } | void; // sessionId 可选，默认为 active
   'terminal:scrollToBottomRequest': { sessionId: string };
@@ -32,12 +32,6 @@ export type WorkspaceEventPayloads = {
   'connection:requestAdd': void; // 来自 WorkspaceConnectionList 或 TerminalTabBar
   'connection:requestEdit': { connectionInfo: ConnectionInfo }; // 来自 WorkspaceConnectionList 或 TerminalTabBar
 
-  // Search Events (主要由 CommandInputBar 或 PaneTitleBar 发出)
-  'search:start': { term: string; sessionId?: string }; // sessionId 可选，用于指定搜索目标终端
-  'search:findNext': { sessionId?: string } | void;
-  'search:findPrevious': { sessionId?: string } | void;
-  'search:close': { sessionId?: string } | void;
-
   // Session Management Events (主要由 TerminalTabBar 发出)
   'session:activate': { sessionId: string };
   'session:close': { sessionId: string };
@@ -52,7 +46,6 @@ export type WorkspaceEventPayloads = {
   'ui:toggleWorkspaceSplit': { paneId?: string | null } | void;
   'ui:resizeTransaction': { phase: 'start' | 'live' | 'end'; source: 'server-panel' | 'terminal-grid' | 'workspace-layout' };
   'ui:openTransferProgressModal': void; // 请求打开文件传输进度模态框
-  // 'ui:toggleVirtualKeyboard': void; // 如果决定迁移 CommandInputBar 的这个事件
   'fileManager:openModalRequest': { sessionId: string; sourceDocument?: Document }; // 请求打开文件管理器模态框
 
   // Suspended SSH Session Events

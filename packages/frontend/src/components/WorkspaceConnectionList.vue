@@ -7,7 +7,6 @@ import { useI18n } from 'vue-i18n';
 import { useConnectionsStore, ConnectionInfo, type ConnectionFolderInfo } from '../stores/connections.store';
 import { useTagsStore, TagInfo } from '../stores/tags.store'; // 确保 TagInfo 已导入
 import { useSessionStore } from '../stores/session.store';
-import { useFocusSwitcherStore } from '../stores/focusSwitcher.store';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store'; // +++ 修正导入大小写 +++
 import { useSettingsStore } from '../stores/settings.store'; 
 import { useWorkspaceEventEmitter } from '../composables/workspaceEvents';
@@ -31,7 +30,6 @@ const { t } = useI18n();
 const connectionsStore = useConnectionsStore();
 const tagsStore = useTagsStore();
 const sessionStore = useSessionStore(); // 获取 session store 实例
-const focusSwitcherStore = useFocusSwitcherStore(); // +++ 实例化焦点切换 Store +++
 const uiNotificationsStore = useUiNotificationsStore(); // +++ 修正实例化大小写 +++
 const settingsStore = useSettingsStore(); // 实例化设置 store
 const { showConfirmDialog } = useConfirmDialog();
@@ -735,27 +733,12 @@ const handleBlur = () => {
 
 // 获取数据的 onMounted 调用已移至新的 onMounted 逻辑中
 
-// +++ 注册/注销自定义聚焦动作 +++
-let unregisterFocusAction: (() => void) | null = null; // 用于存储注销函数
-
 onMounted(() => {
-  // 调用新的 registerFocusAction 并存储返回的注销函数
-  // focusSearchInput 返回 boolean，符合 () => boolean | Promise<boolean | undefined> 类型
-  unregisterFocusAction = focusSwitcherStore.registerFocusAction('connectionListSearch', focusSearchInput, { ownerDocument: listAreaRef.value?.ownerDocument ?? document });
   connectionsStore.fetchConnections(); // 移到 onMounted
   connectionsStore.fetchFolders();
   tagsStore.fetchTags(); // 移到 onMounted
   // Load initial expanded state after fetching tags/connections
   expandedGroups.value = loadInitialExpandedGroups();
-});
-
-onBeforeUnmount(() => {
-  // 调用存储的注销函数
-  if (unregisterFocusAction) {
-    unregisterFocusAction();
-    debugLog(`[WkspConnList] Unregistered focus action on unmount.`);
-  }
-  unregisterFocusAction = null;
 });
 
 // 处理中键点击（在新标签页打开） - 功能已移除

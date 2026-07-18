@@ -238,7 +238,6 @@ import { useUiNotificationsStore } from '../stores/uiNotifications.store';
 import { useI18n } from 'vue-i18n';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
 import AddEditQuickCommandForm from '../components/AddEditQuickCommandForm.vue';
-import { useFocusSwitcherStore } from '../stores/focusSwitcher.store';
 import { useSettingsStore } from '../stores/settings.store';
 import { useWorkspaceEventEmitter } from '../composables/workspaceEvents';
 import { useSessionStore } from '../stores/session.store';
@@ -251,7 +250,6 @@ const quickCommandTagsStore = useQuickCommandTagsStore();
 const uiNotificationsStore = useUiNotificationsStore();
 const { t } = useI18n();
 const { showConfirmDialog } = useConfirmDialog();
-const focusSwitcherStore = useFocusSwitcherStore();
 const settingsStore = useSettingsStore();
 const emitWorkspaceEvent = useWorkspaceEventEmitter();
 const sessionStore = useSessionStore();
@@ -262,7 +260,6 @@ const isFormVisible = ref(false);
 const commandToEdit = ref<QuickCommandFE | null>(null);
 const commandListContainerRef = ref<HTMLDivElement | null>(null); // Changed ref name to match template
 const searchInputRef = ref<HTMLInputElement | null>(null); // +++ Ref for the search input +++
-let unregisterFocus: (() => void) | null = null; // +++ 保存注销函数 +++
 let activeQuickCommandMenuDocument: Document | null = null;
 const readQuickCommandsDocument = () => commandListContainerRef.value?.ownerDocument ?? document;
 const readQuickCommandsWindow = () => readQuickCommandsDocument().defaultView ?? window;
@@ -359,15 +356,6 @@ onMounted(async () => { // Make onMounted async
     await quickCommandsStore.fetchQuickCommands();
     // Also fetch the quick command tags using the correct store instance
     await quickCommandTagsStore.fetchTags();
-    // +++ 注册自定义聚焦动作 +++
-    unregisterFocus = focusSwitcherStore.registerFocusAction('quickCommandsSearch', focusSearchInput, { ownerDocument: commandListContainerRef.value?.ownerDocument ?? document });
-});
-
-onBeforeUnmount(() => {
-  // +++ 调用保存的注销函数 +++
-  if (unregisterFocus) {
-    unregisterFocus();
-  }
 });
 
 

@@ -5,7 +5,6 @@ import { useI18n } from 'vue-i18n';
 import MonacoEditor from './MonacoEditor.vue'; 
 import FileEditorTabs from './FileEditorTabs.vue';
 import type { FileTab } from '../stores/fileEditor.store'; 
-import { useFocusSwitcherStore } from '../stores/focusSwitcher.store';
 import { useSessionStore } from '../stores/session.store';
 import { useSettingsStore } from '../stores/settings.store';
 import { useAppearanceStore } from '../stores/appearance.store'; // +++ 导入外观 Store +++
@@ -15,7 +14,6 @@ import { measureCachedTextWidth } from '../composables/useCachedTextMeasurement'
 
 const { t } = useI18n();
 const emitWorkspaceEvent = useWorkspaceEventEmitter(); // +++ 获取事件发射器 +++
-const focusSwitcherStore = useFocusSwitcherStore(); // +++ 实例化焦点切换 Store +++
 const sessionStore = useSessionStore(); // +++ 实例化会话 Store +++
 const settingsStore = useSettingsStore(); // +++ 实例化设置 Store +++
 const appearanceStore = useAppearanceStore(); // +++ 实例化外观 Store +++
@@ -229,22 +227,13 @@ const focusActiveEditor = (): boolean => {
 // 暴露聚焦方法
 defineExpose({ focusActiveEditor });
 
-// +++ 注册/注销自定义聚焦动作 +++
-let unregisterFocusFn: (() => void) | null = null; // 保存注销函数
-
 onMounted(() => {
-  // 注册动作并保存返回的注销函数
-  unregisterFocusFn = focusSwitcherStore.registerFocusAction('fileEditorActive', focusActiveEditor, { ownerDocument: editorContainerRef.value?.ownerDocument ?? document });
   // +++ 键盘事件监听器 +++
   activeEditorWindow = editorContainerRef.value?.ownerDocument.defaultView ?? window;
   activeEditorWindow.addEventListener('keydown', handleKeyDown);
 });
 
 onBeforeUnmount(() => {
-  // 调用保存的注销函数（如果存在）
-  if (unregisterFocusFn) {
-    unregisterFocusFn();
-  }
   // +++ 移除键盘事件监听器 +++
   activeEditorWindow?.removeEventListener('keydown', handleKeyDown);
   activeEditorWindow = null;

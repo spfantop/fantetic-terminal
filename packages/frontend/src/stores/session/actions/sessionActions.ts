@@ -70,7 +70,6 @@ export const openNewSession = (
       kind: connInfo.type === 'TELNET' ? 'telnet' : 'ssh',
       editorTabs: ref([]),
       activeEditorTabId: ref(null),
-      commandInputContent: ref(''),
       terminalSingleLineOutput: false,
       isMarkedForSuspend: false,
       createdAt: Date.now(),

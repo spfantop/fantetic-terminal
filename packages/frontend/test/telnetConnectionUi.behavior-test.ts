@@ -11,8 +11,6 @@ const webSocketManager = fs.readFileSync(path.resolve('src/composables/useWebSoc
 const terminalManager = fs.readFileSync(path.resolve('src/composables/useSshTerminal.ts'), 'utf8');
 const layoutRenderer = fs.readFileSync(path.resolve('src/components/LayoutRenderer.vue'), 'utf8');
 const workspaceView = fs.readFileSync(path.resolve('src/views/WorkspaceView.vue'), 'utf8');
-const commandInputBar = fs.readFileSync(path.resolve('src/components/CommandInputBar.vue'), 'utf8');
-const commandInputActions = fs.readFileSync(path.resolve('src/stores/session/actions/commandInputActions.ts'), 'utf8');
 const terminalTabBar = fs.readFileSync(path.resolve('src/components/TerminalTabBar.vue'), 'utf8');
 const quickCommandsView = fs.readFileSync(path.resolve('src/views/QuickCommandsView.vue'), 'utf8');
 const commandHistoryView = fs.readFileSync(path.resolve('src/views/CommandHistoryView.vue'), 'utf8');
@@ -72,8 +70,6 @@ assert.doesNotMatch(
 );
 assert.match(workspaceView, /isTerminalShellSessionKind = \(kind\?: string\) => kind === 'ssh' \|\| kind === 'telnet'/);
 assert.match(workspaceView, /const manager = isTerminalShellSessionKind\(session\?\.kind\)\s*\?\s*\(session\.terminalManager/);
-assert.match(commandInputBar, /isTerminalShellSessionKind = \(kind\?: string\) => kind === 'ssh' \|\| kind === 'telnet'/);
-assert.match(commandInputActions, /isTerminalShellSessionKind = \(kind\?: string\) => kind === 'ssh' \|\| kind === 'telnet'/);
 assert.match(sessionActions, /isTerminalShellSessionKind = \(kind\?: string\) => kind === 'ssh' \|\| kind === 'telnet'/);
 assert.match(sessionActions, /else if \(connection\.type === 'TELNET'\) \{\s*const connIdStr = String\(connection\.id\);\s*openTelnetSession\(connIdStr, \{ connectionsStore, t \}\);/s);
 assert.doesNotMatch(sessionActions, /currentActiveSession\?\.kind === 'ssh' \|\| currentActiveSession\?\.kind === 'telnet'/);

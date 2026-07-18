@@ -5,12 +5,9 @@ type OmitIdRecursive<T> = T extends object
   : T;
 
 export const createDefaultLayoutTreeStructure = (): OmitIdRecursive<LayoutNode> => ({
-  type: 'container',
-  direction: 'vertical',
-  children: [
-    { type: 'pane', component: 'terminal', size: 94.00342561521252 },
-    { type: 'pane', component: 'commandBar', size: 5.996574384787479 },
-  ],
+  type: 'pane',
+  component: 'terminal',
+  size: 100,
 });
 
 export const createDefaultSidebarPanesStructure = (): SidebarConfig => ({

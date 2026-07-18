@@ -9,13 +9,9 @@ import AddConnectionFormComponent from '../components/AddConnectionForm.vue';
 import TerminalTabBar from '../components/TerminalTabBar.vue';
 import LayoutRenderer from '../components/LayoutRenderer.vue';
 import LayoutConfigurator from '../components/LayoutConfigurator.vue';
-import FocusSwitcherConfigurator from '../components/FocusSwitcherConfigurator.vue';
 import FileEditorOverlay from '../components/FileEditorOverlay.vue';
 import UINotificationDisplay from '../components/UINotificationDisplay.vue';
 import ConfirmDialog from '../components/common/ConfirmDialog.vue';
-import Terminal from '../components/Terminal.vue';
-import CommandInputBar from '../components/CommandInputBar.vue'; 
-import VirtualKeyboard from '../components/VirtualKeyboard.vue';
 import FileManager from '../components/FileManager.vue'; 
 import { useSessionStore } from '../stores/session.store';
 import type { SessionTabInfoWithStatus, SshTerminalInstance } from '../stores/session/types';
@@ -24,10 +20,8 @@ import { useFileEditorStore, type FileTab } from '../stores/fileEditor.store';
 import { useCommandHistoryStore } from '../stores/commandHistory.store';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
 import { useDialogStore } from '../stores/dialog.store';
-import { useFocusSwitcherStore } from '../stores/focusSwitcher.store';
 import i18n from '../i18n';
 import type { Terminal as XtermTerminal } from '@xterm/xterm';
-import type { ISearchOptions } from '@xterm/addon-search';
 import {
   useWorkspaceEventSubscriber,
   useWorkspaceEventOff,
@@ -53,7 +47,6 @@ const commandHistoryStore = useCommandHistoryStore();
 const connectionsStore = useConnectionsStore(); 
 const uiNotificationsStore = useUiNotificationsStore();
 const dialogStore = useDialogStore();
-const focusSwitcherStore = useFocusSwitcherStore();
 const { isHeaderVisible } = storeToRefs(layoutStore);
 const { isMobile } = useDeviceDetection();
 
@@ -258,10 +251,6 @@ const connectionToEdit = ref<ConnectionInfo | null>(null);
 const showLayoutConfigurator = ref(false); // 控制布局配置器可见性
 // 本地 RDP 状态已被移除
 
-// --- 搜索状态 ---
-const currentSearchTerm = ref(''); // 当前搜索的关键词
-const mobileTerminalRef = ref<InstanceType<typeof Terminal> | null>(null);
-const isVirtualKeyboardVisible = ref(false); 
 const workspaceRootRef = ref<HTMLElement | null>(null);
 
 // --- 文件管理器模态框状态 ---
@@ -290,8 +279,6 @@ type PoppedOutTerminalState = {
   closeTimer: number;
   closeHandler: () => void;
   focusHandler: () => void;
-  focusSwitcherKeyDownHandler: (event: KeyboardEvent) => void;
-  focusSwitcherKeyUpHandler: (event: KeyboardEvent) => void;
   resizeHandler: () => void;
   visibilityHandler: () => void;
 };
@@ -405,111 +392,6 @@ const requestTerminalSessionResize = (sessionElement: HTMLElement) => {
   sessionElement.dispatchEvent(new eventWindow.Event(TERMINAL_RESIZE_EVENT));
 };
 
-const shouldHandleFocusSwitcherHotkeys = () => true;
-
-const registerPopoutFocusSwitcherHotkeys = (popup: Window, sessionId: string) => {
-  const popupDocument = popup.document;
-  let lastFocusedIdBySwitcher: string | null = null;
-  let isAltPressed = false;
-  let altShortcutKey: string | null = null;
-
-  const suppressPlainAltDefault = (event: KeyboardEvent) => {
-    if (!(event.key === 'Alt' || event.altKey) || !shouldHandleFocusSwitcherHotkeys()) return;
-    event.preventDefault();
-    event.stopPropagation();
-  };
-
-  const focusTargetInPopup = async (targetId: string) => (
-    focusSwitcherStore.focusTarget(targetId, popupDocument)
-  );
-
-  const focusSwitcherKeyDownHandler = async (event: KeyboardEvent) => {
-    suppressPlainAltDefault(event);
-    if (!shouldHandleFocusSwitcherHotkeys()) return;
-
-    if (event.key === 'Alt') {
-      if (event.repeat) return;
-      isAltPressed = true;
-      altShortcutKey = null;
-      return;
-    }
-
-    if (
-      (isAltPressed || (event.altKey && !event.ctrlKey && !event.metaKey))
-      && !['Control', 'Shift', 'Alt', 'Meta'].includes(event.key)
-    ) {
-      let key = event.key;
-      if (key.length === 1) key = key.toUpperCase();
-
-      if (/^[a-zA-Z0-9]$/.test(key)) {
-        isAltPressed = true;
-        altShortcutKey = key;
-        const targetId = focusSwitcherStore.getFocusTargetIdByShortcut(`Alt+${key}`);
-        if (targetId) {
-          event.preventDefault();
-          const success = await focusTargetInPopup(targetId);
-          if (success) {
-            lastFocusedIdBySwitcher = targetId;
-          }
-        }
-      } else {
-        isAltPressed = false;
-        altShortcutKey = null;
-      }
-      return;
-    }
-
-    if (isAltPressed && ['Control', 'Shift', 'Meta'].includes(event.key)) {
-      isAltPressed = false;
-      altShortcutKey = null;
-    }
-  };
-
-  const focusSwitcherKeyUpHandler = async (event: KeyboardEvent) => {
-    suppressPlainAltDefault(event);
-    if (!shouldHandleFocusSwitcherHotkeys() || event.key !== 'Alt') return;
-
-    const altWasPressed = isAltPressed;
-    const triggeredShortcutKey = altShortcutKey;
-    isAltPressed = false;
-    altShortcutKey = null;
-
-    if (!altWasPressed || triggeredShortcutKey !== null) return;
-
-    event.preventDefault();
-    let currentFocusId = lastFocusedIdBySwitcher;
-    if (!currentFocusId) {
-      const activeElement = popupDocument.activeElement as HTMLElement | null;
-      if (activeElement?.hasAttribute('data-focus-id')) {
-        currentFocusId = activeElement.getAttribute('data-focus-id');
-      }
-    }
-
-    const order = focusSwitcherStore.sequenceOrder;
-    for (let i = 0; i < order.length; i += 1) {
-      const nextFocusId = focusSwitcherStore.getNextFocusTargetId(currentFocusId);
-      if (!nextFocusId) break;
-
-      const success = await focusTargetInPopup(nextFocusId);
-      if (success) {
-        lastFocusedIdBySwitcher = nextFocusId;
-        return;
-      }
-      currentFocusId = nextFocusId;
-    }
-
-    lastFocusedIdBySwitcher = null;
-  };
-
-  popup.addEventListener('keydown', focusSwitcherKeyDownHandler, { capture: true });
-  popup.addEventListener('keyup', focusSwitcherKeyUpHandler, { capture: true });
-
-  return {
-    focusSwitcherKeyDownHandler,
-    focusSwitcherKeyUpHandler,
-  };
-};
-
 const rebindXtermRenderWindow = (sessionId: string, targetWindow: Window) => {
   const terminal = getTerminalForSession(sessionId);
   if (!terminal) {
@@ -575,8 +457,6 @@ const restorePoppedOutTerminalElement = (sessionId: string) => {
     state.windowRef.removeEventListener('beforeunload', state.closeHandler);
     state.windowRef.removeEventListener('focus', state.focusHandler);
     state.windowRef.removeEventListener('pageshow', state.focusHandler);
-    state.windowRef.removeEventListener('keydown', state.focusSwitcherKeyDownHandler, { capture: true });
-    state.windowRef.removeEventListener('keyup', state.focusSwitcherKeyUpHandler, { capture: true });
     state.windowRef.removeEventListener('resize', state.resizeHandler);
     state.windowRef.document.removeEventListener('visibilitychange', state.visibilityHandler);
   } catch (error) {
@@ -1000,11 +880,6 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
             sessionId: sessionId,
           }),
           h(UINotificationDisplay),
-          h(FocusSwitcherConfigurator, {
-            isVisible: focusSwitcherStore.isConfiguratorVisible && focusSwitcherStore.configuratorSourceDocument === popup.document,
-            teleportTarget: popup.document.body,
-            onClose: () => focusSwitcherStore.toggleConfigurator(false),
-          }),
           h(PopoutFileManagerModal, {
             ownerDocument: popup.document,
           }),
@@ -1076,10 +951,6 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
 
   const closeHandler = () => restorePoppedOutTerminalElement(sessionId);
   const focusHandler = () => focusPoppedOutSession(sessionId, { resize: true });
-  const {
-    focusSwitcherKeyDownHandler,
-    focusSwitcherKeyUpHandler,
-  } = registerPopoutFocusSwitcherHotkeys(popup, sessionId);
   const resizeHandler = () => {
     const sessionKind = sessionStore.sessions.get(sessionId)?.kind;
     if (isTerminalShellSessionKind(sessionKind)) {
@@ -1104,8 +975,6 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
     closeTimer,
     closeHandler,
     focusHandler,
-    focusSwitcherKeyDownHandler,
-    focusSwitcherKeyUpHandler,
     resizeHandler,
     visibilityHandler,
   });
@@ -1179,22 +1048,6 @@ const handleTerminalSendCommandEvent = (payload: WorkspaceEventPayloads['termina
   handleSendCommand(payload.command, payload.sessionId);
 };
 
-const handleSearchStartEvent = (payload: WorkspaceEventPayloads['search:start']) => {
-  handleSearch(payload.term, payload.sessionId);
-};
-
-const handleSearchFindNextEvent = (payload?: WorkspaceEventPayloads['search:findNext']) => {
-  handleFindNext(payload?.sessionId);
-};
-
-const handleSearchFindPreviousEvent = (payload?: WorkspaceEventPayloads['search:findPrevious']) => {
-  handleFindPrevious(payload?.sessionId);
-};
-
-const handleSearchCloseEvent = (payload?: WorkspaceEventPayloads['search:close']) => {
-  handleCloseSearch(payload?.sessionId);
-};
-
 const activateSessionFromTabBar = (sessionId: string) => {
   sessionStore.activateSession(sessionId);
 };
@@ -1239,10 +1092,6 @@ onMounted(() => {
   subscribeToWorkspaceEvents('connection:requestAdd', handleRequestAddConnection);
   subscribeToWorkspaceEvents('connection:requestEdit', (payload) => handleRequestEditConnection(payload.connectionInfo));
 
-  subscribeToWorkspaceEvents('search:start', handleSearchStartEvent);
-  subscribeToWorkspaceEvents('search:findNext', handleSearchFindNextEvent);
-  subscribeToWorkspaceEvents('search:findPrevious', handleSearchFindPreviousEvent);
-  subscribeToWorkspaceEvents('search:close', handleSearchCloseEvent);
   subscribeToWorkspaceEvents('ui:toggleWorkspaceSplit', handleToggleWorkspaceSplitEvent);
 
   // 来自 TerminalTabBar 的事件
@@ -1292,10 +1141,6 @@ onBeforeUnmount(() => {
   unsubscribeFromWorkspaceEvents('connection:requestAdd', handleRequestAddConnection);
   unsubscribeFromWorkspaceEvents('connection:requestEdit', (payload) => handleRequestEditConnection(payload.connectionInfo));
 
-  unsubscribeFromWorkspaceEvents('search:start', handleSearchStartEvent);
-  unsubscribeFromWorkspaceEvents('search:findNext', handleSearchFindNextEvent);
-  unsubscribeFromWorkspaceEvents('search:findPrevious', handleSearchFindPreviousEvent);
-  unsubscribeFromWorkspaceEvents('search:close', handleSearchCloseEvent);
   unsubscribeFromWorkspaceEvents('ui:toggleWorkspaceSplit', handleToggleWorkspaceSplitEvent);
 
   unsubscribeFromWorkspaceEvents('session:activate', handleSessionActivateEvent);
@@ -1455,78 +1300,10 @@ const unsubscribeFromWorkspaceEvents = useWorkspaceEventOff();
     getSshSessionForAction(payload.sessionId)?.terminalManager.handleTerminalResize(payload.dims);
  };
 
- // 处理终端就绪 (用于 Terminal)
- // 注意：LayoutRenderer 内部的 Terminal 组件需要 emit('terminal-ready', payload)
- // *** 修正：更新 payload 类型以包含 searchAddon ***
- const handleTerminalReady = (payload: { sessionId: string; terminal: XtermTerminal; searchAddon?: any | null; ensureSearchAddonLoaded?: () => any }) => { // --- 使用重命名的 XtermTerminal ---
-   debugLog(`[工作区视图 ${payload.sessionId}] 收到 terminal-ready 事件。Payload:`, payload);
-    // *** 检查 payload 中 searchAddon 是否存在 ***
-    if (payload?.searchAddon || payload?.ensureSearchAddonLoaded) {
-        debugLog(`[工作区视图 ${payload.sessionId}] Payload 包含搜索插件实例或按需加载函数。`);
-   } else {
-        console.warn(`[工作区视图 ${payload.sessionId}] Payload 未包含搜索插件加载能力！ Payload:`, payload);
-    }
-    // *** 修正：传递包含 terminal 和 searchAddon 的完整 payload ***
-    getSshSessionForAction(payload.sessionId)?.terminalManager.handleTerminalReady(payload);
-};
-
-// --- 搜索事件处理 ---
-const handleSearch = (term: string, sessionId?: string) => { // +++ 修改 +++
-  currentSearchTerm.value = term;
-  if (!term) {
-    // 如果搜索词为空，清除搜索
-    handleCloseSearch(sessionId);
-    return;
-  }
-  debugLog(`[WorkspaceView] Received search event: "${term}"`);
-  // 默认向前搜索
-  // 触发 findNext
-  handleFindNext(sessionId); // 保持调用 findNext，内部会处理 isMobile
-};
-
-const handleFindNext = (sessionId?: string) => {
-  const manager = getSshSessionForAction(sessionId)?.terminalManager;
-  if (manager && currentSearchTerm.value) {
-    const mode = isMobile.value ? 'Mobile' : 'Desktop';
-   debugLog(`[WorkspaceView ${mode}] Calling findNext for term: "${currentSearchTerm.value}"`);
-    const found = manager.searchNext(currentSearchTerm.value, { incremental: true });
-   debugLog(`[WorkspaceView ${mode}] findNext returned: ${found}`);
-    if (!found) {
-      debugLog(`[WorkspaceView ${mode}] findNext: No more results for "${currentSearchTerm.value}"`);
-    }
-  } else {
-    const mode = isMobile.value ? 'Mobile' : 'Desktop';
-    console.warn(`[WorkspaceView ${mode}] Cannot findNext, no active session manager or search term.`);
-  }
-};
-
-const handleFindPrevious = (sessionId?: string) => {
-  const manager = getSshSessionForAction(sessionId)?.terminalManager;
-  if (manager && currentSearchTerm.value) {
-    const mode = isMobile.value ? 'Mobile' : 'Desktop';
-   debugLog(`[WorkspaceView ${mode}] Calling findPrevious for term: "${currentSearchTerm.value}"`);
-    const found = manager.searchPrevious(currentSearchTerm.value, { incremental: true });
-   debugLog(`[WorkspaceView ${mode}] findPrevious returned: ${found}`);
-    if (!found) {
-      debugLog(`[WorkspaceView ${mode}] findPrevious: No previous results for "${currentSearchTerm.value}"`);
-    }
-  } else {
-    const mode = isMobile.value ? 'Mobile' : 'Desktop';
-    console.warn(`[WorkspaceView ${mode}] Cannot findPrevious, no active session manager or search term.`);
-  }
-};
-
-const handleCloseSearch = (sessionId?: string) => {
-  debugLog(`[WorkspaceView] Received close-search event.`);
-  currentSearchTerm.value = ''; // 清空搜索词
-  const manager = getSshSessionForAction(sessionId)?.terminalManager;
-  const mode = isMobile.value ? 'Mobile' : 'Desktop';
-  if (manager) {
-    manager.clearTerminalSearch();
-   debugLog(`[WorkspaceView ${mode}] Search cleared.`);
-  } else {
-    console.warn(`[WorkspaceView ${mode}] Cannot clear search, no active session manager.`);
-  }
+// 终端搜索完全由 Terminal 组件维护，工作区只负责转交 xterm 实例。
+const handleTerminalReady = (payload: { sessionId: string; terminal: XtermTerminal }) => {
+  debugLog(`[工作区视图 ${payload.sessionId}] 收到 terminal-ready 事件。`);
+  getSshSessionForAction(payload.sessionId)?.terminalManager.handleTerminalReady({ terminal: payload.terminal });
 };
 
 // +++ 处理清空终端事件 +++
@@ -1672,29 +1449,6 @@ const handleCloseEditorTab = (tabId: string) => {
    debugLog(`[WorkspaceView] Received 'open-new-session' event for ID: ${id}`);
     sessionStore.handleOpenNewSession(id);
   };
-
-// +++ 处理虚拟键盘按键事件 +++
-const handleVirtualKeyPress = (keySequence: string) => {
- const currentSession = getSshSessionForAction();
- if (!currentSession) {
-   console.warn('[WorkspaceView] Cannot send virtual key, no active session.');
-   return;
- }
- // 在移动端模式下，我们假设 terminalManager 总是存在的（如果会话活动）
- // 并且直接发送数据，因为虚拟键盘通常用于发送控制字符或特殊序列
- const terminalManager = currentSession.terminalManager as (SshTerminalInstance | undefined);
- if (terminalManager && typeof terminalManager.sendData === 'function') {
-   debugLogLazy(() => [`[WorkspaceView Mobile] Sending virtual key sequence: ${JSON.stringify(keySequence)}`]);
-   terminalManager.sendData(keySequence);
- } else {
-   console.warn(`[WorkspaceView Mobile] Cannot send virtual key for session ${currentSession.sessionId}, terminal manager or sendData method not available.`);
- }
-};
-
-// +++ Function to toggle virtual keyboard visibility +++
-const toggleVirtualKeyboard = () => {
- isVirtualKeyboardVisible.value = !isVirtualKeyboardVisible.value;
-};
 
 // RDP 事件处理方法已被移除
 
@@ -1994,27 +1748,6 @@ const closeFileManagerModal = () => {
           {{ t('workspace.noActiveSession', '没有活动的会话') }}
         </div>
       </div>
-      <CommandInputBar
-        v-if="!isVisibleActiveSessionRemoteDesktop && !isSessionFullscreenActive"
-        class="mobile-command-bar"
-        :is-mobile="isMobile"
-        @send-command="handleSendCommand"
-        @search="handleSearch"
-        @find-next="handleFindNext"
-        @find-previous="handleFindPrevious"
-        @close-search="handleCloseSearch"
-        @clear-terminal="handleClearTerminal"
-        :is-virtual-keyboard-visible="isVirtualKeyboardVisible"
-        @toggle-virtual-keyboard="toggleVirtualKeyboard"
-      />
-      <!-- +++ Use v-show for VirtualKeyboard and bind visibility +++ -->
-      <VirtualKeyboard
-        v-if="!isVisibleActiveSessionRemoteDesktop && !isSessionFullscreenActive"
-        v-show="isVirtualKeyboardVisible"
-        class="mobile-virtual-keyboard"
-        @send-key="handleVirtualKeyPress"
-        @hide="isVirtualKeyboardVisible = false"
-      />
     </template>
 
     <!-- Modals 保持不变，应在布局之外 -->

@@ -60,13 +60,6 @@ const electronDevEnv = {
 assert.equal(resolveApiBaseUrl(electronDevEnv), 'http://127.0.0.1:22458/api/v1');
 assert.equal(resolveWebSocketBaseUrl(electronDevEnv), 'ws://127.0.0.1:22458/ws/');
 
-const focusSwitcherStore = readFileSync(resolve('packages/frontend/src/stores/focusSwitcher.store.ts'), 'utf8');
-assert.match(
-  focusSwitcherStore,
-  /\$\{resolveApiBaseUrl\(\)\}\/settings\/focus-switcher-sequence/,
-  'desktop focus switcher settings must use the Electron backend origin',
-);
-
 assert.equal(
   resolveApiBaseUrl({
     isElectron: false,

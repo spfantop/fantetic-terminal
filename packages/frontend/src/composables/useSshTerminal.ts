@@ -4,7 +4,6 @@ import { storeToRefs } from 'pinia';
 import { sessions as globalSessionsRef, poppedOutSessionIds } from '../stores/session/state'; // +++ 导入全局 sessions state +++
 // import { useWebSocketConnection } from './useWebSocketConnection'; // 移除全局导入
 import type { Terminal } from '@xterm/xterm';
-import type { SearchAddon, ISearchOptions } from '@xterm/addon-search'; // *** 移除 ISearchResult 导入 ***
 import type { WebSocketMessage, MessagePayload } from '../types/websocket.types';
 import type { SshOutputHandler } from './useWebSocketConnection';
 import { debugLog } from './useDebugLog';
@@ -48,8 +47,6 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
     const { terminalHighlightEnabledBoolean, terminalHighlightRulesList } = storeToRefs(settingsStore);
 
     const terminalInstance = ref<Terminal | null>(null);
-    const searchAddon = ref<SearchAddon | null>(null); // Keep searchAddon ref
-    let ensureSearchAddonLoaded: (() => SearchAddon | null) | null = null;
     let terminalWriteParsedDisposable: { dispose(): void } | null = null;
     // Removed search result state refs
     // const searchResultCount = ref(0);
@@ -576,10 +573,9 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
 
     // --- 终端事件处理 ---
 
-    // *** 更新 handleTerminalReady 签名以接收 searchAddon ***
-    const handleTerminalReady = (payload: { terminal: Terminal; searchAddon?: SearchAddon | null; ensureSearchAddonLoaded?: () => SearchAddon | null }) => {
-        const { terminal: term, searchAddon: addon } = payload;
-        debugLog(`[会话 ${sessionId}][SSH终端模块] 终端实例已就绪。SearchAddon 实例:`, addon ? '存在' : '按需加载');
+    const handleTerminalReady = (payload: { terminal: Terminal }) => {
+        const { terminal: term } = payload;
+        debugLog(`[会话 ${sessionId}][SSH终端模块] 终端实例已就绪。`);
         terminalInstance.value = term;
         if (!terminalRenderHighlighter.attach(term)) {
             console.warn(`[会话 ${sessionId}][SSH终端模块] 当前 xterm 渲染器不支持行级高亮，已保留原始终端输出。`);
@@ -588,8 +584,6 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         terminalWriteParsedDisposable = term.onWriteParsed(() => {
             terminalRenderHighlighter.ensureAttached(term);
         });
-        searchAddon.value = addon ?? null; // *** 存储 searchAddon 实例 ***
-        ensureSearchAddonLoaded = payload.ensureSearchAddonLoaded ?? null;
 
         
         // 1. 处理 SessionState.pendingOutput (来自 SSH_OUTPUT_CACHED_CHUNK 的早期数据)
@@ -902,49 +896,6 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         scheduleTerminalInput(data);
     };
 
-    // --- 搜索相关方法 (移除计数逻辑) ---
-
-    // Removed countOccurrences helper function
-
-    const searchNext = (term: string, options?: ISearchOptions): boolean => {
-        const addon = searchAddon.value ?? ensureSearchAddonLoaded?.() ?? null;
-        searchAddon.value = addon;
-        if (addon) {
-            debugLog(`[会话 ${sessionId}][SSH终端模块] 执行 searchNext: "${term}"`);
-            const found = addon.findNext(term, options);
-            // Removed manual count and state update
-            return found;
-        }
-        console.warn(`[会话 ${sessionId}][SSH终端模块] searchNext 调用失败，searchAddon 不可用。`);
-        // Removed state reset on failure
-        return false;
-    };
-
-    const searchPrevious = (term: string, options?: ISearchOptions): boolean => {
-        const addon = searchAddon.value ?? ensureSearchAddonLoaded?.() ?? null;
-        searchAddon.value = addon;
-        if (addon) {
-             debugLog(`[会话 ${sessionId}][SSH终端模块] 执行 searchPrevious: "${term}"`);
-            const found = addon.findPrevious(term, options);
-            // Removed manual count and state update
-            return found;
-        }
-         console.warn(`[会话 ${sessionId}][SSH终端模块] searchPrevious 调用失败，searchAddon 不可用。`);
-         // Removed state reset on failure
-        return false;
-    };
-
-    const clearTerminalSearch = () => {
-        const addon = searchAddon.value;
-        if (addon) {
-            debugLog(`[会话 ${sessionId}][SSH终端模块] 清除搜索高亮。`);
-            addon.clearDecorations();
-        }
-        // Removed state reset
-        debugLog(`[会话 ${sessionId}][SSH终端模块] 搜索高亮已清除 (状态不再管理)。`);
-    };
-
-
     // 返回工厂实例
     return {
         // 公共接口
@@ -954,10 +905,6 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         sendData, // 允许外部直接发送数据
         writeOutput: scheduleTerminalOutput,
         cleanup,
-        // --- 搜索方法 ---
-        searchNext,
-        searchPrevious,
-        clearTerminalSearch,
         // --- 暴露状态 ---
         isSshConnected: readonly(isSshConnected), // 暴露 SSH 连接状态 (只读)
         terminalInstance, // 暴露 terminal 实例，以便 WorkspaceView 可以写入提示信息

@@ -10,6 +10,7 @@ import LayoutNodeEditor from './LayoutNodeEditor.vue';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
 import { useAlertDialog } from '../composables/useAlertDialog';
 import { useDraggableDialog } from '../composables/useDraggableDialog';
+import { createLayoutEditorTree } from '../utils/layoutPanes';
 
 
 
@@ -56,7 +57,8 @@ watch(() => props.isVisible, (newValue) => {
   if (newValue) {
     // --- Load initial data and create original copies ---
     // Main layout
-    const initialLayout = layoutStore.layoutTree ? JSON.parse(JSON.stringify(layoutStore.layoutTree)) : null;
+    const storedLayout = layoutStore.layoutTree ? JSON.parse(JSON.stringify(layoutStore.layoutTree)) : null;
+    const initialLayout = createLayoutEditorTree(storedLayout, layoutStore.generateId) as LayoutNode;
     localLayoutTree.value = initialLayout;
     originalLayoutTree.value = JSON.parse(JSON.stringify(initialLayout)); // Deep copy for original
 
@@ -160,7 +162,6 @@ const isModified = computed(() => (
 const paneLabels = computed(() => ({ // Assuming labels might depend on i18n
   connections: t('layout.pane.connections', '连接列表'),
   terminal: t('layout.pane.terminal', '终端'),
-  commandBar: t('layout.pane.commandBar', '命令栏'),
   fileManager: t('layout.pane.fileManager', '文件管理器'),
   editor: t('layout.pane.editor', '编辑器'),
   statusMonitor: t('layout.pane.statusMonitor', '状态监视器'),
@@ -230,7 +231,7 @@ const resetToDefault = async () => {
   if (confirmed) {
     // Reset main layout
     const defaultLayout = layoutStore.getSystemDefaultLayout();
-    localLayoutTree.value = JSON.parse(JSON.stringify(defaultLayout));
+    localLayoutTree.value = createLayoutEditorTree(defaultLayout, layoutStore.generateId) as LayoutNode;
 
     // Reset sidebar config
     const defaultSidebarPanes = layoutStore.getSystemDefaultSidebarPanes();

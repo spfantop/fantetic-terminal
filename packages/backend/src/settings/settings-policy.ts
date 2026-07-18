@@ -1,11 +1,11 @@
 import { AuthorizationSubject } from '../access-control/authorization-subject';
 
 export const PERSONAL_SETTING_KEYS = new Set([
-  'language', 'focusSwitcherSequence', 'navBarVisible', 'layoutTree', 'autoCopyOnSelect',
+  'language', 'navBarVisible', 'layoutTree', 'autoCopyOnSelect',
   'sidebarConfig', 'showConnectionTags', 'showQuickCommandTags', 'showStatusMonitorIpAddress',
   'showPopupFileEditor', 'showPopupFileManager', 'shareFileEditorTabs', 'workspaceSidebarPersistent',
   'sidebarPaneWidths', 'fileManagerRowSizeMultiplier', 'fileManagerColWidths',
-  'fileManagerShowDeleteConfirmation', 'commandInputSyncTarget', 'timezone', 'layoutLocked',
+  'fileManagerShowDeleteConfirmation', 'timezone', 'layoutLocked',
   'rdpModalWidth', 'rdpModalHeight', 'vncModalWidth', 'vncModalHeight',
   'rdpDefaultFixedResolution', 'rdpDefaultWidth', 'rdpDefaultHeight', 'rdpDefaultQuality',
   'vncDefaultFixedResolution', 'vncDefaultWidth', 'vncDefaultHeight', 'vncDefaultQuality',

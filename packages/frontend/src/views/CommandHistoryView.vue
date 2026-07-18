@@ -87,7 +87,6 @@ import { storeToRefs } from 'pinia';
 import { useCommandHistoryStore, CommandHistoryEntryFE } from '../stores/commandHistory.store';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
 import { useI18n } from 'vue-i18n';
-import { useFocusSwitcherStore } from '../stores/focusSwitcher.store';
 import { useWorkspaceEventEmitter } from '../composables/workspaceEvents'; 
 import { useSessionStore } from '../stores/session.store'; 
 import type { SessionState } from '../stores/session/types'; 
@@ -100,7 +99,6 @@ const commandHistoryStore = useCommandHistoryStore();
 const { showConfirmDialog } = useConfirmDialog();
 const uiNotificationsStore = useUiNotificationsStore();
 const { t } = useI18n();
-const focusSwitcherStore = useFocusSwitcherStore(); // +++ 实例化焦点切换 Store +++
 const emitWorkspaceEvent = useWorkspaceEventEmitter(); // +++ 获取事件发射器 +++
 const sessionStore = useSessionStore(); // +++ 实例化 SessionStore +++
 const connectionsStore = useConnectionsStore(); // +++ 实例化 ConnectionsStore +++
@@ -108,7 +106,6 @@ const hoveredItemId = ref<number | null>(null);
 // const selectedIndex = ref<number>(-1); // REMOVED: Use store's selectedIndex
 const historyListRef = ref<HTMLUListElement | null>(null); // Ref for the history list UL
 const searchInputRef = ref<HTMLInputElement | null>(null); // +++ Ref for the search input +++
-let unregisterFocus: (() => void) | null = null; // +++ 保存注销函数 +++
 const readCommandHistoryDocument = () => historyListRef.value?.ownerDocument ?? document;
 const readCommandHistoryWindow = () => readCommandHistoryDocument().defaultView ?? window;
 const readCommandHistoryClipboard = () => readCommandHistoryWindow().navigator.clipboard;
@@ -141,18 +138,6 @@ onMounted(() => {
   // 视图挂载时获取历史记录 (如果 store 中还没有的话)
   if (commandHistoryStore.historyList.length === 0) {
       commandHistoryStore.fetchHistory();
-  }
-});
-
-// +++ 注册/注销自定义聚焦动作 +++
-onMounted(() => {
-  // +++ 保存返回的注销函数 +++
-  unregisterFocus = focusSwitcherStore.registerFocusAction('commandHistorySearch', focusSearchInput, { ownerDocument: historyListRef.value?.ownerDocument ?? document });
-});
-onBeforeUnmount(() => {
-  // +++ 调用保存的注销函数 +++
-  if (unregisterFocus) {
-    unregisterFocus();
   }
 });
 

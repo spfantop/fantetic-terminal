@@ -34,7 +34,6 @@ export function useWorkspaceSettings() {
     shareFileEditorTabsBoolean,
     autoCopyOnSelectBoolean,
     workspaceSidebarPersistentBoolean,
-    commandInputSyncTarget,
     showConnectionTagsBoolean,
     showQuickCommandTagsBoolean,
     terminalScrollbackLimitNumber,
@@ -138,29 +137,6 @@ export function useWorkspaceSettings() {
       workspaceSidebarPersistentSuccess.value = false;
     } finally {
       workspaceSidebarPersistentLoading.value = false;
-    }
-  };
-
-  // --- Command Input Sync Target ---
-  const commandInputSyncTargetLocal = ref<'none' | 'quickCommands' | 'commandHistory'>('none');
-  const commandInputSyncLoading = ref(false);
-  const commandInputSyncMessage = ref('');
-  const commandInputSyncSuccess = ref(false);
-
-  const handleUpdateCommandInputSyncTarget = async () => {
-    commandInputSyncLoading.value = true;
-    commandInputSyncMessage.value = '';
-    commandInputSyncSuccess.value = false;
-    try {
-      await settingsStore.updateSetting('commandInputSyncTarget', commandInputSyncTargetLocal.value);
-      commandInputSyncMessage.value = t('settings.commandInputSync.success.saved', '同步目标已保存');
-      commandInputSyncSuccess.value = true;
-    } catch (error: any) {
-      console.error('更新命令输入同步目标失败:', error);
-      commandInputSyncMessage.value = error.message || t('settings.commandInputSync.error.saveFailed', '保存同步目标失败');
-      commandInputSyncSuccess.value = false;
-    } finally {
-      commandInputSyncLoading.value = false;
     }
   };
 
@@ -423,7 +399,6 @@ export function useWorkspaceSettings() {
   watch(shareFileEditorTabsBoolean, (newValue) => { shareTabsEnabled.value = newValue; }, { immediate: true });
   watch(autoCopyOnSelectBoolean, (newValue) => { autoCopyEnabled.value = newValue; }, { immediate: true });
   watch(workspaceSidebarPersistentBoolean, (newValue) => { workspaceSidebarPersistentEnabled.value = newValue; }, { immediate: true });
-  watch(commandInputSyncTarget, (newValue) => { commandInputSyncTargetLocal.value = newValue; }, { immediate: true });
   watch(showConnectionTagsBoolean, (newValue) => { showConnectionTagsLocal.value = newValue; }, { immediate: true });
   watch(showQuickCommandTagsBoolean, (newValue) => { showQuickCommandTagsLocal.value = newValue; }, { immediate: true });
   watch(terminalScrollbackLimitNumber, (newValue) => { terminalScrollbackLimitLocal.value = newValue; }, { immediate: true });
@@ -460,11 +435,6 @@ export function useWorkspaceSettings() {
     workspaceSidebarPersistentSuccess,
     handleUpdateWorkspaceSidebarSetting,
 
-    commandInputSyncTargetLocal,
-    commandInputSyncLoading,
-    commandInputSyncMessage,
-    commandInputSyncSuccess,
-    handleUpdateCommandInputSyncTarget,
 
     showConnectionTagsLocal,
     showConnectionTagsLoading,

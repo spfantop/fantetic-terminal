@@ -5,6 +5,7 @@ import apiClient from '../utils/apiClient';
 import {
   CONFIGURABLE_LAYOUT_PANES,
   isConfigurableLayoutPane,
+  normalizeLayoutTree,
   normalizeConfigurablePaneList,
   type ConfigurableLayoutPane,
   type SidebarPaneConfig,
@@ -96,24 +97,12 @@ export function areSidebarPanesEqual(left: { left: PaneName[], right: PaneName[]
   return isSamePaneList(left.left, right.left) && isSamePaneList(left.right, right.right);
 }
 function sanitizeLayoutTree(node: LayoutNode | null): LayoutNode | null {
-  if (!node) return null;
-
-  const clonedNode = { ...node };
-  if (clonedNode.type === 'pane') {
-    if (!isConfigurableLayoutPane(clonedNode.component)) {
-      return null;
-    }
-    if (clonedNode.component === 'terminal') {
-      delete clonedNode.sessionId;
-    }
-    return clonedNode;
+  const normalizedNode = normalizeLayoutTree(node) as LayoutNode | null;
+  if (!normalizedNode) return null;
+  if (normalizedNode.type === 'pane' && normalizedNode.component === 'terminal') {
+    delete normalizedNode.sessionId;
   }
-  if (clonedNode.type === 'container' && clonedNode.children) {
-    clonedNode.children = clonedNode.children
-      .map(child => sanitizeLayoutTree(child))
-      .filter(Boolean) as LayoutNode[];
-  }
-  return clonedNode;
+  return normalizedNode;
 }
 
 function normalizeSidebarPaneConfig(value: { left?: unknown[]; right?: unknown[] } | null | undefined): SidebarPaneConfig | null {

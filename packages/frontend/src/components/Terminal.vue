@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onBeforeUnmount, watch, nextTick, watchEffect } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Terminal, IDisposable } from '@xterm/xterm';
 import { useDeviceDetection } from '../composables/useDeviceDetection';
 import { useAppearanceStore } from '../stores/appearance.store';
@@ -7,7 +8,7 @@ import { useSettingsStore } from '../stores/settings.store';
 import { storeToRefs } from 'pinia';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from 'xterm-addon-web-links';
-import { SearchAddon, type ISearchOptions } from '@xterm/addon-search';
+import { SearchAddon } from '@xterm/addon-search';
 import '@xterm/xterm/css/xterm.css';
 import { useWorkspaceEventEmitter, useWorkspaceEventOff, useWorkspaceEventSubscriber } from '../composables/workspaceEvents';
 import type { WorkspaceEventPayloads } from '../composables/workspaceEvents';
@@ -21,6 +22,11 @@ import {
   TERMINAL_ZOOM_MIN_FONT_SIZE,
   TERMINAL_ZOOM_POPUP_HIDE_DELAY,
 } from '../utils/terminalZoom';
+import {
+  createTerminalSearchScheduler,
+  createTerminalSearchOptions,
+  TERMINAL_SEARCH_HIGHLIGHT_LIMIT,
+} from '../utils/terminalSearch';
 
 
 // 定义 props 和 emits
@@ -38,6 +44,7 @@ const props = defineProps<{
 const emitWorkspaceEvent = useWorkspaceEventEmitter(); // +++ 获取事件发射器 +++
 const subscribeToWorkspaceEvent = useWorkspaceEventSubscriber();
 const unsubscribeFromWorkspaceEvent = useWorkspaceEventOff();
+const { t } = useI18n();
 
 const terminalRef = ref<HTMLElement | null>(null); // xterm 挂载点的引用 (内部容器)
 const terminalOuterWrapperRef = ref<HTMLElement | null>(null); // 最外层容器的引用，用于背景图
@@ -45,6 +52,7 @@ const singleLineContentWidth = ref<string | null>(null);
 let terminal: Terminal | null = null;
 let fitAddon: FitAddon | null = null;
 let searchAddon: SearchAddon | null = null; // *** 添加 searchAddon 变量 ***
+let searchResultDisposable: IDisposable | null = null;
 let webLinksAddonDisposable: IDisposable | null = null;
 let resizeObserver: ResizeObserver | null = null;
 let resizeObserverWindow: Window | null = null;
@@ -66,6 +74,28 @@ let hasDeferredFitDuringResize = false;
 let resizeTransactionSettleTimer: number | null = null;
 let zoomPopupHideTimer: number | null = null;
 let terminalClipboardKeydownTargets: HTMLElement[] = [];
+const terminalSearchInputRef = ref<HTMLInputElement | null>(null);
+const terminalSearchVisible = ref(false);
+const terminalSearchTerm = ref('');
+const terminalSearchCaseSensitive = ref(false);
+const terminalSearchResultIndex = ref(-1);
+const terminalSearchResultCount = ref(0);
+const terminalSearchResultCurrent = computed(() => (
+  terminalSearchResultIndex.value >= 0 ? terminalSearchResultIndex.value + 1 : 0
+));
+const terminalSearchResultTotal = computed(() => (
+  terminalSearchResultCount.value >= TERMINAL_SEARCH_HIGHLIGHT_LIMIT
+    ? `${TERMINAL_SEARCH_HIGHLIGHT_LIMIT}+`
+    : String(terminalSearchResultCount.value)
+));
+const terminalSearchResultLabel = computed(() => (
+  `${terminalSearchResultCurrent.value}/${terminalSearchResultTotal.value}`
+));
+const terminalSearchCaseSensitiveLabel = computed(() => (
+  terminalSearchCaseSensitive.value
+    ? t('terminal.search.disableCaseSensitive', '关闭大小写匹配')
+    : t('terminal.search.enableCaseSensitive', '开启大小写匹配')
+));
 const RESIZE_THRESHOLD = 0.5; // px
 const RESIZE_EMIT_DELAY = 150;
 const STABILIZED_RESIZE_DELAY = 150;
@@ -441,11 +471,88 @@ const fitAndEmitResizeNow = (term: Terminal) => {
 const ensureSearchAddonLoaded = (): SearchAddon | null => {
   if (!terminal) return null;
   if (!searchAddon) {
-    const addon = new SearchAddon();
+    // 限制可视装饰数量，避免大量重复日志命中时创建过多 DOM/Canvas 装饰。
+    const addon = new SearchAddon({ highlightLimit: TERMINAL_SEARCH_HIGHLIGHT_LIMIT });
     terminal.loadAddon(addon);
+    searchResultDisposable = addon.onDidChangeResults(({ resultIndex, resultCount }) => {
+      terminalSearchResultIndex.value = resultIndex;
+      terminalSearchResultCount.value = resultCount;
+    });
     searchAddon = addon;
   }
   return searchAddon;
+};
+
+const resetTerminalSearchResults = () => {
+  terminalSearchResultIndex.value = -1;
+  terminalSearchResultCount.value = 0;
+};
+
+const terminalSearchOptions = () => createTerminalSearchOptions(terminalSearchCaseSensitive.value);
+
+const runTerminalSearchNext = (term: string) => (
+  ensureSearchAddonLoaded()?.findNext(term, terminalSearchOptions()) ?? false
+);
+
+const terminalSearchScheduler = createTerminalSearchScheduler<string>({
+  onSearch: runTerminalSearchNext,
+});
+
+const openTerminalSearch = () => {
+  terminalSearchVisible.value = true;
+  nextTick(() => terminalSearchInputRef.value?.focus());
+};
+
+const updateTerminalSearch = () => {
+  if (!terminalSearchTerm.value) {
+    terminalSearchScheduler.cancel();
+    searchAddon?.clearDecorations();
+    resetTerminalSearchResults();
+    return;
+  }
+  resetTerminalSearchResults();
+  terminalSearchScheduler.schedule(terminalSearchTerm.value);
+};
+
+const findTerminalSearchNext = () => {
+  if (!terminalSearchTerm.value) return;
+  terminalSearchScheduler.runNow(terminalSearchTerm.value);
+};
+
+const findTerminalSearchPrevious = () => {
+  if (!terminalSearchTerm.value) return;
+  terminalSearchScheduler.cancel();
+  ensureSearchAddonLoaded()?.findPrevious(terminalSearchTerm.value, terminalSearchOptions());
+};
+
+const toggleTerminalSearchCaseSensitive = () => {
+  terminalSearchCaseSensitive.value = !terminalSearchCaseSensitive.value;
+  if (!terminalSearchTerm.value) return;
+  terminalSearchScheduler.runNow(terminalSearchTerm.value);
+};
+
+const closeTerminalSearch = () => {
+  terminalSearchScheduler.cancel();
+  terminalSearchTerm.value = '';
+  terminalSearchVisible.value = false;
+  searchAddon?.clearDecorations();
+  resetTerminalSearchResults();
+  nextTick(() => terminal?.focus());
+};
+
+const handleTerminalSearchKeydown = (event: KeyboardEvent) => {
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    closeTerminalSearch();
+    return;
+  }
+  if (event.key !== 'Enter') return;
+  event.preventDefault();
+  if (event.shiftKey) {
+    findTerminalSearchPrevious();
+    return;
+  }
+  findTerminalSearchNext();
 };
 
 const loadWebLinksAddonIfEnabled = () => {
@@ -616,6 +723,13 @@ const removeContextMenuListener = () => {
 };
 
 const terminalClipboardKeyDownHandler = async (event: KeyboardEvent) => {
+  if (event.ctrlKey && !event.altKey && !event.shiftKey && event.code === 'KeyF') {
+    event.preventDefault();
+    event.stopPropagation();
+    openTerminalSearch();
+    return;
+  }
+
   if (!event.ctrlKey || !event.shiftKey) return;
 
   // Ctrl+Shift+C copies the current xterm selection.
@@ -740,6 +854,9 @@ onMounted(() => {
       scrollback: getScrollbackValue(terminalScrollbackLimitNumber.value), //  Use setting from store
       scrollOnUserInput: true, // 输入时滚动到底部
       ...props.options, // 合并外部传入的选项
+      // SearchAddon uses xterm decorations to render current and non-current matches.
+      // Those decorations are exposed through xterm's proposed API.
+      allowProposedApi: true,
     });
     const mountedFontSize = terminal.options.fontSize ?? currentTerminalFontSize.value;
     originalTerminalFontSize.value = mountedFontSize;
@@ -851,7 +968,7 @@ onMounted(() => {
 
     // 触发 ready 事件，搜索插件延迟到首次搜索时加载，降低终端初始化成本。
     if (terminal) {
-        emitWorkspaceEvent('terminal:ready', { sessionId: props.sessionId, terminal: terminal, ensureSearchAddonLoaded });
+        emitWorkspaceEvent('terminal:ready', { sessionId: props.sessionId, terminal: terminal });
     }
 
     // --- 监听并处理选中即复制 ---
@@ -996,6 +1113,9 @@ onMounted(() => {
 
 // 组件卸载前清理资源
 onBeforeUnmount(() => {
+  terminalSearchScheduler.cancel();
+  searchResultDisposable?.dispose();
+  searchResultDisposable = null;
   unsubscribeFromWorkspaceEvent('ui:resizeTransaction', handleResizeTransaction);
   terminalOuterWrapperRef.value?.removeEventListener(TERMINAL_RESIZE_EVENT, handleExternalResizeRequest);
 
@@ -1069,25 +1189,12 @@ const write = (data: string | Uint8Array) => {
     terminal?.write(data);
 };
 
-// *** 暴露搜索方法 ***
-const findNext = (term: string, options?: ISearchOptions): boolean => {
-  return ensureSearchAddonLoaded()?.findNext(term, options) ?? false;
-};
-
-const findPrevious = (term: string, options?: ISearchOptions): boolean => {
-  return ensureSearchAddonLoaded()?.findPrevious(term, options) ?? false;
-};
-
-const clearSearch = () => {
-  searchAddon?.clearDecorations();
-};
-
 // +++  clear 方法 +++
 const clear = () => {
   terminal?.clear();
 };
 
-defineExpose({ write, findNext, findPrevious, clearSearch, clear }); // 暴露 clear 方法
+defineExpose({ write, clear }); // 暴露 clear 方法
 
 
 // --- 文字描边和阴影 ---
@@ -1161,10 +1268,50 @@ const terminalInnerStyle = computed(() => (
       :class="['terminal-inner-container', { 'single-line-output': props.singleLineOutput }]"
       :style="terminalInnerStyle"
     ></div>
+    <form
+      v-if="terminalSearchVisible"
+      class="terminal-search-popover"
+      role="search"
+      @submit.prevent="findTerminalSearchNext"
+      @pointerdown.stop
+    >
+      <input
+        ref="terminalSearchInputRef"
+        v-model="terminalSearchTerm"
+        type="search"
+        :aria-label="t('terminal.search.inputLabel', '终端内搜索')"
+        :placeholder="t('terminal.search.placeholder', '搜索终端内容')"
+        @input="updateTerminalSearch"
+        @keydown="handleTerminalSearchKeydown"
+      />
+      <span
+        class="terminal-search-results"
+        aria-live="polite"
+        :aria-label="t('terminal.search.resultCount', { current: terminalSearchResultCurrent, total: terminalSearchResultTotal })"
+      >{{ terminalSearchResultLabel }}</span>
+      <button
+        type="button"
+        class="terminal-search-case-toggle"
+        :class="{ 'is-active': terminalSearchCaseSensitive }"
+        :aria-label="terminalSearchCaseSensitiveLabel"
+        :aria-pressed="terminalSearchCaseSensitive"
+        :title="terminalSearchCaseSensitiveLabel"
+        @click="toggleTerminalSearchCaseSensitive"
+      >Aa</button>
+      <button type="button" :aria-label="t('terminal.search.previous', '上一个匹配项')" :title="t('terminal.search.previous', '上一个匹配项')" @click="findTerminalSearchPrevious">
+        <i class="fas fa-chevron-up" aria-hidden="true"></i>
+      </button>
+      <button type="submit" :aria-label="t('terminal.search.next', '下一个匹配项')" :title="t('terminal.search.next', '下一个匹配项')">
+        <i class="fas fa-chevron-down" aria-hidden="true"></i>
+      </button>
+      <button type="button" :aria-label="t('terminal.search.close', '关闭搜索')" :title="t('terminal.search.close', '关闭搜索')" @click="closeTerminalSearch">
+        <i class="fas fa-times" aria-hidden="true"></i>
+      </button>
+    </form>
     <Transition name="terminal-zoom-popover">
       <div
         v-if="zoomPopupVisible"
-        class="terminal-zoom-popover"
+        :class="['terminal-zoom-popover', { 'terminal-zoom-popover--below-search': terminalSearchVisible }]"
         role="status"
         aria-live="polite"
         @pointerdown.stop
@@ -1262,6 +1409,65 @@ const terminalInnerStyle = computed(() => (
   user-select: none;
   pointer-events: auto;
   backdrop-filter: blur(10px);
+}
+
+.terminal-zoom-popover--below-search {
+  top: 54px;
+}
+
+.terminal-search-popover {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 31;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: min(28rem, calc(100% - 20px));
+  padding: 5px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--header-bg-color) 94%, var(--app-bg-color));
+  box-shadow: 0 10px 26px rgb(0 0 0 / 24%);
+  backdrop-filter: blur(10px);
+}
+
+.terminal-search-popover input {
+  min-width: 0;
+  flex: 1;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--app-bg-color) 88%, var(--header-bg-color));
+  color: var(--text-color);
+}
+
+.terminal-search-popover button {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--app-bg-color) 88%, var(--header-bg-color));
+  color: var(--text-color);
+}
+
+.terminal-search-results {
+  min-width: 4ch;
+  color: var(--muted-text-color, var(--text-color));
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.terminal-search-popover button.is-active {
+  border-color: var(--primary-color);
+  background: color-mix(in srgb, var(--primary-color) 24%, var(--app-bg-color));
+  color: var(--primary-color);
 }
 
 .terminal-zoom-popover__value {
