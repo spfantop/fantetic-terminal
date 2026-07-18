@@ -24,12 +24,14 @@ COPY packages/contracts/index.d.ts ./packages/contracts/
 RUN npm run build --workspace=@fantetic-terminal/backend
 
 
-FROM node:20-alpine
+FROM node:20-bookworm-slim
 
 WORKDIR /app
 
-RUN apk upgrade --no-cache \
-    && apk add --no-cache su-exec
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends gosu python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/packages/backend/dist ./packages/backend/dist
 
@@ -43,10 +45,10 @@ COPY packages/frontend/package.json ./packages/frontend/
 COPY packages/remote-gateway/package.json ./packages/remote-gateway/
 COPY build-tools/apply-patches.js ./build-tools/
 # The production server invokes node directly; retain no package-manager toolchain in the final image.
-RUN apk add --no-cache --virtual .build-deps python3 py3-setuptools make g++ \
-    && npm ci --omit=dev --workspace=@fantetic-terminal/backend \
+RUN npm ci --omit=dev --workspace=@fantetic-terminal/backend \
     && npm cache clean --force \
-    && apk del .build-deps \
+    && apt-get purge -y --auto-remove python3 make g++ \
+    && rm -rf /var/lib/apt/lists/* \
     && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn \
     && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg
 
