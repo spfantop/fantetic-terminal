@@ -7,9 +7,9 @@ import {
   createSessionRecorder,
   readGuacamoleServerRecordingChunks,
   readRecordingEventPage,
-  verifyRecordingIntegrity,
 } from './session-recorder';
 import { resolveSessionRecordingIntegrity } from './recording-integrity';
+import { recordingIntegrityCache } from './recording-integrity-cache';
 import {
   completeSessionRecording,
   deleteSessionRecording,
@@ -181,7 +181,7 @@ export const readRecordingForSubject = async (
   if (!row || !canReadRecording(row, subject)) return undefined;
   const integrity = resolveSessionRecordingIntegrity(
     row,
-    await verifyRecordingIntegrity(recordingRoot, row.relative_path),
+    await recordingIntegrityCache.verify(recordingRoot, row.relative_path),
   );
   if (integrity.status === 'invalid') {
     return { metadata: row, integrity, eventList: [], nextCursor: null };
@@ -204,7 +204,7 @@ export const prepareGuacamoleRecordingStreamForSubject = async (
 
   const integrity = resolveSessionRecordingIntegrity(
     row,
-    await verifyRecordingIntegrity(recordingRoot, row.relative_path),
+    await recordingIntegrityCache.verify(recordingRoot, row.relative_path),
   );
   if (integrity.status === 'invalid') return { status: 'integrity_failed' };
   if (integrity.status === 'unanchored') return { status: 'not_ready' };

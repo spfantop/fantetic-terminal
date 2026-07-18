@@ -5,7 +5,13 @@ import path from 'node:path';
 
 process.env.ENCRYPTION_KEY = '33'.repeat(32);
 
-const { createSessionRecorder, readRecordingEventPage, readRecordingEvents, verifyRecordingIntegrity } = await import('../session-recording/session-recorder');
+const {
+  createSessionRecorder,
+  readRecordingEventPage,
+  readRecordingEvents,
+  verifyRecordingIntegrity,
+  verifyRecordingIntegrityLines,
+} = await import('../session-recording/session-recorder');
 
 const rootPath = fs.mkdtempSync(path.join(os.tmpdir(), 'fantetic-recording-test-'));
 const completed: Array<{
@@ -51,6 +57,15 @@ assert.deepEqual(await readRecordingEventPage(rootPath, recorder.relativePath, 0
 });
 const { decrypt, encrypt } = await import('../utils/crypto');
 assert.deepEqual(await verifyRecordingIntegrity(rootPath, recorder.relativePath), {
+  status: 'valid',
+  eventCount: 5,
+  batchCount: 1,
+  finalHash: completed[0].finalHash,
+});
+async function* recordingLineSource() {
+  yield fs.readFileSync(path.resolve(rootPath, recorder.relativePath), 'utf8').trim();
+}
+assert.deepEqual(await verifyRecordingIntegrityLines(recordingLineSource()), {
   status: 'valid',
   eventCount: 5,
   batchCount: 1,

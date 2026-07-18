@@ -22,9 +22,11 @@ assert.deepEqual(resolveSessionRecordingIntegrity(
 const migrations = readFileSync(resolve('src/database/migrations.ts'), 'utf8');
 const repository = readFileSync(resolve('src/session-recording/session-recording.repository.ts'), 'utf8');
 const service = readFileSync(resolve('src/session-recording/session-recording.service.ts'), 'utf8');
+const integrityCache = readFileSync(resolve('src/session-recording/recording-integrity-cache.ts'), 'utf8');
 assert.match(migrations, /id:\s*29[\s\S]*recording_chain_hash[\s\S]*recording_batch_count/);
 assert.match(repository, /recording_chain_hash, recording_batch_count/);
-assert.match(service, /verifyRecordingIntegrity\(/);
+assert.match(service, /recordingIntegrityCache\.verify\(/);
+assert.match(integrityCache, /verifyRecordingIntegrity/);
 assert.match(service, /integrity\.status === 'invalid'/);
 
 console.log('session recording integrity behavior ok');

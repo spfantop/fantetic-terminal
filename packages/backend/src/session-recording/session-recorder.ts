@@ -236,35 +236,59 @@ export const verifyRecordingIntegrity = async (
   relativePath: string,
 ): Promise<RecordingIntegrityResult> => {
   const filePath = resolveRecordingPath(rootPath, relativePath);
-  const lineList = (await fs.promises.readFile(filePath, 'utf8')).split('\n').filter(Boolean);
+  const reader = readline.createInterface({
+    input: fs.createReadStream(filePath, { encoding: 'utf8' }),
+    crlfDelay: Infinity,
+  });
+  try {
+    return await verifyRecordingIntegrityLines(reader);
+  } finally {
+    reader.close();
+  }
+};
+
+export const verifyRecordingIntegrityLines = async (
+  lineSource: AsyncIterable<string>,
+): Promise<RecordingIntegrityResult> => {
   let previousHash: string | null = null;
   let eventCount = 0;
+  let batchCount = 0;
 
-  for (let index = 0; index < lineList.length; index += 1) {
+  for await (const line of lineSource) {
+    if (!line) continue;
     let value: unknown;
     try {
-      value = JSON.parse(decrypt(lineList[index]));
+      value = JSON.parse(decrypt(line));
     } catch {
-      return { status: 'invalid', eventCount, batchCount: index, finalHash: previousHash, reason: 'corrupt-batch' };
+      return { status: 'invalid', eventCount, batchCount, finalHash: previousHash, reason: 'corrupt-batch' };
     }
     if (Array.isArray(value)) {
       eventCount += value.length;
-      return { status: 'legacy', eventCount, batchCount: index + 1, finalHash: null };
+      return { status: 'legacy', eventCount, batchCount: batchCount + 1, finalHash: null };
     }
     if (!isRecordingBatch(value)) {
-      return { status: 'invalid', eventCount, batchCount: index, finalHash: previousHash, reason: 'invalid-batch' };
+      return { status: 'invalid', eventCount, batchCount, finalHash: previousHash, reason: 'invalid-batch' };
     }
     eventCount += value.eventList.length;
+    batchCount += 1;
     if (value.previousHash !== previousHash) {
-      return { status: 'invalid', eventCount, batchCount: index + 1, finalHash: previousHash, reason: 'previous-hash-mismatch' };
+      return { status: 'invalid', eventCount, batchCount, finalHash: previousHash, reason: 'previous-hash-mismatch' };
     }
     if (value.hash !== hashRecordingBatch(previousHash, value.eventList)) {
-      return { status: 'invalid', eventCount, batchCount: index + 1, finalHash: previousHash, reason: 'hash-mismatch' };
+      return { status: 'invalid', eventCount, batchCount, finalHash: previousHash, reason: 'hash-mismatch' };
     }
     previousHash = value.hash;
   }
 
-  return { status: 'valid', eventCount, batchCount: lineList.length, finalHash: previousHash };
+  return { status: 'valid', eventCount, batchCount, finalHash: previousHash };
+};
+
+export const readRecordingFileFingerprint = async (
+  rootPath: string,
+  relativePath: string,
+): Promise<string> => {
+  const stats = await fs.promises.stat(resolveRecordingPath(rootPath, relativePath));
+  return [stats.dev, stats.ino, stats.size, stats.mtimeMs, stats.ctimeMs].join(':');
 };
 
 export const readRecordingEventPage = async (
