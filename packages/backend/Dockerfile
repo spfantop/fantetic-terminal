@@ -28,11 +28,6 @@ FROM node:20-bookworm-slim
 
 WORKDIR /app
 
-RUN apt-get update \
-    && apt-get upgrade -y \
-    && apt-get install -y --no-install-recommends gosu python3 make g++ \
-    && rm -rf /var/lib/apt/lists/*
-
 COPY --from=builder /app/packages/backend/dist ./packages/backend/dist
 
 COPY --from=builder /app/packages/backend/src/locales ./packages/backend/dist/locales
@@ -44,8 +39,12 @@ COPY packages/contracts/package.json ./packages/contracts/
 COPY packages/frontend/package.json ./packages/frontend/
 COPY packages/remote-gateway/package.json ./packages/remote-gateway/
 COPY build-tools/apply-patches.js ./build-tools/
-# The production server invokes node directly; retain no package-manager toolchain in the final image.
-RUN npm ci --omit=dev --workspace=@fantetic-terminal/backend \
+# Keep compiler installation and removal in one layer. Docker layers are immutable,
+# so deleting build dependencies in a later RUN would not reduce the published image.
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends gosu python3 make g++ \
+    && npm ci --omit=dev --workspace=@fantetic-terminal/backend \
     && npm cache clean --force \
     && apt-get purge -y --auto-remove python3 make g++ \
     && rm -rf /var/lib/apt/lists/* \

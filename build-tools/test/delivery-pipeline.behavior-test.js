@@ -52,7 +52,11 @@ assert.match(dockerPublishWorkflow, /image:\s*backend/);
 assert.match(dockerPublishWorkflow, /image:\s*remote-gateway/);
 assert.match(dockerPublishWorkflow, /fantetic-terminal-\$\{\{ matrix\.image \}\}/);
 assert.match(dockerPublishWorkflow, /type=semver,pattern=\{\{version\}\}/);
-assert.match(dockerPublishWorkflow, /type=raw,value=latest,enable=\{\{is_default_branch\}\}/);
+assert.match(dockerPublishWorkflow, /type=raw,value=latest/);
+assert.doesNotMatch(dockerPublishWorkflow, /type=ref,event=branch/);
+assert.doesNotMatch(dockerPublishWorkflow, /type=semver,pattern=\{\{major\}\}/);
+assert.doesNotMatch(dockerPublishWorkflow, /type=sha,prefix=sha-/);
+assert.doesNotMatch(dockerPublishWorkflow, /value=latest,enable=/);
 assert.match(dockerPublishGuide, /DOCKERHUB_USERNAME/);
 assert.match(dockerPublishGuide, /DOCKERHUB_TOKEN/);
 
@@ -71,10 +75,13 @@ assert.match(backendDockerfile, /COPY build-tools\/apply-patches\.js \.\/build-t
 assert.match(backendDockerfile, /COPY packages\/remote-gateway\/patches \.\/packages\/remote-gateway\/patches/);
 assert.match(backendDockerfile, /COPY --from=builder \/app\/packages\/backend\/dist \.\/packages\/backend\/dist/);
 assert.match(backendDockerfile, /^FROM node:20-bookworm-slim$/m);
-assert.match(backendDockerfile, /npm ci --omit=dev --workspace=@fantetic-terminal\/backend[\s\S]*npm cache clean --force[\s\S]*apt-get purge -y --auto-remove python3 make g\+\+/);
+assert.match(
+  backendDockerfile,
+  /RUN apt-get update(?:(?!\r?\nRUN )[\s\S])*apt-get upgrade -y(?:(?!\r?\nRUN )[\s\S])*apt-get install -y --no-install-recommends gosu python3 make g\+\+(?:(?!\r?\nRUN )[\s\S])*npm ci --omit=dev --workspace=@fantetic-terminal\/backend(?:(?!\r?\nRUN )[\s\S])*npm cache clean --force(?:(?!\r?\nRUN )[\s\S])*apt-get purge -y --auto-remove python3 make g\+\+/,
+  'Backend build dependencies must be installed and removed in the same layer so compilers do not remain in the published image',
+);
 assert.match(backendDockerfile, /CMD \["node", "packages\/backend\/dist\/index\.js"\]/);
 assert.match(backendDockerfile, /ENTRYPOINT \["\/entrypoint\.sh"\]/);
-assert.match(backendDockerfile, /apt-get install -y --no-install-recommends gosu python3 make g\+\+/);
 assert.match(backendDockerfile, /apt-get upgrade -y/);
 assert.match(backendDockerfile, /rm -rf \/usr\/local\/lib\/node_modules\/npm/);
 assert.match(read('packages\/backend\/entrypoint\.sh'), /exec gosu node/);
