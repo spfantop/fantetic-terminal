@@ -9,7 +9,12 @@ const { spawn, spawnSync } = require('node:child_process');
 const dataPath = process.env.APP_BACKEND_DATA_PATH || '/app/data';
 const nodeUser = process.getuid?.() === 0 ? { uid: 1000, gid: 1000 } : {};
 const children = new Map();
-let stopping = false;
+
+const resolveStartupTimeoutMs = value => {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : 180_000;
+};
+const startupTimeoutMs = resolveStartupTimeoutMs(process.env.ALL_IN_ONE_STARTUP_TIMEOUT_MS);
 
 const emit = (level, processName, message, context) => {
   const entry = {
@@ -21,6 +26,60 @@ const emit = (level, processName, message, context) => {
   };
   process.stdout.write(`${JSON.stringify(entry)}\n`);
 };
+
+const createShutdownController = ({
+  listChildren,
+  exit = code => process.exit(code),
+  emitLog = emit,
+  forceTimeoutMs = 10_000,
+  setTimer = setTimeout,
+  clearTimer = clearTimeout,
+}) => {
+  let stopping = false;
+
+  const shutdown = (reason, exitCode = 0) => {
+    if (stopping) return false;
+    stopping = true;
+    emitLog(exitCode === 0 ? 'info' : 'error', 'supervisor', '正在停止单镜像服务', { reason });
+
+    const childList = listChildren();
+    const exited = childList.map(child => new Promise(resolve => {
+      if (child.exitCode !== null || child.signalCode !== null) {
+        resolve();
+        return;
+      }
+      child.once('exit', resolve);
+    }));
+
+    let finished = false;
+    let forceTimer;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      if (forceTimer) clearTimer(forceTimer);
+      exit(exitCode);
+    };
+
+    forceTimer = setTimer(() => {
+      for (const child of listChildren()) child.kill('SIGKILL');
+      finish();
+    }, forceTimeoutMs);
+
+    for (const child of childList) child.kill('SIGTERM');
+    Promise.all(exited).then(finish);
+    return true;
+  };
+
+  return {
+    isStopping: () => stopping,
+    shutdown,
+  };
+};
+
+const shutdownController = createShutdownController({
+  listChildren: () => [...children.values()],
+});
+const shutdown = (reason, exitCode = 0) => shutdownController.shutdown(reason, exitCode);
 
 const normalizeLogLine = (processName, line, stream) => {
   const trimmed = line.trim();
@@ -59,12 +118,12 @@ const startChild = (name, command, args, options = {}) => {
   child.once('exit', (code, signal) => {
     children.delete(name);
     emit(code === 0 && !signal ? 'info' : 'error', name, '进程已退出', { code, signal });
-    if (!stopping) shutdown(`childExit:${name}`, 1);
+    if (!shutdownController.isStopping()) shutdown(`childExit:${name}`, 1);
   });
   return child;
 };
 
-const waitFor = async (description, check, timeoutMs = 45_000) => {
+const waitFor = async (description, check, timeoutMs = startupTimeoutMs) => {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (await check()) return;
@@ -115,23 +174,6 @@ const prepareGuacdRuntime = () => {
   fs.copyFileSync('/etc/resolv.conf', resolvConf);
 };
 
-const shutdown = (reason, exitCode = 0) => {
-  if (stopping) return;
-  stopping = true;
-  emit(exitCode === 0 ? 'info' : 'error', 'supervisor', '正在停止单镜像服务', { reason });
-  const childList = [...children.values()];
-  for (const child of childList) child.kill('SIGTERM');
-  const forceTimer = setTimeout(() => {
-    for (const child of children.values()) child.kill('SIGKILL');
-    process.exit(exitCode || 1);
-  }, 10_000);
-  Promise.all(childList.map(child => new Promise(resolve => child.once('exit', resolve))))
-    .then(() => {
-      clearTimeout(forceTimer);
-      process.exit(exitCode);
-    });
-};
-
 const start = async () => {
   if (process.getuid?.() === 0) {
     // Only the mount root needs ownership on a fresh named volume. Recursing here
@@ -180,4 +222,9 @@ if (require.main === module) {
   });
 }
 
-module.exports = { normalizeLogLine, readGatewaySecret };
+module.exports = {
+  createShutdownController,
+  normalizeLogLine,
+  readGatewaySecret,
+  resolveStartupTimeoutMs,
+};

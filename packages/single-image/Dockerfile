@@ -89,7 +89,7 @@ RUN rm -f /etc/nginx/sites-enabled/default \
 
 EXPOSE 80
 
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
     CMD node -e "Promise.all([fetch('http://127.0.0.1/api/v1/health/ready'), fetch('http://127.0.0.1:9090/health/ready')]).then(results => { if (results.some(result => !result.ok)) process.exit(1); }).catch(() => process.exit(1))"
 
 ENTRYPOINT ["/usr/bin/tini", "--", "node", "/app/supervisor.js"]

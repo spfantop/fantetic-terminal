@@ -103,6 +103,7 @@ const clientIpResolver = createClientIpResolver();
 const filesystemReadiness = createFilesystemReadinessChecks({
   appDataPath: getAppDataPath(),
   backupDirectoryPath: path.join(getAppDataPath(), 'backups'),
+  onFreeBytes: bytes => backendMetrics.setDataFreeBytes(bytes),
 });
 const healthHandlers = createHealthHandlers({
   checkDatabase: async () => {

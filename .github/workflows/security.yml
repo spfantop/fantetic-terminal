@@ -67,17 +67,67 @@ jobs:
         include:
           - name: backend
             dockerfile: packages/backend/Dockerfile
+            smoke: false
           - name: frontend
             dockerfile: packages/frontend/Dockerfile
+            smoke: false
           - name: remote-gateway
             dockerfile: packages/remote-gateway/Dockerfile
+            smoke: false
           - name: all-in-one
             dockerfile: packages/single-image/Dockerfile
+            smoke: true
     steps:
       - name: Checkout source
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Build image
         run: docker build --pull --file ${{ matrix.dockerfile }} --tag fantetic-${{ matrix.name }}:${{ github.sha }} .
+      - name: Smoke test all-in-one runtime
+        if: matrix.smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          container_name="fantetic-all-in-one-smoke"
+          volume_name="fantetic-all-in-one-smoke-data"
+
+          cleanup() {
+            docker logs "$container_name" || true
+            docker rm -f "$container_name" || true
+            docker volume rm "$volume_name" || true
+          }
+          trap cleanup EXIT
+
+          wait_until_ready() {
+            for attempt in $(seq 1 180); do
+              if curl --fail --silent --show-error http://127.0.0.1:18080/api/v1/health/ready > /dev/null; then
+                return 0
+              fi
+              sleep 1
+            done
+            return 1
+          }
+
+          docker volume create "$volume_name"
+          docker run --detach \
+            --name "$container_name" \
+            --publish 18080:80 \
+            --volume "$volume_name:/app/data" \
+            "fantetic-${{ matrix.name }}:${{ github.sha }}"
+
+          wait_until_ready
+          curl --fail --silent --show-error http://127.0.0.1:18080/ > /dev/null
+          docker exec "$container_name" touch /app/data/.delivery-smoke
+
+          docker restart "$container_name"
+          wait_until_ready
+          docker exec "$container_name" test -f /app/data/.delivery-smoke
+
+          docker stop --time 20 "$container_name"
+          exit_code="$(docker inspect --format '{{.State.ExitCode}}' "$container_name")"
+          if [ "$exit_code" -ne 0 ]; then
+            echo "::error::All-in-one container exited with status $exit_code after SIGTERM."
+            exit 1
+          fi
       - name: Scan image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:

@@ -3,7 +3,7 @@ const { resolve } = require('node:path');
 const { gzipSync } = require('node:zlib');
 
 const DEFAULT_BUDGET_BYTES = Object.freeze({
-  javascript: 450 * 1024,
+  javascript: 300 * 1024,
   css: 48 * 1024,
 });
 

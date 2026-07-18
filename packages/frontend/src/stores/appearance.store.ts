@@ -6,7 +6,8 @@ import { useDeviceDetection } from '../composables/useDeviceDetection';
 import type { ITheme } from '@xterm/xterm';
 import type { TerminalTheme } from '../types/terminal-theme.types';
 import type { AppearanceSettings, UpdateAppearanceDto } from '../types/appearance.types';
-import { darkUiTheme, defaultXtermTheme, defaultUiTheme } from '../features/appearance/config/default-themes';
+import { darkUiTheme, defaultUiTheme } from '../features/appearance/config/default-themes';
+import { resolveTerminalTheme } from '../utils/terminalThemeFallback';
 import {
     createUiThemeModeUpdate,
     readUiThemeMode,
@@ -74,16 +75,11 @@ export const useAppearanceStore = defineStore('appearance', () => {
 
     // 当前应用的终端主题对象 (ITheme)
     const currentTerminalTheme = computed<ITheme>(() => {
-        const activeId = activeTerminalThemeId.value; // number | null | undefined
-        if (activeId === null || activeId === undefined || allTerminalThemes.value.length === 0) {
-             // 如果没有激活 ID 或列表为空，查找默认主题
-             // TODO: 需要确认默认主题的识别方式 (preset_key='default' 或 name='默认')
-             const defaultTheme = allTerminalThemes.value.find(t => t.name === '默认'); // 假设按名称查找
-             return defaultTheme ? defaultTheme.themeData : defaultXtermTheme;
-        }
-        // 根据数字 ID 查找 (需要将 theme._id 转回数字比较)
-        const activeTheme = allTerminalThemes.value.find(t => parseInt(t._id ?? '-1', 10) === activeId);
-        return activeTheme ? activeTheme.themeData : defaultXtermTheme; // 找不到也回退到 xterm 默认
+        return resolveTerminalTheme(
+            allTerminalThemes.value,
+            activeTerminalThemeId.value,
+            currentUiThemeMode.value,
+        );
     });
 
     // Effective terminal theme, considering preview
@@ -92,13 +88,11 @@ export const useAppearanceStore = defineStore('appearance', () => {
             return previewTerminalThemeData.value;
         }
         // Fallback to the currently set theme if not previewing
-        const activeId = activeTerminalThemeId.value;
-        if (activeId === null || activeId === undefined || allTerminalThemes.value.length === 0) {
-            const defaultPresetTheme = allTerminalThemes.value.find(t => t.name === '默认'); // Adjust if default theme identified differently
-            return defaultPresetTheme ? defaultPresetTheme.themeData : defaultXtermTheme;
-        }
-        const activeSetTheme = allTerminalThemes.value.find(t => parseInt(t._id ?? '-1', 10) === activeId);
-        return activeSetTheme ? activeSetTheme.themeData : defaultXtermTheme;
+        return resolveTerminalTheme(
+            allTerminalThemes.value,
+            activeTerminalThemeId.value,
+            currentUiThemeMode.value,
+        );
     });
 
     // 当前终端字体设置

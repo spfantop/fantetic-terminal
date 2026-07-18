@@ -4,6 +4,37 @@ export type GatewayHealthState = {
   guacamoleReady: boolean;
 };
 
+export type GatewayReadiness = {
+  isReady: () => boolean;
+  markReady: () => void;
+  markUnavailable: () => void;
+};
+
+type GatewayLifecycleSource = {
+  on: (event: 'error' | 'close', listener: () => void) => unknown;
+};
+
+export const createGatewayReadiness = (): GatewayReadiness => {
+  let ready = false;
+  return {
+    isReady: () => ready,
+    markReady: () => {
+      ready = true;
+    },
+    markUnavailable: () => {
+      ready = false;
+    },
+  };
+};
+
+export const bindGatewayReadinessLifecycle = (
+  server: GatewayLifecycleSource,
+  readiness: GatewayReadiness,
+): void => {
+  server.on('error', readiness.markUnavailable);
+  server.on('close', readiness.markUnavailable);
+};
+
 export const isGuacdReachable = ({
   host,
   port,

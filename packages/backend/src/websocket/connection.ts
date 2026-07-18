@@ -34,6 +34,7 @@ import { readOwnedClientState } from './session-access';
 import { BoundedTaskQueue } from './bounded-task-queue';
 import { installWebSocketErrorSanitizer } from './error-sanitizer';
 import { createLogger } from '../logging/logger';
+import { backendMetrics } from '../observability/metrics';
 
 const logger = createLogger('WebSocketConnection');
 
@@ -539,6 +540,7 @@ export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendServ
                     }
                 });
                 if (!accepted && ws.readyState === WebSocket.OPEN) {
+                    backendMetrics.recordWebSocketQueueRejected();
                     ws.send(JSON.stringify({ type: 'error', payload: '消息处理队列已超载，连接已关闭' }));
                     ws.close(1013, 'message queue overloaded');
                 }

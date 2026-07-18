@@ -23,8 +23,7 @@ import { useDialogStore } from '../stores/dialog.store';
 import i18n from '../i18n';
 import type { Terminal as XtermTerminal } from '@xterm/xterm';
 import {
-  useWorkspaceEventSubscriber,
-  useWorkspaceEventOff,
+  createWorkspaceEventSubscriptionRegistry,
   type WorkspaceEventPayloads
 } from '../composables/workspaceEvents';
 import type { WebSocketDependencies } from '../composables/useSftpActions'; 
@@ -1116,47 +1115,11 @@ onBeforeUnmount(() => {
   resetFullscreenEscPressCount();
   unlockFullscreenKeyboard();
   sessionStore.cleanupAllSessions();
-
-  // +++ 取消订阅工作区事件 +++
-  unsubscribeFromWorkspaceEvents('terminal:sendCommand', handleTerminalSendCommandEvent);
-  unsubscribeFromWorkspaceEvents('terminal:input', handleTerminalInput);
-  unsubscribeFromWorkspaceEvents('terminal:resize', handleTerminalResize);
-  unsubscribeFromWorkspaceEvents('terminal:ready', handleTerminalReady);
-  unsubscribeFromWorkspaceEvents('terminal:clear', handleClearTerminal);
-  unsubscribeFromWorkspaceEvents('terminal:scrollToBottomRequest', handleScrollToBottomRequest);
-
-  unsubscribeFromWorkspaceEvents('editor:closeTab', (payload) => handleCloseEditorTab(payload.tabId));
-  unsubscribeFromWorkspaceEvents('editor:activateTab', (payload) => handleActivateEditorTab(payload.tabId));
-  unsubscribeFromWorkspaceEvents('editor:updateContent', handleUpdateEditorContent);
-  unsubscribeFromWorkspaceEvents('editor:saveTab', (payload) => handleSaveEditorTab(payload.tabId));
-  unsubscribeFromWorkspaceEvents('editor:changeEncoding', handleChangeEncoding);
-  unsubscribeFromWorkspaceEvents('editor:closeOtherTabs', (payload) => handleCloseOtherEditorTabs(payload.tabId));
-  unsubscribeFromWorkspaceEvents('editor:closeTabsToRight', (payload) => handleCloseEditorTabsToRight(payload.tabId));
-  unsubscribeFromWorkspaceEvents('editor:closeTabsToLeft', (payload) => handleCloseEditorTabsToLeft(payload.tabId));
-  unsubscribeFromWorkspaceEvents('editor:updateScrollPosition', handleEditorScrollPositionUpdate); // +++ 取消订阅滚动位置更新事件 +++
- 
-  // 移除对 connection:connect 事件的监听，以避免重复创建会话
-  // unsubscribeFromWorkspaceEvents('connection:connect', (payload) => handleConnectRequest(payload.connectionId));
-  unsubscribeFromWorkspaceEvents('connection:openNewSession', (payload) => handleOpenNewSession(payload.connectionId));
-  unsubscribeFromWorkspaceEvents('connection:requestAdd', handleRequestAddConnection);
-  unsubscribeFromWorkspaceEvents('connection:requestEdit', (payload) => handleRequestEditConnection(payload.connectionInfo));
-
-  unsubscribeFromWorkspaceEvents('ui:toggleWorkspaceSplit', handleToggleWorkspaceSplitEvent);
-
-  unsubscribeFromWorkspaceEvents('session:activate', handleSessionActivateEvent);
-  unsubscribeFromWorkspaceEvents('session:close', (payload) => sessionStore.closeSession(payload.sessionId));
-  unsubscribeFromWorkspaceEvents('session:closeOthers', (payload) => handleCloseOtherSessions(payload.targetSessionId));
-  unsubscribeFromWorkspaceEvents('session:closeToRight', (payload) => handleCloseSessionsToRight(payload.targetSessionId));
-  unsubscribeFromWorkspaceEvents('session:closeToLeft', (payload) => handleCloseSessionsToLeft(payload.targetSessionId));
-  unsubscribeFromWorkspaceEvents('session:popOut', handlePopOutSession);
-  unsubscribeFromWorkspaceEvents('session:fullscreen', handleFullscreenSessionEvent);
-  unsubscribeFromWorkspaceEvents('ui:openLayoutConfigurator', handleOpenLayoutConfigurator);
-  unsubscribeFromWorkspaceEvents('fileManager:openModalRequest', handleFileManagerOpenRequest); // +++ 取消订阅文件管理器打开请求 +++
-  unsubscribeFromWorkspaceEvents('quickCommand:executeProcessed', handleQuickCommandExecuteProcessed);
+  workspaceEventSubscriptions.disposeAll();
 });
 
-const subscribeToWorkspaceEvents = useWorkspaceEventSubscriber(); // +++ 定义订阅和取消订阅函数 +++
-const unsubscribeFromWorkspaceEvents = useWorkspaceEventOff();
+const workspaceEventSubscriptions = createWorkspaceEventSubscriptionRegistry();
+const subscribeToWorkspaceEvents = workspaceEventSubscriptions.subscribe;
 
  // --- 本地方法 (仅处理 UI 状态) ---
  const handleRequestAddConnection = () => {
@@ -1565,6 +1528,7 @@ const PopoutFileManagerModal = {
     const modalContentRef = ref<HTMLElement | null>(null);
     const propsMap = shallowRef<Map<string, FileManagerModalProps>>(new Map());
     const currentSessionId = ref<string | null>(null);
+    let disposeOpenModalSubscription = () => {};
     const { centerDialog, startDialogDrag } = useDraggableDialog({
       rootRef: modalRootRef,
       dialogRef: modalContentRef,
@@ -1587,11 +1551,11 @@ const PopoutFileManagerModal = {
     };
 
     onMounted(() => {
-      subscribeToWorkspaceEvents('fileManager:openModalRequest', openModal);
+      disposeOpenModalSubscription = subscribeToWorkspaceEvents('fileManager:openModalRequest', openModal);
     });
 
     onBeforeUnmount(() => {
-      unsubscribeFromWorkspaceEvents('fileManager:openModalRequest', openModal);
+      disposeOpenModalSubscription();
     });
 
     return () => {

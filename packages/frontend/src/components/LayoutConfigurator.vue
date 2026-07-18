@@ -11,6 +11,7 @@ import { useConfirmDialog } from '../composables/useConfirmDialog';
 import { useAlertDialog } from '../composables/useAlertDialog';
 import { useDraggableDialog } from '../composables/useDraggableDialog';
 import { createLayoutEditorTree } from '../utils/layoutPanes';
+import { useDialogFocus } from '../composables/useDialogFocus';
 
 
 
@@ -47,6 +48,7 @@ const originalSidebarPanes: Ref<{ left: PaneName[], right: PaneName[] }> = ref({
 // --- Dialog State ---
 const dialogRootRef = ref<HTMLElement | null>(null);
 const dialogRef = ref<HTMLElement | null>(null);
+const dialogCloseButtonRef = ref<HTMLElement | null>(null);
 const { centerDialog, startDialogDrag } = useDraggableDialog({
   rootRef: dialogRootRef,
   dialogRef,
@@ -201,6 +203,13 @@ const closeDialog = async () => {
     emit('close');
   }
 };
+
+useDialogFocus({
+  isOpen: computed(() => props.isVisible),
+  dialogRef,
+  initialFocusRef: dialogCloseButtonRef,
+  onEscape: () => { void closeDialog(); },
+});
 
 const saveLayout = async () => { // Make async
   debugLog('[LayoutConfigurator] Attempting to save layout...');
@@ -382,11 +391,11 @@ const handleAvailablePaneDragEnd = (event: any) => {
 
 <template>
   <div ref="dialogRootRef" v-if="isVisible" class="fixed inset-0 bg-overlay flex justify-center items-center z-[1000]" @click.self="closeDialog">
-    <div ref="dialogRef" class="layout-configurator-dialog bg-background text-foreground rounded-lg shadow-xl w-auto h-auto min-w-[800px] min-h-[600px] max-w-[95vw] max-h-[90vh] flex flex-col overflow-auto relative pointer-events-auto cursor-default">
+    <div ref="dialogRef" class="layout-configurator-dialog bg-background text-foreground rounded-lg shadow-xl w-auto h-auto min-w-[800px] min-h-[600px] max-w-[95vw] max-h-[90vh] flex flex-col overflow-auto relative pointer-events-auto cursor-default" role="dialog" aria-modal="true" aria-labelledby="layout-configurator-title" tabindex="-1">
 
       <header class="layout-configurator-drag-handle flex justify-between items-center p-4 border-b border-border bg-header" @pointerdown="startDialogDrag">
-        <h2 class="text-lg font-semibold">{{ t('layoutConfigurator.title', '布局管理器') }}</h2>
-        <button class="bg-transparent border-none text-2xl cursor-pointer text-text-secondary hover:text-foreground leading-none p-0" @pointerdown.stop @click="closeDialog" :title="t('common.close', '关闭')">&times;</button>
+        <h2 id="layout-configurator-title" class="text-lg font-semibold">{{ t('layoutConfigurator.title', '布局管理器') }}</h2>
+        <button ref="dialogCloseButtonRef" type="button" class="bg-transparent border-none text-2xl cursor-pointer text-text-secondary hover:text-foreground leading-none p-0" @pointerdown.stop @click="closeDialog" :aria-label="t('common.close', '关闭')" :title="t('common.close', '关闭')">&times;</button>
       </header>
 
       <!-- Grid Layout -->

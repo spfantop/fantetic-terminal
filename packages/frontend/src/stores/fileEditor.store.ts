@@ -1,11 +1,12 @@
 import { debugLog, debugLogLazy } from '../composables/useDebugLog';
 import { ref, computed, readonly, watch, nextTick } from 'vue'; 
-import { defineStore } from 'pinia';
+import { defineStore, storeToRefs } from 'pinia';
 import { useI18n } from 'vue-i18n';
 import { useSessionStore } from './session.store'; 
 import type { SaveStatus, SftpReadFileSuccessPayload } from '../types/sftp.types'; 
 import * as iconv from '@vscode/iconv-lite-umd'; 
 import { Buffer } from 'buffer/'; 
+import { useGlobalOverlayStore } from './globalOverlay.store';
 
 // --- 类型定义 ---
 // 文件信息，用于打开文件操作
@@ -104,14 +105,13 @@ const decodeRawContent = (rawContentBase64: string, encoding: string): string =>
 export const useFileEditorStore = defineStore('fileEditor', () => {
     const { t } = useI18n();
     const sessionStore = useSessionStore();
+    const overlayStore = useGlobalOverlayStore();
+    const { popupTrigger, popupFileInfo } = storeToRefs(overlayStore);
 
     // --- 多标签状态 ---
     const tabs = ref(new Map<string, FileTab>()); // 存储所有打开的标签页 (使用 FileTab)
     const activeTabId = ref<string | null>(null); // 当前激活的标签页 ID
     // const editorVisibleState = ref<'visible' | 'minimized' | 'closed'>('closed'); // 移除，面板可见性由布局控制
-    const popupTrigger = ref(0); // 用于触发弹窗显示的信号
-    const popupFileInfo = ref<{ filePath: string; sessionId: string } | null>(null); // 存储弹窗文件信息
-
     // --- 计算属性 ---
     const orderedTabs = computed(() => Array.from(tabs.value.values())); // 获取标签页数组，用于渲染
     const activeTab = computed(() => {
@@ -137,8 +137,7 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
     // 修改：triggerPopup 接收文件信息并存储
     const triggerPopup = (filePath: string, sessionId: string) => {
         debugLog(`[文件编辑器 Store] Triggering popup for ${filePath} in session ${sessionId}.`);
-        popupFileInfo.value = { filePath, sessionId };
-        popupTrigger.value++; // 增加触发器值以通知监听者
+        overlayStore.openFileEditor(filePath, sessionId);
     };
 
     // 移除内部的 getSftpManager 辅助函数，将直接使用 sessionStore.getOrCreateSftpManager
@@ -165,7 +164,7 @@ export const useFileEditorStore = defineStore('fileEditor', () => {
             debugLog(`[文件编辑器 Store] 标签页 ${tabId} 已存在，激活它。`);
             setActiveTab(tabId);
             // 触发弹窗 (如果设置允许)
-            popupTrigger.value++;
+            overlayStore.notifyFileEditor();
             return;
         }
 

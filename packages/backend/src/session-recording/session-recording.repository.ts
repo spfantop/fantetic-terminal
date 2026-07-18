@@ -58,6 +58,12 @@ export const readSessionRecording = async (id: string): Promise<SessionRecording
   return getDb(db, 'SELECT * FROM session_recordings WHERE id = ?', [id]);
 };
 
+export const listSessionRecordingsForCapacity = async (): Promise<SessionRecordingRow[]> => {
+  const db = await getDbInstance();
+  return allDb<SessionRecordingRow>(db, `SELECT * FROM session_recordings
+    WHERE status != 'active' ORDER BY COALESCE(ended_at, started_at) ASC`);
+};
+
 export const deleteSessionRecording = async (id: string): Promise<boolean> => {
   const db = await getDbInstance();
   return (await runDb(db, 'DELETE FROM session_recordings WHERE id = ?', [id])).changes > 0;

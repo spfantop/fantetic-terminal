@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict');
+const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -16,6 +17,7 @@ const singleImageSupervisor = read('packages/single-image/supervisor.js');
 const singleImageNginxConfig = read('packages/single-image/nginx.conf');
 const qualityWorkflow = read('.github/workflows/quality.yml');
 const dockerPublishWorkflow = read('.github/workflows/docker-publish.yml');
+const securityWorkflow = read('.github/workflows/security.yml');
 const releaseGuide = read('docs/RELEASE.md');
 const dockerPublishGuide = read('docs/DOCKER_IMAGE_PUBLISH.md');
 const dockerCompose = read('docker-compose.yml');
@@ -45,8 +47,14 @@ assert.match(workflow, /APPLE_API_ISSUER:/);
 assert.match(workflow, /APPLE_TEAM_ID:/);
 assert.doesNotMatch(workflow, /Production desktop releases require platform signing credentials/);
 assert.doesNotMatch(workflow, /^\s*CSC_LINK:\s*\$\{\{[^\n]*\|\|\s*''/m);
-assert.match(dockerPublishWorkflow, /branches:\s*\[main\]/);
 assert.match(dockerPublishWorkflow, /tags:\s*\n\s*- 'v\*'/);
+assert.doesNotMatch(
+  dockerPublishWorkflow,
+  /branches:\s*\[main\]/,
+  'Docker images must only be published for release tags or explicit manual runs',
+);
+assert.match(dockerPublishWorkflow, /workflow_dispatch:\s*\n\s*inputs:\s*\n\s*version:/);
+assert.match(dockerPublishWorkflow, /Release version must use semantic versioning/);
 assert.match(dockerPublishWorkflow, /DOCKERHUB_USERNAME/);
 assert.match(dockerPublishWorkflow, /DOCKERHUB_TOKEN/);
 assert.match(dockerPublishWorkflow, /linux\/amd64,linux\/arm64/);
@@ -66,7 +74,10 @@ assert.doesNotMatch(dockerPublishWorkflow, /type=sha,prefix=sha-/);
 assert.doesNotMatch(dockerPublishWorkflow, /value=latest,enable=/);
 assert.match(dockerPublishWorkflow, /name: Remove obsolete Docker Hub tags/);
 assert.match(dockerPublishWorkflow, /if: startsWith\(github\.ref, 'refs\/tags\/v'\)/);
-assert.match(dockerPublishWorkflow, /RELEASE_VERSION: \$\{\{ github\.ref_name \}\}/);
+assert.match(
+  dockerPublishWorkflow,
+  /RELEASE_VERSION: \$\{\{ github\.event_name == 'workflow_dispatch' && inputs\.version \|\| github\.ref_name \}\}/,
+);
 assert.match(dockerPublishWorkflow, /https:\/\/hub\.docker\.com\/v2\/auth\/token/);
 assert.match(dockerPublishWorkflow, /\{identifier: \$identifier, secret: \$secret\}/);
 assert.match(dockerPublishWorkflow, /\.access_token \/\/ empty/);
@@ -105,6 +116,8 @@ assert.match(backendDockerfile, /rm -rf \/usr\/local\/lib\/node_modules\/npm/);
 assert.match(read('packages\/backend\/entrypoint\.sh'), /exec gosu node/);
 assert.match(backendDockerfile, /HEALTHCHECK/);
 assert.match(frontendDockerfile, /HEALTHCHECK/);
+assert.match(backendDockerfile, /HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3/);
+assert.match(frontendDockerfile, /HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3/);
 assert.match(gatewayDockerfile, /COPY package\.json package-lock\.json/);
 assert.match(gatewayDockerfile, /RUN npm ci/);
 assert.match(gatewayDockerfile, /FROM node:20 AS production-dependencies/);
@@ -124,6 +137,7 @@ assert.match(gatewayDockerfile, /COPY --from=node-runtime \/usr\/local\/bin\/nod
 assert.doesNotMatch(gatewayDockerfile, /apk add --no-cache nodejs/);
 assert.match(gatewayDockerfile, /rm -rf \.\/node_modules\/esbuild \.\/node_modules\/@esbuild/);
 assert.match(gatewayDockerfile, /rm -f \.\/node_modules\/\.bin\/esbuild/);
+assert.match(gatewayDockerfile, /HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3/);
 
 assert.match(qualityWorkflow, /pull_request:/);
 assert.match(qualityWorkflow, /Run full behavior suite/);
@@ -150,6 +164,11 @@ assert.equal(electronPackage.build.mac.notarize, true);
 assert.equal(electronPackage.build.mac.hardenedRuntime, true);
 assert.doesNotMatch(dockerCompose, /:\?Set (ENCRYPTION_KEY|SESSION_SECRET|REMOTE_GATEWAY_SHARED_SECRET)/);
 assert.match(dockerCompose, /APP_BACKEND_DATA_PATH: \/app\/data/);
+assert.match(dockerCompose, /RECORDING_RETENTION_DAYS: "\$\{RECORDING_RETENTION_DAYS:-0\}"/);
+assert.match(dockerCompose, /RECORDING_MAX_TOTAL_BYTES: "\$\{RECORDING_MAX_TOTAL_BYTES:-0\}"/);
+assert.match(dockerCompose, /RECORDING_MIN_FREE_BYTES: "\$\{RECORDING_MIN_FREE_BYTES:-536870912\}"/);
+assert.match(dockerCompose, /HEALTH_MIN_FREE_BYTES: "\$\{HEALTH_MIN_FREE_BYTES:-104857600\}"/);
+assert.match(dockerCompose, /METRICS_TOKEN: "\$\{METRICS_TOKEN:-\}"/);
 assert.match(dockerCompose, /\.\/data:\/app\/data:ro/);
 assert.match(dockerCompose, /image:\s*spfantop\/fantetic-terminal-frontend:latest/);
 assert.match(dockerCompose, /image:\s*spfantop\/fantetic-terminal-backend:latest/);
@@ -184,7 +203,15 @@ assert.match(
 assert.match(singleImageDockerfile, /REMOTE_GATEWAY_API_BASE_DOCKER=http:\/\/127\.0\.0\.1:9090/);
 assert.match(singleImageDockerfile, /REMOTE_GATEWAY_WS_URL_DOCKER=ws:\/\/127\.0\.0\.1:8080/);
 assert.match(singleImageDockerfile, /ENTRYPOINT \["\/usr\/bin\/tini", "--", "node", "\/app\/supervisor\.js"\]/);
-assert.match(singleImageDockerfile, /HEALTHCHECK/);
+assert.match(singleImageDockerfile, /HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3/);
+assert.match(singleImageSupervisor, /ALL_IN_ONE_STARTUP_TIMEOUT_MS/);
+assert.match(singleImageSupervisor, /180_000/);
+assert.match(securityWorkflow, /name: Smoke test all-in-one runtime/);
+assert.match(securityWorkflow, /matrix\.smoke/);
+assert.match(securityWorkflow, /docker restart "\$container_name"/);
+assert.match(securityWorkflow, /docker stop --time 20 "\$container_name"/);
+assert.match(securityWorkflow, /\.delivery-smoke/);
+assert.match(securityWorkflow, /State\.ExitCode/);
 assert.match(singleImageSupervisor, /chroot/);
 assert.match(singleImageSupervisor, /REMOTE_GATEWAY_SHARED_SECRET/);
 assert.match(singleImageSupervisor, /127\.0\.0\.1/);
@@ -194,5 +221,16 @@ assert.match(singleImageNginxConfig, /access_log \/dev\/stdout fantetic_json/);
 assert.match(singleImageNginxConfig, /error_log \/dev\/stderr warn/);
 assert.match(singleImageNginxConfig, /\$uri/);
 assert.doesNotMatch(singleImageNginxConfig, /\$request_uri/);
+
+const supervisorBehaviorResult = spawnSync(
+  process.execPath,
+  [path.join(__dirname, 'single-image-supervisor.behavior-test.js')],
+  { cwd: rootDir, encoding: 'utf8' },
+);
+assert.equal(
+  supervisorBehaviorResult.status,
+  0,
+  supervisorBehaviorResult.stderr || supervisorBehaviorResult.stdout,
+);
 
 console.log('Delivery pipeline behavior checks passed');

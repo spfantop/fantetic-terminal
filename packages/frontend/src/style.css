@@ -225,7 +225,7 @@ hr {
 input:focus, textarea:focus, select:focus {
     border-color: var(--input-focus-border-color) !important; /* Use new variable, !important might be needed depending on specificity */
     outline: 0;
-    box-shadow: 0 0 0 3px rgba(var(--input-focus-glow-rgb), 0.2) !important; /* Use new variable, !important might be needed */
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--input-focus-glow) 20%, transparent) !important;
 }
 
 /* Ensure icons inside primary buttons are white */
@@ -244,16 +244,15 @@ button.bg-primary:hover .fab {
   color: white !important; /* Keep white on hover */
 }
 
-/* 移除按钮的聚焦光圈 */
 button:focus {
   outline: none !important;
-  box-shadow: none !important; /* 同时移除 box-shadow 以防其被用于聚焦指示 */
+  box-shadow: none !important;
 }
 
-/* 针对使用 :focus-visible 的浏览器 */
 button:focus-visible {
-  outline: none !important;
-  box-shadow: none !important;
+  outline: 2px solid var(--link-active-color) !important;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--input-focus-glow) 20%, transparent) !important;
 }
 /* 当鼠标悬停在按钮上时，鼠标指针变为手型 */
 button:hover {

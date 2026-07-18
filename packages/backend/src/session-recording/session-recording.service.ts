@@ -15,9 +15,17 @@ import {
   deleteSessionRecording,
   insertSessionRecording,
   listSessionRecordings,
+  listSessionRecordingsForCapacity,
   readSessionRecording,
   SessionRecordingRow,
 } from './session-recording.repository';
+import {
+  isRecordingPathInsideRoot,
+  readAvailableBytes,
+  resolveRecordingCapacityConfig,
+  selectRecordingsForPrune,
+} from './recording-capacity';
+import { backendMetrics } from '../observability/metrics';
 import { settingsRepository } from '../settings/settings.repository';
 import { createLogger } from '../logging/logger';
 import type { SessionRecordingListQuery } from '@fantetic-terminal/contracts';
@@ -37,12 +45,61 @@ export interface SessionRecordingIdentity {
 
 export type ActiveSessionRecorder = ReturnType<typeof createSessionRecorder>;
 const recordingRoot = path.join(getAppDataPath(), 'session-recordings');
+let capacityEnforcementPromise: Promise<boolean> | undefined;
+
+const enforceRecordingCapacityInternal = async (): Promise<boolean> => {
+  fs.mkdirSync(recordingRoot, { recursive: true });
+  const config = resolveRecordingCapacityConfig();
+  const pruneList = selectRecordingsForPrune(
+    (await listSessionRecordingsForCapacity()).map(recording => ({
+      id: recording.id,
+      status: recording.status,
+      endedAt: recording.ended_at,
+      byteCount: recording.byte_count,
+      relativePath: recording.relative_path,
+    })),
+    config,
+  );
+  for (const recording of pruneList) {
+    if (!isRecordingPathInsideRoot(recordingRoot, recording.relativePath)) {
+      logger.warn('录像路径超出存储目录，已跳过自动清理', { recordingId: recording.id });
+      continue;
+    }
+    await fs.promises.rm(path.resolve(recordingRoot, recording.relativePath), { force: true });
+    await deleteSessionRecording(recording.id);
+    backendMetrics.recordRecordingCapacityOutcome('pruned');
+  }
+  const availableBytes = readAvailableBytes(recordingRoot);
+  backendMetrics.setDataFreeBytes(availableBytes);
+  if (availableBytes < config.minimumFreeBytes) {
+    backendMetrics.recordRecordingCapacityOutcome('skipped_low_disk');
+    logger.warn('可用磁盘空间不足，已跳过新增会话录像', {
+      availableBytes,
+      minimumFreeBytes: config.minimumFreeBytes,
+    });
+    return false;
+  }
+  return true;
+};
+
+const enforceRecordingCapacity = (): Promise<boolean> => {
+  if (capacityEnforcementPromise) return capacityEnforcementPromise;
+  capacityEnforcementPromise = enforceRecordingCapacityInternal()
+    .finally(() => { capacityEnforcementPromise = undefined; });
+  return capacityEnforcementPromise;
+};
 
 export const startSessionRecording = async (
   identity: SessionRecordingIdentity,
 ): Promise<ActiveSessionRecorder | undefined> => {
   if (identity.clientKind === 'mobile') return undefined;
   if (await settingsRepository.getSetting(SESSION_RECORDING_ENABLED_KEY) === 'false') return undefined;
+  try {
+    if (!await enforceRecordingCapacity()) return undefined;
+  } catch (error) {
+    logger.error('检查会话录像容量失败，已跳过新增录像', { error });
+    return undefined;
+  }
   const id = uuidv4();
   const startedAt = Date.now();
   let endedAt = startedAt;
@@ -63,6 +120,7 @@ export const startSessionRecording = async (
       );
     },
   });
+  backendMetrics.recordRecordingCapacityOutcome('started');
   await insertSessionRecording({
     id,
     user_id: identity.userId ?? null,
@@ -89,7 +147,10 @@ export const startSessionRecording = async (
 
 export const finishSessionRecording = async (recorder?: ActiveSessionRecorder): Promise<void> => {
   if (!recorder) return;
-  try { await recorder.finish(Date.now()); } catch (error) {
+  try {
+    await recorder.finish(Date.now());
+    await enforceRecordingCapacity();
+  } catch (error) {
     logger.error('结束录像失败', { error });
   }
 };

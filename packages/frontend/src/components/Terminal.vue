@@ -1465,9 +1465,14 @@ const terminalInnerStyle = computed(() => (
 }
 
 .terminal-search-popover button.is-active {
-  border-color: var(--primary-color);
-  background: color-mix(in srgb, var(--primary-color) 24%, var(--app-bg-color));
-  color: var(--primary-color);
+  border-color: var(--link-active-color);
+  background: color-mix(in srgb, var(--link-active-color) 24%, var(--app-bg-color));
+  color: var(--link-active-color);
+}
+
+.terminal-search-popover button:focus-visible {
+  outline: 2px solid var(--link-active-color);
+  outline-offset: 2px;
 }
 
 .terminal-zoom-popover__value {

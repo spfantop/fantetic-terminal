@@ -3,7 +3,12 @@ import GuacamoleLite from 'guacamole-lite';
 import express, { Request, Response } from 'express';
 import http from 'http';
 import crypto from 'crypto';
-import { createHealthSnapshot, isGuacdReachable } from './health';
+import {
+    bindGatewayReadinessLifecycle,
+    createGatewayReadiness,
+    createHealthSnapshot,
+    isGuacdReachable,
+} from './health';
 import { createGatewayTokenClaims, GatewayTokenReplayGuard, isAuthorizedGatewayRequest } from './security';
 import { encryptGatewayToken } from './token';
 import { createGatewayLogger } from './logging';
@@ -73,7 +78,7 @@ const clientOptions = {
 };
 
 let guacServer: any;
-let guacamoleReady = false;
+const gatewayReadiness = createGatewayReadiness();
 const tokenReplayGuard = new GatewayTokenReplayGuard();
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
 
@@ -125,12 +130,16 @@ try {
             }
         },
     });
-    guacamoleReady = true;
+    gatewayReadiness.markReady();
     logger.info('GuacamoleLite 初始化成功');
 
     if (guacServer.on) {
+        bindGatewayReadinessLifecycle(guacServer, gatewayReadiness);
         guacServer.on('error', (error: Error) => {
             logger.error('GuacamoleLite 服务器错误', { error });
+        });
+        guacServer.on('close', () => {
+            logger.warn('GuacamoleLite 服务器已关闭');
         });
         guacServer.on('connection', (client: any) => {
             const clientId = client.id || '未知客户端ID';
@@ -156,7 +165,8 @@ app.get('/health/live', (_req: Request, res: Response): void => {
 });
 
 app.get(['/health', '/health/ready'], async (_req: Request, res: Response): Promise<void> => {
-    const guacdReachable = guacamoleReady && await isGuacdReachable({ host: GUACD_HOST, port: GUACD_PORT });
+    const guacdReachable = gatewayReadiness.isReady()
+        && await isGuacdReachable({ host: GUACD_HOST, port: GUACD_PORT });
     const snapshot = createHealthSnapshot({ guacamoleReady: guacdReachable });
     res.status(guacdReachable ? 200 : 503).json(snapshot);
 });
@@ -257,7 +267,7 @@ apiServer.listen(REMOTE_GATEWAY_API_PORT, () => {
 const gracefulShutdown = (signal: string) => {
     logger.info('收到关闭信号，开始优雅关闭', { signal });
 
-  guacamoleReady = false;
+  gatewayReadiness.markUnavailable();
   let guacClosed = false;
   let apiClosed = false;
 

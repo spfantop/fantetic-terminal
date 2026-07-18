@@ -21,7 +21,9 @@ assert.match(component, /\.remote-desktop-recording-host :deep\(div\[style\*="po
 assert.doesNotMatch(component, /<select v-model\.number="speed" :disabled="isRemoteDesktopRecording">/);
 assert.match(component, /startRemoteDesktopSpeedController/);
 assert.match(component, /remoteDesktopRecording\?\.seek\(targetPosition\)/);
-assert.match(component, /if \(remoteDesktopSpeedSeekInProgress\) return;/);
+assert.match(component, /recording\.onseek = \(position: number\) => \{[\s\S]*remoteDesktopSpeedSeekInProgress = false;[\s\S]*reanchorRemoteDesktopSpeedController\(position\)/);
+assert.match(component, /recording\.onpause = \(\) => \{[\s\S]*remoteDesktopSpeedSeekInProgress = false;/);
+assert.match(component, /\}, 250\);/);
 assert.match(component, /recordingPlayerExpanded/);
 assert.match(component, /recording-player--expanded/);
 assert.match(component, /fa-window-maximize/);

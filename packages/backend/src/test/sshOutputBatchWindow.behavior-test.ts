@@ -18,7 +18,7 @@ assert.match(outputBufferSource, /INTERACTIVE_SSH_OUTPUT_FLUSH_BYTES\s*=\s*1024/
 assert.match(outputBufferSource, /queueMicrotask\(\(\)\s*=>\s*flushSshOutput\(state\)\)/);
 assert.match(outputBufferSource, /setTimeout\(\(\)\s*=>\s*flushSshOutput\(state\),\s*SSH_OUTPUT_BATCH_WINDOW_MS\s*\)/);
 
-assert.match(heartbeatSource, /HEARTBEAT_MISSED_LIMIT\s*=\s*2/);
+assert.match(heartbeatSource, /HEARTBEAT_MISSED_LIMIT\s*=\s*3/);
 assert.match(heartbeatSource, /missedHeartbeatCount/);
 
 assert.match(websocketSource, /threshold:\s*64\s*\*\s*1024/);

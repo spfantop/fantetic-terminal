@@ -1,5 +1,6 @@
 // packages/frontend/src/composables/workspaceEvents.ts
 import mitt from 'mitt';
+import type { Handler } from 'mitt';
 import type { ConnectionInfo } from '../stores/connections.store';
 import type { Terminal as XtermTerminal } from '@xterm/xterm';
 
@@ -80,4 +81,32 @@ export function useWorkspaceEventSubscriber() {
  */
 export function useWorkspaceEventOff() {
   return workspaceEmitter.off;
+}
+
+/**
+ * 统一保管一组工作区事件订阅，确保卸载时使用原始处理器引用取消订阅。
+ */
+export function createWorkspaceEventSubscriptionRegistry() {
+  const disposerList: Array<() => void> = [];
+
+  const subscribe = <EventName extends keyof WorkspaceEventPayloads>(
+    eventName: EventName,
+    handler: Handler<WorkspaceEventPayloads[EventName]>,
+  ) => {
+    workspaceEmitter.on(eventName, handler);
+    let active = true;
+    const dispose = () => {
+      if (!active) return;
+      active = false;
+      workspaceEmitter.off(eventName, handler);
+    };
+    disposerList.push(dispose);
+    return dispose;
+  };
+
+  const disposeAll = () => {
+    disposerList.splice(0).forEach(dispose => dispose());
+  };
+
+  return { subscribe, disposeAll };
 }

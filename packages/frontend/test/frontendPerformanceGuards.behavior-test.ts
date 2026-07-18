@@ -10,7 +10,8 @@ const settings = source('views/SettingsView.vue');
 const fileEditorOverlay = source('components/FileEditorOverlay.vue');
 
 assert.doesNotMatch(main, /element-plus/);
-assert.match(app, /useFileEditorStore/);
+assert.match(app, /useGlobalOverlayStore/);
+assert.doesNotMatch(app, /useFileEditorStore|useSessionStore|useSettingsStore/);
 assert.match(app, /popupFileInfo/);
 assert.match(app, /v-if="shouldMountPopupFileEditor"/);
 assert.doesNotMatch(app, /<FileEditorOverlay v-if="showPopupFileEditorBoolean"/);

@@ -254,6 +254,18 @@ CORS_ALLOWED_ORIGINS=https://your-domain.com
 
 Use HTTPS in production. Browser APIs such as secure cookies, clipboard and Passkeys may not work correctly on non-HTTPS origins except localhost.
 
+### Recording capacity
+
+Session recording capacity controls are disabled by default, except for the minimum free-space guard:
+
+```env
+RECORDING_RETENTION_DAYS=0
+RECORDING_MAX_TOTAL_BYTES=0
+RECORDING_MIN_FREE_BYTES=536870912
+```
+
+Values of `0` disable age- and total-size-based pruning. Active recordings are never pruned. When available space is below `RECORDING_MIN_FREE_BYTES`, the backend keeps existing sessions running but skips new recordings until space is available. Monitor `fantetic_data_free_bytes` and the recording capacity/queue rejection counters through the authenticated Prometheus endpoint.
+
 ---
 
 ## Reverse Proxy Example

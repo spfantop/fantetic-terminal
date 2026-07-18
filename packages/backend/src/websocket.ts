@@ -49,7 +49,11 @@ export const initializeWebSocket = async (
     // const db = await getDbInstance(); // db instance might not be directly needed here anymore if all DB interactions are in services/handlers
 
     // 1. Initialize Heartbeat
-    const heartbeatTimer = initializeHeartbeat(wss); // Store timer to potentially clear it, though heartbeat.ts handles its own wss.on('close')
+    const heartbeatTimer = initializeHeartbeat(wss, {
+        cleanupClientConnection: sessionId => {
+            void cleanupClientConnection(sessionId);
+        },
+    }); // Store timer to potentially clear it, though heartbeat.ts handles its own wss.on('close')
 
     // 2. Initialize Upgrade Handler (handles authentication and protocol upgrade)
     initializeUpgradeHandler(server, wss, sessionParser, clientIpResolver, allowedOrigins);

@@ -17,6 +17,44 @@ firstLease.release();
 const replacementLease = acquireSingleNodeLease({ appDataPath, enabled: true, instanceId: 'replacement' });
 replacementLease.release();
 
+const staleOwnerLease = acquireSingleNodeLease({
+  appDataPath,
+  enabled: true,
+  instanceId: 'stale-owner',
+  heartbeatIntervalMs: 60_000,
+  staleAfterMs: 30_000,
+});
+const lockPath = path.join(appDataPath, 'runtime', 'single-node.lock');
+const staleLock = JSON.parse(fs.readFileSync(lockPath, 'utf8')) as { heartbeatAt: number };
+staleLock.heartbeatAt = Date.now() - 31_000;
+fs.writeFileSync(lockPath, JSON.stringify(staleLock), 'utf8');
+
+const takeoverLease = acquireSingleNodeLease({
+  appDataPath,
+  enabled: true,
+  instanceId: 'takeover',
+  heartbeatIntervalMs: 60_000,
+  staleAfterMs: 30_000,
+});
+staleOwnerLease.release();
+assert.equal(fs.existsSync(lockPath), true, 'an expired owner must not remove the replacement lease');
+takeoverLease.release();
+
+fs.mkdirSync(path.dirname(lockPath), { recursive: true });
+fs.writeFileSync(lockPath, JSON.stringify({
+  instanceId: 'crashed-owner',
+  leaseToken: 'crashed-token',
+  pid: process.pid,
+  startedAt: Date.now() - 60_000,
+  heartbeatAt: Date.now() - 60_000,
+}), 'utf8');
+const crashRecoveryLease = acquireSingleNodeLease({
+  appDataPath,
+  enabled: true,
+  instanceId: 'crash-recovery',
+});
+crashRecoveryLease.release();
+
 const disabledLease = acquireSingleNodeLease({ appDataPath, enabled: false, instanceId: 'disabled' });
 assert.equal(disabledLease.enabled, false);
 assert.equal(fs.existsSync(path.join(appDataPath, 'runtime', 'single-node.lock')), false);

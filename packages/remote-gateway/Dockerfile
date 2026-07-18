@@ -63,7 +63,7 @@ RUN rm -rf ./node_modules/esbuild ./node_modules/@esbuild \
 
 EXPOSE 9090 8081
 
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
     CMD curl -sf http://localhost:9090/health/ready > /dev/null 2>&1 || exit 1
 
 ENTRYPOINT ["/entrypoint.sh"]

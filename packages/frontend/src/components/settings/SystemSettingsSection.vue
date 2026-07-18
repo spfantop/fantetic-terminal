@@ -27,7 +27,7 @@
          </form>
       </div>
       <hr class="border-border/50"> <!-- Separator -->
-      <div v-if="isSystemAdministrator" class="settings-section-content">
+      <div v-if="isSystemAdministrator && !isMobile" class="settings-section-content">
          <h3 class="text-base font-semibold text-foreground mb-1">{{ $t('settings.sessionRecording.title') }}</h3>
          <p class="text-sm text-text-secondary mb-4">{{ $t('settings.sessionRecording.description') }}</p>
          <form @submit.prevent="handleUpdateSessionRecording" class="space-y-4">
@@ -44,7 +44,7 @@
            </div>
          </form>
       </div>
-      <hr v-if="isSystemAdministrator" class="border-border/50"> <!-- Separator -->
+      <hr v-if="isSystemAdministrator && !isMobile" class="border-border/50"> <!-- Separator -->
       <!-- Timezone Setting -->
       <div class="settings-section-content">
          <h3 class="text-base font-semibold text-foreground mb-3">{{ $t('settings.timezone.title') }}</h3>
@@ -82,11 +82,13 @@ import { computed, ref, watch } from 'vue';
 import { useSystemSettings } from '../../composables/settings/useSystemSettings';
 import { useAuthStore } from '../../stores/auth.store';
 import { isAccountFeatureAvailable } from '../../utils/runtimeConfig';
+import { useDeviceDetection } from '../../composables/useDeviceDetection';
 
 const settingsStore = useSettingsStore();
 const { settings } = storeToRefs(settingsStore); 
 const { t } = useI18n();
 const authStore = useAuthStore();
+const { isMobile } = useDeviceDetection();
 const isSystemAdministrator = computed(() => !isAccountFeatureAvailable()
   || ['super_admin', 'admin'].includes(authStore.user?.systemRole ?? ''));
 const sessionRecordingEnabled = ref(true);

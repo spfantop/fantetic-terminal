@@ -4,9 +4,7 @@ import { onMounted, watch, computed, defineAsyncComponent } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useAuthStore } from './stores/auth.store';
 import { useDeviceDetection } from './composables/useDeviceDetection';
-import { useSettingsStore } from './stores/settings.store';
-import { useSessionStore } from './stores/session.store';
-import { useFileEditorStore } from './stores/fileEditor.store';
+import { useGlobalOverlayStore } from './stores/globalOverlay.store';
 import { useFavoritePathsStore } from './stores/favoritePaths.store';
 import { storeToRefs } from 'pinia';
 import UINotificationDisplay from './components/UINotificationDisplay.vue';
@@ -28,17 +26,13 @@ const VncModal = isDesktopBuild
   ? null
   : defineAsyncComponent(() => import('./components/VncModal.vue'));
 const authStore = useAuthStore();
-const settingsStore = useSettingsStore();
-const fileEditorStore = useFileEditorStore();
-const sessionStore = useSessionStore(); // +++ 实例化 Session Store +++
+const overlayStore = useGlobalOverlayStore();
 const dialogStore = useDialogStore(); // +++ 实例化 DialogStore +++
 const { state: dialogState } = storeToRefs(dialogStore); 
 const favoritePathsStore = useFavoritePathsStore(); // +++ 实例化 favoritePathsStore +++
 const { isAuthenticated } = storeToRefs(authStore);
-const { showPopupFileEditorBoolean } = storeToRefs(settingsStore);
-const { popupFileInfo } = storeToRefs(fileEditorStore);
-const shouldMountPopupFileEditor = computed(() => showPopupFileEditorBoolean.value && popupFileInfo.value !== null);
-const { isRdpModalOpen, rdpConnectionInfo, isVncModalOpen, vncConnectionInfo } = storeToRefs(sessionStore); // +++ 获取 RDP/VNC 状态 +++
+const { popupFileInfo, isRdpModalOpen, rdpConnectionInfo, isVncModalOpen, vncConnectionInfo } = storeToRefs(overlayStore);
+const shouldMountPopupFileEditor = computed(() => popupFileInfo.value !== null);
 const { isMobile } = useDeviceDetection();
 
 const route = useRoute();
@@ -110,14 +104,14 @@ const closeAdminCenterOverlay = () => {
     <RemoteDesktopModal
       v-if="remoteDesktopFeatureAvailable && isRdpModalOpen"
       :connection="rdpConnectionInfo"
-      @close="sessionStore.closeRdpModal()"
+      @close="overlayStore.closeRdpModal()"
     />
 
     <!-- +++ 条件渲染 VNC 模态框 +++ -->
     <VncModal
       v-if="remoteDesktopFeatureAvailable && isVncModalOpen"
       :connection="vncConnectionInfo"
-      @close="sessionStore.closeVncModal()"
+      @close="overlayStore.closeVncModal()"
     />
 
     <!-- +++ 全局确认对话框 +++ -->

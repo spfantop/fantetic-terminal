@@ -3,6 +3,10 @@ import { useI18n } from 'vue-i18n'; // +++ Add import for useI18n +++
 // 从 websocket.types.ts 导入并重新导出 ConnectionStatus
 import type { ConnectionStatus as WsConnectionStatusType, MessagePayload, WebSocketMessage, MessageHandler } from '../types/websocket.types';
 import { debugLog } from './useDebugLog';
+import {
+    MAX_WEBSOCKET_RECONNECT_ATTEMPTS,
+    resolveWebSocketReconnectDelayMs,
+} from '../utils/webSocketReconnectPolicy';
 
 // 导出类型别名，以便其他模块可以使用
 export type WsConnectionStatus = WsConnectionStatusType;
@@ -53,8 +57,9 @@ export function createWebSocketConnectionManager(
     const instanceDbConnectionId = dbConnectionId; // 保存数据库连接 ID
     const getIsMarkedForSuspend = options?.getIsMarkedForSuspend; // +++ 获取回调函数 +++
     let reconnectAttempts = 0; // 重连尝试次数
-    const maxReconnectAttempts = 5; // 最大重连次数
+    const maxReconnectAttempts = MAX_WEBSOCKET_RECONNECT_ATTEMPTS;
     let reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null; // 重连定时器 ID
+    let activeConnectionGeneration = 0;
     let lastUrl = ''; // 保存上次连接的 URL
     let intentionalDisconnect = false; // 标记是否为用户主动断开
     const pendingSshInputBuffer: string[] = [];
@@ -73,6 +78,9 @@ export function createWebSocketConnectionManager(
     let activeLatencyProbeId = '';
     let activeLatencyProbeSentAt = 0;
 
+    const isCurrentConnection = (socket: WebSocket, generation: number) => (
+        ws.value === socket && activeConnectionGeneration === generation
+    );
 
     /**
      * 安全地获取状态文本的辅助函数
@@ -306,8 +314,7 @@ export function createWebSocketConnectionManager(
 
         reconnectAttempts++;
         connectionDiagnostics.value.reconnectAttempts = reconnectAttempts;
-        // 指数退避延迟 (例如: 2s, 4s, 8s, 16s, 32s)
-        const delay = Math.pow(2, reconnectAttempts) * 1000;
+        const delay = resolveWebSocketReconnectDelayMs(reconnectAttempts);
         statusMessage.value = getStatusText('reconnecting', { attempt: reconnectAttempts, delay: delay / 1000 });
         connectionStatus.value = 'connecting'; // 更新状态为正在连接
 
@@ -388,13 +395,14 @@ export function createWebSocketConnectionManager(
                  debugLog(`[WebSocket ${instanceSessionId}] HTTP detected, using WebSocket URL: ${secureUrl}`);
             }
             // --- 使用调整后的 URL ---
-            ws.value = new WebSocket(secureUrl);
-            ws.value.binaryType = 'arraybuffer';
+            const currentSocket = new WebSocket(secureUrl);
+            const connectionGeneration = ++activeConnectionGeneration;
+            ws.value = currentSocket;
+            currentSocket.binaryType = 'arraybuffer';
 
-            ws.value.onopen = () => {
-                reconnectAttempts = 0; // 连接成功，重置尝试次数
+            currentSocket.onopen = () => {
+                if (!isCurrentConnection(currentSocket, connectionGeneration)) return;
                 connectionDiagnostics.value.openedAt = Date.now();
-                connectionDiagnostics.value.reconnectAttempts = 0;
                 connectionDiagnostics.value.lastLatencyMs = 0;
                 connectionDiagnostics.value.maxLatencyMs = 0;
                 connectionDiagnostics.value.missedLatencyProbeCount = 0;
@@ -420,7 +428,8 @@ export function createWebSocketConnectionManager(
                 dispatchMessage('internal:opened', {}, { type: 'internal:opened' }); // 触发内部打开事件
             };
 
-            ws.value.onmessage = (event: MessageEvent) => {
+            currentSocket.onmessage = (event: MessageEvent) => {
+                if (!isCurrentConnection(currentSocket, connectionGeneration)) return;
                 try {
                     connectionDiagnostics.value.lastMessageAt = Date.now();
                     const rawData = event.data;
@@ -437,6 +446,8 @@ export function createWebSocketConnectionManager(
 
                     // --- 更新此实例的连接状态 ---
                     if (message.type === 'ssh:connected' || message.type === 'telnet:connected') {
+                        reconnectAttempts = 0;
+                        connectionDiagnostics.value.reconnectAttempts = 0;
                         serverSupportsSshBinaryInput = message.payload?.serverCapabilities?.sshBinaryInput === true;
                         if (connectionStatus.value !== 'connected') {
                             connectionStatus.value = 'connected';
@@ -471,7 +482,8 @@ export function createWebSocketConnectionManager(
                 }
             };
 
-            ws.value.onerror = (event) => {
+            currentSocket.onerror = (event) => {
+                if (!isCurrentConnection(currentSocket, connectionGeneration)) return;
                 if (connectionStatus.value !== 'disconnected' && connectionStatus.value !== 'error') { // Don't override if already explicitly disconnected
                     connectionStatus.value = 'error';
                     statusMessage.value = getStatusText('wsError');
@@ -479,16 +491,10 @@ export function createWebSocketConnectionManager(
                 }
                 dispatchMessage('internal:error', event, { type: 'internal:error' });
                 isSftpReady.value = false;
-                clearPendingSshInput();
-                stopAppLatencyProbe();
-                ws.value = null; // 清理实例
-                // 如果不是主动断开，尝试重连
-                if (!intentionalDisconnect) {
-                    scheduleReconnect();
-                }
             };
 
-            ws.value.onclose = (event) => {
+            currentSocket.onclose = (event) => {
+                if (!isCurrentConnection(currentSocket, connectionGeneration)) return;
                 connectionDiagnostics.value.lastCloseCode = event.code;
                 // 只有在非错误状态下才更新为 disconnected
                 if (connectionStatus.value !== 'error' && connectionStatus.value !== 'disconnected') { // Avoid redundant sets or overriding 'error'
@@ -518,6 +524,7 @@ export function createWebSocketConnectionManager(
              clearPendingSshInput();
              stopAppLatencyProbe();
              ws.value = null;
+             scheduleReconnect();
         }
     };
 
@@ -526,6 +533,7 @@ export function createWebSocketConnectionManager(
      */
     const disconnect = () => {
         intentionalDisconnect = true; // 标记为主动断开
+        activeConnectionGeneration += 1;
         if (reconnectTimeoutId) {
             clearTimeout(reconnectTimeoutId); // 清除重连定时器
             reconnectTimeoutId = null;

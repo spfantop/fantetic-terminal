@@ -24,9 +24,9 @@
         <AdminPagination :page="currentPage" :page-count="pageCount" :total="total" :disabled="loading" @update:page="setPage" />
       </aside>
 
-      <div v-if="selectedRecording" ref="recordingDialogRootRef" class="recording-modal" role="dialog" aria-modal="true" :aria-label="t('sessionRecording.player')" @click.self="closePlayer">
-        <article ref="recordingDialogRef" class="recording-player" :class="{ 'recording-player--expanded': recordingPlayerExpanded }">
-          <header class="recording-detail recording-drag-handle" @pointerdown="startRecordingDialogDrag"><div><h3>{{ selectedRecording.connection_name }}</h3><p>{{ selectedRecording.username || '-' }} · {{ selectedRecording.protocol }}</p></div><dl><div><dt>{{ t('sessionRecording.duration') }}</dt><dd>{{ formatDuration(playbackDurationMs) }}</dd></div><div><dt>{{ t('sessionRecording.events') }}</dt><dd>{{ selectedRecording.event_count }}</dd></div><div><dt>{{ t('sessionRecording.size') }}</dt><dd>{{ formatBytes(selectedRecording.byte_count) }}</dd></div></dl><div class="modal-actions" data-dialog-no-drag><button type="button" :aria-label="t(recordingPlayerExpanded ? 'sessionRecording.restorePlayer' : 'sessionRecording.expandPlayer')" :aria-pressed="recordingPlayerExpanded" @click="toggleRecordingPlayerExpanded"><i :class="recordingPlayerExpanded ? 'fas fa-window-restore' : 'fas fa-window-maximize'"></i></button><button type="button" class="modal-close" :aria-label="t('common.close')" @click="closePlayer"><i class="fas fa-xmark"></i></button></div></header>
+      <div v-if="selectedRecording" ref="recordingDialogRootRef" class="recording-modal" @click.self="closePlayer">
+        <article ref="recordingDialogRef" class="recording-player" :class="{ 'recording-player--expanded': recordingPlayerExpanded }" role="dialog" aria-modal="true" aria-labelledby="recording-player-title" tabindex="-1">
+          <header class="recording-detail recording-drag-handle" @pointerdown="startRecordingDialogDrag"><div><h3 id="recording-player-title">{{ selectedRecording.connection_name }}</h3><p>{{ selectedRecording.username || '-' }} · {{ selectedRecording.protocol }}</p></div><dl><div><dt>{{ t('sessionRecording.duration') }}</dt><dd>{{ formatDuration(playbackDurationMs) }}</dd></div><div><dt>{{ t('sessionRecording.events') }}</dt><dd>{{ selectedRecording.event_count }}</dd></div><div><dt>{{ t('sessionRecording.size') }}</dt><dd>{{ formatBytes(selectedRecording.byte_count) }}</dd></div></dl><div class="modal-actions" data-dialog-no-drag><button type="button" :aria-label="t(recordingPlayerExpanded ? 'sessionRecording.restorePlayer' : 'sessionRecording.expandPlayer')" :aria-pressed="recordingPlayerExpanded" @click="toggleRecordingPlayerExpanded"><i :class="recordingPlayerExpanded ? 'fas fa-window-restore' : 'fas fa-window-maximize'"></i></button><button ref="recordingCloseButtonRef" type="button" class="modal-close" :aria-label="t('common.close')" @click="closePlayer"><i class="fas fa-xmark"></i></button></div></header>
           <div class="player-toolbar"><button type="button" :disabled="preparing || hasInvalidRecordingIntegrity() || (isRemoteDesktopRecording && !remoteDesktopRecordingReady)" @click="playing ? stop() : play()"><i :class="playing ? 'fas fa-pause' : 'fas fa-play'"></i>{{ playing ? t('sessionRecording.stop') : t('sessionRecording.play') }}</button><label>{{ t('sessionRecording.speed') }}<select v-model.number="speed" @change="handlePlaybackSpeedChange"><option :value="1">1×</option><option :value="2">2×</option><option :value="4">4×</option><option :value="8">8×</option></select></label><span v-if="preparing">{{ t('sessionRecording.preparing', '正在准备回放…') }}</span></div>
           <p v-if="recordingIntegrity?.status === 'invalid'" role="alert" class="recording-message">{{ t('sessionRecording.integrity.invalid') }}</p>
           <div v-if="isRemoteDesktopRecording" ref="remoteDesktopRecordingHost" class="terminal-host remote-desktop-recording-host" :aria-label="t('sessionRecording.player')"></div>
@@ -52,6 +52,7 @@ import AdminPagination from '../admin/AdminPagination.vue';
 import AdminDateRange from '../admin/AdminDateRange.vue';
 import { useConfirmDialog } from '../../composables/useConfirmDialog';
 import { useDraggableDialog } from '../../composables/useDraggableDialog';
+import { useDialogFocus } from '../../composables/useDialogFocus';
 
 const { t } = useI18n();
 const route = useRoute();
@@ -77,6 +78,7 @@ const terminalHost = ref<HTMLElement>();
 const remoteDesktopRecordingHost = ref<HTMLElement>();
 const recordingDialogRootRef = ref<HTMLElement | null>(null);
 const recordingDialogRef = ref<HTMLElement | null>(null);
+const recordingCloseButtonRef = ref<HTMLElement | null>(null);
 const cachedEvents = ref<SessionRecordingEvent[]>([]);
 const recordingIntegrity = ref<SessionRecordingIntegrity>();
 const recordingPlayerExpanded = ref(false);
@@ -105,6 +107,12 @@ const remoteDesktopPlaybackDurationMs = ref(0);
 const remoteDesktopRecordingReady = ref(false);
 
 const selectedRecording = computed(() => recordingList.value.find(item => item.id === selectedId.value));
+useDialogFocus({
+  isOpen: computed(() => Boolean(selectedRecording.value)),
+  dialogRef: recordingDialogRef,
+  initialFocusRef: recordingCloseButtonRef,
+  onEscape: () => closePlayer(),
+});
 const isRemoteDesktopRecording = computed(() => ['RDP', 'VNC'].includes(selectedRecording.value?.protocol ?? ''));
 const durationMs = computed(() => selectedRecording.value ? Math.max(0, (selectedRecording.value.ended_at ?? Date.now()) - selectedRecording.value.started_at) : 0);
 const playbackDurationMs = computed(() => isRemoteDesktopRecording.value
@@ -185,6 +193,13 @@ const stopRemoteDesktopSpeedController = () => {
   remoteDesktopSpeedAnchor = undefined;
   remoteDesktopSpeedSeekInProgress = false;
 };
+const reanchorRemoteDesktopSpeedController = (position: number) => {
+  if (speed.value <= 1 || !playing.value) {
+    remoteDesktopSpeedAnchor = undefined;
+    return;
+  }
+  remoteDesktopSpeedAnchor = { position, timestamp: performance.now() };
+};
 // Guacamole 的 SessionRecording 没有 playbackRate；倍速时定期向前 seek，仍由其自身完成关键帧恢复和画面渲染。
 const startRemoteDesktopSpeedController = () => {
   stopRemoteDesktopSpeedController();
@@ -202,11 +217,11 @@ const startRemoteDesktopSpeedController = () => {
       remoteDesktopSpeedAnchor.position + (performance.now() - remoteDesktopSpeedAnchor.timestamp) * speed.value,
     );
     const currentPosition = Number(remoteDesktopRecording.getPosition?.() ?? timelineOffset.value);
-    if (targetPosition - currentPosition < 100) return;
+    if (Math.abs(targetPosition - currentPosition) < 150) return;
 
     remoteDesktopSpeedSeekInProgress = true;
     remoteDesktopRecording?.seek(targetPosition);
-  }, 100);
+  }, 250);
 };
 const handlePlaybackSpeedChange = () => {
   if (isRemoteDesktopRecording.value) startRemoteDesktopSpeedController();
@@ -241,11 +256,20 @@ const ensureRemoteDesktopRecording = async () => {
   };
   recording.onplay = () => { remoteDesktopSpeedSeekInProgress = false; playing.value = true; };
   recording.onpause = () => {
-    if (remoteDesktopSpeedSeekInProgress) return;
+    const speedSeekWasInProgress = remoteDesktopSpeedSeekInProgress;
+    remoteDesktopSpeedSeekInProgress = false;
+    if (speedSeekWasInProgress && playing.value) {
+      reanchorRemoteDesktopSpeedController(Number(recording.getPosition?.() ?? timelineOffset.value));
+      return;
+    }
     stopRemoteDesktopSpeedController();
     playing.value = false;
   };
-  recording.onseek = (position: number) => { timelineOffset.value = position; };
+  recording.onseek = (position: number) => {
+    timelineOffset.value = position;
+    remoteDesktopSpeedSeekInProgress = false;
+    reanchorRemoteDesktopSpeedController(position);
+  };
   recording.onerror = () => {
     stopRemoteDesktopSpeedController();
     playing.value = false;
@@ -313,9 +337,7 @@ const play = async () => {
   finally { if (generation === playGeneration) playing.value = false; }
 };
 const stop = () => { playGeneration += 1; stopRemoteDesktopSpeedController(); remoteDesktopRecording?.pause(); playing.value = false; };
-const handleEscape = (event: KeyboardEvent) => { if(event.key==='Escape'&&selectedId.value)closePlayer(); };
 onMounted(() => {
-  window.addEventListener('keydown', handleEscape);
   const routeQuery = Array.isArray(route.query.recordingQuery) ? route.query.recordingQuery[0] : route.query.recordingQuery;
   const routeStart = Array.isArray(route.query.recordingStartedAfter) ? route.query.recordingStartedAfter[0] : route.query.recordingStartedAfter;
   filterQuery.value = routeQuery || '';
@@ -326,7 +348,7 @@ onMounted(() => {
   }
   void loadList();
 });
-onBeforeUnmount(() => { window.removeEventListener('keydown', handleEscape); stop(); remoteDesktopRecording?.abort(); remoteDesktopResizeObserver?.disconnect(); recordingAbortController?.abort(); resizeObserver?.disconnect(); terminal?.dispose(); });
+onBeforeUnmount(() => { stop(); remoteDesktopRecording?.abort(); remoteDesktopResizeObserver?.disconnect(); recordingAbortController?.abort(); resizeObserver?.disconnect(); terminal?.dispose(); });
 </script>
 
 <style scoped>

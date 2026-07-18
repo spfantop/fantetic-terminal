@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 import net from 'node:net';
 
-import { createHealthSnapshot, isGuacdReachable } from '../health';
+import {
+  bindGatewayReadinessLifecycle,
+  createGatewayReadiness,
+  createHealthSnapshot,
+  isGuacdReachable,
+} from '../health';
 
 const run = async (): Promise<void> => {
   assert.deepEqual(
@@ -21,6 +27,23 @@ const run = async (): Promise<void> => {
     createHealthSnapshot({ guacamoleReady: false }),
     { status: 'not_ready', checks: { guacamole: 'not_ready' } },
   );
+
+  const readiness = createGatewayReadiness();
+  assert.equal(readiness.isReady(), false);
+  readiness.markReady();
+  assert.equal(readiness.isReady(), true);
+  readiness.markUnavailable();
+  assert.equal(readiness.isReady(), false);
+
+  const lifecycle = new EventEmitter();
+  bindGatewayReadinessLifecycle(lifecycle, readiness);
+  lifecycle.on('error', () => {});
+  readiness.markReady();
+  lifecycle.emit('error', new Error('socket failed'));
+  assert.equal(readiness.isReady(), false);
+  readiness.markReady();
+  lifecycle.emit('close');
+  assert.equal(readiness.isReady(), false);
 };
 
 run().catch((error: unknown) => {

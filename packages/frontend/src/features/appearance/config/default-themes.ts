@@ -25,6 +25,31 @@ export const defaultXtermTheme: ITheme = {
   brightWhite: '#e5e5e5'
 };
 
+export const darkXtermTheme: ITheme = defaultXtermTheme;
+
+export const lightXtermTheme: ITheme = {
+  background: '#ffffff',
+  foreground: '#1f2937',
+  cursor: '#111827',
+  selectionBackground: '#bfdbfe',
+  black: '#000000',
+  red: '#b91c1c',
+  green: '#047857',
+  yellow: '#a16207',
+  blue: '#1d4ed8',
+  magenta: '#7e22ce',
+  cyan: '#0e7490',
+  white: '#e5e7eb',
+  brightBlack: '#4b5563',
+  brightRed: '#dc2626',
+  brightGreen: '#059669',
+  brightYellow: '#ca8a04',
+  brightBlue: '#2563eb',
+  brightMagenta: '#9333ea',
+  brightCyan: '#0891b2',
+  brightWhite: '#f9fafb',
+};
+
 // 默认 UI 主题 (CSS 变量)
 // (与 backend/src/config/default-themes.ts 中的定义保持一致)
 export const defaultUiTheme: Record<string, string> = {

@@ -1,6 +1,6 @@
 
 
-import { defineStore } from 'pinia';
+import { defineStore, storeToRefs } from 'pinia';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import { useConnectionsStore, type ConnectionInfo } from './connections.store';
@@ -10,11 +10,6 @@ import {
   sessions,
   activeSessionId,
   poppedOutSessionIds,
-  isRdpModalOpen,
-  rdpConnectionInfo,
-  isVncModalOpen,
-  vncConnectionInfo,
-  
   suspendedSshSessions,
   isLoadingSuspendedSessions,
 } from './session/state';
@@ -35,6 +30,7 @@ import * as sshSuspendActions from './session/actions/sshSuspendActions';
 
 
 import type { FileInfo } from './fileEditor.store';
+import { useGlobalOverlayStore } from './globalOverlay.store';
 
 
 
@@ -44,6 +40,8 @@ export const useSessionStore = defineStore('session', () => {
   const { t } = useI18n();
   const connectionsStore = useConnectionsStore();
   const router = useRouter();
+  const overlayStore = useGlobalOverlayStore();
+  const { isRdpModalOpen, rdpConnectionInfo, isVncModalOpen, vncConnectionInfo } = storeToRefs(overlayStore);
 
   // --- 包装 Actions 以注入依赖 ---
 

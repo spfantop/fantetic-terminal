@@ -122,5 +122,33 @@ assert.equal(completed[2].eventCount, 0);
 assert.equal(completed[2].batchCount, 0);
 assert.equal(completed[2].finalHash, null);
 
+let releaseSlowWrite: (() => void) | undefined;
+let slowWriteStarted: (() => void) | undefined;
+const slowWriteStartedPromise = new Promise<void>(resolve => {
+  slowWriteStarted = resolve;
+});
+const slowWritePromise = new Promise<void>(resolve => {
+  releaseSlowWrite = resolve;
+});
+const slowRecorder = createSessionRecorder({
+  rootPath,
+  recordingId: 'recording-slow-writer',
+  startedAt: 3_000,
+  flushIntervalMs: 1,
+  maxPendingBytes: 4,
+  writeLine: async () => {
+    slowWriteStarted?.();
+    await slowWritePromise;
+  },
+  onComplete: async summary => completed.push(summary),
+});
+slowRecorder.recordOutput(Buffer.from('1234'));
+await slowWriteStartedPromise;
+slowRecorder.recordOutput(Buffer.from('5'));
+releaseSlowWrite?.();
+await slowRecorder.finish(3_100);
+assert.equal(completed[3].incomplete, true, 'queued and in-flight bytes must count toward the memory budget');
+assert.equal(completed[3].eventCount, 1, 'events rejected by the queue budget must not be counted');
+
 fs.rmSync(rootPath, { recursive: true, force: true });
 console.log('session recording behavior ok');

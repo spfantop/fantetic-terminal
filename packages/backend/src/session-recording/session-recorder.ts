@@ -6,6 +6,7 @@ import type { SessionRecordingEvent } from '@fantetic-terminal/contracts';
 
 import { decrypt, encrypt } from '../utils/crypto';
 import { createLogger } from '../logging/logger';
+import { backendMetrics } from '../observability/metrics';
 
 const logger = createLogger('SessionRecorder');
 
@@ -46,6 +47,7 @@ interface RecorderOptions {
   flushIntervalMs?: number;
   maxPendingBytes?: number;
   now?: () => number;
+  writeLine?: (line: string) => Promise<void>;
   onComplete: (summary: RecordingSummary) => Promise<void>;
 }
 
@@ -91,7 +93,7 @@ export const createSessionRecorder = (options: RecorderOptions) => {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   const stream = fs.createWriteStream(filePath, { flags: 'wx', mode: 0o600 });
   const pendingEventList: PendingRecordingEvent[] = [];
-  let pendingBytes = 0;
+  let queuedBytes = 0;
   let byteCount = 0;
   let eventCount = 0;
   let incomplete = false;
@@ -105,30 +107,37 @@ export const createSessionRecorder = (options: RecorderOptions) => {
     logger.error('录像文件流错误', { error });
   });
 
+  const writeLine = options.writeLine ?? ((line: string) => new Promise<void>((resolve, reject) => {
+    stream.write(line, error => {
+      if (error) reject(error);
+      else resolve();
+    });
+  }));
+
   const flush = (): void => {
     if (timer) clearTimeout(timer);
     timer = undefined;
     if (pendingEventList.length === 0) return;
     const pendingBatch = pendingEventList.splice(0, pendingEventList.length);
-    pendingBytes = 0;
-    writeChain = writeChain.then(() => new Promise<void>((resolve, reject) => {
-      const batch: RecordingEvent[] = pendingBatch.map(event => event.type === 'resize' ? event : ({
-        ...event,
-        data: event.data.toString('base64'),
-      }));
-      const batchHash = hashRecordingBatch(previousBatchHash, batch);
-      const line = `${encrypt(JSON.stringify({ eventList: batch, previousHash: previousBatchHash, hash: batchHash }))}\n`;
-      stream.write(line, error => {
-        if (error) {
-          reject(error);
-          return;
-        }
+    const pendingBatchBytes = pendingBatch.reduce((total, event) => (
+      total + (event.type === 'resize' ? 16 : event.data.byteLength)
+    ), 0);
+    writeChain = writeChain.then(async () => {
+      try {
+        const batch: RecordingEvent[] = pendingBatch.map(event => event.type === 'resize' ? event : ({
+          ...event,
+          data: event.data.toString('base64'),
+        }));
+        const batchHash = hashRecordingBatch(previousBatchHash, batch);
+        const line = `${encrypt(JSON.stringify({ eventList: batch, previousHash: previousBatchHash, hash: batchHash }))}\n`;
+        await writeLine(line);
         previousBatchHash = batchHash;
         batchCount += 1;
         byteCount += Buffer.byteLength(line);
-        resolve();
-      });
-    })).catch(error => {
+      } finally {
+        queuedBytes = Math.max(0, queuedBytes - pendingBatchBytes);
+      }
+    }).catch(error => {
       incomplete = true;
       logger.error('写入录像失败', { error });
     });
@@ -140,12 +149,13 @@ export const createSessionRecorder = (options: RecorderOptions) => {
 
   const enqueue = (event: PendingRecordingEvent, size: number): void => {
     if (finished) return;
-    if (pendingBytes + size > (options.maxPendingBytes ?? DEFAULT_MAX_PENDING_BYTES)) {
+    if (queuedBytes + size > (options.maxPendingBytes ?? DEFAULT_MAX_PENDING_BYTES)) {
       incomplete = true;
+      backendMetrics.recordRecordingQueueRejected();
       return;
     }
     pendingEventList.push(event);
-    pendingBytes += size;
+    queuedBytes += size;
     eventCount += 1;
     scheduleFlush();
   };
