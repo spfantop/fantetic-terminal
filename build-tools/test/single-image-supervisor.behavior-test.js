@@ -3,6 +3,7 @@ const { EventEmitter } = require('node:events');
 
 const {
   createShutdownController,
+  forwardOutput,
   resolveStartupTimeoutMs,
 } = require('../../packages/single-image/supervisor');
 
@@ -43,6 +44,11 @@ const run = async () => {
   assert.equal(resolveStartupTimeoutMs('240000'), 240_000);
   assert.equal(resolveStartupTimeoutMs('invalid'), 180_000);
   assert.equal(resolveStartupTimeoutMs('-1'), 180_000);
+
+  assert.doesNotThrow(
+    () => forwardOutput({ stdout: null, stderr: null }, 'frontend'),
+    'Processes that inherit container stdio must not require pipe streams',
+  );
 
   const child = new ImmediateExitChild();
   const exitCodes = [];

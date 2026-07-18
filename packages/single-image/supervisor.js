@@ -98,6 +98,7 @@ const normalizeLogLine = (processName, line, stream) => {
 
 const forwardOutput = (child, processName) => {
   for (const [streamName, stream] of [['stdout', child.stdout], ['stderr', child.stderr]]) {
+    if (!stream) continue;
     let buffered = '';
     stream.setEncoding('utf8');
     stream.on('data', (chunk) => {
@@ -207,7 +208,11 @@ const start = async () => {
   await waitFor('远程桌面网关', () => isHealthy(9090, '/health/ready'));
 
   emit('info', 'supervisor', '正在启动前端服务');
-  startChild('frontend', 'nginx', ['-g', 'daemon off;']);
+  startChild('frontend', 'nginx', ['-g', 'daemon off;'], {
+    // nginx reopens /dev/stdout while parsing its log configuration. A pipe
+    // created by child_process.spawn cannot be reopened and fails with ENXIO.
+    stdio: ['ignore', 'inherit', 'inherit'],
+  });
   await waitFor('前端服务', () => isHealthy(80, '/'));
   emit('info', 'supervisor', '单镜像服务已就绪');
 };
@@ -224,6 +229,7 @@ if (require.main === module) {
 
 module.exports = {
   createShutdownController,
+  forwardOutput,
   normalizeLogLine,
   readGatewaySecret,
   resolveStartupTimeoutMs,

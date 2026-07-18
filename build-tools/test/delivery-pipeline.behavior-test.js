@@ -206,6 +206,11 @@ assert.match(singleImageDockerfile, /ENTRYPOINT \["\/usr\/bin\/tini", "--", "nod
 assert.match(singleImageDockerfile, /HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3/);
 assert.match(singleImageSupervisor, /ALL_IN_ONE_STARTUP_TIMEOUT_MS/);
 assert.match(singleImageSupervisor, /180_000/);
+assert.match(
+  singleImageSupervisor,
+  /startChild\('frontend', 'nginx', \['-g', 'daemon off;'\], \{[\s\S]*?stdio: \['ignore', 'inherit', 'inherit'\],[\s\S]*?\}\);/,
+  'nginx must inherit container stdio because reopening a Node child pipe through /dev/stdout fails with ENXIO',
+);
 assert.match(securityWorkflow, /name: Smoke test all-in-one runtime/);
 assert.match(securityWorkflow, /matrix\.smoke/);
 assert.match(securityWorkflow, /docker restart "\$container_name"/);
