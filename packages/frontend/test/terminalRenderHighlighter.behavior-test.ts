@@ -1,4 +1,6 @@
 import { strict as assert } from 'node:assert';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   createTerminalRenderHighlighter,
   previewTerminalRenderHighlightSegments,
@@ -124,6 +126,21 @@ assert.equal(
 
 const disabledHighlighter = createTerminalRenderHighlighter(() => ({ ...options, enabled: false }));
 assert.equal(disabledHighlighter.resolveLine(line), undefined);
+
+const terminalManagerSource = readFileSync(
+  resolve(import.meta.dirname, '..', 'packages/frontend/src/composables/useSshTerminal.ts'),
+  'utf8',
+);
+assert.match(
+  terminalManagerSource,
+  /if \(!terminalHighlightEnabledBoolean\.value \|\| terminalHighlightRulesList\.value\.length === 0\)[\s\S]{0,160}terminalRenderHighlighter\.dispose\(\)/,
+  'disabled highlighting must detach the xterm row renderer hook',
+);
+assert.match(
+  terminalManagerSource,
+  /syncTerminalRenderHighlighter\(term\)/,
+  'terminal readiness and renderer replacement must share highlighter lifecycle synchronization',
+);
 
 const densePresetHighlighter = createTerminalRenderHighlighter(() => ({
   enabled: true,

@@ -1767,7 +1767,6 @@ const closeFileManagerModal = () => {
   flex-direction: column;
   height: 100dvh; /* 使用动态视口高度 */
   overflow: hidden;
-  transition: height 0.3s ease; /* 可选：添加过渡效果 */
 }
 
 /* 主导航已改为左侧 dock，可见性不再影响工作区纵向高度。 */

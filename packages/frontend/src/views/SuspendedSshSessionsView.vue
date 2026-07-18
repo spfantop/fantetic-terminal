@@ -271,8 +271,23 @@ const exportLog = async (session: SuspendedSshSession) => {
 };
 
 let fetchIntervalId: number | undefined;
+let isViewMounted = false;
+
+const refreshSuspendedSessionsInBackground = () => {
+  if (!isViewMounted || document.visibilityState !== 'visible') return;
+  void sessionStore.fetchSuspendedSshSessions({ showLoadingIndicator: false });
+};
+
+const handleVisibilityChange = () => {
+  if (document.visibilityState === 'visible') {
+    refreshSuspendedSessionsInBackground();
+  }
+};
 
 onMounted(async () => {
+  isViewMounted = true;
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+
   const connectionsStore = useConnectionsStore(); // +++ 获取 Connections Store 实例 +++
   // 确保连接列表已加载或正在加载
   // 通常 store 的 fetch 方法会处理重复调用或自行管理加载状态
@@ -284,16 +299,20 @@ onMounted(async () => {
     // 根据需要处理错误，例如显示通知
   }
 
+  if (!isViewMounted) return;
+
   // 立即获取一次挂起会话数据 (显示加载指示器)
   await sessionStore.fetchSuspendedSshSessions();
-  
+
+  if (!isViewMounted) return;
+
   // 设置定时器，每3秒获取一次挂起会话数据 (不显示加载指示器)
-  fetchIntervalId = window.setInterval(async () => {
-    await sessionStore.fetchSuspendedSshSessions({ showLoadingIndicator: false });
-  }, 3000);
+  fetchIntervalId = window.setInterval(refreshSuspendedSessionsInBackground, 3000);
 });
 
 onUnmounted(() => {
+  isViewMounted = false;
+  document.removeEventListener('visibilitychange', handleVisibilityChange);
   // 组件卸载时清除定时器
   if (fetchIntervalId) {
     clearInterval(fetchIntervalId);

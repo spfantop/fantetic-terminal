@@ -1400,7 +1400,7 @@ const terminalInnerStyle = computed(() => (
   padding: 5px 6px 5px 10px;
   border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--header-bg-color) 94%, var(--app-bg-color));
+  background: color-mix(in srgb, var(--header-bg-color) 98%, var(--app-bg-color));
   color: var(--text-color);
   box-shadow: 0 10px 26px rgb(0 0 0 / 24%);
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -1408,7 +1408,6 @@ const terminalInnerStyle = computed(() => (
   line-height: 1;
   user-select: none;
   pointer-events: auto;
-  backdrop-filter: blur(10px);
 }
 
 .terminal-zoom-popover--below-search {
@@ -1427,9 +1426,8 @@ const terminalInnerStyle = computed(() => (
   padding: 5px;
   border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--header-bg-color) 94%, var(--app-bg-color));
+  background: color-mix(in srgb, var(--header-bg-color) 98%, var(--app-bg-color));
   box-shadow: 0 10px 26px rgb(0 0 0 / 24%);
-  backdrop-filter: blur(10px);
 }
 
 .terminal-search-popover input {
@@ -1522,6 +1520,13 @@ const terminalInnerStyle = computed(() => (
 .terminal-zoom-popover-leave-to {
   opacity: 0;
   transform: translateY(-4px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .terminal-zoom-popover-enter-active,
+  .terminal-zoom-popover-leave-active {
+    transition-duration: 0.01ms;
+  }
 }
 
 /* 文字描边和阴影样式 */

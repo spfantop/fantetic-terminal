@@ -29,8 +29,23 @@ import i18n from '../../../i18n';
 import type { ComposerTranslation } from 'vue-i18n'; 
 import apiClient from '../../../utils/apiClient';
 import { debugLog } from '../../../composables/useDebugLog';
+import { createSingleFlight, waitForRefValue } from '../../../utils/asyncScheduling';
 
 const t: ComposerTranslation = i18n.global.t; 
+
+const requestSuspendedSshSessions = createSingleFlight(async (): Promise<void> => {
+  try {
+    const response = await apiClient.get<SuspendedSshSession[]>('ssh-suspend/suspended-sessions');
+    suspendedSshSessions.value = response.data;
+    debugLog(`[${t('term.sshSuspend')}] 已通过 HTTP 获取挂起列表，数量: ${response.data.length}`);
+  } catch (error) {
+    console.error(`[${t('term.sshSuspend')}] 通过 HTTP 获取挂起列表失败:`, error);
+    useUiNotificationsStore().addNotification({
+      type: 'error',
+      message: t('sshSuspend.notifications.fetchListError', { error: String(error) }),
+    });
+  }
+});
 
 // 辅助函数：获取一个可用的 WebSocket 管理器
 // 优先使用当前激活的会话，或者任意一个已连接的 SSH 会话
@@ -170,21 +185,7 @@ export const fetchSuspendedSshSessions = async (options?: { showLoadingIndicator
     isLoadingSuspendedSessions.value = true;
   }
   try {
-    // 假设后端 API 端点为 /api/ssh/suspended-sessions
-    // 并且它返回 SuspendedSshSession[] 类型的数据
-    const response = await apiClient.get<SuspendedSshSession[]>('ssh-suspend/suspended-sessions');
-    suspendedSshSessions.value = response.data;
-    debugLog(`[${t('term.sshSuspend')}] 已通过 HTTP 获取挂起列表，数量: ${response.data.length}`);
-  } catch (error) {
-    console.error(`[${t('term.sshSuspend')}] 通过 HTTP 获取挂起列表失败:`, error);
-    // 可选：通知用户错误
-    const uiNotificationsStore = useUiNotificationsStore();
-    uiNotificationsStore.addNotification({
-      type: 'error',
-      message: t('sshSuspend.notifications.fetchListError', { error: String(error) }),
-    });
-    // 即使失败，也可能需要清空旧数据或保留旧数据，具体取决于产品需求
-    // suspendedSshSessions.value = []; // 例如，失败时清空
+    await requestSuspendedSshSessions();
   } finally {
     if (shouldShowLoading) {
       isLoadingSuspendedSessions.value = false;
@@ -247,14 +248,8 @@ export const resumeSshSession = async (suspendSessionId: string): Promise<void> 
     const wsManager = newSessionState.wsManager;
 
     // 3. 等待 WebSocket 连接成功
-    const MAX_WAIT_ITERATIONS = 25; // 25 * 200ms = 5 seconds
-    let iterations = 0;
-    while (!wsManager.isConnected.value && iterations < MAX_WAIT_ITERATIONS) {
-      await new Promise(resolve => setTimeout(resolve, 200));
-      iterations++;
-    }
-
-    if (!wsManager.isConnected.value) {
+    const connected = await waitForRefValue(wsManager.isConnected, value => value, 5000);
+    if (!connected) {
       console.error(`[${t('term.sshSuspend')}] 新创建的会话 ${newFrontendSessionId} 的 WebSocket 未能连接。无法发送恢复请求。`);
       uiNotificationsStore.addNotification({ type: 'error', message: t('sshSuspend.notifications.resumeErrorGeneric', { error: '无法连接到服务器以恢复会话' }) });
       if (sessions.value.has(newFrontendSessionId)) {

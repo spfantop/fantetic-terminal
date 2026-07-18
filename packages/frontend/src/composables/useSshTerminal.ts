@@ -199,12 +199,29 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         rules: terminalHighlightRulesList.value,
     });
     const terminalRenderHighlighter = createTerminalRenderHighlighter(getTerminalHighlightOptions);
+    let hasWarnedAboutUnsupportedHighlighter = false;
+    const syncTerminalRenderHighlighter = (term: Terminal): boolean => {
+        if (!terminalHighlightEnabledBoolean.value || terminalHighlightRulesList.value.length === 0) {
+            terminalRenderHighlighter.dispose();
+            return true;
+        }
+
+        const attached = terminalRenderHighlighter.ensureAttached(term);
+        if (attached) {
+            hasWarnedAboutUnsupportedHighlighter = false;
+        } else if (!hasWarnedAboutUnsupportedHighlighter) {
+            hasWarnedAboutUnsupportedHighlighter = true;
+            console.warn(`[会话 ${sessionId}][SSH终端模块] 当前 xterm 渲染器不支持行级高亮，已保留原始终端输出。`);
+        }
+        return attached;
+    };
     const stopTerminalHighlightWatcher = watch(
         [terminalHighlightEnabledBoolean, terminalHighlightRulesList],
         () => {
             terminalRenderHighlighter.invalidate();
             const term = terminalInstance.value;
             if (term) {
+                syncTerminalRenderHighlighter(term);
                 term.refresh(0, Math.max(term.rows - 1, 0));
             }
         },
@@ -577,12 +594,10 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         const { terminal: term } = payload;
         debugLog(`[会话 ${sessionId}][SSH终端模块] 终端实例已就绪。`);
         terminalInstance.value = term;
-        if (!terminalRenderHighlighter.attach(term)) {
-            console.warn(`[会话 ${sessionId}][SSH终端模块] 当前 xterm 渲染器不支持行级高亮，已保留原始终端输出。`);
-        }
+        syncTerminalRenderHighlighter(term);
         terminalWriteParsedDisposable?.dispose();
         terminalWriteParsedDisposable = term.onWriteParsed(() => {
-            terminalRenderHighlighter.ensureAttached(term);
+            syncTerminalRenderHighlighter(term);
         });
 
         
@@ -642,7 +657,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
             const terminalWindow = getTerminalWindow(term);
             terminalWindow.requestAnimationFrame(() => {
                 if (terminalInstance.value !== term) return;
-                terminalRenderHighlighter.ensureAttached(term);
+                syncTerminalRenderHighlighter(term);
                 term.refresh(0, Math.max(term.rows - 1, 0));
             });
         }

@@ -24,6 +24,11 @@ assert.match(systemSettings, /useDeviceDetection/);
 const terminal = readFileSync(resolve('src/components/Terminal.vue'), 'utf8');
 assert.doesNotMatch(terminal, /terminal-search-popover button\.is-active[\s\S]{0,240}primary-color/);
 assert.match(terminal, /terminal-search-popover button:focus-visible/);
+assert.doesNotMatch(terminal, /backdrop-filter:\s*blur/, 'live terminal overlays must not continuously blur changing content');
+assert.match(terminal, /prefers-reduced-motion:\s*reduce/, 'terminal popovers must honor reduced-motion preferences');
+
+const workspace = readFileSync(resolve('src/views/WorkspaceView.vue'), 'utf8');
+assert.doesNotMatch(workspace, /transition:\s*height/, 'workspace resizing must not animate layout dimensions');
 
 const layoutConfigurator = readFileSync(resolve('src/components/LayoutConfigurator.vue'), 'utf8');
 const recordingSettings = readFileSync(resolve('src/components/settings/SessionRecordingSettings.vue'), 'utf8');

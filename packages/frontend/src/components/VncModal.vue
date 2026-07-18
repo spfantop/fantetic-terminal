@@ -8,6 +8,7 @@ import { useConnectionsStore } from '../stores/connections.store';
 import Guacamole from 'guacamole-common-js';
 import type { ConnectionInfo } from '../stores/connections.store';
 import { resolveRemoteDesktopProxyWebSocketUrl } from '../utils/runtimeConfig';
+import { createRemotePointerScheduler, type RemotePointerState } from '../utils/remotePointerScheduler';
 
 const { t } = useI18n();
 const settingsStore = useSettingsStore();
@@ -29,6 +30,7 @@ const maxAllowedHeight = computed(() => window.innerHeight - MODAL_CONTAINER_PAD
 const vncDisplayRef = ref<HTMLDivElement | null>(null);
 const vncContainerRef = ref<HTMLDivElement | null>(null);
 const guacClient = ref<any | null>(null);
+let inputListenerCleanupList: Array<() => void> = [];
 const connectionStatus = ref<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
 const isResizing = ref(false);
 const resizeStartX = ref(0);
@@ -230,6 +232,7 @@ const trySyncClipboardOnDisplayFocus = async () => {
 const setupInputListeners = () => {
     if (!guacClient.value || !vncDisplayRef.value) return;
     try {
+        removeInputListeners();
         const displayEl = guacClient.value.getDisplay().getElement() as HTMLElement;
         displayEl.tabIndex = 0;
 
@@ -244,11 +247,14 @@ const setupInputListeners = () => {
           }
         };
         displayEl.addEventListener('click', handleVncDisplayClick);
+        inputListenerCleanupList.push(() => displayEl.removeEventListener('click', handleVncDisplayClick));
 
         const handleMouseEnter = () => { if (displayEl) displayEl.style.cursor = 'none'; };
         const handleMouseLeave = () => { if (displayEl) displayEl.style.cursor = 'default'; };
         displayEl.addEventListener('mouseenter', handleMouseEnter);
         displayEl.addEventListener('mouseleave', handleMouseLeave);
+        inputListenerCleanupList.push(() => displayEl.removeEventListener('mouseenter', handleMouseEnter));
+        inputListenerCleanupList.push(() => displayEl.removeEventListener('mouseleave', handleMouseLeave));
 
         // @ts-ignore
         mouse.value = new Guacamole.Mouse(displayEl);
@@ -263,12 +269,17 @@ const setupInputListeners = () => {
           }
         }
 
-        // @ts-ignore
-        mouse.value.onmousedown = mouse.value.onmouseup = mouse.value.onmousemove = (mouseState: any) => {
-            if (guacClient.value) {
-                guacClient.value.sendMouseState(mouseState);
-            }
+        const pointerScheduler = createRemotePointerScheduler<RemotePointerState>({
+          send: (mouseState) => guacClient.value?.sendMouseState(mouseState),
+          animationFrame: displayEl.ownerDocument.defaultView ?? window,
+        });
+        mouse.value.onmousemove = (mouseState: RemotePointerState) => {
+          pointerScheduler.move(mouseState);
         };
+        mouse.value.onmousedown = mouse.value.onmouseup = (mouseState: RemotePointerState) => {
+          pointerScheduler.sendNow(mouseState);
+        };
+        inputListenerCleanupList.push(pointerScheduler.dispose);
 
         // @ts-ignore
         keyboard.value = new Guacamole.Keyboard(displayEl);
@@ -288,6 +299,7 @@ const setupInputListeners = () => {
         // document.addEventListener('copy', handleHostCopy); // Removed this
         // displayEl.addEventListener('mouseenter', trySyncClipboardOnMouseEnter); // Changed to focus event
         displayEl.addEventListener('focus', trySyncClipboardOnDisplayFocus);
+        inputListenerCleanupList.push(() => displayEl.removeEventListener('focus', trySyncClipboardOnDisplayFocus));
 
     } catch (inputError) {
         console.error("Error setting up VNC input listeners:", inputError);
@@ -296,6 +308,15 @@ const setupInputListeners = () => {
 };
 
 const removeInputListeners = () => {
+    inputListenerCleanupList.forEach((cleanup) => {
+        try {
+            cleanup();
+        } catch (error) {
+            console.warn('[VncModal] Could not remove input listener:', error);
+        }
+    });
+    inputListenerCleanupList = [];
+
     // Remove host copy event listener
     // document.removeEventListener('copy', handleHostCopy); // Removed this
     if (guacClient.value) {

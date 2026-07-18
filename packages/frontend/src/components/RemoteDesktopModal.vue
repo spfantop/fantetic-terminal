@@ -9,6 +9,7 @@ import Guacamole from 'guacamole-common-js';
 import apiClient from '../utils/apiClient';
 import { ConnectionInfo } from '../stores/connections.store';
 import { resolveRemoteDesktopProxyWebSocketUrl } from '../utils/runtimeConfig';
+import { createRemotePointerScheduler, type RemotePointerState } from '../utils/remotePointerScheduler';
 
 const { t } = useI18n();
 const settingsStore = useSettingsStore(); 
@@ -39,6 +40,7 @@ const initialModalHeightForResize = ref(0);
 const statusMessage = ref('');
 const keyboard = ref<any | null>(null);
 const mouse = ref<any | null>(null);
+let inputListenerCleanupList: Array<() => void> = [];
 const desiredModalWidth = ref(1064);
 const desiredModalHeight = ref(858);
 
@@ -235,6 +237,7 @@ const trySyncClipboardOnDisplayFocus = async () => {
 const setupInputListeners = () => {
     if (!guacClient.value || !rdpDisplayRef.value) return;
     try {
+        removeInputListeners();
         const displayEl = guacClient.value.getDisplay().getElement() as HTMLElement;
         displayEl.tabIndex = 0; // 使 RDP 显示区域可聚焦
 
@@ -252,6 +255,7 @@ const setupInputListeners = () => {
           }
         };
         displayEl.addEventListener('click', handleRdpDisplayClick);
+        inputListenerCleanupList.push(() => displayEl.removeEventListener('click', handleRdpDisplayClick));
 
 
         // 鼠标进入 RDP 区域时隐藏本地光标
@@ -264,6 +268,8 @@ const setupInputListeners = () => {
         };
         displayEl.addEventListener('mouseenter', handleMouseEnter);
         displayEl.addEventListener('mouseleave', handleMouseLeave);
+        inputListenerCleanupList.push(() => displayEl.removeEventListener('mouseenter', handleMouseEnter));
+        inputListenerCleanupList.push(() => displayEl.removeEventListener('mouseleave', handleMouseLeave));
 
 
 
@@ -291,12 +297,17 @@ const setupInputListeners = () => {
 
 
 
-        // @ts-ignore
-        mouse.value.onmousedown = mouse.value.onmouseup = mouse.value.onmousemove = (mouseState: any) => {
-            if (guacClient.value) {
-                guacClient.value.sendMouseState(mouseState);
-            }
+        const pointerScheduler = createRemotePointerScheduler<RemotePointerState>({
+          send: (mouseState) => guacClient.value?.sendMouseState(mouseState),
+          animationFrame: displayEl.ownerDocument.defaultView ?? window,
+        });
+        mouse.value.onmousemove = (mouseState: RemotePointerState) => {
+          pointerScheduler.move(mouseState);
         };
+        mouse.value.onmousedown = mouse.value.onmouseup = (mouseState: RemotePointerState) => {
+          pointerScheduler.sendNow(mouseState);
+        };
+        inputListenerCleanupList.push(pointerScheduler.dispose);
 
         // @ts-ignore
         keyboard.value = new Guacamole.Keyboard(displayEl); // 将监听器附加到 RDP 显示元素
@@ -316,6 +327,7 @@ const setupInputListeners = () => {
         
         // Listen for display focus to sync clipboard (Host -> RDP)
         displayEl.addEventListener('focus', trySyncClipboardOnDisplayFocus);
+        inputListenerCleanupList.push(() => displayEl.removeEventListener('focus', trySyncClipboardOnDisplayFocus));
 
         // Listen for clipboard data from RDP (RDP -> Host)
         // @ts-ignore
@@ -345,6 +357,15 @@ const setupInputListeners = () => {
 };
 
 const removeInputListeners = () => {
+    inputListenerCleanupList.forEach((cleanup) => {
+        try {
+            cleanup();
+        } catch (error) {
+            console.warn('[RemoteDesktopModal] Could not remove input listener:', error);
+        }
+    });
+    inputListenerCleanupList = [];
+
     // 恢复光标并尝试移除监听器
     if (guacClient.value) {
         try {
