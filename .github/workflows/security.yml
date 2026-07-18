@@ -71,6 +71,8 @@ jobs:
             dockerfile: packages/frontend/Dockerfile
           - name: remote-gateway
             dockerfile: packages/remote-gateway/Dockerfile
+          - name: all-in-one
+            dockerfile: packages/single-image/Dockerfile
     steps:
       - name: Checkout source
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4

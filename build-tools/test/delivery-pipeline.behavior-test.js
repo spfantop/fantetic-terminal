@@ -11,6 +11,9 @@ const backendDockerfile = read('packages/backend/Dockerfile');
 const gatewayDockerfile = read('packages/remote-gateway/Dockerfile');
 const gatewayEntrypoint = read('packages/remote-gateway/entrypoint.sh');
 const frontendNginxConfig = read('packages/frontend/nginx.conf');
+const singleImageDockerfile = read('packages/single-image/Dockerfile');
+const singleImageSupervisor = read('packages/single-image/supervisor.js');
+const singleImageNginxConfig = read('packages/single-image/nginx.conf');
 const qualityWorkflow = read('.github/workflows/quality.yml');
 const dockerPublishWorkflow = read('.github/workflows/docker-publish.yml');
 const releaseGuide = read('docs/RELEASE.md');
@@ -50,7 +53,11 @@ assert.match(dockerPublishWorkflow, /linux\/amd64,linux\/arm64/);
 assert.match(dockerPublishWorkflow, /image:\s*frontend/);
 assert.match(dockerPublishWorkflow, /image:\s*backend/);
 assert.match(dockerPublishWorkflow, /image:\s*remote-gateway/);
-assert.match(dockerPublishWorkflow, /fantetic-terminal-\$\{\{ matrix\.image \}\}/);
+assert.match(dockerPublishWorkflow, /name:\s*All-in-one/);
+assert.match(dockerPublishWorkflow, /repository:\s*fantetic-terminal/);
+assert.match(dockerPublishWorkflow, /dockerfile:\s*packages\/single-image\/Dockerfile/);
+assert.match(dockerPublishWorkflow, /\$\{\{ secrets\.DOCKERHUB_USERNAME \}\}\/\$\{\{ matrix\.repository \}\}/);
+assert.match(dockerPublishWorkflow, /IMAGE_NAME: \$\{\{ matrix\.repository \}\}/);
 assert.match(dockerPublishWorkflow, /type=semver,pattern=\{\{version\}\}/);
 assert.match(dockerPublishWorkflow, /type=raw,value=latest/);
 assert.doesNotMatch(dockerPublishWorkflow, /type=ref,event=branch/);
@@ -164,5 +171,22 @@ assert.equal(
   2,
   'Both API and WebSocket proxy routes must preserve the external forwarded protocol',
 );
+
+assert.match(singleImageDockerfile, /^FROM guacamole\/guacd:1\.6\.0@sha256:8974eaa9ba32f713daf311e7cc8cd7e4cdfba1edea39eed75524e78ef4b08f4f AS guacd-runtime$/m);
+assert.match(singleImageDockerfile, /COPY --from=guacd-runtime \/ \/opt\/guacd-runtime\//);
+assert.match(singleImageDockerfile, /nginx tini python3 make g\+\+/);
+assert.match(singleImageDockerfile, /REMOTE_GATEWAY_API_BASE_DOCKER=http:\/\/127\.0\.0\.1:9090/);
+assert.match(singleImageDockerfile, /REMOTE_GATEWAY_WS_URL_DOCKER=ws:\/\/127\.0\.0\.1:8080/);
+assert.match(singleImageDockerfile, /ENTRYPOINT \["\/usr\/bin\/tini", "--", "node", "\/app\/supervisor\.js"\]/);
+assert.match(singleImageDockerfile, /HEALTHCHECK/);
+assert.match(singleImageSupervisor, /chroot/);
+assert.match(singleImageSupervisor, /REMOTE_GATEWAY_SHARED_SECRET/);
+assert.match(singleImageSupervisor, /127\.0\.0\.1/);
+assert.match(singleImageSupervisor, /SIGTERM/);
+assert.match(singleImageSupervisor, /process/);
+assert.match(singleImageNginxConfig, /access_log \/dev\/stdout fantetic_json/);
+assert.match(singleImageNginxConfig, /error_log \/dev\/stderr warn/);
+assert.match(singleImageNginxConfig, /\$uri/);
+assert.doesNotMatch(singleImageNginxConfig, /\$request_uri/);
 
 console.log('Delivery pipeline behavior checks passed');

@@ -175,7 +175,35 @@ Fantetic Terminal is designed as a **remote workspace**, not just a web SSH page
 
 ## Quick Start
 
-### 1. Download the Compose file
+### 1. Run the all-in-one image
+
+The all-in-one image includes the frontend, backend, Remote Gateway, and guacd. It supports SSH, SFTP, RDP, and VNC without Compose.
+
+```bash
+docker run -d --name fantetic-terminal \
+  --restart unless-stopped \
+  -p 18111:80 \
+  -v fantetic-terminal-data:/app/data \
+  spfantop/fantetic-terminal:latest
+```
+
+The named volume keeps the database, recordings, backups, and generated secrets. View all service logs with:
+
+```bash
+docker logs -f fantetic-terminal
+```
+
+### 2. Open the web interface
+
+```text
+http://localhost:18111
+```
+
+### Advanced: Compose deployment
+
+Use Compose only when you need independently scaled or upgraded frontend, backend, and Remote Gateway services.
+
+### Download the Compose file
 
 ```bash
 mkdir ./fantetic-terminal
@@ -185,17 +213,11 @@ wget https://raw.githubusercontent.com/spfantop/fantetic-terminal/refs/heads/mai
 wget https://raw.githubusercontent.com/spfantop/fantetic-terminal/refs/heads/main/.env.example -O .env
 ```
 
-### 2. Start Fantetic Terminal
+### Start Fantetic Terminal
 
 ```bash
 docker compose pull
 docker compose up -d
-```
-
-### 3. Open the web interface
-
-```text
-http://localhost:18111
 ```
 
 Source checkout is not required when using the published Docker images.

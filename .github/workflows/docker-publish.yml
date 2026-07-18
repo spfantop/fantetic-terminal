@@ -25,13 +25,20 @@ jobs:
         include:
           - name: Frontend
             image: frontend
+            repository: fantetic-terminal-frontend
             dockerfile: packages/frontend/Dockerfile
           - name: Backend
             image: backend
+            repository: fantetic-terminal-backend
             dockerfile: packages/backend/Dockerfile
           - name: Remote gateway
             image: remote-gateway
+            repository: fantetic-terminal-remote-gateway
             dockerfile: packages/remote-gateway/Dockerfile
+          - name: All-in-one
+            image: all-in-one
+            repository: fantetic-terminal
+            dockerfile: packages/single-image/Dockerfile
 
     steps:
       - name: Checkout source
@@ -64,7 +71,7 @@ jobs:
         id: metadata
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
         with:
-          images: ${{ secrets.DOCKERHUB_USERNAME }}/fantetic-terminal-${{ matrix.image }}
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/${{ matrix.repository }}
           tags: |
             type=semver,pattern={{version}}
             type=raw,value=latest
@@ -86,7 +93,7 @@ jobs:
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-          IMAGE_NAME: fantetic-terminal-${{ matrix.image }}
+          IMAGE_NAME: ${{ matrix.repository }}
           RELEASE_VERSION: ${{ github.ref_name }}
         shell: bash
         run: |

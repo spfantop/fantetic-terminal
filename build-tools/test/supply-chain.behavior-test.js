@@ -16,6 +16,7 @@ const rootPackage = JSON.parse(read('package.json'));
 const electronPackage = JSON.parse(read('electron-app/package.json'));
 const gatewayPackage = JSON.parse(read('packages/remote-gateway/package.json'));
 const gatewayDockerfile = read('packages/remote-gateway/Dockerfile');
+const singleImageDockerfile = read('packages/single-image/Dockerfile');
 const armCompose = read('docs/arm/docker-compose.yml');
 
 assert.match(readme, /guacamole\/guacd:1\.6\.0-RC1/);
@@ -41,10 +42,13 @@ assert.match(qualityWorkflow, /npm audit --prefix electron-app --package-lock-on
 assert.match(rootPackage.scripts['test:delivery'], /security-scan/);
 assert.match(desktopWorkflow, /name: Verify release checksums[\s\S]*sha256sum --check SHA256SUMS\.txt/);
 assert.match(gatewayDockerfile, /FROM guacamole\/guacd:1\.6\.0@sha256:8974eaa9ba32f713daf311e7cc8cd7e4cdfba1edea39eed75524e78ef4b08f4f/);
+assert.match(singleImageDockerfile, /FROM guacamole\/guacd:1\.6\.0@sha256:8974eaa9ba32f713daf311e7cc8cd7e4cdfba1edea39eed75524e78ef4b08f4f AS guacd-runtime/);
 assert.match(securityWorkflow, /node build-tools\/security-scan\.js/);
 assert.match(securityWorkflow, /npm sbom --sbom-format cyclonedx --omit=dev/);
 assert.match(securityWorkflow, /aquasecurity\/trivy-action@[a-f0-9]{40}\s+# v0\.36\.0/);
 assert.match(securityWorkflow, /version:\s*v0\.70\.0/);
+assert.match(securityWorkflow, /name:\s*all-in-one/);
+assert.match(securityWorkflow, /dockerfile:\s*packages\/single-image\/Dockerfile/);
 assert.match(securityWorkflow, /github\/codeql-action\/init@[a-f0-9]{40}\s+# v3/);
 for (const workflow of [qualityWorkflow, desktopWorkflow, securityWorkflow, dockerPublishWorkflow]) {
   assert.doesNotMatch(workflow, /uses:\s*[^\s@]+@v\d+/);
