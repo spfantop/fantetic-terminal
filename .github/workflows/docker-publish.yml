@@ -93,11 +93,11 @@ jobs:
           set -euo pipefail
 
           release_version="${RELEASE_VERSION#v}"
-          login_payload="$(jq -cn --arg username "$DOCKERHUB_USERNAME" --arg password "$DOCKERHUB_TOKEN" '{username: $username, password: $password}')"
+          login_payload="$(jq -cn --arg identifier "$DOCKERHUB_USERNAME" --arg secret "$DOCKERHUB_TOKEN" '{identifier: $identifier, secret: $secret}')"
           api_token="$(curl --fail --silent --show-error \
             --header 'Content-Type: application/json' \
             --data "$login_payload" \
-            https://hub.docker.com/v2/users/login/ | jq -r '.token // empty')"
+            https://hub.docker.com/v2/auth/token | jq -r '.access_token // empty')"
 
           if [ -z "$api_token" ]; then
             echo '::error::Docker Hub did not return an API token for tag cleanup.'
