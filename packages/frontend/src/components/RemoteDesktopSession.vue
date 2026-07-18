@@ -15,7 +15,7 @@ import type { ConnectionInfo } from '../stores/connections.store';
 import { useSettingsStore } from '../stores/settings.store';
 import type { WsConnectionStatus } from '../composables/useWebSocketConnection';
 import { resolveRemoteDesktopProxyWebSocketUrl } from '../utils/runtimeConfig';
-import { createRemotePointerScheduler, type RemotePointerState } from '../utils/remotePointerScheduler';
+import type { RemotePointerState } from '../utils/remotePointer';
 
 const { t } = useI18n();
 const settingsStore = useSettingsStore();
@@ -533,17 +533,9 @@ const setupInputListeners = () => {
       cursorElement.style.zIndex = '1000';
     }
 
-    const pointerScheduler = createRemotePointerScheduler<RemotePointerState>({
-      send: (mouseState) => guacClient.value?.sendMouseState(mouseState),
-      animationFrame: displayEl.ownerDocument.defaultView ?? window,
-    });
-    mouse.value.onmousemove = (mouseState: RemotePointerState) => {
-      pointerScheduler.move(mouseState);
+    mouse.value.onmousemove = mouse.value.onmousedown = mouse.value.onmouseup = (mouseState: RemotePointerState) => {
+      guacClient.value?.sendMouseState(mouseState);
     };
-    mouse.value.onmousedown = mouse.value.onmouseup = (mouseState: RemotePointerState) => {
-      pointerScheduler.sendNow(mouseState);
-    };
-    inputListenerCleanupList.push(pointerScheduler.dispose);
 
     // @ts-ignore
     keyboard.value = new Guacamole.Keyboard(displayEl);

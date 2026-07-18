@@ -18,6 +18,8 @@ const recorder = createSessionRecorder({
   onComplete: async () => {},
 });
 recorder.recordGuacamoleClient(Buffer.from('4.sync,1.a;'));
+recorder.recordGuacamoleClient(Buffer.from('5.mouse,2.12,2.34,1.0;'));
+recorder.recordGuacamoleClient(Buffer.from('3.key,2.65,1.1;'));
 recorder.recordGuacamoleServer(Buffer.from('5.ready,1.b;'));
 recorder.recordGuacamoleServer(Buffer.from('4.sync,1.c;'));
 await recorder.finish(1_100);
@@ -26,7 +28,11 @@ const chunkList: Buffer[] = [];
 for await (const chunk of readGuacamoleServerRecordingChunks(rootPath, recorder.relativePath)) {
   chunkList.push(chunk);
 }
-assert.deepEqual(chunkList.map(chunk => chunk.toString('utf8')), ['5.ready,1.b;', '4.sync,1.c;']);
+assert.deepEqual(
+  chunkList.map(chunk => chunk.toString('utf8')),
+  ['5.mouse,2.12,2.34;', '5.ready,1.b;', '4.sync,1.c;'],
+  'playback must retain pointer coordinates without replaying client keyboard or button input',
+);
 
 const routes = fs.readFileSync(path.resolve('src/session-recording/session-recording.routes.ts'), 'utf8');
 const controller = fs.readFileSync(path.resolve('src/session-recording/session-recording.controller.ts'), 'utf8');

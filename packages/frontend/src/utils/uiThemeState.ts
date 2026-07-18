@@ -35,27 +35,29 @@ export const normalizeUiTheme = (uiTheme: Record<string, string> | null | undefi
   ...(uiTheme ?? {}),
 });
 
+const legacyDarkUiTheme = normalizeUiTheme({
+  ...darkUiTheme,
+  '--link-hover-color': '#fafafa',
+  '--link-active-color': '#e5e5e5',
+  '--link-active-bg-color': 'rgba(255, 255, 255, 0.08)',
+  '--button-bg-color': '#f5f5f5',
+  '--button-text-color': '#050505',
+  '--button-hover-bg-color': '#d4d4d4',
+});
 const normalizedDarkUiTheme = normalizeUiTheme(darkUiTheme);
+
+const areThemeRecordsEqual = (
+  left: Record<string, string>,
+  right: Record<string, string>,
+): boolean => {
+  const keySet = new Set([...Object.keys(left), ...Object.keys(right)]);
+  return [...keySet].every(key => left[key] === right[key]);
+};
 
 export const areUiThemesEqual = (
   uiTheme: Record<string, string>,
   targetTheme: Record<string, string>,
-): boolean => {
-  const keySet = new Set([
-    ...Object.keys(normalizedDarkUiTheme),
-    ...Object.keys(defaultUiTheme),
-    ...Object.keys(uiTheme),
-    ...Object.keys(targetTheme),
-  ]);
-
-  for (const key of keySet) {
-    if (uiTheme[key] !== targetTheme[key]) {
-      return false;
-    }
-  }
-
-  return true;
-};
+): boolean => areThemeRecordsEqual(uiTheme, targetTheme);
 
 export const isCanonicalDarkUiTheme = (uiTheme: Record<string, string> | null | undefined): boolean => (
   areUiThemesEqual(normalizeUiTheme(uiTheme), normalizedDarkUiTheme)
@@ -67,7 +69,10 @@ export const readUiThemeMode = (settings: UiThemeSettingsLike): UiThemeMode => (
 
 export const resolveActiveUiTheme = (settings: UiThemeSettingsLike): Record<string, string> => {
   if (readUiThemeMode(settings) === 'dark') {
-    return normalizeUiTheme(safeParseUiTheme(settings.customDarkUiTheme, darkUiTheme));
+    const resolvedDarkTheme = normalizeUiTheme(safeParseUiTheme(settings.customDarkUiTheme, darkUiTheme));
+    return areThemeRecordsEqual(resolvedDarkTheme, legacyDarkUiTheme)
+      ? normalizedDarkUiTheme
+      : resolvedDarkTheme;
   }
 
   return normalizeUiTheme(safeParseUiTheme(settings.customUiTheme, defaultUiTheme));

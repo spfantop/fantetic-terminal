@@ -5,9 +5,7 @@ import { useI18n } from 'vue-i18n';
 import { useAppearanceStore } from '../../stores/appearance.store';
 import { useUiNotificationsStore } from '../../stores/uiNotifications.store';
 import { storeToRefs } from 'pinia';
-import { darkUiTheme, defaultUiTheme } from '../../features/appearance/config/default-themes';
-import { safeJsonParse } from '../../stores/appearance.store';
-import { readUiThemeMode } from '../../utils/uiThemeState';
+import { readUiThemeMode, resolveActiveUiTheme } from '../../utils/uiThemeState';
 
 const { t } = useI18n();
 const appearanceStore = useAppearanceStore();
@@ -19,14 +17,7 @@ const editableUiThemeString = ref('');
 const themeParseError = ref<string | null>(null);
 
 const initializeEditableState = () => {
-  const isDarkMode = readUiThemeMode(appearanceSettings.value) === 'dark';
-  const baseTheme = isDarkMode ? darkUiTheme : defaultUiTheme;
-  const userThemeJson = isDarkMode
-    ? appearanceSettings.value.customDarkUiTheme
-    : appearanceSettings.value.customUiTheme;
-  const userTheme = safeJsonParse(userThemeJson, {});
-  const mergedTheme = { ...baseTheme, ...userTheme };
-  editableUiTheme.value = JSON.parse(JSON.stringify(mergedTheme));
+  editableUiTheme.value = JSON.parse(JSON.stringify(resolveActiveUiTheme(appearanceSettings.value)));
   themeParseError.value = null;
   try {
       const themeObject = editableUiTheme.value;

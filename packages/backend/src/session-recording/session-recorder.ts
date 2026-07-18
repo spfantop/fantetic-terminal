@@ -197,9 +197,21 @@ export const readRecordingEvents = async (
   ));
 };
 
+const extractGuacamolePointerInstructions = (data: Buffer): Buffer[] => {
+  const pointerInstructionList: Buffer[] = [];
+  for (const rawInstruction of data.toString('utf8').split(';')) {
+    const match = /^5\.mouse,(\d+)\.(-?\d+),(\d+)\.(-?\d+)(?:,\d+\.-?\d+)?$/.exec(rawInstruction);
+    if (!match) continue;
+    const [, xLength, x, yLength, y] = match;
+    if (Number(xLength) !== x.length || Number(yLength) !== y.length) continue;
+    pointerInstructionList.push(Buffer.from(`5.mouse,${x.length}.${x},${y.length}.${y};`));
+  }
+  return pointerInstructionList;
+};
+
 /**
- * Streams only server-to-client Guacamole instructions without retaining a
- * complete remote-desktop recording in Backend memory.
+ * Streams server-to-client Guacamole instructions plus sanitized pointer
+ * coordinates. Keyboard and button state remain excluded from playback.
  */
 export async function* readGuacamoleServerRecordingChunks(
   rootPath: string,
@@ -214,7 +226,11 @@ export async function* readGuacamoleServerRecordingChunks(
     for await (const line of reader) {
       if (!line) continue;
       for (const event of parseRecordingLine(line)) {
-        if (event.type === 'guacamole-server') {
+        if (event.type === 'guacamole-client') {
+          for (const pointerInstruction of extractGuacamolePointerInstructions(Buffer.from(event.data, 'base64'))) {
+            yield pointerInstruction;
+          }
+        } else if (event.type === 'guacamole-server') {
           yield Buffer.from(event.data, 'base64');
         }
       }

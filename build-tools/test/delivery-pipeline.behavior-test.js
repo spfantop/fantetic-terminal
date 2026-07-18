@@ -65,27 +65,14 @@ assert.match(dockerPublishWorkflow, /name:\s*All-in-one/);
 assert.match(dockerPublishWorkflow, /repository:\s*fantetic-terminal/);
 assert.match(dockerPublishWorkflow, /dockerfile:\s*packages\/single-image\/Dockerfile/);
 assert.match(dockerPublishWorkflow, /\$\{\{ secrets\.DOCKERHUB_USERNAME \}\}\/\$\{\{ matrix\.repository \}\}/);
-assert.match(dockerPublishWorkflow, /IMAGE_NAME: \$\{\{ matrix\.repository \}\}/);
 assert.match(dockerPublishWorkflow, /type=semver,pattern=\{\{version\}\}/);
 assert.match(dockerPublishWorkflow, /type=raw,value=latest/);
 assert.doesNotMatch(dockerPublishWorkflow, /type=ref,event=branch/);
 assert.doesNotMatch(dockerPublishWorkflow, /type=semver,pattern=\{\{major\}\}/);
 assert.doesNotMatch(dockerPublishWorkflow, /type=sha,prefix=sha-/);
 assert.doesNotMatch(dockerPublishWorkflow, /value=latest,enable=/);
-assert.match(dockerPublishWorkflow, /name: Remove obsolete Docker Hub tags/);
-assert.match(dockerPublishWorkflow, /if: startsWith\(github\.ref, 'refs\/tags\/v'\)/);
-assert.match(
-  dockerPublishWorkflow,
-  /RELEASE_VERSION: \$\{\{ github\.event_name == 'workflow_dispatch' && inputs\.version \|\| github\.ref_name \}\}/,
-);
-assert.match(dockerPublishWorkflow, /https:\/\/hub\.docker\.com\/v2\/auth\/token/);
-assert.match(dockerPublishWorkflow, /\{identifier: \$identifier, secret: \$secret\}/);
-assert.match(dockerPublishWorkflow, /\.access_token \/\/ empty/);
-assert.doesNotMatch(dockerPublishWorkflow, /v2\/users\/login/);
-assert.match(dockerPublishWorkflow, /tags_api_url="https:\/\/hub\.docker\.com\/v2\/namespaces\/\$DOCKERHUB_USERNAME\/repositories\/\$IMAGE_NAME\/tags"/);
-assert.match(dockerPublishWorkflow, /"\$tags_api_url\?page_size=100"/);
-assert.match(dockerPublishWorkflow, /"\$tags_api_url\/\$tag"/);
-assert.match(dockerPublishWorkflow, /\[ "\$tag" = "\$release_version" \] \|\| \[ "\$tag" = 'latest' \]/);
+assert.doesNotMatch(dockerPublishWorkflow, /Remove obsolete Docker Hub tags/);
+assert.doesNotMatch(dockerPublishWorkflow, /--request DELETE|tags_api_url/);
 assert.match(dockerPublishGuide, /DOCKERHUB_USERNAME/);
 assert.match(dockerPublishGuide, /DOCKERHUB_TOKEN/);
 

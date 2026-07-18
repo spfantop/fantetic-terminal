@@ -18,7 +18,7 @@ const EXPECTED_PRESET_MANIFEST = Object.freeze({
 const EXPECTED_DEFAULT_THEME_MANIFESTS = Object.freeze({
   defaultXtermTheme: { count: 20, hash: 'fb38b817d1fd7c6d9515c3c0d12b72a382675cec28d193e399fcb312d6d00336' },
   defaultUiTheme: { count: 24, hash: 'f29a180068bb4d72485dba096dfd87ecd1a57f3b0ab5103ab65bf6def373a65b' },
-  darkUiTheme: { count: 27, hash: '10c00c4e9acf6f15de5e4093ef51c2fac75c4d97b8687b18954903600e867dd0' },
+  darkUiTheme: { count: 27, hash: '164e28184f90f95fe6979d597e6c064512c48cac3b215eba57574ac8ff343d38' },
 });
 
 const normalizeThemeKey = (name) => String(name)

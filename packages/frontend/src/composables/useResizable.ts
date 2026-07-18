@@ -1,4 +1,9 @@
 import { ref, onMounted, onBeforeUnmount, type Ref, watch } from 'vue';
+import {
+  resolveResizeGeometry,
+  type ResizeEdge,
+  type ResizeRect,
+} from '../utils/resizeGeometry';
 
 export interface UseResizableOptions {
   minWidth?: number;
@@ -10,7 +15,7 @@ export interface UseResizableOptions {
   initialHeight?: number | string; // Allow string for % or vh/vw, or number for px
 }
 
-type Edge = 'right' | 'bottom' | 'left' | 'top' | 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left' | null;
+type Edge = ResizeEdge | null;
 
 export function useResizable(
   elementRef: Ref<HTMLElement | null>,
@@ -33,8 +38,12 @@ export function useResizable(
   let startY = 0;
   let startWidth = 0;
   let startHeight = 0;
+  let startLeft = 0;
+  let startTop = 0;
+  let canAnchorLeft = false;
+  let canAnchorTop = false;
   let resizeFrameId: number | null = null;
-  let pendingSize: { width: number; height: number } | null = null;
+  let pendingGeometry: ResizeRect | null = null;
   let activeResizeWindow: Window | null = null;
 
   const resolveMaxWidth = () => (
@@ -75,34 +84,40 @@ export function useResizable(
     else el.style.cursor = 'default';
   };
 
-  const applyPendingSize = () => {
+  const applyPendingGeometry = () => {
     resizeFrameId = null;
-    if (!pendingSize) return;
+    if (!pendingGeometry) return;
 
-    width.value = pendingSize.width;
-    height.value = pendingSize.height;
+    width.value = pendingGeometry.width;
+    height.value = pendingGeometry.height;
     if (elementRef.value) {
-      elementRef.value.style.width = `${pendingSize.width}px`;
-      elementRef.value.style.height = `${pendingSize.height}px`;
+      elementRef.value.style.width = `${pendingGeometry.width}px`;
+      elementRef.value.style.height = `${pendingGeometry.height}px`;
+      if (canAnchorLeft && currentEdge.value?.includes('left')) {
+        elementRef.value.style.left = `${pendingGeometry.left}px`;
+      }
+      if (canAnchorTop && currentEdge.value?.includes('top')) {
+        elementRef.value.style.top = `${pendingGeometry.top}px`;
+      }
     }
-    pendingSize = null;
+    pendingGeometry = null;
   };
 
-  const scheduleSizeUpdate = (nextWidth: number, nextHeight: number) => {
-    pendingSize = { width: nextWidth, height: nextHeight };
+  const scheduleGeometryUpdate = (geometry: ResizeRect) => {
+    pendingGeometry = geometry;
     if (resizeFrameId !== null) return;
 
     const targetWindow = elementRef.value?.ownerDocument.defaultView ?? window;
-    resizeFrameId = targetWindow.requestAnimationFrame(applyPendingSize);
+    resizeFrameId = targetWindow.requestAnimationFrame(applyPendingGeometry);
   };
 
-  const flushPendingSize = () => {
+  const flushPendingGeometry = () => {
     if (resizeFrameId !== null) {
       const targetWindow = activeResizeWindow ?? elementRef.value?.ownerDocument.defaultView ?? window;
       targetWindow.cancelAnimationFrame(resizeFrameId);
       resizeFrameId = null;
     }
-    applyPendingSize();
+    applyPendingGeometry();
   };
 
   const handleMouseDown = (event: MouseEvent) => {
@@ -121,6 +136,14 @@ export function useResizable(
     const rect = elementRef.value.getBoundingClientRect();
     startWidth = rect.width;
     startHeight = rect.height;
+    const computedStyle = (elementRef.value.ownerDocument.defaultView ?? window).getComputedStyle(elementRef.value);
+    const inlineLeft = Number.parseFloat(elementRef.value.style.left);
+    const inlineTop = Number.parseFloat(elementRef.value.style.top);
+    const canPositionElement = computedStyle.position === 'absolute' || computedStyle.position === 'fixed';
+    canAnchorLeft = canPositionElement && Number.isFinite(inlineLeft);
+    canAnchorTop = canPositionElement && Number.isFinite(inlineTop);
+    startLeft = canAnchorLeft ? inlineLeft : rect.left;
+    startTop = canAnchorTop ? inlineTop : rect.top;
     width.value = startWidth;
     height.value = startHeight;
     
@@ -138,32 +161,26 @@ export function useResizable(
     const deltaX = event.clientX - startX;
     const deltaY = event.clientY - startY;
 
-    let newWidth = width.value ?? startWidth;
-    let newHeight = height.value ?? startHeight;
-
-    if (currentEdge.value.includes('right')) {
-      newWidth = startWidth + deltaX;
-    }
-    if (currentEdge.value.includes('left')) {
-      newWidth = startWidth - deltaX;
-    }
-    if (currentEdge.value.includes('bottom')) {
-      newHeight = startHeight + deltaY;
-    }
-    if (currentEdge.value.includes('top')) {
-      newHeight = startHeight - deltaY;
-    }
-
-    // Apply constraints
-    scheduleSizeUpdate(
-      Math.max(minWidth, Math.min(resolveMaxWidth(), newWidth)),
-      Math.max(minHeight, Math.min(resolveMaxHeight(), newHeight)),
-    );
+    scheduleGeometryUpdate(resolveResizeGeometry({
+      edge: currentEdge.value,
+      startRect: {
+        left: startLeft,
+        top: startTop,
+        width: startWidth,
+        height: startHeight,
+      },
+      deltaX,
+      deltaY,
+      minWidth,
+      minHeight,
+      maxWidth: resolveMaxWidth(),
+      maxHeight: resolveMaxHeight(),
+    }));
   };
 
   const handleMouseUp = () => {
     if (!isResizing.value) return;
-    flushPendingSize();
+    flushPendingGeometry();
     isResizing.value = false;
     if (elementRef.value) {
         elementRef.value.style.userSelect = '';
@@ -213,7 +230,7 @@ export function useResizable(
       targetWindow.cancelAnimationFrame(resizeFrameId);
       resizeFrameId = null;
     }
-    pendingSize = null;
+    pendingGeometry = null;
     if (elementRef.value) {
       elementRef.value.removeEventListener('mousedown', handleMouseDown);
       elementRef.value.removeEventListener('mousemove', handleElementHover);

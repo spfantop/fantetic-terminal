@@ -1,5 +1,6 @@
 import { nextTick, onBeforeUnmount, type Ref } from 'vue';
 import { useResizable, type UseResizableOptions } from './useResizable';
+import { isPointOnResizeEdge } from '../utils/resizeGeometry';
 
 type DisabledResolver = boolean | Ref<boolean> | (() => boolean);
 
@@ -23,8 +24,9 @@ interface DragState {
 export function useDraggableDialog(options: DraggableDialogOptions) {
   const margin = options.margin ?? 8;
   const isResizableEnabled = options.resizable !== false;
+  const resizableOptions = typeof options.resizable === 'object' ? options.resizable : {};
   const resizeState = isResizableEnabled
-    ? useResizable(options.dialogRef, typeof options.resizable === 'object' ? options.resizable : {})
+    ? useResizable(options.dialogRef, resizableOptions)
     : null;
   let dragState: DragState | null = null;
   let previousUserSelect = '';
@@ -139,6 +141,18 @@ export function useDraggableDialog(options: DraggableDialogOptions) {
 
     const dialog = options.dialogRef.value;
     if (!dialog) return;
+    if (
+      isResizableEnabled
+      && isPointOnResizeEdge(
+        dialog.getBoundingClientRect(),
+        event.clientX,
+        event.clientY,
+        resizableOptions.edgeThreshold ?? 8,
+      )
+    ) {
+      // 边角区域只允许缩放，避免标题栏拖动和缩放同时修改位置。
+      return;
+    }
 
     ensurePositioned();
 

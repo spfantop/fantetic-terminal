@@ -40,7 +40,17 @@ assert.match(component, /cachedEvents\.value\.find\(event => event\.type === 're
 assert.doesNotMatch(component, /style\.transform = `scale\(/);
 assert.match(component, /grid-template-rows:auto auto minmax\(0,1fr\) auto/);
 assert.match(component, /\.recording-modal\{[^}]*overflow:auto/, 'the modal must scroll instead of clipping the timeline on short viewports');
-assert.match(component, /height:min\(48rem,calc\(100dvh - 5rem\)\)/, 'the player must reserve viewport space for the timeline');
+assert.match(component, /height:min\(48rem,calc\(100dvh - 1\.5rem\)\)/, 'the player must use the available viewport while retaining the timeline');
+assert.match(
+  component,
+  /display\.onresize\s*=\s*syncRemoteDesktopReplayDisplay/,
+  'the replay display must be rescaled when recorded dimensions become available',
+);
+assert.match(
+  component,
+  /getComputedStyle\(host\)/,
+  'the replay scale must use the host content box at every window size',
+);
 assert.match(component, /@media\(max-width:640px\)/);
 assert.match(component, /useDraggableDialog/);
 assert.match(component, /recording-drag-handle/);

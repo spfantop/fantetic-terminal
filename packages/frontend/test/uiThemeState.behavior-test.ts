@@ -7,6 +7,15 @@ import {
 } from '../src/utils/uiThemeState';
 import { darkUiTheme, defaultUiTheme } from '../src/features/appearance/config/default-themes';
 
+const legacyDarkUiTheme = {
+  ...darkUiTheme,
+  '--link-hover-color': '#fafafa',
+  '--link-active-color': '#e5e5e5',
+  '--link-active-bg-color': 'rgba(255, 255, 255, 0.08)',
+  '--button-bg-color': '#f5f5f5',
+  '--button-text-color': '#050505',
+  '--button-hover-bg-color': '#d4d4d4',
+};
 const darkLikeCustomTheme = {
   ...darkUiTheme,
   '--button-bg-color': defaultUiTheme['--button-bg-color'],
@@ -74,6 +83,34 @@ assert.equal(
   })['--app-bg-color'],
   '#101010',
   'dark mode should use the saved dark theme style',
+);
+assert.deepEqual(
+  resolveActiveUiTheme({
+    uiThemeMode: 'dark',
+    customDarkUiTheme: JSON.stringify(legacyDarkUiTheme),
+  }),
+  normalizeUiTheme(darkUiTheme),
+  'the previous built-in dark palette should migrate instead of remaining as a low-contrast custom theme',
+);
+
+const hexLuminance = (value: string): number => {
+  const channelList = value.match(/[0-9a-f]{2}/gi)?.map(channel => Number.parseInt(channel, 16) / 255) ?? [];
+  const [red, green, blue] = channelList.map(channel => (
+    channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+  ));
+  return red * 0.2126 + green * 0.7152 + blue * 0.0722;
+};
+const contrast = (left: string, right: string): number => {
+  const [lighter, darker] = [hexLuminance(left), hexLuminance(right)].sort((a, b) => b - a);
+  return (lighter + 0.05) / (darker + 0.05);
+};
+assert.ok(
+  contrast(darkUiTheme['--link-active-color'], '#ffffff') >= 4.5,
+  'dark primary buttons with white labels must meet WCAG AA contrast',
+);
+assert.ok(
+  contrast(darkUiTheme['--button-bg-color'], darkUiTheme['--button-text-color']) >= 4.5,
+  'dark semantic buttons must meet WCAG AA contrast',
 );
 
 const switchToDarkWithTerminalTheme = createUiThemeModeUpdate('dark', {
