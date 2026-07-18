@@ -1,8 +1,8 @@
 import {
-  readRecordingFileFingerprint,
   verifyRecordingIntegrity,
   type RecordingIntegrityResult,
 } from './session-recorder';
+import { readRecordingFileFingerprint } from './recording-file';
 
 interface IntegrityCacheEntry {
   fingerprint: string;

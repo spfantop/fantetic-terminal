@@ -72,6 +72,19 @@ assert.deepEqual(await verifyRecordingIntegrityLines(recordingLineSource()), {
   finalHash: completed[0].finalHash,
 });
 
+const paginationRelativePath = path.join('pagination', 'recording.jsonl.enc');
+const paginationPath = path.resolve(rootPath, paginationRelativePath);
+fs.mkdirSync(path.dirname(paginationPath), { recursive: true });
+fs.writeFileSync(paginationPath, [0, 1, 2, 3].map(offsetMs => encrypt(JSON.stringify([
+  { offsetMs, type: 'output', data: Buffer.from(String(offsetMs)).toString('base64') },
+]))).join('\n') + '\n');
+assert.equal((await readRecordingEventPage(rootPath, paginationRelativePath, 0, 1)).nextCursor, 1);
+assert.equal((await readRecordingEventPage(rootPath, paginationRelativePath, 2, 1)).nextCursor, 3);
+assert.deepEqual(await readRecordingEventPage(rootPath, paginationRelativePath, 3, 1), {
+  eventList: [{ offsetMs: 3, type: 'output', data: Buffer.from('3').toString('base64') }],
+  nextCursor: null,
+});
+
 const recordingPath = path.resolve(rootPath, recorder.relativePath);
 const encryptedBatch = fs.readFileSync(recordingPath, 'utf8').trim();
 const tamperedBatch = JSON.parse(decrypt(encryptedBatch));
@@ -99,6 +112,14 @@ await chainedRecorder.finish(1_550);
 const chainedPath = path.resolve(rootPath, chainedRecorder.relativePath);
 const chainedLineList = fs.readFileSync(chainedPath, 'utf8').trim().split('\n');
 assert.equal(chainedLineList.length, 2, 'the test recording should have separate encrypted batches');
+assert.deepEqual(await readRecordingEventPage(rootPath, chainedRecorder.relativePath, 0, 1), {
+  eventList: [{ offsetMs: 0, type: 'output', data: Buffer.from('first batch').toString('base64') }],
+  nextCursor: 1,
+});
+assert.deepEqual(await readRecordingEventPage(rootPath, chainedRecorder.relativePath, 1, 1), {
+  eventList: [{ offsetMs: 0, type: 'output', data: Buffer.from('second batch').toString('base64') }],
+  nextCursor: null,
+});
 fs.writeFileSync(chainedPath, `${chainedLineList[1]}\n`);
 assert.deepEqual(await verifyRecordingIntegrity(rootPath, chainedRecorder.relativePath), {
   status: 'invalid',

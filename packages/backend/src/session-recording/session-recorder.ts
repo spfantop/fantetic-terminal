@@ -7,6 +7,8 @@ import type { SessionRecordingEvent } from '@fantetic-terminal/contracts';
 import { decrypt, encrypt } from '../utils/crypto';
 import { createLogger } from '../logging/logger';
 import { backendMetrics } from '../observability/metrics';
+import { resolveRecordingPath } from './recording-file';
+import { recordingPageIndexCache } from './recording-page-index';
 
 const logger = createLogger('SessionRecorder');
 
@@ -72,15 +74,6 @@ const parseRecordingLine = (line: string): RecordingEvent[] => {
   if (Array.isArray(value)) return value as RecordingEvent[];
   if (isRecordingBatch(value)) return value.eventList;
   throw new Error('Recording batch has an invalid format.');
-};
-
-const resolveRecordingPath = (rootPath: string, relativePath: string): string => {
-  const root = path.resolve(rootPath);
-  const target = path.resolve(root, relativePath);
-  if (target !== root && !target.startsWith(`${root}${path.sep}`)) {
-    throw new Error('Recording path escapes its storage root.');
-  }
-  return target;
 };
 
 export const createSessionRecorder = (options: RecorderOptions) => {
@@ -283,14 +276,6 @@ export const verifyRecordingIntegrityLines = async (
   return { status: 'valid', eventCount, batchCount, finalHash: previousHash };
 };
 
-export const readRecordingFileFingerprint = async (
-  rootPath: string,
-  relativePath: string,
-): Promise<string> => {
-  const stats = await fs.promises.stat(resolveRecordingPath(rootPath, relativePath));
-  return [stats.dev, stats.ino, stats.size, stats.mtimeMs, stats.ctimeMs].join(':');
-};
-
 export const readRecordingEventPage = async (
   rootPath: string,
   relativePath: string,
@@ -300,23 +285,30 @@ export const readRecordingEventPage = async (
   const filePath = resolveRecordingPath(rootPath, relativePath);
   const safeCursor = Number.isFinite(cursor) ? Math.max(0, Math.floor(cursor)) : 0;
   const safeLimit = Number.isFinite(limit) ? Math.min(200, Math.max(1, Math.floor(limit))) : 100;
+  const pageIndex = await recordingPageIndexCache.open(rootPath, relativePath);
+  const checkpoint = pageIndex.find(safeCursor);
   const reader = readline.createInterface({
-    input: fs.createReadStream(filePath, { encoding: 'utf8' }),
+    input: fs.createReadStream(filePath, { encoding: 'utf8', start: checkpoint.byteOffset }),
     crlfDelay: Infinity,
   });
   const eventList: RecordingEvent[] = [];
-  let lineIndex = 0;
+  let lineIndex = checkpoint.lineIndex;
+  let byteOffset = checkpoint.byteOffset;
   let hasMore = false;
   for await (const line of reader) {
     if (lineIndex < safeCursor) {
+      byteOffset += Buffer.byteLength(line, 'utf8') + 1;
       lineIndex += 1;
       continue;
     }
     if (lineIndex >= safeCursor + safeLimit) {
       hasMore = true;
+      pageIndex.remember(lineIndex, byteOffset);
       break;
     }
     if (line) eventList.push(...parseRecordingLine(line));
+    // Recorder output is UTF-8 text with an explicit LF separator.
+    byteOffset += Buffer.byteLength(line, 'utf8') + 1;
     lineIndex += 1;
   }
   reader.close();
