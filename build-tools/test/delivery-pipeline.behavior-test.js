@@ -57,6 +57,11 @@ assert.doesNotMatch(dockerPublishWorkflow, /type=ref,event=branch/);
 assert.doesNotMatch(dockerPublishWorkflow, /type=semver,pattern=\{\{major\}\}/);
 assert.doesNotMatch(dockerPublishWorkflow, /type=sha,prefix=sha-/);
 assert.doesNotMatch(dockerPublishWorkflow, /value=latest,enable=/);
+assert.match(dockerPublishWorkflow, /name: Remove obsolete Docker Hub tags/);
+assert.match(dockerPublishWorkflow, /if: startsWith\(github\.ref, 'refs\/tags\/v'\)/);
+assert.match(dockerPublishWorkflow, /RELEASE_VERSION: \$\{\{ github\.ref_name \}\}/);
+assert.match(dockerPublishWorkflow, /tags\?page_size=100/);
+assert.match(dockerPublishWorkflow, /\[ "\$tag" = "\$release_version" \] \|\| \[ "\$tag" = 'latest' \]/);
 assert.match(dockerPublishGuide, /DOCKERHUB_USERNAME/);
 assert.match(dockerPublishGuide, /DOCKERHUB_TOKEN/);
 
