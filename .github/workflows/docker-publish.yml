@@ -104,10 +104,10 @@ jobs:
             exit 1
           fi
 
-          tags_url="https://hub.docker.com/v2/namespaces/$DOCKERHUB_USERNAME/repositories/$IMAGE_NAME/tags?page_size=100"
+          tags_api_url="https://hub.docker.com/v2/namespaces/$DOCKERHUB_USERNAME/repositories/$IMAGE_NAME/tags"
           tag_names="$(curl --fail --silent --show-error \
             --header "Authorization: Bearer $api_token" \
-            "$tags_url" | jq -r '.results[]?.name')"
+            "$tags_api_url?page_size=100" | jq -r '.results[]?.name')"
 
           while IFS= read -r tag; do
             if [ -z "$tag" ] || [ "$tag" = "$release_version" ] || [ "$tag" = 'latest' ]; then
@@ -117,5 +117,5 @@ jobs:
             echo "Removing obsolete Docker Hub tag: $tag"
             curl --fail --silent --show-error --request DELETE \
               --header "Authorization: Bearer $api_token" \
-              "$tags_url/$tag"
+              "$tags_api_url/$tag"
           done <<< "$tag_names"
