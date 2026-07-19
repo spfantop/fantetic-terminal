@@ -77,6 +77,11 @@ assert.match(dockerPublishGuide, /DOCKERHUB_USERNAME/);
 assert.match(dockerPublishGuide, /DOCKERHUB_TOKEN/);
 
 assert.doesNotMatch(frontendDockerfile, /COPY\s+\.env\s/);
+assert.match(
+  frontendDockerfile,
+  /^FROM --platform=\$BUILDPLATFORM node:20 AS builder$/m,
+  'Architecture-neutral frontend assets must build natively instead of through ARM64 QEMU',
+);
 assert.match(frontendDockerfile, /RUN npm ci/);
 assert.doesNotMatch(frontendDockerfile, /RUN npm install/);
 assert.match(frontendDockerfile, /COPY build-tools\/apply-patches\.js \.\/build-tools\//);
