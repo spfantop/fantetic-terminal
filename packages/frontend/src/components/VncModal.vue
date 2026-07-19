@@ -9,6 +9,7 @@ import Guacamole from 'guacamole-common-js';
 import type { ConnectionInfo } from '../stores/connections.store';
 import { resolveRemoteDesktopProxyWebSocketUrl } from '../utils/runtimeConfig';
 import type { RemotePointerState } from '../utils/remotePointer';
+import { setupNativeRemoteCursor } from '../utils/nativeRemoteCursor';
 
 const { t } = useI18n();
 const settingsStore = useSettingsStore();
@@ -249,25 +250,10 @@ const setupInputListeners = () => {
         displayEl.addEventListener('click', handleVncDisplayClick);
         inputListenerCleanupList.push(() => displayEl.removeEventListener('click', handleVncDisplayClick));
 
-        const handleMouseEnter = () => { if (displayEl) displayEl.style.cursor = 'none'; };
-        const handleMouseLeave = () => { if (displayEl) displayEl.style.cursor = 'default'; };
-        displayEl.addEventListener('mouseenter', handleMouseEnter);
-        displayEl.addEventListener('mouseleave', handleMouseLeave);
-        inputListenerCleanupList.push(() => displayEl.removeEventListener('mouseenter', handleMouseEnter));
-        inputListenerCleanupList.push(() => displayEl.removeEventListener('mouseleave', handleMouseLeave));
-
         // @ts-ignore
         mouse.value = new Guacamole.Mouse(displayEl);
         const display = guacClient.value.getDisplay();
-        display.showCursor(true);
-
-        const cursorLayer = display.getCursorLayer();
-        if (cursorLayer) {
-          const cursorElement = cursorLayer.getElement();
-          if (cursorElement) {
-             cursorElement.style.zIndex = '1000';
-          }
-        }
+        inputListenerCleanupList.push(setupNativeRemoteCursor(display, mouse.value, displayEl));
 
         mouse.value.onmousemove = mouse.value.onmousedown = mouse.value.onmouseup = (mouseState: RemotePointerState) => {
           guacClient.value?.sendMouseState(mouseState);

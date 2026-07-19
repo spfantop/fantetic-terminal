@@ -10,6 +10,7 @@ import apiClient from '../utils/apiClient';
 import { ConnectionInfo } from '../stores/connections.store';
 import { resolveRemoteDesktopProxyWebSocketUrl } from '../utils/runtimeConfig';
 import type { RemotePointerState } from '../utils/remotePointer';
+import { setupNativeRemoteCursor } from '../utils/nativeRemoteCursor';
 
 const { t } = useI18n();
 const settingsStore = useSettingsStore(); 
@@ -258,44 +259,11 @@ const setupInputListeners = () => {
         inputListenerCleanupList.push(() => displayEl.removeEventListener('click', handleRdpDisplayClick));
 
 
-        // 鼠标进入 RDP 区域时隐藏本地光标
-        const handleMouseEnter = () => {
-          if (displayEl) displayEl.style.cursor = 'none';
-        };
-        // 鼠标离开 RDP 区域时恢复本地光标
-        const handleMouseLeave = () => {
-          if (displayEl) displayEl.style.cursor = 'default';
-        };
-        displayEl.addEventListener('mouseenter', handleMouseEnter);
-        displayEl.addEventListener('mouseleave', handleMouseLeave);
-        inputListenerCleanupList.push(() => displayEl.removeEventListener('mouseenter', handleMouseEnter));
-        inputListenerCleanupList.push(() => displayEl.removeEventListener('mouseleave', handleMouseLeave));
-
-
-
         // @ts-ignore
         mouse.value = new Guacamole.Mouse(displayEl);
 
         const display = guacClient.value.getDisplay();
-        // 启用 Guacamole 的内置光标渲染
-        display.showCursor(true);
-
-
-        // 提高 Guacamole 光标图层的 z-index
-        const cursorLayer = display.getCursorLayer(); // 获取光标图层
-        if (cursorLayer) {
-          const cursorElement = cursorLayer.getElement(); // 获取光标图层的 DOM 元素
-          if (cursorElement) {
-             cursorElement.style.zIndex = '1000'; // 设置 DOM 元素的 z-index
-             debugLog('[RDP Modal] Set cursor layer element z-index to 1000.');
-          } else {
-             console.warn('[RDP Modal] Could not get cursor layer element to set z-index.');
-          }
-        } else {
-          console.warn('[RDP Modal] Could not get cursor layer to set z-index.');
-        }
-
-
+        inputListenerCleanupList.push(setupNativeRemoteCursor(display, mouse.value, displayEl));
 
         mouse.value.onmousemove = mouse.value.onmousedown = mouse.value.onmouseup = (mouseState: RemotePointerState) => {
           guacClient.value?.sendMouseState(mouseState);

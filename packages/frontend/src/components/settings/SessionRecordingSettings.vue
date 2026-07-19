@@ -53,6 +53,11 @@ import AdminDateRange from '../admin/AdminDateRange.vue';
 import { useConfirmDialog } from '../../composables/useConfirmDialog';
 import { useDraggableDialog } from '../../composables/useDraggableDialog';
 import { useDialogFocus } from '../../composables/useDialogFocus';
+import { createTerminalRecordingEventRenderer } from '../../utils/terminalRecordingReplay';
+import {
+  clearTerminalReplayViewport,
+  fitTerminalReplayViewport,
+} from '../../utils/terminalReplayViewport';
 
 const { t } = useI18n();
 const route = useRoute();
@@ -93,6 +98,8 @@ const { centerDialog: centerRecordingDialog, startDialogDrag: startRecordingDial
 let terminal: Terminal | undefined;
 let fitAddon: FitAddon | undefined;
 let resizeObserver: ResizeObserver | undefined;
+let terminalEventRenderer: ReturnType<typeof createTerminalRecordingEventRenderer> | undefined;
+let terminalViewportFrame: number | undefined;
 let playGeneration = 0;
 let recordedTerminalSize: { cols: number; rows: number } | undefined;
 let nextEventCursor: number | null = 0;
@@ -122,7 +129,6 @@ const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE))
 const formatTime = (value: number) => new Date(value).toLocaleString();
 const formatDuration = (value: number) => `${Math.floor(value / 60000).toString().padStart(2, '0')}:${Math.floor(value % 60000 / 1000).toString().padStart(2, '0')}`;
 const formatBytes = (value: number) => value < 1024 ? `${value} B` : value < 1048576 ? `${(value / 1024).toFixed(1)} KB` : `${(value / 1048576).toFixed(1)} MB`;
-const decode = (data: string) => Uint8Array.from(atob(data), char => char.charCodeAt(0));
 const sleep = (duration: number) => new Promise(resolve => window.setTimeout(resolve, duration));
 
 const loadList = async () => {
@@ -139,11 +145,18 @@ const resetFilters = () => { filterQuery.value = ''; filterStatus.value = ''; fi
 const setPage = (page: number) => { currentPage.value = page; void loadList(); };
 
 const clearTerminalViewportStyles = () => {
-  const xtermElement = terminalHost.value?.querySelector<HTMLElement>('.xterm');
-  if (!xtermElement) return;
-  xtermElement.style.width = '';
-  xtermElement.style.height = '';
-  xtermElement.style.transform = '';
+  if (terminalViewportFrame !== undefined) window.cancelAnimationFrame(terminalViewportFrame);
+  terminalViewportFrame = undefined;
+  clearTerminalReplayViewport(terminalHost.value);
+};
+
+const scheduleTerminalReplayViewportFit = () => {
+  if (!terminalHost.value) return;
+  if (terminalViewportFrame !== undefined) window.cancelAnimationFrame(terminalViewportFrame);
+  terminalViewportFrame = window.requestAnimationFrame(() => {
+    terminalViewportFrame = undefined;
+    if (terminalHost.value && recordedTerminalSize) fitTerminalReplayViewport(terminalHost.value);
+  });
 };
 
 const syncTerminalViewport = () => {
@@ -154,6 +167,7 @@ const syncTerminalViewport = () => {
   }
   terminal?.resize(recordedTerminalSize.cols, recordedTerminalSize.rows);
   terminal?.refresh(0, recordedTerminalSize.rows - 1);
+  scheduleTerminalReplayViewportFit();
 };
 
 // 旧录像可能先记录输出、后记录首次 resize。回放前先采用首个尺寸，避免历史输出按弹窗宽度重排。
@@ -169,6 +183,13 @@ const ensureTerminal = async () => {
   if (terminal || !terminalHost.value) return;
   terminal = new Terminal({ convertEol: false, cursorBlink: false, disableStdin: true, scrollback: 10_000 });
   fitAddon = new FitAddon(); terminal.loadAddon(fitAddon); terminal.open(terminalHost.value);
+  terminalEventRenderer = createTerminalRecordingEventRenderer({
+    write: data => terminal?.write(data),
+    resize: (cols, rows) => {
+      recordedTerminalSize = { cols, rows };
+      syncTerminalViewport();
+    },
+  });
   await nextTick(); fitAddon.fit();
   resizeObserver = new ResizeObserver(syncTerminalViewport); resizeObserver.observe(terminalHost.value);
 };
@@ -234,7 +255,8 @@ const handlePlaybackSpeedChange = () => {
 const toggleRecordingPlayerExpanded = async () => {
   recordingPlayerExpanded.value = !recordingPlayerExpanded.value;
   await nextTick();
-  syncRemoteDesktopReplayDisplay();
+  if (isRemoteDesktopRecording.value) syncRemoteDesktopReplayDisplay();
+  else syncTerminalViewport();
   if (!recordingPlayerExpanded.value) await centerRecordingDialog();
 };
 const ensureRemoteDesktopRecording = async () => {
@@ -291,15 +313,7 @@ const ensureRemoteDesktopRecording = async () => {
   recording.connect();
 };
 const renderEvent = (event: SessionRecordingEvent) => {
-  if (event.type === 'output') {
-    terminal?.write(decode(event.data));
-    return;
-  }
-  if (event.type === 'resize') {
-    recordedTerminalSize = { cols: Math.max(2, event.cols), rows: Math.max(1, event.rows) };
-    terminal?.resize(recordedTerminalSize.cols, recordedTerminalSize.rows);
-    syncTerminalViewport();
-  }
+  terminalEventRenderer?.render(event);
 };
 const loadNextEventPage = async (reset = false) => {
   if (!selectedId.value || (!reset && nextEventCursor === null)) return false;
@@ -335,10 +349,10 @@ const disposeRemoteDesktopRecording = () => {
   remoteDesktopResizeObserver?.disconnect();
   remoteDesktopResizeObserver = undefined;
 };
-const selectRecording = async (id: string) => { stop(); disposeRemoteDesktopRecording(); remoteDesktopRecordingReady.value = false; recordingPlayerExpanded.value = false; recordingAbortController?.abort(); recordingAbortController = new AbortController(); selectedId.value = id; cachedEvents.value = []; recordingIntegrity.value = undefined; remoteDesktopPlaybackDurationMs.value = 0; nextEventCursor = 0; cacheStartCursor = 0; timelineOffset.value = 0; recordedTerminalSize = undefined; await nextTick(); await centerRecordingDialog(); if (isRemoteDesktopRecording.value) { await loadEvents(); if (!hasInvalidRecordingIntegrity()) await ensureRemoteDesktopRecording(); return; } await ensureTerminal(); clearTerminalViewportStyles(); fitAddon?.fit(); terminal?.reset(); void loadEvents(); };
-const closePlayer = () => { stop(); disposeRemoteDesktopRecording(); remoteDesktopRecordingReady.value=false; recordingPlayerExpanded.value=false; remoteDesktopRecordingHost.value?.replaceChildren(); recordingAbortController?.abort(); recordingAbortController=undefined; selectedId.value=''; cachedEvents.value=[]; recordingIntegrity.value=undefined; remoteDesktopPlaybackDurationMs.value=0; nextEventCursor=0; cacheStartCursor=0; recordedTerminalSize=undefined; resizeObserver?.disconnect(); resizeObserver=undefined; terminal?.dispose(); terminal=undefined; fitAddon=undefined; };
+const selectRecording = async (id: string) => { stop(); disposeRemoteDesktopRecording(); remoteDesktopRecordingReady.value = false; recordingPlayerExpanded.value = false; recordingAbortController?.abort(); recordingAbortController = new AbortController(); selectedId.value = id; cachedEvents.value = []; recordingIntegrity.value = undefined; remoteDesktopPlaybackDurationMs.value = 0; nextEventCursor = 0; cacheStartCursor = 0; timelineOffset.value = 0; recordedTerminalSize = undefined; terminalEventRenderer?.reset(); await nextTick(); await centerRecordingDialog(); if (isRemoteDesktopRecording.value) { await loadEvents(); if (!hasInvalidRecordingIntegrity()) await ensureRemoteDesktopRecording(); return; } await ensureTerminal(); clearTerminalViewportStyles(); fitAddon?.fit(); terminal?.reset(); terminalEventRenderer?.reset(); void loadEvents(); };
+const closePlayer = () => { stop(); disposeRemoteDesktopRecording(); remoteDesktopRecordingReady.value=false; recordingPlayerExpanded.value=false; remoteDesktopRecordingHost.value?.replaceChildren(); recordingAbortController?.abort(); recordingAbortController=undefined; selectedId.value=''; cachedEvents.value=[]; recordingIntegrity.value=undefined; remoteDesktopPlaybackDurationMs.value=0; nextEventCursor=0; cacheStartCursor=0; recordedTerminalSize=undefined; resizeObserver?.disconnect(); resizeObserver=undefined; clearTerminalViewportStyles(); terminal?.dispose(); terminal=undefined; fitAddon=undefined; terminalEventRenderer=undefined; };
 const deleteRecording = async (recording: SessionRecording) => { if(recording.status==='active'||!await showConfirmDialog({message:t('sessionRecording.confirmDelete',{name:recording.connection_name})}))return; deletingId.value=recording.id; try{await sessionRecordingApi.delete(recording.id);if(selectedId.value===recording.id)closePlayer();await loadList();}catch{error.value=t('sessionRecording.deleteFailed');}finally{deletingId.value='';} };
-const seekTo = async (offset: number) => { stop(); if (isRemoteDesktopRecording.value) { remoteDesktopRecording?.seek(offset); timelineOffset.value = offset; return; } if (cacheStartCursor > 0 && offset < (cachedEvents.value[0]?.offsetMs ?? 0)) { preparing.value = true; try { await loadNextEventPage(true); while (nextEventCursor !== null && (cachedEvents.value[cachedEvents.value.length - 1]?.offsetMs ?? 0) < offset) await loadNextEventPage(); } finally { preparing.value = false; } } terminal?.reset(); primeTerminalForReplay(); for (const event of cachedEvents.value) { if (event.offsetMs > offset) break; renderEvent(event); } timelineOffset.value = offset; syncTerminalViewport(); };
+const seekTo = async (offset: number) => { stop(); if (isRemoteDesktopRecording.value) { remoteDesktopRecording?.seek(offset); timelineOffset.value = offset; return; } if (cacheStartCursor > 0 && offset < (cachedEvents.value[0]?.offsetMs ?? 0)) { preparing.value = true; try { await loadNextEventPage(true); while (nextEventCursor !== null && (cachedEvents.value[cachedEvents.value.length - 1]?.offsetMs ?? 0) < offset) await loadNextEventPage(); } finally { preparing.value = false; } } terminal?.reset(); terminalEventRenderer?.reset(); primeTerminalForReplay(); for (const event of cachedEvents.value) { if (event.offsetMs > offset) break; renderEvent(event); } timelineOffset.value = offset; syncTerminalViewport(); };
 const play = async () => {
   if (hasInvalidRecordingIntegrity()) return;
   if (isRemoteDesktopRecording.value) {
@@ -350,7 +364,7 @@ const play = async () => {
   await ensureTerminal(); await loadEvents(); if (hasInvalidRecordingIntegrity() || !cachedEvents.value.length) return;
   const lastOffset = cachedEvents.value[cachedEvents.value.length - 1]?.offsetMs ?? 0;
   if (timelineOffset.value >= lastOffset && nextEventCursor === null) await seekTo(0);
-  else if (timelineOffset.value === 0) { terminal?.reset(); primeTerminalForReplay(); }
+  else if (timelineOffset.value === 0) { terminal?.reset(); terminalEventRenderer?.reset(); primeTerminalForReplay(); }
   const generation = ++playGeneration; playing.value = true; let previous = timelineOffset.value;
   try { let index = cachedEvents.value.findIndex(event => event.offsetMs >= timelineOffset.value); if (index < 0) index = cachedEvents.value.length; while (generation === playGeneration) { if (index >= cachedEvents.value.length) { if (nextEventCursor === null || !await loadNextEventPage()) break; index = Math.max(0, cachedEvents.value.findIndex(event => event.offsetMs >= previous)); continue; } const event = cachedEvents.value[index++]; const delay = Math.min(1000, Math.max(0, event.offsetMs - previous)) / speed.value; if (delay) await sleep(delay); if (generation !== playGeneration) return; renderEvent(event); timelineOffset.value = event.offsetMs; previous = event.offsetMs; } }
   finally { if (generation === playGeneration) playing.value = false; }
@@ -367,7 +381,7 @@ onMounted(() => {
   }
   void loadList();
 });
-onBeforeUnmount(() => { stop(); disposeRemoteDesktopRecording(); recordingAbortController?.abort(); resizeObserver?.disconnect(); terminal?.dispose(); });
+onBeforeUnmount(() => { stop(); disposeRemoteDesktopRecording(); recordingAbortController?.abort(); resizeObserver?.disconnect(); clearTerminalViewportStyles(); terminal?.dispose(); terminalEventRenderer=undefined; });
 </script>
 
 <style scoped>
