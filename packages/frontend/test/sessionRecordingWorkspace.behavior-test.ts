@@ -77,18 +77,25 @@ const renderer = createTerminalRecordingEventRenderer({
   resize: (cols, rows) => resizeList.push([cols, rows]),
 });
 
-renderer.render({ offsetMs: 0, type: 'input', data: encode('ls') });
-renderer.render({ offsetMs: 1, type: 'output', data: encode('ls\r\nfile.txt\r\n') });
-assert.equal(writeList.join(''), 'ls\r\nfile.txt\r\n', 'recorded input must be visible without duplicating remote shell echo');
+renderer.render({ offsetMs: 0, type: 'output', data: encode('user@host:~$ ') });
+renderer.render({ offsetMs: 1, type: 'input', data: encode('ls') });
+renderer.render({ offsetMs: 2, type: 'output', data: encode('ls\r\nfile.txt\r\n') });
+assert.equal(writeList.join(''), 'user@host:~$ ls\r\nfile.txt\r\n', 'recorded shell commands must be visible without duplicating remote echo');
 
-renderer.render({ offsetMs: 1, type: 'input', data: encode('uptime\r') });
+renderer.render({ offsetMs: 3, type: 'output', data: encode('user@host:~$ ') });
+renderer.render({ offsetMs: 4, type: 'input', data: encode('uptime\r') });
 assert.match(writeList.join(''), /uptime$/, 'pasted commands must remain visible while the Enter control byte stays hidden');
 
-renderer.render({ offsetMs: 2, type: 'output', data: encode('Password: ') });
-renderer.render({ offsetMs: 3, type: 'input', data: encode('secret') });
+renderer.render({ offsetMs: 5, type: 'output', data: encode('Password: ') });
+renderer.render({ offsetMs: 6, type: 'input', data: encode('secret') });
 assert.doesNotMatch(writeList.join(''), /secret/, 'password input must never be exposed during replay');
 
-renderer.render({ offsetMs: 4, type: 'resize', cols: 120, rows: 40 });
+renderer.reset();
+renderer.render({ offsetMs: 7, type: 'output', data: encode('\r\nEnter API secret: ') });
+renderer.render({ offsetMs: 8, type: 'input', data: encode('custom-token') });
+assert.doesNotMatch(writeList.join(''), /custom-token/, 'only shell commands may be replayed; arbitrary interactive input must stay hidden');
+
+renderer.render({ offsetMs: 9, type: 'resize', cols: 120, rows: 40 });
 assert.deepEqual(resizeList, [[120, 40]]);
 renderer.reset();
 

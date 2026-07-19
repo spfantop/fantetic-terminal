@@ -12,6 +12,8 @@ export interface TerminalRecordingReplaySink {
   resize(cols: number, rows: number): void;
 }
 
+const SHELL_PROMPT_PATTERN = /(?:^|\r|\n)[^\r\n]{0,512}[#$>%] $/;
+
 const decodeBase64 = (data: string, decoder: TextDecoder): string => {
   const binary = atob(data);
   const bytes = Uint8Array.from(binary, character => character.charCodeAt(0));
@@ -27,12 +29,20 @@ export function createTerminalRecordingEventRenderer(sink: TerminalRecordingRepl
   const localEchoState = createTerminalLocalEchoState();
   let inputDecoder = new TextDecoder();
   let outputDecoder = new TextDecoder();
+  let commandInputEnabled = false;
 
   const renderInput = (data: string) => {
     const input = decodeBase64(data, inputDecoder);
     let visibleInput = '';
 
     for (const character of input) {
+      if (character === '\r' || character === '\n') {
+        commandInputEnabled = false;
+        resolveLocalEchoText(character, localEchoState);
+        continue;
+      }
+      if (!commandInputEnabled) continue;
+
       const visibleCharacter = resolveLocalEchoText(character, localEchoState);
       if (!visibleCharacter) continue;
       recordLocalEcho(visibleCharacter, localEchoState);
@@ -52,6 +62,8 @@ export function createTerminalRecordingEventRenderer(sink: TerminalRecordingRepl
         const output = decodeBase64(event.data, outputDecoder);
         const visibleOutput = consumeLocalEchoFromOutput(output, localEchoState);
         if (visibleOutput) sink.write(visibleOutput);
+        if (localEchoState.suppressed) commandInputEnabled = false;
+        else if (SHELL_PROMPT_PATTERN.test(localEchoState.recentOutput)) commandInputEnabled = true;
         return;
       }
       if (event.type === 'resize') {
@@ -62,6 +74,7 @@ export function createTerminalRecordingEventRenderer(sink: TerminalRecordingRepl
       resetTerminalLocalEcho(localEchoState);
       inputDecoder = new TextDecoder();
       outputDecoder = new TextDecoder();
+      commandInputEnabled = false;
     },
   };
 }
