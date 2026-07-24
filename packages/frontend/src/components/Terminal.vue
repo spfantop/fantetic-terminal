@@ -27,6 +27,7 @@ import {
   createTerminalSearchOptions,
   TERMINAL_SEARCH_HIGHLIGHT_LIMIT,
 } from '../utils/terminalSearch';
+import { calculateCenteredTerminalHorizontalPadding } from '../utils/terminalLayout';
 
 
 // 定义 props 和 emits
@@ -132,9 +133,6 @@ type XtermInternalCore = {
       };
     };
   };
-  viewport?: {
-    scrollBarWidth?: number;
-  };
 };
 
 
@@ -237,6 +235,35 @@ const readTerminalCore = (): XtermInternalCore | null => {
   return (terminal as unknown as { _core?: XtermInternalCore })._core ?? null;
 };
 
+const readRenderedScrollbarWidth = () => {
+  const terminalElement = terminal?.element;
+  if (!terminalElement || terminal?.options.scrollback === 0) return 0;
+
+  const viewport = terminalElement.querySelector<HTMLElement>('.xterm-viewport');
+  if (!viewport) return 0;
+
+  // CSS can hide the native scrollbar, so only reserve width absent from the rendered viewport.
+  return Math.max(0, terminalElement.clientWidth - viewport.clientWidth);
+};
+
+const synchronizeTerminalHorizontalPadding = (dimensions: TerminalDimensions, metrics: TerminalFitMetrics) => {
+  const terminalElement = terminal?.element;
+  if (!terminalElement) return;
+
+  if (props.singleLineOutput) {
+    terminalElement.style.removeProperty('--terminal-horizontal-padding');
+    return;
+  }
+
+  const horizontalPadding = calculateCenteredTerminalHorizontalPadding(
+    terminalElement.clientWidth,
+    metrics.scrollbarWidth,
+    dimensions.cols,
+    metrics.cellWidth,
+  );
+  terminalElement.style.setProperty('--terminal-horizontal-padding', `${horizontalPadding}px`);
+};
+
 const readTerminalDocument = () => terminalRef.value?.ownerDocument ?? document;
 const readTerminalWindow = () => readTerminalDocument().defaultView ?? window;
 const readTerminalClipboard = () => readTerminalWindow().navigator.clipboard;
@@ -258,7 +285,7 @@ const refreshTerminalFitMetrics = (): TerminalFitMetrics | null => {
   const elementStyle = terminalWindow.getComputedStyle(terminal.element);
   const paddingHorizontal = readCssPixelValue(elementStyle, 'padding-left') + readCssPixelValue(elementStyle, 'padding-right');
   const paddingVertical = readCssPixelValue(elementStyle, 'padding-top') + readCssPixelValue(elementStyle, 'padding-bottom');
-  const scrollbarWidth = terminal.options.scrollback === 0 ? 0 : Math.max(0, core?.viewport?.scrollBarWidth ?? 0);
+  const scrollbarWidth = readRenderedScrollbarWidth();
 
   cachedFitMetrics = {
     cellWidth,
@@ -380,6 +407,9 @@ const fitTerminalToContainer = (options: { forceFit?: boolean; forceResizeEmit?:
 
     const currentDimensions = { cols: terminal.cols, rows: terminal.rows };
     lastAppliedDimensions = { ...currentDimensions };
+    if (cachedFitMetrics) {
+      synchronizeTerminalHorizontalPadding(currentDimensions, cachedFitMetrics);
+    }
     updateSingleLineContentWidth();
 
     if (dimensionsChanged || options.forceResizeEmit) {

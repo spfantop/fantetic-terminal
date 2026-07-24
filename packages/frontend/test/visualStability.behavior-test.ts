@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 
 import { darkXtermTheme, lightXtermTheme } from '../src/features/appearance/config/default-themes';
 import { resolveTerminalTheme } from '../src/utils/terminalThemeFallback';
+import { calculateCenteredTerminalHorizontalPadding } from '../src/utils/terminalLayout';
 
 const light = { _id: '1', name: 'Builtin Light', themeData: { background: '#fff' }, isPreset: true };
 const dark = { _id: '2', name: 'Builtin Dark', themeData: { background: '#000' }, isPreset: true };
@@ -11,17 +12,39 @@ assert.equal(resolveTerminalTheme([], null, 'default'), lightXtermTheme);
 assert.equal(resolveTerminalTheme([], null, 'dark'), darkXtermTheme);
 assert.equal(resolveTerminalTheme([light, dark], null, 'default'), light.themeData);
 assert.equal(resolveTerminalTheme([light, dark], 999, 'dark'), dark.themeData, 'a deleted theme must fall back by UI mode');
+assert.equal(
+  calculateCenteredTerminalHorizontalPadding(1400, 0, 153, 9),
+  11.5,
+  'remaining terminal grid space should be evenly distributed between both edges',
+);
 
 const style = readFileSync(resolve('src/style.css'), 'utf8');
 assert.match(style, /button:focus-visible[\s\S]*outline:\s*2px solid/);
 assert.doesNotMatch(style, /button:focus-visible\s*\{[\s\S]{0,120}outline:\s*none\s*!important/);
 assert.doesNotMatch(style, /input-focus-glow-rgb/);
+assert.match(
+  style,
+  /\.xterm\s*\{[^}]*box-sizing:\s*border-box/,
+  'terminal padding must be included in the terminal width so both edges remain aligned',
+);
 
 const systemSettings = readFileSync(resolve('src/components/settings/SystemSettingsSection.vue'), 'utf8');
 assert.match(systemSettings, /isSystemAdministrator && !isMobile/);
 assert.match(systemSettings, /useDeviceDetection/);
 
 const terminal = readFileSync(resolve('src/components/Terminal.vue'), 'utf8');
+assert.match(
+  terminal,
+  /terminalElement\.clientWidth - viewport\.clientWidth/,
+  'terminal fitting must use the rendered viewport width when determining scrollbar space',
+);
+assert.doesNotMatch(
+  terminal,
+  /core\?\.viewport\?\.scrollBarWidth/,
+  'terminal fitting must not reserve a scrollbar that CSS has hidden',
+);
+assert.match(terminal, /synchronizeTerminalHorizontalPadding\(currentDimensions, cachedFitMetrics\)/);
+assert.match(style, /--terminal-horizontal-padding/);
 assert.doesNotMatch(terminal, /terminal-search-popover button\.is-active[\s\S]{0,240}primary-color/);
 assert.match(terminal, /terminal-search-popover button:focus-visible/);
 assert.doesNotMatch(terminal, /backdrop-filter:\s*blur/, 'live terminal overlays must not continuously blur changing content');

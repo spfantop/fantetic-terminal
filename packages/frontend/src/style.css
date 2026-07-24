@@ -155,7 +155,11 @@ hr {
 /* 为 xterm 终端添加内边距 */
 
 .xterm{
+  --terminal-horizontal-padding: 10px;
+  box-sizing: border-box;
   padding: 10px 10px 10px 10px;
+  padding-left: var(--terminal-horizontal-padding);
+  padding-right: var(--terminal-horizontal-padding);
 
 }
 
