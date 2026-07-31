@@ -2382,7 +2382,7 @@ const handleOpenAllTargetConnections = async () => {
   flex-direction: column;
   width: 100%;
   min-height: 0;
-  padding: 0.75rem 1rem;
+  padding: 0.5rem 0.45rem 0.6rem;
   overflow: hidden;
 }
 
@@ -2878,13 +2878,13 @@ const handleOpenAllTargetConnections = async () => {
 .server-folder-tree {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.1rem;
 }
 
 .server-folder-drag-list {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.1rem;
 }
 
 .server-folder {
@@ -2897,14 +2897,14 @@ const handleOpenAllTargetConnections = async () => {
   width: 100%;
   min-width: 0;
   gap: 0.5rem;
-  padding: 0.4rem 0.45rem;
+  padding: 0.28rem 0.45rem;
   border: 1px solid transparent;
-  border-radius: 0.45rem;
+  border-radius: 0.3rem;
   background: transparent;
   color: var(--text-color);
   cursor: pointer;
-  font-size: 0.84rem;
-  font-weight: 700;
+  font-size: 0.78rem;
+  font-weight: 600;
   text-align: left;
   transition: background-color 0.12s ease, border-color 0.12s ease;
 }
@@ -2919,7 +2919,7 @@ const handleOpenAllTargetConnections = async () => {
   width: 0.95rem;
   flex-shrink: 0;
   color: var(--text-color-secondary);
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   text-align: center;
 }
 
@@ -2953,12 +2953,12 @@ const handleOpenAllTargetConnections = async () => {
 
 .server-folder-count {
   min-width: 1.35rem;
-  padding: 0.05rem 0.36rem;
+  padding: 0.04rem 0.3rem;
   border: 1px solid var(--border-color);
   border-radius: 999px;
   color: var(--text-color-secondary);
-  font-size: 0.68rem;
-  font-weight: 700;
+  font-size: 0.62rem;
+  font-weight: 600;
   line-height: 1.15;
   text-align: center;
 }
@@ -2966,7 +2966,7 @@ const handleOpenAllTargetConnections = async () => {
 .server-entries {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 0.08rem;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -2985,11 +2985,11 @@ const handleOpenAllTargetConnections = async () => {
   position: relative;
   display: flex;
   align-items: flex-start;
-  gap: 0.55rem;
+  gap: 0.45rem;
   min-width: 0;
-  padding: 0.48rem;
+  padding: 0.22rem 0.45rem;
   border: 1px solid transparent;
-  border-radius: 0.45rem;
+  border-radius: 0.3rem;
   color: var(--text-color);
   transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
   cursor: pointer;
@@ -3001,7 +3001,6 @@ const handleOpenAllTargetConnections = async () => {
 
 .server-entry:hover,
 .server-entry:focus-within {
-  border-color: color-mix(in srgb, var(--border-color) 80%, var(--text-color-secondary));
   background: var(--nav-item-active-bg-color);
 }
 
@@ -3010,26 +3009,37 @@ const handleOpenAllTargetConnections = async () => {
 }
 
 .server-entry-selected {
-  border-color: var(--link-active-color);
-  background: color-mix(in srgb, var(--link-active-color) 14%, transparent);
+  border-color: transparent;
+  background: color-mix(in srgb, var(--link-active-color) 16%, transparent);
+}
+
+.server-entry-selected::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 2px;
+  height: 60%;
+  border-radius: 999px;
+  background: var(--link-active-color);
+  transform: translateY(-50%);
 }
 
 .server-entry-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.65rem;
-  height: 1.65rem;
+  width: 1.3rem;
+  height: 1.3rem;
   flex-shrink: 0;
-  border-radius: 0.28rem;
-  font-size: 2.0rem;
+  font-size: 1rem;
 }
 
 .server-entry-content {
   min-width: 0;
   flex: 1;
   padding-top: 0.05rem;
-  padding-right: 1.6rem;
+  padding-right: 1.3rem;
 }
 
 .server-entry-connect {
@@ -3039,14 +3049,14 @@ const handleOpenAllTargetConnections = async () => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.45rem;
-  height: 1.45rem;
+  width: 1.25rem;
+  height: 1.25rem;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: 0.32rem;
+  border-radius: 0.28rem;
   background: transparent;
   color: var(--text-color-secondary);
-  font-size: .72rem;
+  font-size: .68rem;
   opacity: .72;
   transform: translateY(-50%);
   transition: opacity .12s ease, background-color .12s ease;
@@ -3077,29 +3087,29 @@ const handleOpenAllTargetConnections = async () => {
   min-width: 0;
   flex: 1;
   overflow: hidden;
-  font-size: 0.9rem;
-  font-weight: 700;
-  line-height: 1.2;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .server-entry-type {
-  padding: 0.05rem 0.32rem;
+  padding: 0.04rem 0.28rem;
   border: 1px solid var(--border-color);
   border-radius: 999px;
   color: var(--text-color-secondary);
-  font-size: 0.64rem;
-  font-weight: 700;
-  line-height: 1.1;
+  font-size: 0.58rem;
+  font-weight: 600;
+  line-height: 1.2;
   text-transform: uppercase;
 }
 
 .server-entry-meta {
   overflow: hidden;
   color: var(--text-color-secondary);
-  font-size: 0.76rem;
-  font-weight: 500;
+  font-size: 0.72rem;
+  font-weight: 400;
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3129,7 +3139,7 @@ const handleOpenAllTargetConnections = async () => {
 .server-entry-detail-popover {
   position: absolute;
   top: calc(100% - 0.1rem);
-  left: 2.6rem;
+  left: 2.2rem;
   right: 0.45rem;
   z-index: 9;
   display: grid;
@@ -3190,11 +3200,11 @@ const handleOpenAllTargetConnections = async () => {
 
 .server-entry-tags span {
   max-width: 4.8rem;
-  padding: 0.08rem 0.38rem;
+  padding: 0.06rem 0.32rem;
   border: 1px solid var(--border-color);
   border-radius: 999px;
   color: var(--text-color-secondary);
-  font-size: 0.66rem;
+  font-size: 0.62rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3203,20 +3213,20 @@ const handleOpenAllTargetConnections = async () => {
 .server-test-result {
   position: absolute;
   top: 50%;
-  right: 0.45rem;
+  right: 0.35rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.22rem;
   max-width: 4.9rem;
-  min-width: 1.85rem;
-  height: 1.85rem;
-  padding: 0 0.42rem;
+  min-width: 1.5rem;
+  height: 1.4rem;
+  padding: 0 0.35rem;
   border: 1px solid color-mix(in srgb, currentColor 28%, var(--border-color));
-  border-radius: 0.42rem;
+  border-radius: 0.32rem;
   background: var(--app-bg-color);
-  font-size: 0.7rem;
-  font-weight: 800;
+  font-size: 0.64rem;
+  font-weight: 700;
   line-height: 1;
   overflow: hidden;
   text-overflow: ellipsis;
