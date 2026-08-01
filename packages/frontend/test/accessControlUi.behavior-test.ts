@@ -45,6 +45,6 @@ assert.match(connectionsView, /canConnectConnection/);
 assert.match(connectionsView, /canManageConnection/);
 assert.match(connectionsView, /server-entry-connect/);
 assert.match(connectionsView, /knownFolderIds/);
-assert.match(connectionsView, /width: 1\.45rem/);
+assert.match(connectionsView, /width: 1\.25rem/);
 
 console.log('access control UI behavior ok');
