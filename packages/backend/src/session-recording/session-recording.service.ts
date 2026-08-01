@@ -28,7 +28,7 @@ import {
 import { backendMetrics } from '../observability/metrics';
 import { settingsRepository } from '../settings/settings.repository';
 import { createLogger } from '../logging/logger';
-import type { SessionRecordingListQuery } from '@fantetic-terminal/contracts';
+import type { SessionRecordingDeleteBatchResult, SessionRecordingListQuery } from '@fantetic-terminal/contracts';
 import type { SessionRecordingProtocol } from '@fantetic-terminal/contracts';
 
 const logger = createLogger('SessionRecordingService');
@@ -207,7 +207,7 @@ export const prepareGuacamoleRecordingStreamForSubject = async (
     await recordingIntegrityCache.verify(recordingRoot, row.relative_path),
   );
   if (integrity.status === 'invalid') return { status: 'integrity_failed' };
-  if (integrity.status === 'unanchored') return { status: 'not_ready' };
+  // RDP/VNC 录像可能没有数据库完整性锚点，但文件校验通过时仍可用于回放。
   return {
     status: 'ready',
     chunkIterator: readGuacamoleServerRecordingChunks(recordingRoot, row.relative_path),
@@ -228,4 +228,19 @@ export const deleteRecordingForSubject = async (
   await fs.promises.rm(target, { force: true });
   await deleteSessionRecording(id);
   return 'deleted';
+};
+
+export const deleteRecordingsForSubject = async (
+  ids: string[],
+  subject: { runtime: string; systemRole: string; userId?: number },
+): Promise<SessionRecordingDeleteBatchResult> => {
+  const result: SessionRecordingDeleteBatchResult = { deleted: 0, notFound: 0, activeIds: [], forbiddenIds: [] };
+  for (const id of new Set(ids)) {
+    const outcome = await deleteRecordingForSubject(id, subject);
+    if (outcome === 'deleted') result.deleted += 1;
+    else if (outcome === 'active') result.activeIds.push(id);
+    else if (outcome === 'forbidden') result.forbiddenIds.push(id);
+    else result.notFound += 1;
+  }
+  return result;
 };

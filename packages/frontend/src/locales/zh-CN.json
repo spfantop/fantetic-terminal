@@ -20,7 +20,7 @@
     "eyebrow": "平台治理", "title": "管理中心", "description": "集中管理身份、资产权限、审计记录与系统数据。", "back": "返回工作区", "navigation": "管理中心导航", "signedInAs": "当前操作者：{username}", "pagination": "分页导航", "paginationSummary": "共 {total} 条记录",
     "groups": { "workspace": "管理概览", "identity": "身份与资产", "audit": "审计与合规", "system": "系统运维" },
     "sections": { "overview": "概览" },
-    "descriptions": { "overview": "按职责快速进入各项管理能力。", "accessControl": "管理用户、用户组和连接资产授权。", "auditLogs": "检索关键操作并追踪责任主体。", "sessionRecordings": "查看终端会话记录和回放。", "dataManagement": "执行导入、导出、备份和恢复。" }
+    "descriptions": { "overview": "按职责快速进入各项管理能力。", "accessControl": "管理用户、用户组和连接资产授权。", "auditLogs": "检索关键操作并追踪责任主体。", "sessionRecordings": "查看并回放 SSH、Telnet、RDP 和 VNC 会话录像。", "dataManagement": "执行导入、导出、备份和恢复。" }
   },
   "adminDateRange": { "range": "日期范围", "start": "开始日期", "end": "结束日期", "selectDate": "选择日期", "calendar": "日历", "previousMonth": "上个月", "nextMonth": "下个月", "quickSelect": "快捷日期范围", "today": "今天", "last7Days": "近 7 天", "last30Days": "近 30 天", "invalidRange": "结束日期不能早于开始日期。" },
   "accessControl": {
@@ -2060,12 +2060,12 @@
   },
   "sessionRecording": {
     "title": "会话录像",
-    "description": "查看并回放权限范围内的 SSH 与 Telnet 终端会话。",
+    "description": "查看并回放权限范围内的 SSH、Telnet、RDP 和 VNC 会话。",
     "empty": "暂无会话录像。",
     "loadFailed": "加载会话录像失败。",
     "playFailed": "读取或回放会话录像失败。",
     "remoteDesktopPlaybackFailed": "远程桌面协议录像无法回放。",
-    "play": "回放", "delete": "删除录像", "confirmDelete": "确定删除“{name}”的会话录像吗？此操作不可恢复。", "deleteFailed": "删除会话录像失败。",
+    "play": "回放", "delete": "删除录像", "confirmDelete": "确定删除“{name}”的会话录像吗？此操作不可恢复。", "deleteFailed": "删除会话录像失败。", "select": "选择录像", "selectAll": "全选可删除录像", "selectedCount": "已选择 {count} 条", "deleteSelected": "删除选中录像", "confirmDeleteSelected": "确定删除选中的 {count} 条会话录像吗？此操作不可恢复。", "deleteSelectedFailed": "批量删除会话录像失败。", "deletePartialFailed": "有 {count} 条录像未能删除。",
     "stop": "停止",
     "speed": "速度", "expandPlayer": "放大查看", "restorePlayer": "退出放大",
     "player": "终端会话回放器", "searchPlaceholder": "连接或用户名", "startedAfter": "开始时间", "total": "共 {count} 条", "duration": "时长", "events": "事件", "eventCount": "{count} 个事件", "size": "大小", "preparing": "正在准备回放…", "timeline": "回放时间轴", "selectHint": "选择一条录像查看详情并回放。",

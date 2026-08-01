@@ -781,7 +781,7 @@
       "eyebrow": "プラットフォーム管理", "title": "管理センター", "description": "ID、資産権限、監査記録、システムデータを一元管理します。", "back": "ワークスペースに戻る", "navigation": "管理センターナビゲーション", "signedInAs": "操作ユーザー：{username}", "pagination": "ページナビゲーション", "paginationSummary": "全 {total} 件",
       "groups": { "workspace": "概要", "identity": "IDと資産", "audit": "監査とコンプライアンス", "system": "システム運用" },
       "sections": { "overview": "概要" },
-      "descriptions": { "overview": "担当範囲に応じた管理機能を開きます。", "accessControl": "ユーザー、グループ、接続資産の権限を管理します。", "auditLogs": "重要な操作を検索し、実行者を追跡します。", "sessionRecordings": "ターミナルセッションを確認、再生します。", "dataManagement": "システムデータのインポート、エクスポート、バックアップ、復元を行います。" }
+      "descriptions": { "overview": "担当範囲に応じた管理機能を開きます。", "accessControl": "ユーザー、グループ、接続資産の権限を管理します。", "auditLogs": "重要な操作を検索し、実行者を追跡します。", "sessionRecordings": "SSH、Telnet、RDP、VNC のセッション録画を確認、再生します。", "dataManagement": "システムデータのインポート、エクスポート、バックアップ、復元を行います。" }
     },
     "accessControl": {
     "rootFolder": "ルート",
@@ -2036,12 +2036,12 @@
   },
   "sessionRecording": {
     "title": "セッション録画",
-    "description": "権限のある SSH と Telnet の端末セッションを確認・再生します。",
+    "description": "権限のある SSH、Telnet、RDP、VNC のセッションを確認・再生します。",
     "empty": "セッション録画はありません。",
     "loadFailed": "セッション録画の読み込みに失敗しました。",
     "playFailed": "セッション録画の読み込みまたは再生に失敗しました。",
     "remoteDesktopPlaybackFailed": "リモートデスクトップのプロトコル録画を再生できません。",
-    "play": "再生", "delete": "録画を削除", "confirmDelete": "{name} のセッション録画を削除しますか？この操作は元に戻せません。", "deleteFailed": "セッション録画の削除に失敗しました。",
+    "play": "再生", "delete": "録画を削除", "confirmDelete": "{name} のセッション録画を削除しますか？この操作は元に戻せません。", "deleteFailed": "セッション録画の削除に失敗しました。", "select": "録画を選択", "selectAll": "削除可能な録画をすべて選択", "selectedCount": "{count} 件を選択", "deleteSelected": "選択した録画を削除", "confirmDeleteSelected": "選択した {count} 件のセッション録画を削除しますか？この操作は元に戻せません。", "deleteSelectedFailed": "選択したセッション録画の削除に失敗しました。", "deletePartialFailed": "{count} 件の録画を削除できませんでした。",
     "stop": "停止",
     "speed": "速度", "expandPlayer": "拡大表示", "restorePlayer": "拡大表示を終了",
     "player": "端末セッションプレーヤー", "searchPlaceholder": "接続名またはユーザー名", "startedAfter": "開始日時", "total": "全 {count} 件", "duration": "時間", "events": "イベント", "eventCount": "{count} 件のイベント", "size": "サイズ", "preparing": "再生を準備中…", "timeline": "再生タイムライン", "selectHint": "録画を選択して詳細を確認し、再生します。",

@@ -65,7 +65,7 @@ Fantetic Terminal is designed as a **remote workspace**, not just a web SSH page
 - Structured audit context with actor, request, IP, asset, session, and result correlation.
 - Role-aware Admin Center for access control, audit investigation, recordings, and data management.
 - Encrypted SSH/Telnet session recordings with filtering, streaming playback, cancellation, and bounded event caching.
-- Encrypted bidirectional Guacamole protocol transcripts for RDP/VNC. They are evidence archives only: this repository does not bundle a browser or terminal playback adapter for them.
+- Encrypted bidirectional Guacamole protocol recordings for RDP/VNC with browser playback in the Admin Center.
 - Verified backup creation, integrity checks, guided restore scheduling, and interrupted-recording recovery.
 
 ### Remote Workspace

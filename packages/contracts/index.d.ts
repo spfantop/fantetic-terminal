@@ -50,6 +50,17 @@ export interface SessionRecordingListQuery {
   offset?: number;
 }
 
+export interface SessionRecordingDeleteBatchRequest {
+  ids: string[];
+}
+
+export interface SessionRecordingDeleteBatchResult {
+  deleted: number;
+  notFound: number;
+  activeIds: string[];
+  forbiddenIds: string[];
+}
+
 export interface SessionRecordingListPage {
   itemList: SessionRecordingMetadata[];
   total: number;

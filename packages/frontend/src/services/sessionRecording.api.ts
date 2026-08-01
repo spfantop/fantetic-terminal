@@ -6,10 +6,12 @@ import type {
   SessionRecordingListPage,
   SessionRecordingListQuery,
   SessionRecordingIntegrity,
+  SessionRecordingDeleteBatchRequest,
+  SessionRecordingDeleteBatchResult,
 } from '@fantetic-terminal/contracts';
 
 export type SessionRecording = SessionRecordingMetadata;
-export type { SessionRecordingEvent, SessionRecordingPage, SessionRecordingListPage, SessionRecordingListQuery, SessionRecordingIntegrity };
+export type { SessionRecordingEvent, SessionRecordingPage, SessionRecordingListPage, SessionRecordingListQuery, SessionRecordingIntegrity, SessionRecordingDeleteBatchResult };
 
 export const sessionRecordingApi = {
   async list(query: SessionRecordingListQuery = {}): Promise<SessionRecordingListPage> {
@@ -23,5 +25,9 @@ export const sessionRecordingApi = {
   },
   async delete(id: string): Promise<void> {
     await apiClient.delete(`/session-recordings/${id}`);
+  },
+  async deleteMany(ids: string[]): Promise<SessionRecordingDeleteBatchResult> {
+    const request: SessionRecordingDeleteBatchRequest = { ids };
+    return (await apiClient.delete<SessionRecordingDeleteBatchResult>('/session-recordings', { data: request })).data;
   },
 };

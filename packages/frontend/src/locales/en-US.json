@@ -20,7 +20,7 @@
     "eyebrow": "PLATFORM GOVERNANCE", "title": "Admin Center", "description": "Manage identities, asset permissions, audit records, and system data in one place.", "back": "Back to workspace", "navigation": "Admin center navigation", "signedInAs": "Signed in as {username}", "pagination": "Pagination", "paginationSummary": "{total} records",
     "groups": { "workspace": "Overview", "identity": "Identity & assets", "audit": "Audit & compliance", "system": "System operations" },
     "sections": { "overview": "Overview" },
-    "descriptions": { "overview": "Open management tools based on your responsibilities.", "accessControl": "Manage users, groups, and connection asset permissions.", "auditLogs": "Search critical operations and trace responsible actors.", "sessionRecordings": "Review and replay terminal sessions.", "dataManagement": "Import, export, back up, and restore system data." }
+    "descriptions": { "overview": "Open management tools based on your responsibilities.", "accessControl": "Manage users, groups, and connection asset permissions.", "auditLogs": "Search critical operations and trace responsible actors.", "sessionRecordings": "Review and replay SSH, Telnet, RDP, and VNC session recordings.", "dataManagement": "Import, export, back up, and restore system data." }
   },
   "adminDateRange": { "range": "Date range", "start": "Start date", "end": "End date", "selectDate": "Select date", "calendar": "Calendar", "previousMonth": "Previous month", "nextMonth": "Next month", "quickSelect": "Quick date range", "today": "Today", "last7Days": "Last 7 days", "last30Days": "Last 30 days", "invalidRange": "The end date cannot be earlier than the start date." },
   "accessControl": {
@@ -2056,12 +2056,12 @@
   },
   "sessionRecording": {
     "title": "Session Recordings",
-    "description": "Review and replay authorized SSH and Telnet terminal sessions.",
+    "description": "Review and replay authorized SSH, Telnet, RDP, and VNC sessions.",
     "empty": "No session recordings.",
     "loadFailed": "Failed to load session recordings.",
     "playFailed": "Failed to read or replay the session recording.",
     "remoteDesktopPlaybackFailed": "The remote desktop protocol recording cannot be replayed.",
-    "play": "Replay", "delete": "Delete recording", "confirmDelete": "Delete the session recording for {name}? This cannot be undone.", "deleteFailed": "Failed to delete the session recording.",
+    "play": "Replay", "delete": "Delete recording", "confirmDelete": "Delete the session recording for {name}? This cannot be undone.", "deleteFailed": "Failed to delete the session recording.", "select": "Select recording", "selectAll": "Select all deletable recordings", "selectedCount": "{count} selected", "deleteSelected": "Delete selected", "confirmDeleteSelected": "Delete the selected {count} session recordings? This cannot be undone.", "deleteSelectedFailed": "Failed to delete the selected session recordings.", "deletePartialFailed": "{count} recordings could not be deleted.",
     "stop": "Stop",
     "speed": "Speed", "expandPlayer": "Expand player", "restorePlayer": "Restore player",
     "player": "Terminal session player", "searchPlaceholder": "Connection or username", "startedAfter": "Started after", "total": "{count} total", "duration": "Duration", "events": "Events", "eventCount": "{count} events", "size": "Size", "preparing": "Preparing replay…", "timeline": "Replay timeline", "selectHint": "Select a recording to inspect and replay.",

@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { sendApiError } from '../security/api-error-envelope';
 import {
   deleteRecordingForSubject,
+  deleteRecordingsForSubject,
   listReadableRecordings,
   prepareGuacamoleRecordingStreamForSubject,
   readRecordingForSubject,
@@ -59,6 +60,20 @@ export const streamGuacamoleRecording = async (req: Request, res: Response): Pro
     }
     res.destroy();
   }
+};
+
+export const deleteRecordings = async (req: Request, res: Response): Promise<void> => {
+  const bodyIds = (req.body as { ids?: unknown } | undefined)?.ids;
+  const ids = Array.isArray(bodyIds)
+    ? [...new Set(bodyIds
+      .filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+      .map(id => id.trim()))]
+    : [];
+  if (!ids.length) {
+    sendApiError(res, 400, 'sessionRecording.deleteBatchEmpty');
+    return;
+  }
+  res.json(await deleteRecordingsForSubject(ids, req.authorization!));
 };
 
 export const deleteRecording = async (req: Request, res: Response): Promise<void> => {

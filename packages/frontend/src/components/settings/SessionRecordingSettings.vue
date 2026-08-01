@@ -11,8 +11,9 @@
     <p v-if="error" role="alert" class="recording-message">{{ error }}</p>
     <div class="recording-layout">
       <aside class="recording-list" :aria-busy="loading">
-        <header><strong>{{ t('sessionRecording.title') }}</strong><span>{{ t('sessionRecording.total', { count: total }) }}</span></header>
+        <header><strong>{{ t('sessionRecording.title') }}</strong><span>{{ t('sessionRecording.total', { count: total }) }}</span><span class="recording-batch-bar"><label class="recording-select-all" :title="t('sessionRecording.selectAll')"><input type="checkbox" :checked="isAllRecordingsSelected" :disabled="!selectableRecordings.length" @change="toggleSelectAll">{{ t('sessionRecording.selectAll') }}</label><span v-if="selectedRecordingIds.size" class="recording-selected-count">{{ t('sessionRecording.selectedCount', { count: selectedRecordingIds.size }) }}</span><button type="button" class="danger" :disabled="deletingMany || !selectedRecordingIds.size" @click="deleteSelectedRecordings"><i class="fas fa-trash"></i>{{ t('sessionRecording.deleteSelected') }}</button></span></header>
         <article v-for="recording in recordingList" :key="recording.id" class="recording-item">
+          <label class="recording-select" :title="t('sessionRecording.select')"><input type="checkbox" :checked="isRecordingSelected(recording.id)" :disabled="deletingMany || recording.status === 'active'" @change="toggleRecordingSelection(recording.id)"></label>
           <button type="button" class="recording-open" @click="selectRecording(recording.id)">
             <span class="recording-primary"><strong>{{ recording.connection_name }}</strong><em>{{ recording.protocol }}</em></span>
             <span class="recording-owner"><i class="fas fa-user"></i><small>{{ recording.username || '-' }}</small><small>{{ formatTime(recording.started_at) }}</small></span>
@@ -74,6 +75,8 @@ const playing = ref(false);
 const speed = ref(2);
 const error = ref('');
 const deletingId = ref('');
+const selectedRecordingIds = ref<Set<string>>(new Set());
+const deletingMany = ref(false);
 const filterQuery = ref('');
 const filterStatus = ref<'' | NonNullable<SessionRecordingListQuery['status']>>('');
 const filterStartedAfter = ref('');
@@ -110,6 +113,13 @@ let remoteDesktopResizeObserver: ResizeObserver | undefined;
 let remoteDesktopSpeedTimer: number | undefined;
 let remoteDesktopSpeedAnchor: { position: number; timestamp: number } | undefined;
 let remoteDesktopSpeedSeekInProgress = false;
+let replayProgressFrame: number | undefined;
+let replayProgressAnchorOffset = 0;
+let replayProgressAnchorReal = 0;
+let replayProgressAnchorSpeed = 1;
+let remoteDesktopProgressAnchorOffset = 0;
+let remoteDesktopProgressAnchorReal = 0;
+let remoteDesktopProgressAnchorSpeed = 1;
 const remoteDesktopPlaybackDurationMs = ref(0);
 const remoteDesktopRecordingReady = ref(false);
 
@@ -123,8 +133,8 @@ useDialogFocus({
 const isRemoteDesktopRecording = computed(() => ['RDP', 'VNC'].includes(selectedRecording.value?.protocol ?? ''));
 const durationMs = computed(() => selectedRecording.value ? Math.max(0, (selectedRecording.value.ended_at ?? Date.now()) - selectedRecording.value.started_at) : 0);
 const playbackDurationMs = computed(() => isRemoteDesktopRecording.value
-  ? Math.max(remoteDesktopPlaybackDurationMs.value, durationMs.value)
-  : cachedEvents.value[cachedEvents.value.length - 1]?.offsetMs ?? durationMs.value);
+  ? remoteDesktopPlaybackDurationMs.value || durationMs.value
+  : Math.max(durationMs.value, cachedEvents.value[cachedEvents.value.length - 1]?.offsetMs ?? 0));
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)));
 const formatTime = (value: number) => new Date(value).toLocaleString();
 const formatDuration = (value: number) => `${Math.floor(value / 60000).toString().padStart(2, '0')}:${Math.floor(value % 60000 / 1000).toString().padStart(2, '0')}`;
@@ -219,6 +229,55 @@ const stopRemoteDesktopSpeedController = () => {
   remoteDesktopSpeedAnchor = undefined;
   remoteDesktopSpeedSeekInProgress = false;
 };
+const stopReplayProgressTicker = () => {
+  if (replayProgressFrame !== undefined) window.cancelAnimationFrame(replayProgressFrame);
+  replayProgressFrame = undefined;
+};
+const updateReplayProgress = () => {
+  const offset = Math.min(
+    playbackDurationMs.value,
+    Math.max(0, replayProgressAnchorOffset + (performance.now() - replayProgressAnchorReal) * replayProgressAnchorSpeed),
+  );
+  timelineOffset.value = offset;
+  return offset;
+};
+const reanchorReplayProgress = (offset: number, replaySpeed = speed.value) => {
+  replayProgressAnchorOffset = Math.min(playbackDurationMs.value, Math.max(0, offset));
+  replayProgressAnchorReal = performance.now();
+  replayProgressAnchorSpeed = Math.max(0.01, replaySpeed);
+  if (replayProgressFrame !== undefined) return;
+  const tick = () => {
+    replayProgressFrame = undefined;
+    if (!playing.value) return;
+    updateReplayProgress();
+    replayProgressFrame = window.requestAnimationFrame(tick);
+  };
+  replayProgressFrame = window.requestAnimationFrame(tick);
+};
+const updateRemoteDesktopProgress = () => {
+  const offset = Math.min(
+    playbackDurationMs.value,
+    Math.max(0, remoteDesktopProgressAnchorOffset + (performance.now() - remoteDesktopProgressAnchorReal) * remoteDesktopProgressAnchorSpeed),
+  );
+  timelineOffset.value = offset;
+  return offset;
+};
+const reanchorRemoteDesktopProgress = (offset: number, replaySpeed = speed.value) => {
+  remoteDesktopProgressAnchorOffset = Math.min(playbackDurationMs.value, Math.max(0, offset));
+  remoteDesktopProgressAnchorReal = performance.now();
+  remoteDesktopProgressAnchorSpeed = Math.max(0.01, replaySpeed);
+  if (playing.value) startRemoteDesktopProgressTicker();
+};
+const startRemoteDesktopProgressTicker = () => {
+  if (replayProgressFrame !== undefined) return;
+  const tick = () => {
+    replayProgressFrame = undefined;
+    if (!playing.value || !remoteDesktopRecording) return;
+    updateRemoteDesktopProgress();
+    replayProgressFrame = window.requestAnimationFrame(tick);
+  };
+  replayProgressFrame = window.requestAnimationFrame(tick);
+};
 const reanchorRemoteDesktopSpeedController = (position: number) => {
   if (speed.value <= 1 || !playing.value) {
     remoteDesktopSpeedAnchor = undefined;
@@ -250,7 +309,15 @@ const startRemoteDesktopSpeedController = () => {
   }, 250);
 };
 const handlePlaybackSpeedChange = () => {
-  if (isRemoteDesktopRecording.value) startRemoteDesktopSpeedController();
+  if (!playing.value) return;
+  if (isRemoteDesktopRecording.value) {
+    const position = updateRemoteDesktopProgress();
+    reanchorRemoteDesktopProgress(position, speed.value);
+    startRemoteDesktopSpeedController();
+    return;
+  }
+  const position = updateReplayProgress();
+  reanchorReplayProgress(position, speed.value);
 };
 const toggleRecordingPlayerExpanded = async () => {
   recordingPlayerExpanded.value = !recordingPlayerExpanded.value;
@@ -286,6 +353,8 @@ const ensureRemoteDesktopRecording = async () => {
   recording.onplay = () => {
     remoteDesktopSpeedSeekInProgress = false;
     playing.value = true;
+    const position = Number(recording.getPosition?.() ?? timelineOffset.value);
+    reanchorRemoteDesktopProgress(Number.isFinite(position) ? position : timelineOffset.value, speed.value);
     syncRemoteDesktopReplayDisplay();
   };
   recording.onpause = () => {
@@ -295,16 +364,24 @@ const ensureRemoteDesktopRecording = async () => {
       reanchorRemoteDesktopSpeedController(Number(recording.getPosition?.() ?? timelineOffset.value));
       return;
     }
+    const position = Number(recording.getPosition?.() ?? timelineOffset.value);
+    if (Number.isFinite(position)) {
+      timelineOffset.value = Math.min(playbackDurationMs.value, Math.max(position, updateRemoteDesktopProgress()));
+      reanchorRemoteDesktopProgress(timelineOffset.value, speed.value);
+    }
     stopRemoteDesktopSpeedController();
+    stopReplayProgressTicker();
     playing.value = false;
   };
   recording.onseek = (position: number) => {
     timelineOffset.value = position;
     remoteDesktopSpeedSeekInProgress = false;
+    reanchorRemoteDesktopProgress(position, speed.value);
     reanchorRemoteDesktopSpeedController(position);
   };
   recording.onerror = () => {
     stopRemoteDesktopSpeedController();
+    stopReplayProgressTicker();
     playing.value = false;
     preparing.value = false;
     remoteDesktopRecordingReady.value = false;
@@ -341,6 +418,15 @@ const loadEvents = async () => {
   catch (requestError) { const canceled = requestError instanceof DOMException && requestError.name === 'AbortError' || Boolean(requestError && typeof requestError === 'object' && 'code' in requestError && requestError.code === 'ERR_CANCELED'); if (!canceled) error.value = t('sessionRecording.playFailed'); }
   finally { preparing.value = false; }
 };
+const waitForReplayOffset = async (targetOffset: number, generation: number): Promise<boolean> => {
+  while (generation === playGeneration) {
+    const currentOffset = updateReplayProgress();
+    if (currentOffset >= targetOffset) return true;
+    const waitMs = Math.min(100, Math.max(1, (targetOffset - currentOffset) / Math.max(0.01, speed.value)));
+    await sleep(waitMs);
+  }
+  return false;
+};
 const disposeRemoteDesktopRecording = () => {
   const display = remoteDesktopRecording?.getDisplay?.();
   if (display) display.onresize = null;
@@ -351,7 +437,43 @@ const disposeRemoteDesktopRecording = () => {
 };
 const selectRecording = async (id: string) => { stop(); disposeRemoteDesktopRecording(); remoteDesktopRecordingReady.value = false; recordingPlayerExpanded.value = false; recordingAbortController?.abort(); recordingAbortController = new AbortController(); selectedId.value = id; cachedEvents.value = []; recordingIntegrity.value = undefined; remoteDesktopPlaybackDurationMs.value = 0; nextEventCursor = 0; cacheStartCursor = 0; timelineOffset.value = 0; recordedTerminalSize = undefined; terminalEventRenderer?.reset(); await nextTick(); await centerRecordingDialog(); if (isRemoteDesktopRecording.value) { await loadEvents(); if (!hasInvalidRecordingIntegrity()) await ensureRemoteDesktopRecording(); return; } await ensureTerminal(); clearTerminalViewportStyles(); fitAddon?.fit(); terminal?.reset(); terminalEventRenderer?.reset(); void loadEvents(); };
 const closePlayer = () => { stop(); disposeRemoteDesktopRecording(); remoteDesktopRecordingReady.value=false; recordingPlayerExpanded.value=false; remoteDesktopRecordingHost.value?.replaceChildren(); recordingAbortController?.abort(); recordingAbortController=undefined; selectedId.value=''; cachedEvents.value=[]; recordingIntegrity.value=undefined; remoteDesktopPlaybackDurationMs.value=0; nextEventCursor=0; cacheStartCursor=0; recordedTerminalSize=undefined; resizeObserver?.disconnect(); resizeObserver=undefined; clearTerminalViewportStyles(); terminal?.dispose(); terminal=undefined; fitAddon=undefined; terminalEventRenderer=undefined; };
-const deleteRecording = async (recording: SessionRecording) => { if(recording.status==='active'||!await showConfirmDialog({message:t('sessionRecording.confirmDelete',{name:recording.connection_name})}))return; deletingId.value=recording.id; try{await sessionRecordingApi.delete(recording.id);if(selectedId.value===recording.id)closePlayer();await loadList();}catch{error.value=t('sessionRecording.deleteFailed');}finally{deletingId.value='';} };
+const deleteRecording = async (recording: SessionRecording) => { if(recording.status==='active'||!await showConfirmDialog({message:t('sessionRecording.confirmDelete',{name:recording.connection_name})}))return; deletingId.value=recording.id; try{await sessionRecordingApi.delete(recording.id);const next=new Set(selectedRecordingIds.value);next.delete(recording.id);selectedRecordingIds.value=next;if(selectedId.value===recording.id)closePlayer();await loadList();}catch{error.value=t('sessionRecording.deleteFailed');}finally{deletingId.value='';} };
+const selectableRecordings = computed(() => recordingList.value.filter(recording => recording.status !== 'active'));
+const isAllRecordingsSelected = computed(() => selectableRecordings.value.length > 0 && selectableRecordings.value.every(recording => selectedRecordingIds.value.has(recording.id)));
+const isRecordingSelected = (id: string) => selectedRecordingIds.value.has(id);
+const toggleRecordingSelection = (id: string) => {
+  const next = new Set(selectedRecordingIds.value);
+  if (next.has(id)) next.delete(id); else next.add(id);
+  selectedRecordingIds.value = next;
+};
+const toggleSelectAll = () => {
+  const next = new Set(selectedRecordingIds.value);
+  if (isAllRecordingsSelected.value) {
+    for (const recording of selectableRecordings.value) next.delete(recording.id);
+  } else {
+    for (const recording of selectableRecordings.value) next.add(recording.id);
+  }
+  selectedRecordingIds.value = next;
+};
+const deleteSelectedRecordings = async () => {
+  const ids = [...selectedRecordingIds.value];
+  if (!ids.length || !await showConfirmDialog({ message: t('sessionRecording.confirmDeleteSelected', { count: ids.length }) })) return;
+  deletingMany.value = true;
+  try {
+    const result = await sessionRecordingApi.deleteMany(ids);
+    if (selectedId.value && ids.includes(selectedId.value)) closePlayer();
+    selectedRecordingIds.value = new Set();
+    const failedCount = result.activeIds.length + result.forbiddenIds.length;
+    await loadList();
+    if (failedCount) {
+      error.value = t('sessionRecording.deletePartialFailed', { count: failedCount });
+    }
+  } catch {
+    error.value = t('sessionRecording.deleteSelectedFailed');
+  } finally {
+    deletingMany.value = false;
+  }
+};
 const seekTo = async (offset: number) => { stop(); if (isRemoteDesktopRecording.value) { remoteDesktopRecording?.seek(offset); timelineOffset.value = offset; return; } if (cacheStartCursor > 0 && offset < (cachedEvents.value[0]?.offsetMs ?? 0)) { preparing.value = true; try { await loadNextEventPage(true); while (nextEventCursor !== null && (cachedEvents.value[cachedEvents.value.length - 1]?.offsetMs ?? 0) < offset) await loadNextEventPage(); } finally { preparing.value = false; } } terminal?.reset(); terminalEventRenderer?.reset(); primeTerminalForReplay(); for (const event of cachedEvents.value) { if (event.offsetMs > offset) break; renderEvent(event); } timelineOffset.value = offset; syncTerminalViewport(); };
 const play = async () => {
   if (hasInvalidRecordingIntegrity()) return;
@@ -362,14 +484,13 @@ const play = async () => {
     return;
   }
   await ensureTerminal(); await loadEvents(); if (hasInvalidRecordingIntegrity() || !cachedEvents.value.length) return;
-  const lastOffset = cachedEvents.value[cachedEvents.value.length - 1]?.offsetMs ?? 0;
-  if (timelineOffset.value >= lastOffset && nextEventCursor === null) await seekTo(0);
+  if (timelineOffset.value >= playbackDurationMs.value && nextEventCursor === null) await seekTo(0);
   else if (timelineOffset.value === 0) { terminal?.reset(); terminalEventRenderer?.reset(); primeTerminalForReplay(); }
-  const generation = ++playGeneration; playing.value = true; let previous = timelineOffset.value;
-  try { let index = cachedEvents.value.findIndex(event => event.offsetMs >= timelineOffset.value); if (index < 0) index = cachedEvents.value.length; while (generation === playGeneration) { if (index >= cachedEvents.value.length) { if (nextEventCursor === null || !await loadNextEventPage()) break; index = Math.max(0, cachedEvents.value.findIndex(event => event.offsetMs >= previous)); continue; } const event = cachedEvents.value[index++]; const delay = Math.min(1000, Math.max(0, event.offsetMs - previous)) / speed.value; if (delay) await sleep(delay); if (generation !== playGeneration) return; renderEvent(event); timelineOffset.value = event.offsetMs; previous = event.offsetMs; } }
-  finally { if (generation === playGeneration) playing.value = false; }
+  const generation = ++playGeneration; playing.value = true; let previous = timelineOffset.value; reanchorReplayProgress(previous, speed.value);
+  try { let index = cachedEvents.value.findIndex(event => event.offsetMs >= timelineOffset.value); if (index < 0) index = cachedEvents.value.length; while (generation === playGeneration) { if (index >= cachedEvents.value.length) { if (nextEventCursor === null || !await loadNextEventPage()) break; index = Math.max(0, cachedEvents.value.findIndex(event => event.offsetMs >= previous)); continue; } const event = cachedEvents.value[index++]; if (!await waitForReplayOffset(event.offsetMs, generation)) return; renderEvent(event); previous = event.offsetMs; reanchorReplayProgress(Math.max(event.offsetMs, updateReplayProgress()), speed.value); } if (generation === playGeneration && nextEventCursor === null && await waitForReplayOffset(playbackDurationMs.value, generation)) timelineOffset.value = playbackDurationMs.value; }
+  finally { if (generation === playGeneration) { playing.value = false; stopReplayProgressTicker(); } }
 };
-const stop = () => { playGeneration += 1; stopRemoteDesktopSpeedController(); remoteDesktopRecording?.pause(); playing.value = false; };
+const stop = () => { if (playing.value) timelineOffset.value = isRemoteDesktopRecording.value ? updateRemoteDesktopProgress() : updateReplayProgress(); playGeneration += 1; stopReplayProgressTicker(); stopRemoteDesktopSpeedController(); remoteDesktopRecording?.pause(); playing.value = false; };
 onMounted(() => {
   const routeQuery = Array.isArray(route.query.recordingQuery) ? route.query.recordingQuery[0] : route.query.recordingQuery;
   const routeStart = Array.isArray(route.query.recordingStartedAfter) ? route.query.recordingStartedAfter[0] : route.query.recordingStartedAfter;
@@ -396,5 +517,6 @@ onBeforeUnmount(() => { stop(); disposeRemoteDesktopRecording(); recordingAbortC
   z-index: 0;
 }
 .recording-modal .recording-detail{padding-right:0}.modal-actions{display:flex;gap:.35rem;align-items:center}.modal-actions .modal-close{position:static;padding:.4rem .55rem}.recording-modal .recording-player.recording-player--expanded{position:absolute!important;inset:.75rem!important;width:auto!important;height:auto!important;max-height:none!important;border-radius:.55rem}.recording-player--expanded .recording-drag-handle{cursor:default}@media(max-width:640px){.recording-modal .recording-player.recording-player--expanded{inset:.35rem!important}}
-.recording-modal{overflow:auto;overscroll-behavior:contain;padding:.75rem}.recording-modal .recording-player{height:min(48rem,calc(100dvh - 1.5rem));max-height:calc(100dvh - 1.5rem);margin:auto}@media(max-width:860px){.recording-modal .recording-player{height:calc(100dvh - 1.5rem);max-height:calc(100dvh - 1.5rem)}}@media(max-width:640px){.recording-modal{padding:.35rem}.recording-modal .recording-player{height:calc(100dvh - .7rem);max-height:calc(100dvh - .7rem)}}@media(max-height:620px){.recording-modal .recording-player{gap:.4rem;padding:.55rem}.recording-modal .recording-detail dl{display:none}.recording-modal .player-toolbar button,.recording-modal .player-toolbar select{padding:.35rem .5rem}}
+  .recording-modal{overflow:auto;overscroll-behavior:contain;padding:.75rem}.recording-modal .recording-player{height:min(48rem,calc(100dvh - 1.5rem));max-height:calc(100dvh - 1.5rem);margin:auto}@media(max-width:860px){.recording-modal .recording-player{height:calc(100dvh - 1.5rem);max-height:calc(100dvh - 1.5rem)}}@media(max-width:640px){.recording-modal{padding:.35rem}.recording-modal .recording-player{height:calc(100dvh - .7rem);max-height:calc(100dvh - .7rem)}}@media(max-height:620px){.recording-modal .recording-player{gap:.4rem;padding:.55rem}.recording-modal .recording-detail dl{display:none}.recording-modal .player-toolbar button,.recording-modal .player-toolbar select{padding:.35rem .5rem}}
+  .recording-item{grid-template-columns:2rem minmax(0,1fr) 2.6rem}.recording-item .recording-select{grid-column:1;display:flex;align-items:center;justify-content:center}.recording-item .recording-open{grid-column:2;min-width:0}.recording-item .delete-recording{grid-column:3}.recording-batch-bar{display:flex;align-items:center;gap:.55rem;margin-left:auto;color:var(--foreground)!important;font-size:.75rem!important}.recording-select-all{display:inline-flex;align-items:center;gap:.35rem;white-space:nowrap;color:var(--muted-foreground)}.recording-selected-count{white-space:nowrap}.recording-batch-bar button{padding:.4rem .55rem;white-space:nowrap}.recording-select input{width:1rem;height:1rem;margin:0}@media(max-width:640px){.recording-item{grid-template-columns:2rem minmax(0,1fr) 2.5rem}.recording-item .recording-open{grid-column:2}.recording-item .recording-select{grid-column:1}}
 </style>
