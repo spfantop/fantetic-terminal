@@ -16,6 +16,7 @@ import {
     createTerminalLocalEchoState,
     hasPendingLocalEcho,
     recordLocalEcho,
+    rememberTerminalOutputBytes,
     rememberTerminalOutputText,
     resetTerminalLocalEcho,
     resolveLocalEchoText,
@@ -71,7 +72,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
     let outputDecodeTimer: ReturnType<typeof setTimeout> | null = null;
     let outputDecodeWindow: Window | null = null;
     let outputDecodeMicrotaskScheduled = false;
-    const terminalHighlightTextDecoder = new TextDecoder();
+    let terminalLocalEchoTextDecoder = new TextDecoder();
     const terminalLocalEchoState = createTerminalLocalEchoState();
     const terminalPerformanceStats = {
         localEchoCount: 0,
@@ -470,11 +471,12 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
 
     const scheduleTerminalByteOutput = (bytes: Uint8Array) => {
         if (!hasPendingLocalEcho(terminalLocalEchoState)) {
+            rememberTerminalOutputBytes(bytes, terminalLocalEchoState, terminalLocalEchoTextDecoder);
             scheduleTerminalOutput(bytes);
             return;
         }
 
-        const decodedText = terminalHighlightTextDecoder.decode(bytes, { stream: true });
+        const decodedText = terminalLocalEchoTextDecoder.decode(bytes, { stream: true });
         const text = consumeLocalEchoFromOutput(decodedText, terminalLocalEchoState);
         if (text.length > 0) {
             scheduleTerminalOutput(text);
@@ -892,6 +894,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         terminalWriteParsedDisposable = null;
         stopTerminalHighlightWatcher();
         resetTerminalLocalEcho(terminalLocalEchoState);
+        terminalLocalEchoTextDecoder = new TextDecoder();
         if (inputFlushTimer !== null) {
             clearTimeout(inputFlushTimer);
             inputFlushTimer = null;

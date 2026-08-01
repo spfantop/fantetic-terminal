@@ -12,6 +12,7 @@ export interface TerminalLocalEchoState {
   recentOutput: string;
   suppressed: boolean;
   remoteEditing: boolean;
+  passwordPromptActive: boolean;
 }
 
 export const createTerminalLocalEchoState = (): TerminalLocalEchoState => ({
@@ -19,6 +20,7 @@ export const createTerminalLocalEchoState = (): TerminalLocalEchoState => ({
   recentOutput: '',
   suppressed: false,
   remoteEditing: false,
+  passwordPromptActive: false,
 });
 
 export function resolveLocalEchoText(input: string, state: TerminalLocalEchoState): string {
@@ -27,13 +29,21 @@ export function resolveLocalEchoText(input: string, state: TerminalLocalEchoStat
     // Once Readline receives history/cursor/editing controls it owns the
     // logical line and cursor. A client-side character write cannot model
     // insertion and the remote repaint at the same time.
-    if (input !== '\r' && input !== '\n') {
+    if (input.includes('\r') || input.includes('\n')) {
+      state.passwordPromptActive = false;
+    }
+    const inputWithoutLineBreaks = input.replace(/[\r\n]/g, '');
+    if (CONTROL_CHARACTER_PATTERN.test(inputWithoutLineBreaks)) {
       state.remoteEditing = true;
       state.pendingEcho = '';
     }
     return '';
   }
-  if (state.suppressed || state.remoteEditing || PASSWORD_PROMPT_PATTERN.test(state.recentOutput)) {
+  if (
+    state.suppressed
+    || state.remoteEditing
+    || state.passwordPromptActive
+  ) {
     return '';
   }
 
@@ -53,7 +63,20 @@ export function rememberTerminalOutputText(output: string, state: TerminalLocalE
   if (!output) return;
 
   state.recentOutput = `${state.recentOutput}${output}`.slice(-MAX_RECENT_OUTPUT_LENGTH);
+  if (PASSWORD_PROMPT_PATTERN.test(output)) {
+    state.passwordPromptActive = true;
+  }
   updateLocalEchoSuppression(output, state);
+}
+
+export function rememberTerminalOutputBytes(
+  output: Uint8Array,
+  state: TerminalLocalEchoState,
+  decoder: TextDecoder = new TextDecoder(),
+): void {
+  if (output.byteLength === 0) return;
+
+  rememberTerminalOutputText(decoder.decode(output, { stream: true }), state);
 }
 
 export function consumeLocalEchoFromOutput(output: string, state: TerminalLocalEchoState): string {
@@ -98,6 +121,7 @@ export function resetTerminalLocalEcho(state: TerminalLocalEchoState): void {
   state.recentOutput = '';
   state.suppressed = false;
   state.remoteEditing = false;
+  state.passwordPromptActive = false;
 }
 
 export function hasPendingLocalEcho(state: TerminalLocalEchoState): boolean {
@@ -114,6 +138,7 @@ function updateLocalEchoSuppression(output: string, state: TerminalLocalEchoStat
     if (SHELL_PROMPT_PATTERN.test(state.recentOutput)) {
       state.remoteEditing = false;
       state.pendingEcho = '';
+      state.passwordPromptActive = false;
     }
   }
 }

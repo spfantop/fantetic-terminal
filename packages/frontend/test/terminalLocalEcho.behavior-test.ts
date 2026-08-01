@@ -1,9 +1,12 @@
 import { strict as assert } from 'node:assert';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   consumeLocalEchoFromOutput,
   createTerminalLocalEchoState,
   hasPendingLocalEcho,
   recordLocalEcho,
+  rememberTerminalOutputBytes,
   rememberTerminalOutputText,
   resetTerminalLocalEcho,
   resolveLocalEchoText,
@@ -60,6 +63,25 @@ assert.equal(consumeLocalEchoFromOutput('llo', state), 'lo');
 const passwordState = createTerminalLocalEchoState();
 rememberTerminalOutputText('Password: ', passwordState);
 assert.equal(resolveLocalEchoText('secret', passwordState), '');
+assert.equal(resolveLocalEchoText('\r', passwordState), '');
+rememberTerminalOutputText('\r\nroot@host:~$ ', passwordState);
+assert.equal(resolveLocalEchoText('next-command', passwordState), 'next-command');
+
+const batchedPasswordState = createTerminalLocalEchoState();
+rememberTerminalOutputText('Password: ', batchedPasswordState);
+assert.equal(resolveLocalEchoText('secret\r', batchedPasswordState), '');
+assert.equal(resolveLocalEchoText('next-command', batchedPasswordState), 'next-command');
+
+const binaryPasswordState = createTerminalLocalEchoState();
+rememberTerminalOutputBytes(new TextEncoder().encode('Password: '), binaryPasswordState);
+assert.equal(resolveLocalEchoText('secret', binaryPasswordState), '');
+
+const sshTerminalSource = readFileSync(resolve('src/composables/useSshTerminal.ts'), 'utf8');
+assert.match(
+  sshTerminalSource,
+  /scheduleTerminalByteOutput[\s\S]*rememberTerminalOutputBytes/,
+  'binary SSH output must update password-prompt state before rendering',
+);
 
 const chinesePasswordState = createTerminalLocalEchoState();
 rememberTerminalOutputText('请输入密码：', chinesePasswordState);
