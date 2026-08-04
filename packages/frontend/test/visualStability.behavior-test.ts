@@ -19,6 +19,12 @@ assert.equal(
 );
 
 const style = readFileSync(resolve('src/style.css'), 'utf8');
+assert.match(style, /:root\s*\{[\s\S]*font-size:\s*14px/);
+assert.match(style, /--ui-font-family:[\s\S]*Segoe UI/);
+assert.match(style, /body\s*\{[\s\S]*font-family:\s*var\(--ui-font-family\)/);
+assert.match(style, /body\s*\{[\s\S]*line-height:\s*1\.45/);
+assert.match(style, /\.text-xl\s*\{[\s\S]*font-size:\s*1\.125rem/);
+assert.match(style, /\.text-4xl\s*\{[\s\S]*font-size:\s*1\.75rem/);
 assert.match(style, /button:focus-visible[\s\S]*outline:\s*2px solid/);
 assert.doesNotMatch(style, /button:focus-visible\s*\{[\s\S]{0,120}outline:\s*none\s*!important/);
 assert.doesNotMatch(style, /input-focus-glow-rgb/);
@@ -52,6 +58,38 @@ assert.match(terminal, /prefers-reduced-motion:\s*reduce/, 'terminal popovers mu
 
 const workspace = readFileSync(resolve('src/views/WorkspaceView.vue'), 'utf8');
 assert.doesNotMatch(workspace, /transition:\s*height/, 'workspace resizing must not animate layout dimensions');
+
+const connectionsView = readFileSync(resolve('src/views/ConnectionsView.vue'), 'utf8');
+assert.match(connectionsView, /--server-control-size:\s*2\.1rem/);
+assert.match(connectionsView, /\.server-icon-button\s*\{[\s\S]*width:\s*var\(--server-control-size\)[\s\S]*height:\s*var\(--server-control-size\)/);
+assert.match(connectionsView, /\.server-icon-button i\s*\{[\s\S]*font-size:\s*0\.8rem/);
+assert.doesNotMatch(connectionsView, /\.server-icon-button\s*\{[\s\S]{0,320}width:\s*2\.45rem/);
+
+const layoutRenderer = readFileSync(resolve('src/components/LayoutRenderer.vue'), 'utf8');
+assert.match(layoutRenderer, /overflow-hidden pt-8/);
+assert.match(layoutRenderer, /items-center justify-center p-6/);
+assert.match(layoutRenderer, /text-sm font-medium/);
+
+const statusMonitor = readFileSync(resolve('src/components/StatusMonitor.vue'), 'utf8');
+assert.match(statusMonitor, /\.status-state__icon\s*\{[\s\S]*font-size:\s*1\.25rem/);
+
+const loginView = readFileSync(resolve('src/views/LoginView.vue'), 'utf8');
+assert.match(loginView, /--app-bg-color:\s*#f8fafc/);
+assert.match(loginView, /color-scheme:\s*light/);
+assert.match(loginView, /<VueHcaptcha[\s\S]*theme="light"/);
+assert.doesNotMatch(loginView, /<VueHcaptcha[\s\S]*theme="auto"/);
+assert.match(loginView, /\.auth-field input\s*\{[\s\S]*height:\s*36px/);
+assert.match(loginView, /\.auth-logo\s*\{[\s\S]*width:\s*44px[\s\S]*height:\s*44px/);
+assert.match(loginView, /\.auth-brand h1\s*\{[\s\S]*font-size:\s*clamp\(1\.5rem, 2\.5vw, 2rem\)/);
+assert.match(loginView, /\.auth-panel h2\s*\{[\s\S]*font-size:\s*clamp\(1\.2rem, 2vw, 1\.35rem\)/);
+
+const setupView = readFileSync(resolve('src/views/SetupView.vue'), 'utf8');
+assert.match(setupView, /\.auth-logo\s*\{[\s\S]*width:\s*44px[\s\S]*height:\s*44px/);
+assert.match(setupView, /\.auth-field input\s*\{[\s\S]*height:\s*36px/);
+
+const suspendedSessionsView = readFileSync(resolve('src/views/SuspendedSshSessionsView.vue'), 'utf8');
+assert.doesNotMatch(suspendedSessionsView, /font-size:\s*2rem/);
+assert.match(suspendedSessionsView, /font-semibold text-sm flex items-center/);
 
 const layoutConfigurator = readFileSync(resolve('src/components/LayoutConfigurator.vue'), 'utf8');
 const recordingSettings = readFileSync(resolve('src/components/settings/SessionRecordingSettings.vue'), 'utf8');

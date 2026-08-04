@@ -618,7 +618,7 @@ const copyIpToClipboard = async (ipAddress: string | null) => {
 
 .status-state__icon {
   color: currentColor;
-  font-size: 28px;
+  font-size: 1.25rem;
 }
 
 .status-state__title {

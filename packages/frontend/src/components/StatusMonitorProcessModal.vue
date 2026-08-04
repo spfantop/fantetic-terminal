@@ -670,13 +670,13 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 6px;
   background: transparent;
   color: var(--text-color-secondary);
-  font-size: 18px;
+  font-size: 16px;
   cursor: pointer;
   transition: background-color 0.2s ease, color 0.2s ease;
 }
@@ -688,20 +688,20 @@ onUnmounted(() => {
 
 .process-modal-toolbar {
   display: flex;
-  gap: 12px;
+  gap: 8px;
   align-items: center;
   justify-content: space-between;
-  padding-right: 52px;
+  padding-right: 44px;
 }
 
 .process-modal-search {
   min-width: 0;
   flex: 1;
-  height: 40px;
+  height: 36px;
   border: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
-  border-radius: 8px;
+  border-radius: 6px;
   background: var(--input-bg-color);
-  padding: 0 14px;
+  padding: 0 10px;
   color: var(--text-color);
   font-size: 14px;
 }

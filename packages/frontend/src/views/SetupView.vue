@@ -155,10 +155,10 @@ const handleSetup = async () => {
 }
 
 .auth-shell {
-  width: min(960px, 100%);
-  min-height: 560px;
+  width: min(880px, 100%);
+  min-height: 440px;
   display: grid;
-  grid-template-columns: minmax(280px, 0.9fr) minmax(340px, 1fr);
+  grid-template-columns: minmax(220px, 0.85fr) minmax(300px, 1fr);
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
   border-radius: 8px;
@@ -171,8 +171,8 @@ const handleSetup = async () => {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 2rem;
-  padding: clamp(2rem, 5vw, 4rem);
+  gap: 1.25rem;
+  padding: clamp(1.5rem, 3.5vw, 2.25rem);
   color: #fff;
   background:
     linear-gradient(145deg, rgba(15, 23, 42, 0.94), rgba(30, 41, 59, 0.86)),
@@ -195,15 +195,15 @@ const handleSetup = async () => {
 }
 
 .auth-logo {
-  width: 72px;
-  height: 72px;
+  width: 44px;
+  height: 44px;
   object-fit: contain;
 }
 
 .auth-eyebrow {
-  margin: 0 0 0.75rem;
+  margin: 0 0 0.5rem;
   color: color-mix(in srgb, currentColor 70%, transparent);
-  font-size: 0.78rem;
+  font-size: 0.7rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -211,75 +211,75 @@ const handleSetup = async () => {
 
 .auth-brand h1 {
   margin: 0;
-  font-size: clamp(2rem, 4vw, 3.25rem);
+  font-size: clamp(1.5rem, 2.5vw, 2rem);
   line-height: 1.02;
   letter-spacing: 0;
 }
 
 .auth-copy {
   max-width: 20rem;
-  margin: 1rem 0 0;
+  margin: 0.6rem 0 0;
   color: rgba(255, 255, 255, 0.76);
-  font-size: 0.95rem;
+  font-size: 0.8rem;
 }
 
 .auth-panel {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: clamp(2rem, 5vw, 4rem);
+  padding: clamp(1.5rem, 3.5vw, 2.25rem);
   background: color-mix(in srgb, var(--app-bg-color) 96%, white);
 }
 
 .auth-panel-header {
-  margin-bottom: 1.75rem;
+  margin-bottom: 1rem;
 }
 
 .auth-panel-header p:not(.auth-eyebrow) {
-  margin: 0.65rem 0 0;
+  margin: 0.5rem 0 0;
   color: var(--text-color-secondary);
-  font-size: 0.92rem;
+  font-size: 0.8rem;
 }
 
 .auth-mobile-logo {
   display: none;
-  width: 56px;
-  height: 56px;
+  width: 36px;
+  height: 36px;
   object-fit: contain;
-  margin-bottom: 1rem;
+  margin-bottom: 0.5rem;
 }
 
 .auth-panel h2 {
   margin: 0;
   color: var(--text-color);
-  font-size: clamp(1.55rem, 3vw, 2rem);
+  font-size: clamp(1.2rem, 2vw, 1.35rem);
   line-height: 1.15;
 }
 
 .auth-form {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 .auth-field {
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
+  gap: 0.35rem;
   color: var(--text-color);
-  font-size: 0.88rem;
+  font-size: 0.8rem;
   font-weight: 600;
 }
 
 .auth-field input {
   width: 100%;
-  height: 46px;
-  padding: 0 0.9rem;
+  height: 36px;
+  padding: 0 0.7rem;
   border: 1px solid color-mix(in srgb, var(--border-color) 76%, transparent);
-  border-radius: 6px;
+  border-radius: 4px;
   background: var(--app-bg-color);
   color: var(--text-color);
-  font-size: 0.95rem;
+  font-size: 0.85rem;
   transition: border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
 }
 
@@ -295,9 +295,9 @@ const handleSetup = async () => {
 
 .auth-error,
 .auth-success {
-  border-radius: 6px;
-  padding: 0.7rem 0.85rem;
-  font-size: 0.88rem;
+  border-radius: 4px;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.8rem;
 }
 
 .auth-error {
@@ -314,16 +314,16 @@ const handleSetup = async () => {
 
 .auth-submit {
   width: 100%;
-  min-height: 46px;
+  min-height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border: 0;
-  border-radius: 6px;
+  border-radius: 4px;
   background: #111827;
   color: #fff;
   box-shadow: 0 12px 22px rgba(17, 24, 39, 0.18);
-  font-size: 0.95rem;
+  font-size: 0.85rem;
   font-weight: 700;
   transition: transform 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease, opacity 0.16s ease;
 }
@@ -358,7 +358,7 @@ const handleSetup = async () => {
 
   .auth-panel {
     min-height: calc(100dvh - 2rem);
-    padding: 2rem 1.25rem;
+    padding: 1.25rem 1rem;
   }
 }
 </style>

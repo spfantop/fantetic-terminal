@@ -434,7 +434,7 @@ const formatAuditDetails = (details: AuditLogEntry['details']) => {
 </script>
 
 <template>
-  <div class="dashboard-view p-4 md:p-6 lg:p-8 bg-background text-foreground">
+  <div class="dashboard-view p-4 md:p-6 lg:p-6 bg-background text-foreground">
     <div class="dashboard-shell">
       <section class="dashboard-hero">
         <div class="dashboard-hero__copy">
@@ -890,7 +890,7 @@ const formatAuditDetails = (details: AuditLogEntry['details']) => {
   display: block;
   margin: 0.35rem 0 0.15rem;
   color: var(--text-color);
-  font-size: 2rem;
+  font-size: 1.6rem;
   font-weight: 800;
   line-height: 1;
 }
@@ -903,8 +903,8 @@ const formatAuditDetails = (details: AuditLogEntry['details']) => {
 .stat-card__icon {
   display: grid;
   place-items: center;
-  width: 2.75rem;
-  height: 2.75rem;
+  width: 2.25rem;
+  height: 2.25rem;
   border-radius: 8px;
   background: color-mix(in srgb, var(--text-color) 8%, transparent);
   color: var(--text-color);
@@ -1051,8 +1051,8 @@ const formatAuditDetails = (details: AuditLogEntry['details']) => {
 .connection-row__icon {
   display: grid;
   place-items: center;
-  width: 2.5rem;
-  height: 2.5rem;
+  width: 2rem;
+  height: 2rem;
   border-radius: 8px;
   background: color-mix(in srgb, var(--text-color) 8%, transparent);
   color: var(--text-color-secondary);
@@ -1325,15 +1325,15 @@ const formatAuditDetails = (details: AuditLogEntry['details']) => {
 .session-summary__main {
   display: grid;
   place-items: center;
-  width: 7rem;
-  min-height: 6rem;
+  width: 6rem;
+  min-height: 5.25rem;
   border-radius: 8px;
   background: color-mix(in srgb, var(--link-active-bg-color) 66%, transparent);
 }
 
 .session-summary__main strong {
   color: var(--text-color);
-  font-size: 2.15rem;
+  font-size: 1.75rem;
   font-weight: 850;
   line-height: 1;
 }

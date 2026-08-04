@@ -136,7 +136,7 @@ const handleSubmit = async () => {
 
 <template>
   <div ref="modalRootRef" class="fixed inset-0 bg-overlay flex justify-center items-center z-50"> <!-- Use bg-overlay for the overlay -->
-    <div ref="modalContentRef" class="bg-background text-foreground p-8 rounded-lg shadow-xl border border-border min-w-[350px] max-w-lg"> <!-- Form Panel with Tailwind -->
+    <div ref="modalContentRef" class="bg-background text-foreground p-6 rounded-lg shadow-xl border border-border min-w-[350px] max-w-lg"> <!-- Form Panel with Tailwind -->
       <h3 class="text-lg font-semibold text-center mb-6 cursor-move select-none" @pointerdown="startDialogDrag">{{ formTitle }}</h3> <!-- Title with Tailwind -->
       <form @submit.prevent="handleSubmit" class="space-y-4"> <!-- Form with spacing -->
         <div> <!-- Form Group -->

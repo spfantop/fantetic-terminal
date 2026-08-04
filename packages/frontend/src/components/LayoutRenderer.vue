@@ -904,11 +904,8 @@ const handlePaneResize = (eventData: { panes: Array<{ size: number; [key: string
   if (props.layoutNode && typeof props.layoutNode.id === 'undefined') {
     console.warn(`[LayoutRenderer DEBUG] handlePaneResize triggered but props.layoutNode.id is undefined. Full layoutNode prop:`, JSON.parse(JSON.stringify(props.layoutNode)));
   }
-  // console.log(`[LayoutRenderer DEBUG] handlePaneResize triggered for node ID: ${props.layoutNode?.id}, direction: ${props.layoutNode?.direction ?? 'N/A'}`); // Use optional chaining for safety
-  // console.log('[LayoutRenderer DEBUG] Splitpanes resized event object:', eventData);
   const paneSizes = eventData.panes; // 从事件对象中提取 panes 数组
 
-  // console.log('[LayoutRenderer DEBUG] Extracted paneSizes:', paneSizes); // 打印提取出的数组
 
   // +++ Use optional chaining for safety +++
   if (props.layoutNode?.type === 'container' && props.layoutNode?.children) {
@@ -924,11 +921,9 @@ const handlePaneResize = (eventData: { panes: Array<{ size: number; [key: string
     }));
 
     // +++ 调用 store action 前的日志 +++
-    // console.log(`[LayoutRenderer DEBUG] Calling layoutStore.updateNodeSizes for node ID: ${props.layoutNode.id} with sizes:`, JSON.parse(JSON.stringify(childrenSizes)));
     // 调用 store action 来更新节点大小
     layoutStore.updateNodeSizes(props.layoutNode.id, childrenSizes);
   } else {
-    // console.log(`[LayoutRenderer DEBUG] handlePaneResize ignored for node ID: ${props.layoutNode.id} (type: ${props.layoutNode.type})`);
   }
 };
 
@@ -989,7 +984,7 @@ const getSidebarPaneTitle = (paneName: PaneName) => (
 );
 
 const getSidebarPaneButtonClasses = (side: 'left' | 'right', paneName: PaneName) => [
-  'flex items-center justify-center w-10 h-10 mb-1 text-text-secondary hover:bg-hover hover:text-foreground transition-colors duration-150 cursor-pointer text-lg disabled:opacity-40 disabled:cursor-not-allowed',
+  'flex items-center justify-center w-8 h-8 mb-1 text-text-secondary hover:bg-hover hover:text-foreground transition-colors duration-150 cursor-pointer text-sm disabled:opacity-40 disabled:cursor-not-allowed',
   { 'bg-primary text-white hover:bg-primary-dark': isSidebarPaneButtonActive(side, paneName) },
 ];
 
@@ -1326,9 +1321,9 @@ onBeforeUnmount(() => {
                         <div v-if="!terminalPaneSessionId || !hasTerminalSessions"
                              class="absolute inset-0 flex justify-center items-center text-center text-text-secondary bg-header text-sm p-4"
                              :style="{ zIndex: 4 }">
-                            <div class="flex flex-col items-center justify-center p-8 w-full h-full">
+                            <div class="flex flex-col items-center justify-center p-6 w-full h-full">
                                 <i class="fas fa-plug text-4xl mb-3 text-text-secondary"></i>
-                                <span class="text-lg font-medium text-text-secondary mb-2">{{ terminalPaneSessionId ? t('layout.noSshSessionActive.title', '无活动的终端会话') : t('layout.noActiveSession.title') }}</span>
+                                <span class="text-sm font-medium text-text-secondary mb-2">{{ terminalPaneSessionId ? t('layout.noSshSessionActive.title', '无活动的终端会话') : t('layout.noActiveSession.title') }}</span>
                                 <div class="text-xs text-text-secondary mt-2">{{ terminalPaneSessionId ? t('layout.noSshSessionActive.message', '请激活一个 SSH/Telnet 会话以使用此终端面板。') : t('layout.noActiveSession.message') }}</div>
                             </div>
                         </div>
@@ -1364,9 +1359,9 @@ onBeforeUnmount(() => {
                         >
                         </component>
                      <div v-if="!scopedActiveSshSession" class="flex-grow flex justify-center items-center text-center text-text-secondary bg-header text-sm p-4">
-                      <div class="flex flex-col items-center justify-center p-8 w-full h-full">
+                      <div class="flex flex-col items-center justify-center p-6 w-full h-full">
                         <i class="fas fa-plug text-4xl mb-3 text-text-secondary"></i>
-                        <span class="text-lg font-medium text-text-secondary mb-2">{{ t('layout.noActiveSession.title') }}</span>
+                        <span class="text-sm font-medium text-text-secondary mb-2">{{ t('layout.noActiveSession.title') }}</span>
                         <div class="text-xs text-text-secondary mt-2">{{ t('layout.noActiveSession.message') }}</div>
                       </div>
                     </div>
@@ -1381,9 +1376,9 @@ onBeforeUnmount(() => {
                         />
                      </keep-alive>
                      <div v-else class="flex-grow flex justify-center items-center text-center text-text-secondary bg-header text-sm p-4">
-                      <div class="flex flex-col items-center justify-center p-8 w-full h-full">
+                      <div class="flex flex-col items-center justify-center p-6 w-full h-full">
                         <i class="fas fa-plug text-4xl mb-3 text-text-secondary"></i>
-                        <span class="text-lg font-medium text-text-secondary mb-2">{{ t('layout.noActiveSession.title') }}</span>
+                        <span class="text-sm font-medium text-text-secondary mb-2">{{ t('layout.noActiveSession.title') }}</span>
                         <div class="text-xs text-text-secondary mt-2">{{ t('layout.noActiveSession.message') }}</div>
                       </div>
                     </div>
@@ -1427,7 +1422,7 @@ onBeforeUnmount(() => {
         <div ref="leftResizeHandleRef" class="absolute top-0 bottom-0 w-2 cursor-col-resize z-[120] bg-transparent transition-colors duration-200 ease-in-out hover:bg-primary-light right-[-4px]"></div>
         <button class="absolute top-1 right-2 p-1 text-text-secondary hover:text-foreground cursor-pointer text-2xl leading-none z-10" @click="closeSidebars" title="Close Sidebar">&times;</button>
         <KeepAlive>
-            <div :key="`left-sidebar-content-${activeLeftSidebarPane ?? 'none'}`" class="relative flex flex-col flex-grow overflow-hidden pt-10"> <!-- Added pt-10 -->
+            <div :key="`left-sidebar-content-${activeLeftSidebarPane ?? 'none'}`" class="relative flex flex-col flex-grow overflow-hidden pt-8">
                 <component
       
                         v-if="currentLeftSidebarComponent && activeLeftSidebarPane && (activeLeftSidebarPane === 'statusMonitor' || activeLeftSidebarPane !== 'fileManager' || scopedActiveSshSession)"
@@ -1438,9 +1433,9 @@ onBeforeUnmount(() => {
                     </component>
                      <!-- 'fileManager' 且无 activeSession 的提示 -->
                     <div v-else-if="activeLeftSidebarPane === 'fileManager' && !scopedActiveSshSession" class="flex flex-col flex-grow justify-center items-center text-center text-text-secondary p-4">
-                      <div class="flex flex-col items-center justify-center p-8">
+                      <div class="flex flex-col items-center justify-center p-6">
                         <i class="fas fa-plug text-4xl mb-3 text-text-secondary"></i>
-                        <span class="text-lg font-medium mb-2">{{ t('layout.noActiveSession.title') }}</span>
+                        <span class="text-sm font-medium mb-2">{{ t('layout.noActiveSession.title') }}</span>
                         <div class="text-xs mt-2">{{ t('layout.noActiveSession.fileManagerSidebar') }}</div>
                       </div>
                     </div>
@@ -1460,7 +1455,7 @@ onBeforeUnmount(() => {
         <div ref="rightResizeHandleRef" class="absolute top-0 bottom-0 w-2 cursor-col-resize z-[120] bg-transparent transition-colors duration-200 ease-in-out hover:bg-primary-light left-[-4px]"></div>
         <button class="absolute top-1 right-2 p-1 text-text-secondary hover:text-foreground cursor-pointer text-2xl leading-none z-10" @click="closeSidebars" title="Close Sidebar">&times;</button>
         <KeepAlive>
-            <div :key="`right-sidebar-content-${activeRightSidebarPane ?? 'none'}`" class="relative flex flex-col flex-grow overflow-hidden pt-10"> <!-- Added pt-10 -->
+            <div :key="`right-sidebar-content-${activeRightSidebarPane ?? 'none'}`" class="relative flex flex-col flex-grow overflow-hidden pt-8">
                 <component
                         v-if="currentRightSidebarComponent && activeRightSidebarPane && (activeRightSidebarPane === 'statusMonitor' || activeRightSidebarPane !== 'fileManager' || scopedActiveSshSession)"
                         :is="currentRightSidebarComponent"
@@ -1470,9 +1465,9 @@ onBeforeUnmount(() => {
                     </component>
                      <!-- 'fileManager' 且无 activeSession 的提示 -->
                     <div v-else-if="activeRightSidebarPane === 'fileManager' && !scopedActiveSshSession" class="flex flex-col flex-grow justify-center items-center text-center text-text-secondary p-4">
-                      <div class="flex flex-col items-center justify-center p-8">
+                      <div class="flex flex-col items-center justify-center p-6">
                         <i class="fas fa-plug text-4xl mb-3 text-text-secondary"></i>
-                        <span class="text-lg font-medium mb-2">{{ t('layout.noActiveSession.title') }}</span>
+                        <span class="text-sm font-medium mb-2">{{ t('layout.noActiveSession.title') }}</span>
                         <div class="text-xs mt-2">{{ t('layout.noActiveSession.fileManagerSidebar') }}</div>
                       </div>
                     </div>

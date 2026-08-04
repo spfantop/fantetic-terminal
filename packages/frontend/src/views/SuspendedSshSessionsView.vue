@@ -9,7 +9,7 @@
           type="text"
           v-model="searchTerm"
           :placeholder="$t('suspendedSshSessions.searchPlaceholder')"
-          class="w-full pl-10 pr-4 py-1.5 border border-border/50 rounded-lg bg-input text-foreground text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition duration-150 ease-in-out"
+          class="w-full pl-8 pr-3 py-1 border border-border/50 rounded-md bg-input text-foreground text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary transition duration-150 ease-in-out"
           @input="filterSessions"
         />
       </div>
@@ -21,7 +21,7 @@
 
     <div class="session-list-container flex-grow overflow-y-auto">
       <div v-if="isLoading" class="text-center p-4">
-        <i class="pi pi-spin pi-spinner" style="font-size: 2rem"></i>
+        <i class="pi pi-spin pi-spinner" style="font-size: 1.25rem"></i>
         <p>{{ $t('suspendedSshSessions.loading') }}</p>
       </div>
       <div v-else-if="filteredSessions.length === 0 && !isLoading" class="text-center p-4">
@@ -31,12 +31,12 @@
         <li
           v-for="session in filteredSessions"
           :key="session.suspendSessionId"
-          class="session-item p-3 mb-2 border border-border/70 rounded-md bg-surface-ground"
+          class="session-item p-2 mb-1 border border-border/70 rounded-md bg-surface-ground"
           :class="{ 'opacity-60': session.backendSshStatus === 'disconnected_by_backend' }"
         >
           <div class="flex justify-between items-center">
             <div class="session-info flex-grow mr-2">
-              <div class="font-bold text-lg flex items-center">
+              <div class="font-semibold text-sm flex items-center">
                 <span
                   v-if="editingSuspendSessionId !== session.suspendSessionId"
                   class="cursor-pointer hover:text-primary"
@@ -50,7 +50,7 @@
                   ref="nameInputRef"
                   v-model="currentEditingNameValue"
                   type="text"
-                  class="text-lg font-bold w-full px-1 py-0.5 border border-primary rounded-md bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  class="text-sm font-semibold w-full px-1 py-0.5 border border-primary rounded-md bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                   @blur="finishEditingName()"
                   @keydown.enter.prevent="finishEditingName()"
                   @keydown.esc.prevent="cancelEditingName()"
@@ -396,7 +396,7 @@ onUnmounted(() => {
   /* 在窄视图下，确保按钮容器占满宽度，使按钮能正确对齐 */
   /* The nested container query might not be needed or needs simplification */
   @container suspended-sessions-view-pane (max-width: 320px) {
-    .session-item .session-info .font-bold.text-lg { /* 针对名称和状态标签的容器 */
+    .session-item .session-info .font-semibold.text-sm { /* 针对名称和状态标签的容器 */
         flex-wrap: wrap; /* 如果名称和状态标签加起来太长，允许状态标签换行 - This is still good */
     }
     /* .session-item .session-status-actions { */

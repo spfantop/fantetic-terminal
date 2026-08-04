@@ -69,7 +69,7 @@
         <div v-if="activeTab === 'security'">
           <div v-if="settings" class="p-4 bg-background text-foreground">
             <div class="max-w-6xl mx-auto">
-              <h2 class="text-xl font-semibold text-foreground mb-4 pb-2 border-b border-border">{{ $t('settings.category.security') }}</h2>
+              <h2 class="text-lg font-semibold text-foreground mb-4 pb-2 border-b border-border">{{ $t('settings.category.security') }}</h2>
               <div class="space-y-6">
                 <ChangePasswordForm />
                 <hr class="border-border/50">
@@ -460,8 +460,8 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   width: 100%;
-  gap: 0.75rem;
-  padding: 0.65rem 0.9rem;
+  gap: 0.6rem;
+  padding: 0.55rem 0.75rem;
   border: 1px solid transparent;
   border-radius: 0.65rem;
   background: transparent;
@@ -472,9 +472,9 @@ onUnmounted(() => {
 }
 
 .settings-nav-item i {
-  width: 1.25rem;
+  width: 1.1rem;
   color: currentColor;
-  font-size: 1rem;
+  font-size: 0.9rem;
   text-align: center;
 }
 
@@ -483,7 +483,7 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.95rem;
+  font-size: 0.875rem;
   font-weight: 500;
 }
 
@@ -512,9 +512,9 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.9rem;
+  gap: 0.7rem;
   flex-shrink: 0;
-  padding: 1.1rem 1.5rem 0.9rem;
+  padding: 0.85rem 1.25rem 0.7rem;
   border-bottom: 1px solid var(--border-color);
   background: var(--app-bg-color);
 }
@@ -523,7 +523,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   min-width: 0;
-  gap: 0.9rem;
+  gap: 0.7rem;
 }
 
 .settings-drag-handle {
@@ -533,21 +533,21 @@ onUnmounted(() => {
 }
 
 .settings-content-title i {
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 1.9rem;
+  height: 1.9rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 0.65rem;
+  border-radius: 0.45rem;
   background: var(--nav-item-active-bg-color);
   color: var(--link-active-color);
-  font-size: 1.15rem;
+  font-size: 0.95rem;
 }
 
 .settings-content-title h1 {
   margin: 0;
   color: var(--text-color);
-  font-size: 1.6rem;
+  font-size: 1.3rem;
   font-weight: 700;
   line-height: 1.2;
 }
@@ -556,11 +556,11 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 2rem;
+  height: 2rem;
   flex-shrink: 0;
   border: 1px solid transparent;
-  border-radius: 0.65rem;
+  border-radius: 0.45rem;
   background: transparent;
   color: var(--text-color-secondary);
   cursor: pointer;
@@ -575,7 +575,7 @@ onUnmounted(() => {
 }
 
 .settings-close-button i {
-  font-size: 1rem;
+  font-size: 0.85rem;
   line-height: 1;
 }
 

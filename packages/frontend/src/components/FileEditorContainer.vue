@@ -397,7 +397,7 @@ const handleKeyDown = (event: KeyboardEvent) => {
 }
 
 .editor-loading, .editor-error, .editor-placeholder {
-  padding: 2rem;
+  padding: 1rem;
   text-align: center;
   font-size: 1.1em;
   flex-grow: 1;

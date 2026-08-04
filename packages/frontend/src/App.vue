@@ -138,7 +138,7 @@ const closeAdminCenterOverlay = () => {
   height: 100dvh;
   width: 100vw;
   overflow: hidden;
-  font-family: var(--font-family-sans-serif); /* 使用字体变量 */
+  font-family: var(--ui-font-family);
 }
 
 main {

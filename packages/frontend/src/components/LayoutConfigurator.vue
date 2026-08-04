@@ -470,7 +470,7 @@ const handleAvailablePaneDragEnd = (event: any) => {
                   :group="'layout-items'"
                   class="flex-grow"
                 />
-                <p v-else class="text-center text-text-alt p-8 italic text-sm w-full">
+                <p v-else class="text-center text-text-alt p-6 italic text-sm w-full">
                   {{ t('layoutConfigurator.emptyLayout', '布局为空，请从左侧拖拽面板或添加容器。') }}
                 </p>
               </div>

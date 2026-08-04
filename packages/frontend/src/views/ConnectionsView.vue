@@ -2361,6 +2361,8 @@ const handleOpenAllTargetConnections = async () => {
   display: flex;
   height: 100%;
   flex-shrink: 0;
+  --server-control-size: 2.1rem;
+  --server-control-radius: 0.35rem;
   border-right: 2px solid color-mix(in srgb, var(--border-color) 78%, transparent);
   background: color-mix(in srgb, var(--header-bg-color) 92%, var(--app-bg-color));
   overflow: hidden;
@@ -2382,7 +2384,7 @@ const handleOpenAllTargetConnections = async () => {
   flex-direction: column;
   width: 100%;
   min-height: 0;
-  padding: 0.5rem 0.45rem 0.6rem;
+  padding: 0.4rem 0.4rem 0.5rem;
   overflow: hidden;
 }
 
@@ -2426,22 +2428,22 @@ const handleOpenAllTargetConnections = async () => {
 .server-command-row {
   display: flex;
   width: 100%;
-  gap: 0.5rem;
+  gap: 0.35rem;
 }
 
 .server-search-row {
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.35rem;
 }
 
 .server-filter-row {
   position: relative;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.4rem;
 }
 
 .server-command-row {
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 0.6rem;
+  margin-bottom: 0.45rem;
 }
 
 .server-search-box {
@@ -2452,10 +2454,10 @@ const handleOpenAllTargetConnections = async () => {
 
 .server-search-box i {
   position: absolute;
-  left: 0.75rem;
+  left: 0.65rem;
   top: 50%;
   color: var(--text-color-secondary);
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   transform: translateY(-50%);
   pointer-events: none;
 }
@@ -2464,23 +2466,23 @@ const handleOpenAllTargetConnections = async () => {
 .server-select {
   width: 100%;
   min-width: 0;
-  height: 2.45rem;
+  height: var(--server-control-size);
   border: 1px solid var(--border-color);
-  border-radius: 0.5rem;
+  border-radius: var(--server-control-radius);
   background: var(--app-bg-color);
   color: var(--text-color);
-  font-size: 0.86rem;
+  font-size: 0.8rem;
   outline: none;
   transition: border-color 0.12s ease, background-color 0.12s ease, box-shadow 0.12s ease;
 }
 
 .server-search-box input {
-  padding: 0 0.85rem 0 2.25rem;
+  padding: 0 0.7rem 0 2rem;
 }
 
 .server-select {
   flex: 1;
-  padding: 0 0.7rem;
+  padding: 0 0.6rem;
 }
 
 .server-tag-filter {
@@ -2500,19 +2502,19 @@ const handleOpenAllTargetConnections = async () => {
 
 .server-tag-filter-count {
   position: absolute;
-  top: -0.35rem;
-  right: -0.35rem;
+  top: -0.3rem;
+  right: -0.3rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 1rem;
-  height: 1rem;
-  padding: 0 0.25rem;
+  min-width: 0.9rem;
+  height: 0.9rem;
+  padding: 0 0.2rem;
   border: 1px solid var(--app-bg-color);
   border-radius: 999px;
   background: var(--button-bg-color);
   color: var(--button-text-color);
-  font-size: 0.62rem;
+  font-size: 0.58rem;
   font-weight: 800;
   line-height: 1;
 }
@@ -2520,10 +2522,10 @@ const handleOpenAllTargetConnections = async () => {
 .server-tag-filter-menu {
   position: fixed;
   z-index: 120;
-  max-height: 18rem;
-  padding: 0.35rem;
+  max-height: 16rem;
+  padding: 0.25rem;
   border: 1px solid var(--border-color);
-  border-radius: 0.55rem;
+  border-radius: 0.4rem;
   background: var(--header-bg-color);
   box-shadow: 0 18px 44px rgba(15, 23, 42, 0.18);
   overflow-y: auto;
@@ -2533,10 +2535,10 @@ const handleOpenAllTargetConnections = async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
-  padding: 0.35rem 0.45rem 0.45rem;
+  gap: 0.4rem;
+  padding: 0.3rem 0.4rem 0.35rem;
   color: var(--text-color-secondary);
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 800;
 }
 
@@ -2545,7 +2547,7 @@ const handleOpenAllTargetConnections = async () => {
   background: transparent;
   color: var(--text-color-secondary);
   cursor: pointer;
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 700;
 }
 
@@ -2558,15 +2560,15 @@ const handleOpenAllTargetConnections = async () => {
   display: flex;
   align-items: center;
   width: 100%;
-  gap: 0.55rem;
-  min-height: 2rem;
-  padding: 0.35rem 0.5rem;
+  gap: 0.45rem;
+  min-height: 1.8rem;
+  padding: 0.3rem 0.4rem;
   border: 0;
-  border-radius: 0.42rem;
+  border-radius: 0.3rem;
   background: transparent;
   color: var(--text-color);
   cursor: pointer;
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   text-align: left;
 }
 
@@ -2577,7 +2579,7 @@ const handleOpenAllTargetConnections = async () => {
 }
 
 .server-tag-filter-item i {
-  width: 1rem;
+  width: 0.9rem;
   color: var(--text-color-secondary);
   text-align: center;
 }
@@ -2594,9 +2596,9 @@ const handleOpenAllTargetConnections = async () => {
 }
 
 .server-tag-filter-empty {
-  padding: 0.75rem 0.5rem;
+  padding: 0.65rem 0.4rem;
   color: var(--text-color-secondary);
-  font-size: 0.8rem;
+  font-size: 0.76rem;
   text-align: center;
 }
 
@@ -2611,11 +2613,11 @@ const handleOpenAllTargetConnections = async () => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.45rem;
-  height: 2.45rem;
+  width: var(--server-control-size);
+  height: var(--server-control-size);
   flex-shrink: 0;
   border: 1px solid var(--border-color);
-  border-radius: 0.5rem;
+  border-radius: var(--server-control-radius);
   background: var(--app-bg-color);
   color: var(--text-color-secondary);
   cursor: pointer;
@@ -2634,6 +2636,11 @@ const handleOpenAllTargetConnections = async () => {
 .server-batch-bar button i,
 .server-test-result i {
   color: currentColor;
+}
+
+.server-icon-button i {
+  font-size: 0.8rem;
+  line-height: 1;
 }
 
 .server-icon-button-primary,
@@ -2662,17 +2669,17 @@ const handleOpenAllTargetConnections = async () => {
 .server-batch-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.35rem;
   color: var(--text-color-secondary);
-  font-size: 0.8rem;
+  font-size: 0.74rem;
   font-weight: 600;
   user-select: none;
 }
 
 .server-switch {
   position: relative;
-  width: 2.25rem;
-  height: 1.25rem;
+  width: 2rem;
+  height: 1.1rem;
   flex-shrink: 0;
   border: 1px solid var(--border-color);
   border-radius: 999px;
@@ -2683,10 +2690,10 @@ const handleOpenAllTargetConnections = async () => {
 
 .server-switch span {
   position: absolute;
-  left: 0.15rem;
+  left: 0.14rem;
   top: 50%;
-  width: 0.9rem;
-  height: 0.9rem;
+  width: 0.78rem;
+  height: 0.78rem;
   border-radius: 999px;
   background: var(--app-bg-color);
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.22);
@@ -2700,37 +2707,37 @@ const handleOpenAllTargetConnections = async () => {
 }
 
 .server-switch.active span {
-  transform: translate(0.95rem, -50%);
+  transform: translate(0.82rem, -50%);
 }
 
 .server-command-actions {
   display: flex;
-  gap: 0.4rem;
+  gap: 0.25rem;
 }
 
 .server-batch-bar {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
-  margin-bottom: 0.65rem;
-  padding: 0.55rem;
+  gap: 0.3rem;
+  margin-bottom: 0.45rem;
+  padding: 0.4rem;
   border: 1px solid var(--border-color);
-  border-radius: 0.5rem;
+  border-radius: 0.35rem;
   background: color-mix(in srgb, var(--app-bg-color) 72%, var(--header-bg-color));
 }
 
 .server-batch-bar button {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  min-height: 1.85rem;
-  padding: 0.25rem 0.55rem;
+  gap: 0.3rem;
+  min-height: 1.7rem;
+  padding: 0.2rem 0.45rem;
   border: 1px solid var(--border-color);
-  border-radius: 0.45rem;
+  border-radius: 0.3rem;
   background: transparent;
   color: var(--text-color);
   cursor: pointer;
-  font-size: 0.76rem;
+  font-size: 0.72rem;
   font-weight: 600;
 }
 
@@ -2770,10 +2777,10 @@ const handleOpenAllTargetConnections = async () => {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 0.5rem;
+  gap: 0.35rem;
   flex-shrink: 0;
-  margin-top: 0.65rem;
-  padding-top: 0.65rem;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
   border-top: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
 }
 
@@ -2781,11 +2788,11 @@ const handleOpenAllTargetConnections = async () => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.45rem;
-  height: 2.45rem;
+  width: var(--server-control-size);
+  height: var(--server-control-size);
   flex-shrink: 0;
   border: 1px solid var(--border-color);
-  border-radius: 0.5rem;
+  border-radius: var(--server-control-radius);
   background: var(--app-bg-color);
   color: var(--text-color-secondary);
   cursor: pointer;
@@ -2807,7 +2814,7 @@ const handleOpenAllTargetConnections = async () => {
 
 .server-bottom-button i {
   color: currentColor;
-  font-size: 1rem;
+  font-size: 0.86rem;
   line-height: 1;
 }
 
@@ -2819,12 +2826,12 @@ const handleOpenAllTargetConnections = async () => {
 .server-actions-menu {
   position: absolute;
   left: 0;
-  bottom: calc(100% + 0.5rem);
+  bottom: calc(100% + 0.4rem);
   z-index: 30;
-  min-width: 12rem;
-  padding: 0.35rem;
+  min-width: 11rem;
+  padding: 0.25rem;
   border: 1px solid var(--border-color);
-  border-radius: 0.55rem;
+  border-radius: 0.4rem;
   background: var(--header-bg-color);
   box-shadow: 0 18px 44px rgba(15, 23, 42, 0.18);
 }
@@ -2833,14 +2840,14 @@ const handleOpenAllTargetConnections = async () => {
   display: flex;
   align-items: center;
   width: 100%;
-  gap: 0.65rem;
-  padding: 0.55rem 0.65rem;
+  gap: 0.5rem;
+  padding: 0.45rem 0.55rem;
   border: 0;
-  border-radius: 0.42rem;
+  border-radius: 0.3rem;
   background: transparent;
   color: var(--text-color);
   cursor: pointer;
-  font-size: 0.86rem;
+  font-size: 0.8rem;
   text-align: left;
   text-decoration: none;
 }
@@ -2863,7 +2870,7 @@ const handleOpenAllTargetConnections = async () => {
 }
 
 .server-actions-menu-item i {
-  width: 1.05rem;
+  width: 0.95rem;
   color: currentColor;
   text-align: center;
 }
@@ -2896,14 +2903,14 @@ const handleOpenAllTargetConnections = async () => {
   align-items: center;
   width: 100%;
   min-width: 0;
-  gap: 0.5rem;
-  padding: 0.28rem 0.45rem;
+  gap: 0.4rem;
+  padding: 0.22rem 0.4rem;
   border: 1px solid transparent;
   border-radius: 0.3rem;
   background: transparent;
   color: var(--text-color);
   cursor: pointer;
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   font-weight: 600;
   text-align: left;
   transition: background-color 0.12s ease, border-color 0.12s ease;
@@ -2916,10 +2923,10 @@ const handleOpenAllTargetConnections = async () => {
 }
 
 .server-folder-header i {
-  width: 0.95rem;
+  width: 0.85rem;
   flex-shrink: 0;
   color: var(--text-color-secondary);
-  font-size: 0.7rem;
+  font-size: 0.66rem;
   text-align: center;
 }
 
@@ -2952,12 +2959,12 @@ const handleOpenAllTargetConnections = async () => {
 }
 
 .server-folder-count {
-  min-width: 1.35rem;
+  min-width: 1.25rem;
   padding: 0.04rem 0.3rem;
   border: 1px solid var(--border-color);
   border-radius: 999px;
   color: var(--text-color-secondary);
-  font-size: 0.62rem;
+  font-size: 0.6rem;
   font-weight: 600;
   line-height: 1.15;
   text-align: center;
@@ -2985,9 +2992,9 @@ const handleOpenAllTargetConnections = async () => {
   position: relative;
   display: flex;
   align-items: flex-start;
-  gap: 0.45rem;
+  gap: 0.35rem;
   min-width: 0;
-  padding: 0.22rem 0.45rem;
+  padding: 0.18rem 0.4rem;
   border: 1px solid transparent;
   border-radius: 0.3rem;
   color: var(--text-color);
@@ -3029,10 +3036,10 @@ const handleOpenAllTargetConnections = async () => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.3rem;
-  height: 1.3rem;
+  width: 1.2rem;
+  height: 1.2rem;
   flex-shrink: 0;
-  font-size: 1rem;
+  font-size: 0.9rem;
 }
 
 .server-entry-content {
@@ -3079,7 +3086,7 @@ const handleOpenAllTargetConnections = async () => {
 .server-entry-mainline {
   display: flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.35rem;
   min-width: 0;
 }
 
@@ -3087,9 +3094,9 @@ const handleOpenAllTargetConnections = async () => {
   min-width: 0;
   flex: 1;
   overflow: hidden;
-  font-size: 0.8125rem;
+  font-size: 0.78rem;
   font-weight: 500;
-  line-height: 1.25;
+  line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3099,7 +3106,7 @@ const handleOpenAllTargetConnections = async () => {
   border: 1px solid var(--border-color);
   border-radius: 999px;
   color: var(--text-color-secondary);
-  font-size: 0.58rem;
+  font-size: 0.55rem;
   font-weight: 600;
   line-height: 1.2;
   text-transform: uppercase;
@@ -3108,9 +3115,9 @@ const handleOpenAllTargetConnections = async () => {
 .server-entry-meta {
   overflow: hidden;
   color: var(--text-color-secondary);
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 400;
-  line-height: 1.35;
+  line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3204,7 +3211,7 @@ const handleOpenAllTargetConnections = async () => {
   border: 1px solid var(--border-color);
   border-radius: 999px;
   color: var(--text-color-secondary);
-  font-size: 0.62rem;
+  font-size: 0.58rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3249,15 +3256,15 @@ const handleOpenAllTargetConnections = async () => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.55rem;
-  padding: 1.25rem;
+  gap: 0.45rem;
+  padding: 1rem;
   color: var(--text-color-secondary);
-  font-size: 0.9rem;
+  font-size: 0.84rem;
   text-align: center;
 }
 
 .server-state i {
-  font-size: 1.45rem;
+  font-size: 1.3rem;
 }
 
 .connection-workspace {
@@ -3331,9 +3338,9 @@ const handleOpenAllTargetConnections = async () => {
   position: fixed;
   z-index: 9999;
   min-width: 13rem;
-  padding: 0.35rem;
+  padding: 0.25rem;
   border: 1px solid var(--border-color);
-  border-radius: 0.55rem;
+  border-radius: 0.4rem;
   background: var(--header-bg-color);
   box-shadow: 0 18px 44px rgba(15, 23, 42, 0.18);
 }
@@ -3342,14 +3349,14 @@ const handleOpenAllTargetConnections = async () => {
   display: flex;
   align-items: center;
   width: 100%;
-  gap: 0.65rem;
-  padding: 0.55rem 0.65rem;
+  gap: 0.5rem;
+  padding: 0.45rem 0.55rem;
   border: 0;
-  border-radius: 0.42rem;
+  border-radius: 0.3rem;
   background: transparent;
   color: var(--text-color);
   cursor: pointer;
-  font-size: 0.86rem;
+  font-size: 0.8rem;
   text-align: left;
 }
 
@@ -3370,7 +3377,7 @@ const handleOpenAllTargetConnections = async () => {
 }
 
 .server-context-menu i {
-  width: 1.05rem;
+  width: 0.95rem;
   color: currentColor;
   text-align: center;
 }

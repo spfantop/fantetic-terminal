@@ -1253,13 +1253,11 @@ const applyTerminalTextStyles = () => {
     } else {
       hostElement.style.removeProperty('--terminal-shadow');
     }
-    // console.log('[Terminal] Applied text styles. Stroke enabled:', terminalTextStrokeEnabled.value, 'Shadow enabled:', terminalTextShadowEnabled.value);
   }
 };
 
 // 监听文字描边和阴影设置的变化
 watch(terminalTextStyleSignature, () => {
-  // console.log('[Terminal] Text style settings changed, applying new styles.');
   // 这个 watch 现在主要负责响应运行时的更改
   // 初始加载由下面的 watchEffect 处理
   if (isTerminalDomReady.value && initialAppearanceDataLoaded.value) {
