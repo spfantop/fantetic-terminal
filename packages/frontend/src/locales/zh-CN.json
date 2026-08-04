@@ -1398,7 +1398,8 @@
     "error":"失败",
     "alert":"提示",
     "confirm":"确认",
-    "updateSuccess":"更新成功"
+    "updateSuccess":"更新成功",
+    "copy":"复制"
   },
   "layoutConfigurator": {
     "title": "布局管理器",

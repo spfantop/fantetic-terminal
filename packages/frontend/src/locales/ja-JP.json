@@ -167,7 +167,8 @@
         "minimize": "最小化",
         "send":"送信する",
         "updateSuccess":"更新に成功しました",
-        "copied": "クリップボードにコピーしました"
+        "copied": "クリップボードにコピーしました",
+        "copy": "コピー"
     },
     "connections": {
         "batchEdit": {

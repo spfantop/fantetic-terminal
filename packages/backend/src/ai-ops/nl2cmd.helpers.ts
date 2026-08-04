@@ -15,13 +15,28 @@ export function sanitizeUserInput(input: string): string {
     .slice(0, NL2CMD_CONFIG.MAX_QUERY_LENGTH);
 }
 
+const AI_LOG_SECRET_PATTERN = /((?:api[_-]?key|access[_-]?token|authorization|password|passwd|secret|passphrase|private[_-]?key)\s*[:=]\s*)(?:bearer\s+)?[^\s,;]+/gi;
+const AI_LOG_BEARER_PATTERN = /(bearer\s+)[A-Za-z0-9._~+/=-]+/gi;
+const AI_LOG_KEY_PATTERN = /\bsk-[A-Za-z0-9._-]{12,}\b/gi;
+const AI_LOG_TEXT_LIMIT = 2000;
+
+export function sanitizeAIChatLogText(value: string): string {
+  const sanitized = value
+    .replace(AI_LOG_SECRET_PATTERN, '$1[REDACTED]')
+    .replace(AI_LOG_BEARER_PATTERN, '$1[REDACTED]')
+    .replace(AI_LOG_KEY_PATTERN, 'sk-[REDACTED]');
+  return sanitized.length > AI_LOG_TEXT_LIMIT
+    ? `${sanitized.slice(0, AI_LOG_TEXT_LIMIT)}...[TRUNCATED]`
+    : sanitized;
+}
+
 export function cleanCommandOutput(output: string): string {
   if (isHtmlResponse(output)) {
     return '';
   }
 
   const fencedCommand = output.match(/```(?:bash|sh|zsh|fish|powershell|pwsh|cmd|shell)?\s*\n?([\s\S]*?)```/i)?.[1]?.trim();
-  let cleaned = (fencedCommand || output)
+  let cleaned = stripProviderReasoning(fencedCommand || output)
     .replace(/```[\w-]*\n?/g, '')
     .replace(/```/g, '')
     .trim();
@@ -67,12 +82,31 @@ export function isHtmlResponse(output: unknown): boolean {
     || /<div\s+id=["']root["']\s*><\/div>/i.test(trimmed);
 }
 
+const isReasoningSegment = (value: unknown): boolean => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const type = (value as Record<string, unknown>).type;
+  return typeof type === 'string' && /^(reasoning|thinking|thought|analysis)(?:[_-]|$)/i.test(type);
+};
+
+export function stripProviderReasoning(output: string): string {
+  return output
+    .replace(/<think(?:ing)?\b[^>]*>[\s\S]*?(?:<\/think(?:ing)?>|$)/gi, '')
+    .replace(/<\|(?:begin|end)_(?:of_)?(?:thought|thinking|reasoning)\|>/gi, '')
+    .trim();
+}
+
 export function readProviderText(value: unknown): string {
-  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'string') return stripProviderReasoning(value);
   if (Array.isArray(value)) {
-    return value.map(readProviderText).filter(Boolean).join('\n').trim();
+    return value
+      .filter((item) => !isReasoningSegment(item))
+      .map(readProviderText)
+      .filter(Boolean)
+      .join('\n')
+      .trim();
   }
   if (!value || typeof value !== 'object') return '';
+  if (isReasoningSegment(value)) return '';
 
   const record = value as Record<string, unknown>;
   const candidates = [

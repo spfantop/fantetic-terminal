@@ -1397,7 +1397,8 @@
     "minimize": "Minimize",
     "send":"Send",
     "updateSuccess":"Update successful",
-    "copied": "Copied to clipboard"
+    "copied": "Copied to clipboard",
+    "copy": "Copy"
   },
   "layoutConfigurator": {
     "title": "Layout Configurator",

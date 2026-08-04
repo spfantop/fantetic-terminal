@@ -3,12 +3,19 @@ import {
   cleanCommandOutput,
   detectDangerousCommand,
   readProviderText,
+  sanitizeAIChatLogText,
   sanitizeUserInput,
 } from '../ai-ops/nl2cmd.helpers';
 import {
   applySavedAISettingsPatch,
   maskAISettingsForClient,
 } from '../ai-ops/ai-settings.helpers';
+
+const sanitizedLogText = sanitizeAIChatLogText(
+  'run password=secret api_key=secret-key with Bearer secret-token sk-12345678901234567890',
+);
+assert.doesNotMatch(sanitizedLogText, /secret-key|secret-token|sk-12345678901234567890/);
+assert.match(sanitizedLogText, /\[REDACTED\]/);
 
 assert.equal(
   sanitizeUserInput('  ```\n列出${PWD}\u200B下面的大文件\n```  '),
@@ -32,6 +39,27 @@ assert.equal(
   cleanCommandOutput('可以使用下面的命令：\n```bash\nls -la\n```'),
   'ls -la',
   'AI response with prose before a fenced command should extract the fenced command',
+);
+
+assert.equal(
+  cleanCommandOutput('<think>先分析用户需求，再选择命令</think>\nls -la'),
+  'ls -la',
+  'DeepSeek thinking tags must never be returned as the generated command',
+);
+
+assert.equal(
+  cleanCommandOutput(readProviderText({
+    choices: [{
+      message: {
+        content: [
+          { type: 'reasoning', text: '先分析用户需求' },
+          { type: 'text', text: 'pwd' },
+        ],
+      },
+    }],
+  })),
+  'pwd',
+  'OpenAI-compatible reasoning content segments must be excluded from the final command',
 );
 
 assert.equal(

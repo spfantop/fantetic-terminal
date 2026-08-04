@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   AI_ASSISTANT_HISTORY_LIMIT,
   parseAssistantHistory,
@@ -7,6 +9,13 @@ import {
   type AssistantConversation,
   type AssistantMessage,
 } from '../src/utils/aiAssistantHistory';
+
+for (const locale of ['zh-CN', 'en-US', 'ja-JP']) {
+  const messages = JSON.parse(readFileSync(resolve(`src/locales/${locale}.json`), 'utf8')) as {
+    common?: { copy?: string };
+  };
+  assert.equal(typeof messages.common?.copy, 'string', `${locale} should define the AI assistant copy label`);
+}
 
 const messages: AssistantMessage[] = [
   {

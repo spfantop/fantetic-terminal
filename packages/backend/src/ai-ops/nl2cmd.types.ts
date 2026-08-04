@@ -35,6 +35,7 @@ export interface OpenAIChatResponse {
   choices?: Array<{
     message?: {
       content?: unknown;
+      reasoning_content?: string | null;
     };
   }>;
   usage?: unknown;

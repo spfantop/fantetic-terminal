@@ -1,5 +1,6 @@
 import axios, { AxiosError } from 'axios';
 import i18next from '../i18n';
+import { createLogger } from '../logging/logger';
 import { settingsRepository } from '../settings/settings.repository';
 import { decrypt, encrypt } from '../utils/crypto';
 import { AI_SETTINGS_KEY, DEFAULT_AI_SETTINGS, NL2CMD_CONFIG } from './nl2cmd.constants';
@@ -14,6 +15,7 @@ import {
   detectDangerousCommand,
   isHtmlResponse,
   readProviderText,
+  sanitizeAIChatLogText,
   sanitizeUserInput,
   validateBaseUrl,
 } from './nl2cmd.helpers';
@@ -31,6 +33,8 @@ interface StoredAISettings extends Omit<AISettings, 'apiKey'> {
   encryptedApiKey?: string;
   apiKey?: string;
 }
+
+const logger = createLogger('AIService');
 
 export function aiMessage(key: string, options?: Record<string, unknown>): string {
   return i18next.t(`ai.${key}`, options);
@@ -88,7 +92,7 @@ export async function getAISettings(): Promise<AISettings> {
       apiKey: readStoredApiKey(stored),
     });
   } catch (error) {
-    console.error('[AI] 读取 AI 配置失败:', error);
+    logger.error('读取 AI 配置失败', { error });
     return normalizeAISettings(DEFAULT_AI_SETTINGS);
   }
 }
@@ -266,7 +270,24 @@ export async function generateCommand(request: NL2CMDRequest): Promise<NL2CMDRes
   }
 
   const settings = await getAISettings();
+  const endpoint = settings.provider === 'claude'
+    ? '/messages'
+    : settings.openaiEndpoint || DEFAULT_AI_SETTINGS.openaiEndpoint;
+  logger.info('AI 聊天请求', {
+    provider: settings.provider,
+    model: settings.model,
+    endpoint,
+    query: sanitizeAIChatLogText(query),
+    osType: request.osType || 'Linux',
+    shellType: request.shellType || 'bash',
+    currentPath: sanitizeAIChatLogText(request.currentPath || '~'),
+  });
   if (!settings.enabled || !settings.apiKey) {
+    logger.warn('AI 聊天请求未执行', {
+      provider: settings.provider,
+      model: settings.model,
+      reason: settings.enabled ? 'missing_api_key' : 'disabled',
+    });
     return { success: false, error: aiMessage('disabled') };
   }
 
@@ -278,20 +299,41 @@ export async function generateCommand(request: NL2CMDRequest): Promise<NL2CMDRes
       : await callOpenAI(settings, prompt);
     const command = cleanCommandOutput(result.command);
     if (!command) {
+      logger.warn('AI 聊天响应为空', {
+        provider: settings.provider,
+        model: settings.model,
+      });
       return { success: false, error: aiMessage('emptyCommand') };
     }
+
+    const warning = detectDangerousCommand(command);
+    logger.info('AI 聊天响应', {
+      provider: settings.provider,
+      model: settings.model,
+      command: sanitizeAIChatLogText(command),
+      hasWarning: Boolean(warning),
+      usage: result.usage,
+    });
 
     return {
       success: true,
       command,
-      warning: detectDangerousCommand(command),
+      warning,
     };
   } catch (error) {
-    console.error('[AI] 生成命令失败:', error);
+    const errorMessage = axios.isAxiosError(error)
+      ? buildErrorMessage(error)
+      : translateAIError(error, 'generateFailed');
+    logger.error('AI 聊天请求失败', {
+      provider: settings.provider,
+      model: settings.model,
+      status: axios.isAxiosError(error) ? error.response?.status : undefined,
+      error: sanitizeAIChatLogText(errorMessage),
+    });
     if (axios.isAxiosError(error)) {
-      return { success: false, error: buildErrorMessage(error) };
+      return { success: false, error: errorMessage };
     }
-    return { success: false, error: translateAIError(error, 'generateFailed') };
+    return { success: false, error: errorMessage };
   }
 }
 
