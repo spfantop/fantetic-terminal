@@ -17,6 +17,7 @@ type DocumentWithViewTransition = Document & {
 };
 
 type ThemeMode = 'default' | 'dark';
+type ThemeTransitionDirection = 'reveal' | 'retract';
 
 const shouldReduceThemeMotion = () => {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -53,7 +54,7 @@ const getThemeRevealClipPath = (x: number, y: number) => {
   };
 };
 
-const runThemeRevealTransition = async <T,>(event: MouseEvent | undefined, updateTheme: () => Promise<T>) => {
+const runThemeRevealTransition = async <T,>(event: MouseEvent | undefined, updateTheme: () => Promise<T>, direction: ThemeTransitionDirection) => {
   const transitionDocument = document as DocumentWithViewTransition;
   if (!transitionDocument.startViewTransition || shouldReduceThemeMotion()) {
     return updateTheme();
@@ -66,25 +67,26 @@ const runThemeRevealTransition = async <T,>(event: MouseEvent | undefined, updat
   const transitionAnimationOptions: KeyframeAnimationOptions & { pseudoElement?: string } = {
     duration: THEME_REVEAL_DURATION,
     easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
-    pseudoElement: '::view-transition-new(root)',
+    pseudoElement: direction === 'reveal' ? '::view-transition-new(root)' : '::view-transition-old(root)',
   };
+  const transitionClass = direction === 'reveal' ? 'theme-radial-reveal-active' : 'theme-radial-retract-active';
 
-  root.classList.add('theme-radial-reveal-active');
+  root.classList.add(transitionClass);
   const transition = transitionDocument.startViewTransition(async () => {
     updateResult = await updateTheme();
     await nextTick();
   });
 
-  const revealAnimation = transition.ready
-    .then(() => root.animate({ clipPath: [from, to] }, transitionAnimationOptions).finished)
+  const transitionAnimation = transition.ready
+    .then(() => root.animate({ clipPath: direction === 'reveal' ? [from, to] : [to, from] }, transitionAnimationOptions).finished)
     .catch(() => undefined);
 
   try {
     await transition.updateCallbackDone;
-    await revealAnimation;
+    await transitionAnimation;
     await transition.finished.catch(() => undefined);
   } finally {
-    root.classList.remove('theme-radial-reveal-active');
+    root.classList.remove(transitionClass);
   }
 
   return updateResult as T;
@@ -120,7 +122,8 @@ export const useThemeToggle = (t: ComposerTranslation) => {
 
     isSwitchingTheme.value = true;
     try {
-      const appliedMode = await runThemeRevealTransition(event, applyThemeToggle);
+      const nextThemeMode: ThemeMode = isDarkUiThemeActive.value ? 'default' : 'dark';
+      const appliedMode = await runThemeRevealTransition(event, applyThemeToggle, nextThemeMode === 'dark' ? 'reveal' : 'retract');
       if (appliedMode === 'default') {
         uiNotificationsStore.showInfo(t('dock.defaultThemeApplied', '已切换到默认模式'));
       } else {

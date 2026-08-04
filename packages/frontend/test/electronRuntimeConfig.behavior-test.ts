@@ -2,12 +2,37 @@ import assert from 'node:assert/strict';
 import {
   isAccountFeatureAvailable,
   isRemoteDesktopFeatureAvailable,
+  resolveIsElectronRuntime,
   resolveApiBaseUrl,
   resolveRemoteDesktopProxyWebSocketUrl,
   resolveWebSocketBaseUrl,
 } from '../src/utils/runtimeConfig';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+
+assert.equal(
+  resolveIsElectronRuntime('Mozilla/5.0 (Windows NT 10.0; Win64; x64)', false),
+  false,
+  'A browser visiting an Electron-marked dev bundle must use web runtime behavior',
+);
+
+assert.equal(
+  resolveIsElectronRuntime('Mozilla/5.0 (Windows NT 10.0; Win64; x64)', true),
+  true,
+  'The Electron preload bridge must identify the desktop runtime',
+);
+
+const viteConfigSource = readFileSync(resolve('vite.config.ts'), 'utf8');
+assert.equal(
+  (viteConfigSource.match(/changeOrigin:\s*false/g) ?? []).length,
+  3,
+  'Development HTTP and WebSocket proxies must preserve the browser Host header',
+);
+assert.doesNotMatch(
+  viteConfigSource,
+  /changeOrigin:\s*true/,
+  'Development proxies must not replace the public frontend origin with the backend origin',
+);
 
 const electronProdEnv = {
   isElectron: true,

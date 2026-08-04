@@ -157,6 +157,14 @@ body.fantetic-global-dragging * {
   z-index: 1;
 }
 
+.theme-radial-retract-active::view-transition-old(root) {
+  z-index: 1;
+}
+
+.theme-radial-retract-active::view-transition-new(root) {
+  z-index: 0;
+}
+
 /* 全局链接样式 */
 a {
   /* color: var(--link-color); */ /* 注释掉全局 a 标签的颜色设置，让 Tailwind 类生效 */

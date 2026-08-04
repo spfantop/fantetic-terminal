@@ -15,13 +15,16 @@ export type RuntimeCapabilities = {
 export const ELECTRON_FRONTEND_PORT = 22457;
 export const ELECTRON_BACKEND_PORT = 22458;
 
-export const readRuntimeConfigEnv = (): RuntimeConfigEnv => {
-  const userAgent = navigator.userAgent.toLowerCase();
-  const isElectronAppMode = import.meta.env.VITE_FANTETIC_APP_MODE === 'electron';
+export const resolveIsElectronRuntime = (userAgent: string, hasElectronBridge: boolean): boolean => (
+  userAgent.toLowerCase().includes('electron') || hasElectronBridge
+);
 
+export const readRuntimeConfigEnv = (): RuntimeConfigEnv => {
   return {
-    isElectron:
-      isElectronAppMode || userAgent.includes('electron') || Boolean((window as any).electronAPI),
+    isElectron: resolveIsElectronRuntime(
+      navigator.userAgent,
+      Boolean((window as Window & { electronAPI?: unknown }).electronAPI),
+    ),
     isProd: import.meta.env.PROD,
     locationProtocol: window.location.protocol,
     locationHost: window.location.host,

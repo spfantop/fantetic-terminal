@@ -11,18 +11,18 @@ import UINotificationDisplay from './components/UINotificationDisplay.vue';
 import ConfirmDialog from './components/common/ConfirmDialog.vue';
 import { useDialogStore } from './stores/dialog.store';
 import { debugLog } from './composables/useDebugLog';
-import { isRemoteDesktopFeatureAvailable } from './utils/runtimeConfig';
+import { isRemoteDesktopFeatureAvailable, readRuntimeConfigEnv } from './utils/runtimeConfig';
 
 const { t } = useI18n();
 const remoteDesktopFeatureAvailable = isRemoteDesktopFeatureAvailable();
-const isDesktopBuild = import.meta.env.VITE_FANTETIC_APP_MODE === 'electron';
+const isDesktopRuntime = readRuntimeConfigEnv().isElectron;
 const FileEditorOverlay = defineAsyncComponent(() => import('./components/FileEditorOverlay.vue'));
 const SettingsView = defineAsyncComponent(() => import('./views/SettingsView.vue'));
 const AdminCenterView = defineAsyncComponent(() => import('./views/AdminCenterView.vue'));
-const RemoteDesktopModal = isDesktopBuild
+const RemoteDesktopModal = isDesktopRuntime
   ? null
   : defineAsyncComponent(() => import('./components/RemoteDesktopModal.vue'));
-const VncModal = isDesktopBuild
+const VncModal = isDesktopRuntime
   ? null
   : defineAsyncComponent(() => import('./components/VncModal.vue'));
 const authStore = useAuthStore();

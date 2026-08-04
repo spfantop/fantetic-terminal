@@ -17,7 +17,7 @@ import { storeToRefs } from 'pinia';
 import TransferProgressModal from './TransferProgressModal.vue';
 import { isActionLayoutPane } from '../utils/layoutPanes';
 import { useDeviceDetection } from '../composables/useDeviceDetection';
-import { isRemoteDesktopFeatureAvailable } from '../utils/runtimeConfig';
+import { isRemoteDesktopFeatureAvailable, readRuntimeConfigEnv } from '../utils/runtimeConfig';
 
 
 // --- Props ---
@@ -144,7 +144,7 @@ const componentMap: Partial<Record<PaneName, Component>> = {
   transferProgress: TransferProgressModal,
 };
 const remoteDesktopFeatureAvailable = isRemoteDesktopFeatureAvailable();
-const RemoteDesktopSession = import.meta.env.VITE_FANTETIC_APP_MODE === 'electron'
+const RemoteDesktopSession = readRuntimeConfigEnv().isElectron
   ? null
   : defineAsyncComponent(() => import('./RemoteDesktopSession.vue'));
 

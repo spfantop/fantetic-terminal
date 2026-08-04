@@ -25,6 +25,8 @@ for (const source of managedSources) {
 assert.match(admin, /--background:var\(--app-bg-color\)/);
 assert.match(admin, /--border:var\(--border-color\)/);
 assert.match(admin, /--primary:var\(--link-active-color\)/);
+assert.match(admin, /class="admin-overview-stat-icon"/);
+assert.match(admin, /fa-table-cells-large/);
 assert.doesNotMatch(admin, /admin-center-eyebrow/);
 assert.doesNotMatch(admin, /adminCenter\.description/);
 assert.doesNotMatch(admin, /activeItem\.description/);

@@ -85,6 +85,7 @@ const createDevProcessSpecs = ({
     cwd: rootDir,
     env: {
       VITE_FANTETIC_APP_MODE: 'electron',
+      FANTETIC_DEV_BACKEND_URL: `http://127.0.0.1:${DEV_BACKEND_PORT}`,
     },
   },
   {

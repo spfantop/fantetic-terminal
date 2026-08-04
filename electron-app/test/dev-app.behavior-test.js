@@ -50,6 +50,7 @@ assert.deepEqual(specs[1], {
   cwd: rootDir,
   env: {
     VITE_FANTETIC_APP_MODE: 'electron',
+    FANTETIC_DEV_BACKEND_URL: 'http://127.0.0.1:22458',
   },
 });
 
