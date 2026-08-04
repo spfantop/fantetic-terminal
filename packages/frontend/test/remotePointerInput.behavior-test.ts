@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { setupNativeRemoteCursor } from '../src/utils/nativeRemoteCursor';
+import { bindRemoteTouchInput } from '../src/utils/remoteTouchInput';
 
 const showCursorCallList: boolean[] = [];
 const display = {
@@ -36,6 +37,33 @@ cleanupNativeCursor();
 assert.equal(display.oncursor, null, 'cursor callbacks must be detached during disconnect');
 assert.equal(displayElement.style.cursor, 'default', 'disconnect must restore the host cursor');
 
+const touchInput = {
+  onmousemove: null as ((state: { x: number; y: number }) => void) | null,
+  onmousedown: null as ((state: { x: number; y: number }) => void) | null,
+  onmouseup: null as ((state: { x: number; y: number }) => void) | null,
+};
+const touchStateCallList: Array<{ state: { x: number; y: number }; applyDisplayScale?: boolean }> = [];
+const cleanupTouchInput = bindRemoteTouchInput(touchInput, (state, applyDisplayScale) => {
+  touchStateCallList.push({ state, applyDisplayScale });
+});
+const touchState = { x: 12, y: 34 };
+touchInput.onmousemove?.(touchState);
+touchInput.onmousedown?.(touchState);
+touchInput.onmouseup?.(touchState);
+assert.deepEqual(
+  touchStateCallList,
+  [
+    { state: touchState, applyDisplayScale: true },
+    { state: touchState, applyDisplayScale: true },
+    { state: touchState, applyDisplayScale: true },
+  ],
+  'touch mouse states must be sent using local display units',
+);
+cleanupTouchInput();
+assert.equal(touchInput.onmousemove, null, 'touch move callback must be detached during cleanup');
+assert.equal(touchInput.onmousedown, null, 'touch down callback must be detached during cleanup');
+assert.equal(touchInput.onmouseup, null, 'touch up callback must be detached during cleanup');
+
 for (const componentPath of [
   'src/components/RemoteDesktopSession.vue',
   'src/components/RemoteDesktopModal.vue',
@@ -48,6 +76,8 @@ for (const componentPath of [
     /mouse\.value\.onmousemove\s*=\s*mouse\.value\.onmousedown\s*=\s*mouse\.value\.onmouseup\s*=\s*\(mouseState[^)]*\)\s*=>\s*\{\s*guacClient\.value\?\.sendMouseState\(mouseState\)/,
     `${componentPath} must forward every pointer state immediately`,
   );
+  assert.match(source, /new Guacamole\.Mouse\.Touchpad\(displayEl\)/, `${componentPath} must support touchpad input`);
+  assert.match(source, /bindRemoteTouchInput\(/, `${componentPath} must forward touchpad input`);
   assert.match(source, /setupNativeRemoteCursor\(/, `${componentPath} must use the local hardware cursor path`);
   assert.doesNotMatch(source, /style\.cursor\s*=\s*'none'[\s\S]{0,500}new Guacamole\.Mouse/, `${componentPath} must not hide the local cursor unconditionally`);
 }

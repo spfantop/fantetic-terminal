@@ -11,6 +11,7 @@ import { ConnectionInfo } from '../stores/connections.store';
 import { resolveRemoteDesktopProxyWebSocketUrl } from '../utils/runtimeConfig';
 import type { RemotePointerState } from '../utils/remotePointer';
 import { setupNativeRemoteCursor } from '../utils/nativeRemoteCursor';
+import { bindRemoteTouchInput, supportsTouchInput } from '../utils/remoteTouchInput';
 
 const { t } = useI18n();
 const settingsStore = useSettingsStore(); 
@@ -41,6 +42,7 @@ const initialModalHeightForResize = ref(0);
 const statusMessage = ref('');
 const keyboard = ref<any | null>(null);
 const mouse = ref<any | null>(null);
+const touchpad = ref<any | null>(null);
 let inputListenerCleanupList: Array<() => void> = [];
 const desiredModalWidth = ref(1064);
 const desiredModalHeight = ref(858);
@@ -259,11 +261,26 @@ const setupInputListeners = () => {
         inputListenerCleanupList.push(() => displayEl.removeEventListener('click', handleRdpDisplayClick));
 
 
+        const display = guacClient.value.getDisplay();
+        const touchInputAvailable = supportsTouchInput(displayEl);
+
         // @ts-ignore
         mouse.value = new Guacamole.Mouse(displayEl);
-
-        const display = guacClient.value.getDisplay();
-        inputListenerCleanupList.push(setupNativeRemoteCursor(display, mouse.value, displayEl));
+        if (touchInputAvailable && typeof Guacamole.Mouse.Touchpad === 'function') {
+          // @ts-ignore
+          touchpad.value = new Guacamole.Mouse.Touchpad(displayEl);
+          inputListenerCleanupList.push(bindRemoteTouchInput(
+            touchpad.value,
+            (mouseState, applyDisplayScale) => guacClient.value?.sendMouseState(mouseState, applyDisplayScale),
+          ));
+          display.showCursor(true);
+          displayEl.style.touchAction = 'none';
+          inputListenerCleanupList.push(() => {
+            displayEl.style.touchAction = '';
+          });
+        } else {
+          inputListenerCleanupList.push(setupNativeRemoteCursor(display, mouse.value, displayEl));
+        }
 
         mouse.value.onmousemove = mouse.value.onmousedown = mouse.value.onmouseup = (mouseState: RemotePointerState) => {
           guacClient.value?.sendMouseState(mouseState);
@@ -351,6 +368,12 @@ const removeInputListeners = () => {
         mouse.value.onmouseup = null;
         mouse.value.onmousemove = null;
         mouse.value = null;
+    }
+    if (touchpad.value) {
+        touchpad.value.onmousedown = null;
+        touchpad.value.onmouseup = null;
+        touchpad.value.onmousemove = null;
+        touchpad.value = null;
     }
     // 清理剪贴板监听器
     if (guacClient.value) {
