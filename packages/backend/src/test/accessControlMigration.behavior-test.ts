@@ -42,6 +42,9 @@ await exec(`
   CREATE TABLE audit_logs (id INTEGER PRIMARY KEY, details TEXT, timestamp INTEGER, actor_user_id INTEGER NULL);
   CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, created_at INTEGER, updated_at INTEGER);
   CREATE TABLE appearance_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, created_at INTEGER, updated_at INTEGER);
+  INSERT INTO appearance_settings(key, value, created_at, updated_at) VALUES
+    ('terminalFontSize', '14', 100, 100),
+    ('terminalFontSizeMobile', '14', 100, 101);
   INSERT INTO users(id, username) VALUES (3, 'legacy-admin');
   INSERT INTO connections(id, name) VALUES (30, 'legacy-connection');
   INSERT INTO quick_commands(id, name) VALUES (40, 'legacy-command');
@@ -51,7 +54,7 @@ await runMigrations(db);
 
 assert.deepEqual(
   await get<{ currentVersion: number }>('SELECT MAX(id) AS currentVersion FROM migrations'),
-  { currentVersion: 29 },
+  { currentVersion: 30 },
 );
 assert.deepEqual(
   await get<{ count: number }>("SELECT COUNT(*) AS count FROM pragma_table_info('audit_logs') WHERE name IN ('request_id','actor_user_id','actor_role','source_ip','asset_id','session_id','result')"),
@@ -109,6 +112,21 @@ assert.deepEqual(
 assert.deepEqual(
   await get<{ count: number }>("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name='user_appearance_settings'"),
   { count: 1 },
+);
+assert.deepEqual(
+  await get<{ value: string }>("SELECT value FROM appearance_settings WHERE key = 'terminalFontSize'"),
+  { value: '15' },
+  'legacy default terminal font size should be upgraded to the xterm default',
+);
+assert.deepEqual(
+  await get<{ value: string }>("SELECT value FROM appearance_settings WHERE key = 'terminalFontSizeMobile'"),
+  { value: '14' },
+  'custom terminal font size values must not be overwritten by the default migration',
+);
+assert.deepEqual(
+  await get<{ value: string }>("SELECT value FROM user_appearance_settings WHERE user_id = 3 AND key = 'terminalFontSize'"),
+  { value: '15' },
+  'copied user default terminal font size should be upgraded as well',
 );
 assert.deepEqual(
   await get<{ count: number }>("SELECT COUNT(*) AS count FROM pragma_table_info('audit_logs') WHERE name IN ('previous_hash', 'entry_hash')"),

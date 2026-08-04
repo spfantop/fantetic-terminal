@@ -8,6 +8,7 @@ import type { TerminalTheme } from '../types/terminal-theme.types';
 import type { AppearanceSettings, UpdateAppearanceDto } from '../types/appearance.types';
 import { darkUiTheme, defaultUiTheme } from '../features/appearance/config/default-themes';
 import { resolveTerminalTheme } from '../utils/terminalThemeFallback';
+import { TERMINAL_DEFAULT_FONT_SIZE } from '../utils/terminalZoom';
 import {
     createUiThemeModeUpdate,
     readUiThemeMode,
@@ -109,19 +110,19 @@ export const useAppearanceStore = defineStore('appearance', () => {
         } else {
             size = appearanceSettings.value.terminalFontSize;
         }
-        return typeof size === 'number' && size > 0 ? size : 14;
+        return typeof size === 'number' && size > 0 ? size : TERMINAL_DEFAULT_FONT_SIZE;
     });
 
     // 桌面端终端字体大小 (用于设置面板等处区分显示)
     const terminalFontSizeDesktop = computed<number>(() => {
         const size = appearanceSettings.value.terminalFontSize;
-        return typeof size === 'number' && size > 0 ? size : 14;
+        return typeof size === 'number' && size > 0 ? size : TERMINAL_DEFAULT_FONT_SIZE;
     });
 
     // 移动端终端字体大小 (用于设置面板等处区分显示)
     const terminalFontSizeMobile = computed<number>(() => {
         const size = appearanceSettings.value.terminalFontSizeMobile;
-        return typeof size === 'number' && size > 0 ? size : 14;
+        return typeof size === 'number' && size > 0 ? size : TERMINAL_DEFAULT_FONT_SIZE;
     });
 
     // 页面背景图片 URL

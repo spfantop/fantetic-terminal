@@ -208,8 +208,8 @@ const getDefaultAppearanceSettings = (): Omit<AppearanceSettings, '_id'> => {
         activeDefaultTerminalThemeId: null,
         activeDarkTerminalThemeId: null,
         terminalFontFamily: 'Consolas, "Courier New", monospace, "Microsoft YaHei", "微软雅黑"',
-        terminalFontSize: 14,
-        terminalFontSizeMobile: 14, // 移动端默认字体大小
+        terminalFontSize: 15,
+        terminalFontSizeMobile: 15, // 移动端默认字体大小
         editorFontSize: 14,
         mobileEditorFontSize: 16, //移动端编辑器默认字体大小
         editorFontFamily: 'Consolas, "Noto Sans SC", "Microsoft YaHei"',

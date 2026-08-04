@@ -985,7 +985,24 @@ const definedMigrations: Migration[] = [
             await addColumnIfMissing(db, 'session_recordings', 'recording_chain_hash', 'recording_chain_hash TEXT NULL');
             await addColumnIfMissing(db, 'session_recordings', 'recording_batch_count', 'recording_batch_count INTEGER NOT NULL DEFAULT 0');
         },
-    }
+    },
+    {
+        id: 30,
+        name: 'Use xterm default terminal font size',
+        sql: '',
+        apply: async (db: Database): Promise<void> => {
+            for (const tableName of ['appearance_settings', 'user_appearance_settings']) {
+                if (!(await tableExists(db, tableName))) continue;
+                await execMigrationSql(db, `
+                    UPDATE ${tableName}
+                    SET value = '15', updated_at = strftime('%s', 'now')
+                    WHERE key IN ('terminalFontSize', 'terminalFontSizeMobile')
+                      AND value = '14'
+                      AND created_at = updated_at;
+                `);
+            }
+        },
+    },
 ];
 
 /**

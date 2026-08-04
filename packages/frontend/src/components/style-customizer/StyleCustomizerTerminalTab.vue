@@ -7,6 +7,7 @@ import { storeToRefs } from 'pinia';
 import type { ITheme } from '@xterm/xterm';
 import type { TerminalTheme } from '../../types/terminal-theme.types';
 import { defaultXtermTheme } from '../../features/appearance/config/default-themes';
+import { TERMINAL_DEFAULT_FONT_SIZE } from '../../utils/terminalZoom';
 
 const { t } = useI18n();
 const appearanceStore = useAppearanceStore();
@@ -40,7 +41,7 @@ const {
 } = storeToRefs(appearanceStore);
 
 const editableTerminalFontFamily = ref('');
-const editableTerminalFontSize = ref(14);
+const editableTerminalFontSize = ref(TERMINAL_DEFAULT_FONT_SIZE);
 
 const editableTerminalTextStrokeEnabled = ref(false);
 const editableTerminalTextStrokeWidth = ref(1);

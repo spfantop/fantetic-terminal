@@ -103,8 +103,14 @@ assert.match(
 
 assert.match(
   connectionsView,
-  /const\s+SERVER_PANEL_DEFAULT_WIDTH\s*=\s*SERVER_PANEL_MIN_WIDTH/,
-  'the server list should default to the minimum width',
+  /const\s+SERVER_PANEL_MIN_WIDTH\s*=\s*200/,
+  'the server list should allow a narrower minimum width after UI density changes',
+);
+
+assert.match(
+  connectionsView,
+  /const\s+SERVER_PANEL_DEFAULT_WIDTH\s*=\s*220/,
+  'the server list default width should remain stable when only the drag minimum changes',
 );
 
 assert.match(

@@ -4,7 +4,26 @@ import {
   clampTerminalFontSize,
   isTerminalZoomReset,
   resolveTerminalWheelZoomUpdate,
+  TERMINAL_DEFAULT_FONT_SIZE,
 } from '../src/utils/terminalZoom';
+
+assert.equal(
+  TERMINAL_DEFAULT_FONT_SIZE,
+  15,
+  'terminal default font size should match xterm default size',
+);
+
+assert.equal(
+  calculateTerminalZoomPercent(TERMINAL_DEFAULT_FONT_SIZE, TERMINAL_DEFAULT_FONT_SIZE),
+  100,
+  'terminal default font size should be displayed as 100%',
+);
+
+assert.equal(
+  calculateTerminalZoomPercent(TERMINAL_DEFAULT_FONT_SIZE - 1, TERMINAL_DEFAULT_FONT_SIZE),
+  93,
+  '14px should remain identifiable as the previous 93% terminal size',
+);
 
 assert.equal(
   calculateTerminalZoomPercent(18, 12),
