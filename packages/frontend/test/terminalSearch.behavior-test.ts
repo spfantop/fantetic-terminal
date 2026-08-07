@@ -5,8 +5,11 @@ import {
   createTerminalSearchOptions,
   createTerminalSearchScheduler,
   TERMINAL_SEARCH_DELAY_MS,
+  TERMINAL_SEARCH_DECORATION_COLUMN_LIMIT,
+  TERMINAL_SEARCH_DECORATION_LINE_LIMIT,
   TERMINAL_SEARCH_HIGHLIGHT_LIMIT,
   TERMINAL_SEARCH_OPTIONS,
+  shouldDecorateTerminalSearch,
 } from '../src/utils/terminalSearch';
 
 type PendingTimer = {
@@ -62,6 +65,24 @@ assert.deepEqual(TERMINAL_SEARCH_OPTIONS, {
 
 assert.equal(createTerminalSearchOptions(false).caseSensitive, false, 'search should ignore case by default');
 assert.equal(createTerminalSearchOptions(true).caseSensitive, true, 'the match-case control should enable case-sensitive search');
+assert.equal(
+  createTerminalSearchOptions(false, false).decorations,
+  undefined,
+  'large-buffer search must be able to keep only the active xterm selection',
+);
+assert.equal(TERMINAL_SEARCH_DECORATION_LINE_LIMIT, 1000);
+assert.equal(TERMINAL_SEARCH_DECORATION_COLUMN_LIMIT, 512);
+assert.equal(shouldDecorateTerminalSearch({ bufferLineCount: 1000, cols: 512 }), true);
+assert.equal(
+  shouldDecorateTerminalSearch({ bufferLineCount: 1001, cols: 120 }),
+  false,
+  'large scrollback must skip the synchronous all-match decoration pass',
+);
+assert.equal(
+  shouldDecorateTerminalSearch({ bufferLineCount: 200, cols: 1024 }),
+  false,
+  'wide single-line output must skip all-match decorations even with short scrollback',
+);
 
 const terminalSource = readFileSync(resolve('src/components/Terminal.vue'), 'utf8');
 assert.match(
@@ -78,6 +99,11 @@ assert.match(terminalSource, /class="terminal-search-popover"/);
 assert.match(terminalSource, /onDidChangeResults/, 'search result count should follow the addon result events');
 assert.match(terminalSource, /terminalSearchResultLabel/, 'search result count should be displayed in the popover');
 assert.match(terminalSource, /toggleTerminalSearchCaseSensitive/, 'the popover should provide a match-case toggle');
+assert.match(
+  terminalSource,
+  /shouldDecorateTerminalSearch/,
+  'the terminal component must select the bounded search mode from the live buffer size',
+);
 assert.match(terminalSource, /@click="findTerminalSearchPrevious"/);
 assert.match(terminalSource, /@submit\.prevent="findTerminalSearchNext"/);
 assert.match(terminalSource, /@click="closeTerminalSearch"/);

@@ -25,9 +25,16 @@ import {
 import {
   createTerminalSearchScheduler,
   createTerminalSearchOptions,
+  shouldDecorateTerminalSearch,
   TERMINAL_SEARCH_HIGHLIGHT_LIMIT,
 } from '../utils/terminalSearch';
 import { calculateCenteredTerminalHorizontalPadding } from '../utils/terminalLayout';
+import {
+  hasTerminalBufferWrappedLines,
+  resolveTerminalSingleLineOutputCols,
+  TERMINAL_SINGLE_LINE_MAX_COLS,
+  TERMINAL_SINGLE_LINE_MIN_COLS,
+} from '../utils/terminalLineOutput';
 
 
 // 定义 props 和 emits
@@ -54,6 +61,7 @@ let terminal: Terminal | null = null;
 let fitAddon: FitAddon | null = null;
 let searchAddon: SearchAddon | null = null; // *** 添加 searchAddon 变量 ***
 let searchResultDisposable: IDisposable | null = null;
+let singleLineOutputWriteDisposable: IDisposable | null = null;
 let webLinksAddonDisposable: IDisposable | null = null;
 let resizeObserver: ResizeObserver | null = null;
 let resizeObserverWindow: Window | null = null;
@@ -61,6 +69,8 @@ let observedElement: HTMLElement | null = null; // +++ Store the observed elemen
 let selectionListenerDisposable: IDisposable | null = null; // +++ 提升声明并添加类型 +++
 let resizeAnimationFrameId: number | null = null;
 let resizeAnimationFrameWindow: Window | null = null;
+let singleLineGrowthAnimationFrameId: number | null = null;
+let singleLineGrowthAnimationFrameWindow: Window | null = null;
 let pendingFitOptions: { forceFit: boolean; forceResizeEmit: boolean; pixelSize?: TerminalPixelSize } = { forceFit: false, forceResizeEmit: false };
 let resizeEmitTimer: number | null = null;
 let pendingResizeDimensions: TerminalDimensions | null = null;
@@ -81,11 +91,15 @@ const terminalSearchTerm = ref('');
 const terminalSearchCaseSensitive = ref(false);
 const terminalSearchResultIndex = ref(-1);
 const terminalSearchResultCount = ref(0);
+const terminalSearchResultCountLimited = ref(false);
+let lastTerminalSearchDecorated: boolean | null = null;
 const terminalSearchResultCurrent = computed(() => (
   terminalSearchResultIndex.value >= 0 ? terminalSearchResultIndex.value + 1 : 0
 ));
 const terminalSearchResultTotal = computed(() => (
-  terminalSearchResultCount.value >= TERMINAL_SEARCH_HIGHLIGHT_LIMIT
+  terminalSearchResultCountLimited.value
+    ? '?'
+    : terminalSearchResultCount.value >= TERMINAL_SEARCH_HIGHLIGHT_LIMIT
     ? `${TERMINAL_SEARCH_HIGHLIGHT_LIMIT}+`
     : String(terminalSearchResultCount.value)
 ));
@@ -101,8 +115,8 @@ const RESIZE_THRESHOLD = 0.5; // px
 const RESIZE_EMIT_DELAY = 150;
 const STABILIZED_RESIZE_DELAY = 150;
 const RESIZE_TRANSACTION_SETTLE_DELAY = 80;
-const SINGLE_LINE_OUTPUT_COLS = 4096;
 const TERMINAL_RESIZE_EVENT = 'terminal:resize-request';
+let singleLineOutputCols = TERMINAL_SINGLE_LINE_MIN_COLS;
 
 type TerminalDimensions = {
   cols: number;
@@ -306,7 +320,7 @@ const proposeDimensionsFromCachedMetrics = (pixelSize: TerminalPixelSize, forceR
   const visibleCols = Math.max(2, Math.floor(availableWidth / metrics.cellWidth));
 
   return {
-    cols: props.singleLineOutput ? Math.max(SINGLE_LINE_OUTPUT_COLS, visibleCols) : visibleCols,
+    cols: props.singleLineOutput ? Math.max(singleLineOutputCols, visibleCols) : visibleCols,
     rows: Math.max(1, Math.floor(availableHeight / metrics.cellHeight)),
   };
 };
@@ -453,6 +467,42 @@ const scheduleTerminalFit = (options: { forceFit?: boolean; forceResizeEmit?: bo
   });
 };
 
+const resolveCurrentSingleLineOutputCols = (startRow = 0): number | null => {
+  if (!terminal) return null;
+  const pixelSize = readTerminalPixelSize();
+  const metrics = cachedFitMetrics ?? refreshTerminalFitMetrics();
+  if (!pixelSize || !metrics) return null;
+  const availableWidth = Math.max(0, pixelSize.width - metrics.paddingHorizontal - metrics.scrollbarWidth);
+  const visibleCols = Math.max(2, Math.floor(availableWidth / metrics.cellWidth));
+  return resolveTerminalSingleLineOutputCols({
+    buffer: terminal.buffer.active,
+    currentCols: terminal.cols,
+    visibleCols,
+    startRow,
+  });
+};
+
+const scheduleSingleLineOutputGrowth = () => {
+  if (!props.singleLineOutput || !terminal || singleLineOutputCols >= TERMINAL_SINGLE_LINE_MAX_COLS) return;
+  if (singleLineGrowthAnimationFrameId !== null) return;
+
+  const recentRowCount = Math.ceil(TERMINAL_SINGLE_LINE_MAX_COLS / Math.max(1, terminal.cols)) + 2;
+  const startRow = Math.max(0, terminal.buffer.active.length - recentRowCount);
+  if (!hasTerminalBufferWrappedLines(terminal.buffer.active, startRow)) return;
+
+  singleLineGrowthAnimationFrameWindow = readTerminalWindow();
+  singleLineGrowthAnimationFrameId = singleLineGrowthAnimationFrameWindow.requestAnimationFrame(() => {
+    singleLineGrowthAnimationFrameId = null;
+    singleLineGrowthAnimationFrameWindow = null;
+    if (!props.singleLineOutput || !terminal) return;
+
+    const nextCols = resolveCurrentSingleLineOutputCols(startRow);
+    if (nextCols === null || nextCols <= singleLineOutputCols) return;
+    singleLineOutputCols = nextCols;
+    scheduleTerminalFit({ forceFit: true, forceResizeEmit: true });
+  });
+};
+
 const handleObservedResize = (entries: ResizeObserverEntry[]) => {
   if (!props.isActive || !terminal || !terminalRef.value) return;
 
@@ -505,6 +555,7 @@ const ensureSearchAddonLoaded = (): SearchAddon | null => {
     const addon = new SearchAddon({ highlightLimit: TERMINAL_SEARCH_HIGHLIGHT_LIMIT });
     terminal.loadAddon(addon);
     searchResultDisposable = addon.onDidChangeResults(({ resultIndex, resultCount }) => {
+      terminalSearchResultCountLimited.value = false;
       terminalSearchResultIndex.value = resultIndex;
       terminalSearchResultCount.value = resultCount;
     });
@@ -516,13 +567,33 @@ const ensureSearchAddonLoaded = (): SearchAddon | null => {
 const resetTerminalSearchResults = () => {
   terminalSearchResultIndex.value = -1;
   terminalSearchResultCount.value = 0;
+  terminalSearchResultCountLimited.value = false;
 };
 
-const terminalSearchOptions = () => createTerminalSearchOptions(terminalSearchCaseSensitive.value);
+const runTerminalSearch = (term: string, direction: 'next' | 'previous'): boolean => {
+  const addon = ensureSearchAddonLoaded();
+  if (!addon || !terminal) return false;
+  const decorateMatches = shouldDecorateTerminalSearch({
+    bufferLineCount: terminal.buffer.active.length,
+    cols: terminal.cols,
+  });
+  if (lastTerminalSearchDecorated !== null && lastTerminalSearchDecorated !== decorateMatches) {
+    addon.clearDecorations();
+  }
+  lastTerminalSearchDecorated = decorateMatches;
+  const options = createTerminalSearchOptions(terminalSearchCaseSensitive.value, decorateMatches);
+  const found = direction === 'next'
+    ? addon.findNext(term, options)
+    : addon.findPrevious(term, options);
+  if (!decorateMatches) {
+    terminalSearchResultCountLimited.value = found;
+    terminalSearchResultIndex.value = found ? 0 : -1;
+    terminalSearchResultCount.value = found ? 1 : 0;
+  }
+  return found;
+};
 
-const runTerminalSearchNext = (term: string) => (
-  ensureSearchAddonLoaded()?.findNext(term, terminalSearchOptions()) ?? false
-);
+const runTerminalSearchNext = (term: string) => runTerminalSearch(term, 'next');
 
 const terminalSearchScheduler = createTerminalSearchScheduler<string>({
   onSearch: runTerminalSearchNext,
@@ -552,7 +623,7 @@ const findTerminalSearchNext = () => {
 const findTerminalSearchPrevious = () => {
   if (!terminalSearchTerm.value) return;
   terminalSearchScheduler.cancel();
-  ensureSearchAddonLoaded()?.findPrevious(terminalSearchTerm.value, terminalSearchOptions());
+  runTerminalSearch(terminalSearchTerm.value, 'previous');
 };
 
 const toggleTerminalSearchCaseSensitive = () => {
@@ -566,6 +637,7 @@ const closeTerminalSearch = () => {
   terminalSearchTerm.value = '';
   terminalSearchVisible.value = false;
   searchAddon?.clearDecorations();
+  lastTerminalSearchDecorated = null;
   resetTerminalSearchResults();
   nextTick(() => terminal?.focus());
 };
@@ -906,6 +978,7 @@ onMounted(() => {
     debugLog(`[Terminal ${props.sessionId}] Xterm open() called, considering DOM ready for initial style checks.`);
  
     fitTerminalToContainer({ forceFit: true, forceResizeEmit: true, emitStabilizedNow: true }); // 触发初始 resize 事件
+    singleLineOutputWriteDisposable = terminal.onWriteParsed(scheduleSingleLineOutputGrowth);
 
     // 监听用户输入
     terminal.onData((data) => {
@@ -962,13 +1035,17 @@ onMounted(() => {
         }
     });
 
-    watch(() => props.singleLineOutput, () => {
+    watch(() => props.singleLineOutput, (singleLineOutput) => {
       if (!terminal) return;
-      if (!props.singleLineOutput) {
+      if (!singleLineOutput) {
         singleLineContentWidth.value = null;
+        singleLineOutputCols = TERMINAL_SINGLE_LINE_MIN_COLS;
       }
       invalidateTerminalFitMetrics();
       nextTick(() => {
+        if (props.singleLineOutput) {
+          singleLineOutputCols = resolveCurrentSingleLineOutputCols() ?? TERMINAL_SINGLE_LINE_MIN_COLS;
+        }
         fitTerminalToContainer({ forceFit: true, forceResizeEmit: true, emitStabilizedNow: true });
       });
     });
@@ -1146,6 +1223,8 @@ onBeforeUnmount(() => {
   terminalSearchScheduler.cancel();
   searchResultDisposable?.dispose();
   searchResultDisposable = null;
+  singleLineOutputWriteDisposable?.dispose();
+  singleLineOutputWriteDisposable = null;
   unsubscribeFromWorkspaceEvent('ui:resizeTransaction', handleResizeTransaction);
   terminalOuterWrapperRef.value?.removeEventListener(TERMINAL_RESIZE_EVENT, handleExternalResizeRequest);
 
@@ -1153,6 +1232,11 @@ onBeforeUnmount(() => {
     (resizeAnimationFrameWindow ?? readTerminalWindow()).cancelAnimationFrame(resizeAnimationFrameId);
     resizeAnimationFrameId = null;
     resizeAnimationFrameWindow = null;
+  }
+  if (singleLineGrowthAnimationFrameId !== null) {
+    (singleLineGrowthAnimationFrameWindow ?? readTerminalWindow()).cancelAnimationFrame(singleLineGrowthAnimationFrameId);
+    singleLineGrowthAnimationFrameId = null;
+    singleLineGrowthAnimationFrameWindow = null;
   }
   clearPendingResizeEmit();
   if (stabilizedResizeTimer !== null) {

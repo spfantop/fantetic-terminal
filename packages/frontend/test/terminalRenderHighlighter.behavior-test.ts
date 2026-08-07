@@ -45,6 +45,79 @@ assert.equal(decoration?.styles[9]?.underline, true);
 const cachedDecoration = highlighter.resolveLine(line);
 assert.equal(cachedDecoration, decoration, 'unchanged lines should reuse the resolved style cache');
 
+const wideText = `INFO ERROR ${'x'.repeat(90)}`;
+let wideLineTranslations = 0;
+let invalidateAttachedWideLine = () => undefined;
+const wideRenderLine = {
+  length: 4096,
+  translateToString: (_trimRight: boolean, _start: number, _end: number, columns: number[]) => {
+    wideLineTranslations += 1;
+    columns.push(...Array.from({ length: wideText.length + 1 }, (_, index) => index));
+    return wideText;
+  },
+  loadCell: (_column: number, cell: typeof sourceCell) => cell,
+};
+const wideRowFactory = { createRow: () => undefined };
+const wideTerminal = {
+  onWriteParsed: (listener: () => void) => {
+    invalidateAttachedWideLine = listener;
+    return { dispose() {} };
+  },
+  onResize: () => ({ dispose() {} }),
+  _core: {
+    _renderService: { _renderer: { value: { _rowFactory: wideRowFactory } } },
+    _bufferService: { buffer: { lines: { length: 1, get: (index: number) => index === 0 ? wideRenderLine : undefined } } },
+  },
+};
+const attachedWideHighlighter = createTerminalRenderHighlighter(() => options);
+assert.equal(attachedWideHighlighter.attach(wideTerminal as never), true);
+wideRowFactory.createRow(wideRenderLine, 0);
+const attachedWideDecoration = attachedWideHighlighter.resolveLine(wideRenderLine);
+assert.equal(
+  attachedWideDecoration?.styles.length,
+  wideText.length,
+  'single-line mode must not allocate a sparse style array for all 4096 terminal columns',
+);
+wideRowFactory.createRow(wideRenderLine, 0);
+assert.equal(wideLineTranslations, 2, 'renderer cache hits must not translate an unchanged 4096-column line again');
+invalidateAttachedWideLine();
+wideRowFactory.createRow(wideRenderLine, 0);
+assert.equal(wideLineTranslations, 3, 'parsed terminal writes must invalidate the renderer fast cache');
+
+let wrappedLineTranslations = 0;
+const wrappedLineList = Array.from({ length: 64 }, (_, index) => ({
+  length: 80,
+  isWrapped: index > 0,
+  translateToString: (_trimRight: boolean, _start: number, _end: number, columns?: number[]) => {
+    wrappedLineTranslations += 1;
+    columns?.push(...Array.from({ length: 81 }, (_, column) => column));
+    return `${'x'.repeat(74)} ERROR`;
+  },
+  loadCell: (_column: number, cell: typeof sourceCell) => cell,
+}));
+const wrappedRowFactory = { createRow: () => undefined };
+const wrappedTerminal = {
+  onWriteParsed: () => ({ dispose() {} }),
+  onResize: () => ({ dispose() {} }),
+  _core: {
+    _renderService: { _renderer: { value: { _rowFactory: wrappedRowFactory } } },
+    _bufferService: {
+      buffer: {
+        lines: { length: wrappedLineList.length, get: (index: number) => wrappedLineList[index] },
+      },
+    },
+  },
+};
+const wrappedHighlighter = createTerminalRenderHighlighter(() => options);
+assert.equal(wrappedHighlighter.attach(wrappedTerminal as never), true);
+for (let row = 0; row < wrappedLineList.length; row += 1) {
+  wrappedRowFactory.createRow(wrappedLineList[row], row);
+}
+assert.ok(
+  wrappedLineTranslations <= wrappedLineList.length,
+  `wrapped rows must reuse their logical-line text projection, received ${wrappedLineTranslations} translations`,
+);
+
 const equivalentLine = { ...line };
 highlighter.resolveLine(equivalentLine);
 assert.equal(

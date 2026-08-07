@@ -90,6 +90,11 @@ interface LogicalLineContext {
   rowTextOffset: number;
 }
 
+interface LineTextProjection {
+  text: string;
+  columns: number[];
+}
+
 export interface TerminalRenderLineDecoration {
   styles: Array<ResolvedCellStyle | undefined>;
 }
@@ -134,16 +139,48 @@ export function createTerminalRenderHighlighter(getOptions: () => TerminalRender
   let jsonStyles: JsonHighlightStyles = createJsonHighlightStyles([]);
   let resolveRanges: ReturnType<typeof createTerminalHighlightRangeResolver> = () => [];
   let resolvedTextRanges = new Map<string, TerminalHighlightRange[]>();
+  let logicalLineContexts = new Map<XtermBufferLine, LogicalLineContext | null>();
+  let lineTextProjections = new Map<XtermBufferLine, LineTextProjection>();
+  let contentCacheDisposables: Array<{ dispose(): void }> = [];
   let rangeResolutionCount = 0;
   let attachedTerminal: Terminal | undefined;
   let attachedRowFactory: XtermRowFactory | undefined;
   let attachedCreateRow: XtermRowFactory['createRow'] | undefined;
   const MAX_RESOLVED_TEXT_CACHE_ENTRIES = 4096;
   const MAX_LINE_DECORATION_CACHE_ENTRIES = 1024;
+  const MAX_LOGICAL_LINE_CONTEXT_CACHE_ENTRIES = 1024;
+
+  const clearLineCaches = () => {
+    cache = new Map();
+    logicalLineContexts = new Map();
+    lineTextProjections = new Map();
+  };
 
   const clearResolvedCaches = () => {
-    cache = new Map();
+    clearLineCaches();
     resolvedTextRanges = new Map();
+  };
+
+  const readRenderOptions = () => {
+    const sourceOptions = getOptions();
+    if (sourceRules !== sourceOptions.rules) {
+      sourceRules = sourceOptions.rules;
+      renderRules = sourceRules.filter(rule => !DENSE_RENDER_PRESET_IDS.has(rule.id));
+      jsonStyles = createJsonHighlightStyles(sourceRules);
+      resolveRanges = createTerminalHighlightRangeResolver({ ...sourceOptions, rules: renderRules });
+      clearResolvedCaches();
+    }
+    return { ...sourceOptions, rules: renderRules };
+  };
+
+  const readCachedLineDecoration = (line: XtermBufferLine): CachedLineDecoration | undefined => {
+    const options = readRenderOptions();
+    if (!options.enabled) return undefined;
+    const cached = cache.get(line);
+    if (!cached || cached.rules !== renderRules || cached.enabled !== options.enabled) return undefined;
+    cache.delete(line);
+    cache.set(line, cached);
+    return cached;
   };
 
   const resolveTextRanges = (text: string): TerminalHighlightRange[] => {
@@ -171,21 +208,14 @@ export function createTerminalRenderHighlighter(getOptions: () => TerminalRender
   const resolveLine = (
     line: Pick<XtermBufferLine, 'length' | 'translateToString'>,
     logicalContext?: LogicalLineContext,
+    textProjection?: LineTextProjection,
   ): TerminalRenderLineDecoration | undefined => {
-    const sourceOptions = getOptions();
-    if (sourceRules !== sourceOptions.rules) {
-      sourceRules = sourceOptions.rules;
-      renderRules = sourceRules.filter(rule => !DENSE_RENDER_PRESET_IDS.has(rule.id));
-      jsonStyles = createJsonHighlightStyles(sourceRules);
-      resolveRanges = createTerminalHighlightRangeResolver({ ...sourceOptions, rules: renderRules });
-      clearResolvedCaches();
-    }
-    const options = { ...sourceOptions, rules: renderRules };
-    if (!options.enabled || sourceOptions.rules.length === 0) {
+    const options = readRenderOptions();
+    if (!options.enabled || sourceRules?.length === 0) {
       return undefined;
     }
 
-    const { text, columns } = getLineTextAndColumns(line);
+    const { text, columns } = textProjection ?? getLineTextAndColumns(line);
     if (!text) {
       return undefined;
     }
@@ -200,7 +230,8 @@ export function createTerminalRenderHighlighter(getOptions: () => TerminalRender
       return cached.hasStyles ? cached : undefined;
     }
 
-    const styles: Array<ResolvedCellStyle | undefined> = new Array(line.length);
+    const renderedCellCount = Math.min(line.length, columns[columns.length - 1] ?? 0);
+    const styles: Array<ResolvedCellStyle | undefined> = new Array(renderedCellCount);
     const highlightText = logicalContext?.text ?? text;
     const rowTextOffset = logicalContext?.rowTextOffset ?? 0;
     const ranges = resolveTextRanges(highlightText)
@@ -260,11 +291,28 @@ export function createTerminalRenderHighlighter(getOptions: () => TerminalRender
         return originalCreateRow.apply(this, args);
       }
 
+      const cachedDecoration = readCachedLineDecoration(line);
       const row = typeof args[1] === 'number' ? args[1] : undefined;
-      const logicalContext = row !== undefined && bufferLines
-        ? getLogicalLineContext(bufferLines, row, line)
+      const logicalContext = cachedDecoration || row === undefined || !bufferLines
+        ? undefined
+        : getLogicalLineContext(
+          bufferLines,
+          row,
+          line,
+          logicalLineContexts,
+          lineTextProjections,
+          MAX_LOGICAL_LINE_CONTEXT_CACHE_ENTRIES,
+        );
+      const resolvedDecoration = cachedDecoration ?? resolveLine(
+        line,
+        logicalContext,
+        lineTextProjections.get(line),
+      );
+      const decoration = resolvedDecoration && ('hasStyles' in resolvedDecoration
+        ? resolvedDecoration.hasStyles
+        : resolvedDecoration.styles.some(Boolean))
+        ? resolvedDecoration
         : undefined;
-      const decoration = resolveLine(line, logicalContext);
       if (!decoration) {
         return originalCreateRow.apply(this, args);
       }
@@ -303,6 +351,11 @@ export function createTerminalRenderHighlighter(getOptions: () => TerminalRender
     attachedTerminal = terminal;
     attachedRowFactory = rowFactory;
     attachedCreateRow = createHighlightedRow;
+    const contentEvents = terminal as Partial<Pick<Terminal, 'onWriteParsed' | 'onResize'>>;
+    contentCacheDisposables = [
+      contentEvents.onWriteParsed?.(() => clearLineCaches()),
+      contentEvents.onResize?.(() => clearLineCaches()),
+    ].filter((disposable): disposable is { dispose(): void } => Boolean(disposable));
 
     detach = (preserveTextCache = false) => {
       if (rowFactory.createRow === createHighlightedRow) {
@@ -312,7 +365,9 @@ export function createTerminalRenderHighlighter(getOptions: () => TerminalRender
       attachedTerminal = undefined;
       attachedRowFactory = undefined;
       attachedCreateRow = undefined;
-      cache = new Map();
+      contentCacheDisposables.forEach(disposable => disposable.dispose());
+      contentCacheDisposables = [];
+      clearLineCaches();
       if (!preserveTextCache) resolvedTextRanges = new Map();
     };
     return true;
@@ -332,6 +387,8 @@ export function createTerminalRenderHighlighter(getOptions: () => TerminalRender
       rangeResolutionCount,
       resolvedTextCacheSize: resolvedTextRanges.size,
       lineDecorationCacheSize: cache.size,
+      logicalLineContextCacheSize: logicalLineContexts.size,
+      lineTextProjectionCacheSize: lineTextProjections.size,
     }),
     invalidate: () => { clearResolvedCaches(); sourceRules = undefined; },
     resolveLine,
@@ -389,21 +446,52 @@ function getLogicalLineContext(
   lines: { get(index: number): XtermBufferLine | undefined; length?: number },
   row: number,
   currentLine: XtermBufferLine,
+  cache?: Map<XtermBufferLine, LogicalLineContext | null>,
+  projectionCache?: Map<XtermBufferLine, LineTextProjection>,
+  maxCacheEntries = 1024,
 ): LogicalLineContext | undefined {
-  if (!currentLine.isWrapped && !lines.get(row + 1)?.isWrapped) return undefined;
+  if (cache?.has(currentLine)) return cache.get(currentLine) ?? undefined;
+  if (!currentLine.isWrapped && !lines.get(row + 1)?.isWrapped) {
+    cache?.set(currentLine, null);
+    return undefined;
+  }
   let startRow = row;
   let inspected = 0;
   while (startRow > 0 && lines.get(startRow)?.isWrapped && inspected++ < 64) startRow -= 1;
 
   let text = '';
   let rowTextOffset = 0;
+  const logicalLineList: Array<{ line: XtermBufferLine; rowTextOffset: number }> = [];
   const maxRow = typeof lines.length === 'number' ? lines.length - 1 : row + 64;
   for (let currentRow = startRow; currentRow <= maxRow && currentRow <= startRow + 64; currentRow += 1) {
     const line = lines.get(currentRow);
     if (!line) break;
+    logicalLineList.push({ line, rowTextOffset: text.length });
     if (currentRow === row) rowTextOffset = text.length;
-    text += line.translateToString(true, 0, line.length);
+    const projection = getLineTextAndColumns(line);
+    text += projection.text;
+    if (projectionCache) {
+      projectionCache.delete(line);
+      projectionCache.set(line, projection);
+    }
     if (!lines.get(currentRow + 1)?.isWrapped) break;
+  }
+  if (text && cache) {
+    for (const entry of logicalLineList) {
+      cache.set(entry.line, { text, rowTextOffset: entry.rowTextOffset });
+    }
+    while (cache.size > maxCacheEntries) {
+      const oldest = cache.keys().next().value;
+      if (oldest === undefined) break;
+      cache.delete(oldest);
+    }
+  }
+  if (projectionCache) {
+    while (projectionCache.size > maxCacheEntries) {
+      const oldest = projectionCache.keys().next().value;
+      if (oldest === undefined) break;
+      projectionCache.delete(oldest);
+    }
   }
   return text ? { text, rowTextOffset } : undefined;
 }

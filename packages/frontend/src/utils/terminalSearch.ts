@@ -2,6 +2,8 @@ import type { ISearchOptions } from '@xterm/addon-search';
 
 export const TERMINAL_SEARCH_DELAY_MS = 180;
 export const TERMINAL_SEARCH_HIGHLIGHT_LIMIT = 200;
+export const TERMINAL_SEARCH_DECORATION_LINE_LIMIT = 1000;
+export const TERMINAL_SEARCH_DECORATION_COLUMN_LIMIT = 512;
 
 const TERMINAL_SEARCH_DECORATIONS = {
   matchBackground: '#1D4ED8',
@@ -12,13 +14,22 @@ const TERMINAL_SEARCH_DECORATIONS = {
   activeMatchColorOverviewRuler: '#F59E0B',
 };
 
-export const createTerminalSearchOptions = (caseSensitive: boolean): ISearchOptions => ({
+export const createTerminalSearchOptions = (caseSensitive: boolean, decorateMatches = true): ISearchOptions => ({
   incremental: false,
   caseSensitive,
-  decorations: TERMINAL_SEARCH_DECORATIONS,
+  decorations: decorateMatches ? TERMINAL_SEARCH_DECORATIONS : undefined,
 });
 
 export const TERMINAL_SEARCH_OPTIONS = createTerminalSearchOptions(false);
+
+export const shouldDecorateTerminalSearch = ({
+  bufferLineCount,
+  cols,
+}: {
+  bufferLineCount: number;
+  cols: number;
+}) => bufferLineCount <= TERMINAL_SEARCH_DECORATION_LINE_LIMIT
+  && cols <= TERMINAL_SEARCH_DECORATION_COLUMN_LIMIT;
 
 type TimeoutHandle = ReturnType<typeof setTimeout>;
 
