@@ -1,7 +1,6 @@
 import { debugLog } from '../composables/useDebugLog';
 import axios from 'axios';
-import router from '../router'; 
-import { useAuthStore } from '../stores/auth.store'; 
+import { expireAuthenticatedSession } from '../authentication-runtime';
 import { resolveApiBaseUrl } from './runtimeConfig';
 
 // 创建 axios 实例
@@ -11,49 +10,29 @@ const apiClient = axios.create({
   withCredentials: true, // 允许携带 cookie
 });
 
-// 请求拦截器 (可选，例如添加认证 Token)
-apiClient.interceptors.request.use(
-  (config) => {
-    // 可以在这里添加逻辑，比如从 store 获取 token 并添加到请求头
-    // const authStore = useAuthStore();
-    // if (authStore.token) {
-    //   config.headers.Authorization = `Bearer ${authStore.token}`;
-    // }
-    return config;
-  },
-  (error) => {
-    // 处理请求错误
-    console.error('Request error:', error);
-    return Promise.reject(error);
-  }
-);
-
 // 响应拦截器
 apiClient.interceptors.response.use(
   (response) => {
     // 对响应数据做点什么
     return response;
   },
-  (error) => {
+  async (error) => {
     // 处理响应错误
     console.error('Response error:', error.response || error.message);
 
     if (error.response) {
       const { status } = error.response;
-      const authStore = useAuthStore(); // 在需要时获取 store 实例
-
       // 处理常见的 HTTP 错误状态码
       switch (status) {
         case 401: // 未授权
-          // 如果用户当前是认证状态，则可能是 session 过期或无效
-          if (authStore.isAuthenticated) {
-             console.warn('Unauthorized access detected. Logging out.');
-             // 401 处理必须是纯本地失效；再次请求 /auth/logout 会形成递归 401 风暴。
-             authStore.expireSession();
-             return Promise.reject(error);
-          } else {
-             // 如果用户本来就未认证，可能只是访问了需要登录的接口，暂时不强制跳转
-             debugLog('Unauthorized access to protected route.');
+          // 401 处理必须是纯本地失效；再次请求 /auth/logout 会形成递归 401 风暴。
+          try {
+            if (!await expireAuthenticatedSession('unauthorized')) {
+              debugLog('Unauthorized access to protected route.');
+            }
+          } catch (invalidationError) {
+            // 会话清理是附带行为，失败时仍须向调用方传播原始 HTTP 错误。
+            console.error('Authentication invalidation failed:', invalidationError);
           }
           break;
         case 403: // 禁止访问

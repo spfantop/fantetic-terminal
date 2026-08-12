@@ -6,6 +6,7 @@
 - **Desktop runtime**: a loopback-only local runtime using a synthetic local account and no Web login.
 - **Docker release set**: the four image digests built from one source revision and published under one immutable version.
 - **Locale runtime**: the frontend projection that loads one selected language, keeps the default fallback available, and commits language changes across vue-i18n, the document, local preference, and persisted settings.
+- **Authentication runtime**: the frontend coordinator that invalidates a Web session projection, clears user-scoped cache data, and completes login navigation without coupling the HTTP client or auth store to the router.
 
 ## Access-control language
 
@@ -35,3 +36,4 @@
 13. A distributed Docker deployment selects one completed Docker release set; frontend, backend, and Remote Gateway never resolve independent moving tags.
 14. Live SSH resources have exactly one owner: the WebSocket session or the suspended-session runtime; failed transfer closes the detached channel and client before session cleanup completes.
 15. The locale runtime installs the default fallback before mounting, loads non-default languages on demand, and serializes persisted language changes so the active locale, document language, and settings projection cannot diverge.
+16. The authentication runtime is installed before the first protected HTTP request; concurrent invalidations share one completion, Desktop invalidation is a no-op, and authentication modules remain outside runtime import cycles.

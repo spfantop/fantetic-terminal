@@ -1,7 +1,7 @@
 import { debugLog } from '../composables/useDebugLog';
 import { defineStore } from 'pinia';
 import apiClient from '../utils/apiClient'; 
-import router from '../router'; 
+import { expireAuthenticatedSession } from '../authentication-runtime';
 import { isAccountFeatureAvailable } from '../utils/runtimeConfig';
 import { activateUserCacheScope, clearUserCacheScope } from '../utils/userCacheScope';
 import { classifyAuthBootstrapFailure } from '../utils/authBootstrap';
@@ -140,7 +140,6 @@ export const useAuthStore = defineStore('auth', {
                     this.user = response.data.user;
                     activateCacheForUser(this.user);
                     debugLog('登录成功 (无 2FA):', this.user);
-                    // await router.push({ name: 'Workspace' }); // 改为页面刷新
                     window.location.href = '/'; // 跳转到根路径并刷新
                     return { success: true };
                 } else {
@@ -174,7 +173,6 @@ export const useAuthStore = defineStore('auth', {
                 activateCacheForUser(this.user);
                 this.loginRequires2FA = false; // 重置状态
                 debugLog('2FA 验证成功，登录完成:', this.user);
-                // await router.push({ name: 'Workspace' }); // 改为页面刷新
                 window.location.href = '/'; // 跳转到根路径并刷新
                 return { success: true };
             } catch (err: any) {
@@ -209,27 +207,18 @@ export const useAuthStore = defineStore('auth', {
                 console.error('登出失败:', err);
                 this.error = err.response?.data?.message || err.message || '登出时发生未知错误。';
             } finally {
-                this.isAuthenticated = false;
-                this.user = null;
-                this.passkeys = null;
-                this.ipBlacklist = { entries: [], total: 0 };
-                clearUserCacheScope(localStorage);
                 this.isLoading = false;
-                await router.replace({ name: 'Login' });
+                await expireAuthenticatedSession('logout');
             }
         },
 
-        expireSession() {
-            if (!isAccountFeatureAvailable()) return;
+        clearSessionProjection() {
             this.isAuthenticated = false;
             this.user = null;
             this.loginRequires2FA = false;
             this.passkeys = null;
             this.ipBlacklist = { entries: [], total: 0 };
             clearUserCacheScope(localStorage);
-            if (router.currentRoute.value.name !== 'Login') {
-                void router.replace({ name: 'Login' });
-            }
         },
 
         // 检查并更新认证状态 Action
@@ -299,7 +288,7 @@ export const useAuthStore = defineStore('auth', {
                     newPassword,
                 });
                 debugLog('密码修改成功:', response.data.message);
-                this.expireSession();
+                await expireAuthenticatedSession('password-changed');
                 return true;
             } catch (err: any) {
                 console.error('修改密码失败:', err);

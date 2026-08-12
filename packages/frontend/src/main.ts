@@ -10,7 +10,11 @@ import { useAppearanceStore } from './stores/appearance.store';
 import './style.css';
 import '@fortawesome/fontawesome-free/css/all.min.css';
 import 'splitpanes/dist/splitpanes.css';
-import { readRuntimeConfigEnv } from './utils/runtimeConfig';
+import { isAccountFeatureAvailable, readRuntimeConfigEnv } from './utils/runtimeConfig';
+import {
+  createAuthenticationRuntime,
+  installAuthenticationRuntime,
+} from './authentication-runtime';
 
 
 const pinia = createPinia(); // 创建 Pinia 实例
@@ -26,6 +30,15 @@ const localeInitialization = initializeLocale();
 // 使用 async IIFE 来允许顶层 await
 (async () => {
   const authStore = useAuthStore(pinia); // 实例化 Auth Store
+  const disposeAuthenticationRuntime = installAuthenticationRuntime(createAuthenticationRuntime({
+    isAccountFeatureAvailable,
+    hasAuthenticatedSession: () => authStore.isAuthenticated,
+    clearAuthenticatedSession: () => authStore.clearSessionProjection(),
+    isLoginRouteActive: () => router.currentRoute.value.name === 'Login',
+    navigateToLogin: () => router.replace({ name: 'Login' }),
+    reportFailure: error => console.error('[AuthenticationRuntime] 会话失效未完全收口:', error),
+  }));
+  import.meta.hot?.dispose(disposeAuthenticationRuntime);
   // **提前实例化 AppearanceStore 以确保 immediate watcher 运行**
   const appearanceStore = useAppearanceStore(pinia);
 
