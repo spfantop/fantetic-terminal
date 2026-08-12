@@ -59,6 +59,7 @@
       "test:file-manager-accessibility": "esbuild test/fileManagerAccessibility.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/fileManagerAccessibility.behavior-test.mjs && node ../../.vite-codex-cache/fileManagerAccessibility.behavior-test.mjs",
       "test:file-presentation": "esbuild test/filePresentation.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/filePresentation.behavior-test.mjs && node ../../.vite-codex-cache/filePresentation.behavior-test.mjs",
       "test:connection-filtering": "esbuild test/connectionFiltering.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/connectionFiltering.behavior-test.mjs && node ../../.vite-codex-cache/connectionFiltering.behavior-test.mjs",
+      "test:managed-connection-catalog": "esbuild test/managedConnectionCatalog.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/managedConnectionCatalog.behavior-test.mjs && node ../../.vite-codex-cache/managedConnectionCatalog.behavior-test.mjs",
       "test:connection-permissions": "esbuild test/connectionPermissions.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/connectionPermissions.behavior-test.mjs && node ../../.vite-codex-cache/connectionPermissions.behavior-test.mjs"
    },
    "dependencies": {

@@ -12,6 +12,7 @@
 - **User group**: a named set of users used to delegate access to managed connections.
 - **Group role**: authority inside one group: `owner`, `admin`, `operator`, or `viewer`.
 - **Managed connection**: an SSH, TELNET, RDP, or VNC target owned by one user and optionally delegated to multiple groups.
+- **Managed connection catalog**: the user-scoped frontend projection of readable managed connections and their folders.
 - **Connection permission**: delegated authority over one managed connection: `view`, `connect`, or `manage`.
 - **Resource owner**: the user responsible for a private resource such as a managed connection, proxy, SSH key, folder, or tag.
 
@@ -28,3 +29,4 @@
 9. WebSocket session cleanup completes before database shutdown begins.
 10. Core WebSocket messages cross runtime boundaries through shared contracts and runtime validation before reaching stateful handlers.
 11. Workspace test sources pass strict type checks, and each discovered behavior group runs at most once under bounded concurrency.
+12. Managed connection catalog reads are validated and single-flight per user scope; stale scope or pre-mutation responses never replace the current projection.

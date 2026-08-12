@@ -129,7 +129,8 @@ export function useDataManagement() {
         ? t('settings.importConnections.partialSuccess', '导入完成，但有部分项目失败。')
         : t('settings.importConnections.success', '导入成功完成。');
 
-      localStorage.removeItem('connectionsCache');
+      connectionsStore.invalidateConnections();
+      connectionsStore.invalidateFolders();
       localStorage.removeItem('tagsCache');
       await Promise.all([
         connectionsStore.fetchConnections(),

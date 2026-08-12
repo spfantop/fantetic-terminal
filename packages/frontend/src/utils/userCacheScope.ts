@@ -34,6 +34,8 @@ const clearUserData = (storage: Storage): void => {
 
 const readCurrentScope = (storage: Storage): string | null => storage.getItem(CACHE_OWNER_KEY);
 
+export const readUserCacheScope = (storage: Storage): string | null => readCurrentScope(storage);
+
 const scopedKey = (scope: string, key: string): string => (
   `${USER_STORAGE_PREFIX}${encodeURIComponent(scope)}.${key}`
 );

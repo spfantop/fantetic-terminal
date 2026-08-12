@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   activateUserCacheScope,
   clearUserCacheScope,
+  readUserCacheScope,
   readUserScopedItem,
   writeUserScopedItem,
 } from '../src/utils/userCacheScope';
@@ -21,6 +22,7 @@ const storage = new MemoryStorage();
 storage.setItem('connectionsCache', '[{"id":1}]');
 storage.setItem('fantetic.debug.enabled', 'true');
 assert.equal(activateUserCacheScope(storage, 'web:1'), true);
+assert.equal(readUserCacheScope(storage), 'web:1');
 assert.equal(storage.getItem('connectionsCache'), null, 'first authenticated scope must reject legacy unscoped data');
 storage.setItem('connectionsCache', '[{"id":2}]');
 assert.equal(activateUserCacheScope(storage, 'web:1'), false);
@@ -30,6 +32,7 @@ assert.equal(storage.getItem('connectionsCache'), null, 'switching users must cl
 assert.equal(storage.getItem('fantetic.debug.enabled'), 'true', 'non-user diagnostics must remain untouched');
 clearUserCacheScope(storage);
 assert.equal(storage.getItem('fantetic.cacheOwner'), null);
+assert.equal(readUserCacheScope(storage), null);
 
 activateUserCacheScope(storage, 'web:1');
 writeUserScopedItem(storage, 'connections_view_filter_folder', 'folder-1');

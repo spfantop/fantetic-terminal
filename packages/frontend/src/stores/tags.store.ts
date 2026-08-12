@@ -2,6 +2,7 @@ import { debugLog } from '../composables/useDebugLog';
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import apiClient from '../utils/apiClient'; // 使用统一的 apiClient
+import { useConnectionsStore } from './connections.store';
 
 // 定义标签信息接口
 export interface TagInfo {
@@ -130,16 +131,10 @@ export const useTagsStore = defineStore('tags', () => {
             await apiClient.put(`/tags/${tagId}/connections`, { connection_ids: connectionIds });
             // 更新成功后，清除相关缓存并重新获取数据以确保一致性
             localStorage.removeItem('tagsCache'); // 清除标签缓存
-            localStorage.removeItem('connectionsCache'); // 清除连接缓存，因为连接的 tag_ids 可能已更改
+            const connectionsStore = useConnectionsStore();
+            connectionsStore.invalidateConnections();
 
-            await fetchTags(); // 重新获取标签
-            // 可能还需要通知 connectionsStore 重新获取连接，或者在这里直接调用
-            // (这取决于您希望如何管理 store 间的依赖和数据同步)
-            // 例如: const connectionsStore = useConnectionsStore(); await connectionsStore.fetchConnections();
-            // 为简单起见，这里假设调用者会处理连接列表的刷新，或者依赖于后续的自动刷新机制。
-            // 或者，更健壮的做法是在此 action 成功后，让 connectionsStore 也刷新。
-            // 但为了减少此处的直接依赖，暂时只刷新 tagsStore。
-            // WorkspaceConnectionList 在模态框保存成功后会重新 fetchConnections。
+            await Promise.all([fetchTags(), connectionsStore.fetchConnections()]);
 
             return true;
         } catch (err: any) {
