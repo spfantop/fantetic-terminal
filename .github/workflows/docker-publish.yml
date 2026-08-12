@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Release version (for example, 2.0.3)
+        description: Release version matching package.json (for example, 2.1.3)
         required: true
         type: string
   push:
@@ -14,60 +14,69 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: docker-publish-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  publish:
-    name: ${{ matrix.name }}
+  prepare:
+    name: Prepare Docker release set
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.release-set.outputs.version }}
+      source-revision: ${{ steps.source-revision.outputs.revision }}
+      matrix: ${{ steps.release-set.outputs.matrix }}
+    steps:
+      - name: Resolve release tag
+        id: release-tag
+        env:
+          RELEASE_REFERENCE: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
+        shell: bash
+        run: |
+          release_tag="${RELEASE_REFERENCE#v}"
+          echo "tag=v${release_tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout release tag
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ steps.release-tag.outputs.tag }}
+
+      - name: Resolve source revision
+        id: source-revision
+        shell: bash
+        run: echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Validate release version and prepare image matrix
+        id: release-set
+        env:
+          RELEASE_REFERENCE: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
+        run: |
+          node build-tools/docker-release-set.js prepare \
+            --release-reference "$RELEASE_REFERENCE" \
+            --run-id "${{ github.run_id }}" \
+            --run-attempt "${{ github.run_attempt }}" \
+            --source-revision "${{ steps.source-revision.outputs.revision }}" \
+            --output docker-release/prepared.json \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Upload prepared release set
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: docker-release-set-${{ steps.release-set.outputs.version }}
+          path: docker-release/prepared.json
+          if-no-files-found: error
+          retention-days: 14
+
+  build:
+    name: Build ${{ matrix.name }} candidate
+    needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - name: Frontend
-            image: frontend
-            repository: fantetic-terminal-frontend
-            dockerfile: packages/frontend/Dockerfile
-          - name: Backend
-            image: backend
-            repository: fantetic-terminal-backend
-            dockerfile: packages/backend/Dockerfile
-          - name: Remote gateway
-            image: remote-gateway
-            repository: fantetic-terminal-remote-gateway
-            dockerfile: packages/remote-gateway/Dockerfile
-          - name: All-in-one
-            image: all-in-one
-            repository: fantetic-terminal
-            dockerfile: packages/single-image/Dockerfile
-
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     steps:
       - name: Checkout source
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-
-      - name: Validate release version
-        env:
-          RELEASE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
-        shell: bash
-        run: |
-          if ! [[ "$RELEASE_VERSION" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo '::error::Release version must use semantic versioning, for example 2.0.3 or v2.0.3.'
-            exit 1
-          fi
-
-      - name: Validate Docker Hub credentials
-        env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-        shell: bash
-        run: |
-          if [ -z "$DOCKERHUB_USERNAME" ] || [ -z "$DOCKERHUB_TOKEN" ]; then
-            echo '::error::Configure DOCKERHUB_USERNAME and DOCKERHUB_TOKEN repository secrets before publishing images.'
-            exit 1
-          fi
+        with:
+          ref: ${{ needs.prepare.outputs.source-revision }}
 
       - name: Log in to Docker Hub
         uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
@@ -81,23 +90,97 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
-      - name: Generate image metadata
-        id: metadata
-        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
-        with:
-          images: ${{ secrets.DOCKERHUB_USERNAME }}/${{ matrix.repository }}
-          tags: |
-            type=semver,pattern={{version}},value=${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
-            type=raw,value=latest
-
-      - name: Build and push multi-architecture image
+      - name: Build and push multi-architecture candidate
+        id: build
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
           file: ${{ matrix.dockerfile }}
           platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.metadata.outputs.tags }}
-          labels: ${{ steps.metadata.outputs.labels }}
-          cache-from: type=gha,scope=${{ matrix.image }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+          outputs: type=image,name=spfantop/${{ matrix.repository }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+      - name: Record candidate digest
+        run: |
+          node build-tools/docker-release-set.js record \
+            --name "${{ matrix.name }}" \
+            --repository "${{ matrix.repository }}" \
+            --digest "${{ steps.build.outputs.digest }}" \
+            --output "docker-release-record/${{ matrix.name }}.json"
+
+      - name: Upload candidate record
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: docker-release-record-${{ matrix.name }}
+          path: docker-release-record/${{ matrix.name }}.json
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish Docker release set
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: docker-release-${{ needs.prepare.outputs.version }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.prepare.outputs.source-revision }}
+
+      - name: Download prepared release set
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: docker-release-set-${{ needs.prepare.outputs.version }}
+          path: docker-release
+
+      - name: Download all candidate records
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: docker-release-record-*
+          path: docker-release-record
+          merge-multiple: true
+
+      - name: Assemble candidate release manifest
+        run: |
+          node build-tools/docker-release-set.js assemble \
+            --release-set docker-release/prepared.json \
+            --records docker-release-record \
+            --output docker-release/candidate.json
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+
+      - name: Verify and promote release set
+        run: |
+          node build-tools/docker-release-set.js promote \
+            --manifest docker-release/candidate.json \
+            --output docker-release/complete.json
+          cp docker-release/complete.json \
+            "docker-release/fantetic-terminal-docker-release-${{ needs.prepare.outputs.version }}.json"
+
+      - name: Upload completed release manifest
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: docker-release-manifest-${{ needs.prepare.outputs.version }}
+          path: docker-release/complete.json
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Attach completed manifest to GitHub Release
+        uses: softprops/action-gh-release@c12583777ecdfd3be55c69cf75464299dc01057e # v3
+        with:
+          tag_name: v${{ needs.prepare.outputs.version }}
+          fail_on_unmatched_files: true
+          files: docker-release/fantetic-terminal-docker-release-${{ needs.prepare.outputs.version }}.json

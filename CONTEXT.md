@@ -4,6 +4,7 @@
 
 - **Web runtime**: a session-authenticated, multi-user bastion runtime.
 - **Desktop runtime**: a loopback-only local runtime using a synthetic local account and no Web login.
+- **Docker release set**: the four image digests built from one source revision and published under one immutable version.
 
 ## Access-control language
 
@@ -30,3 +31,4 @@
 10. Core WebSocket messages cross runtime boundaries through shared contracts and runtime validation before reaching stateful handlers.
 11. Workspace test sources pass strict type checks, and each discovered behavior group runs at most once under bounded concurrency.
 12. Managed connection catalog reads are validated and single-flight per user scope; stale scope or pre-mutation responses never replace the current projection.
+13. A distributed Docker deployment selects one completed Docker release set; frontend, backend, and Remote Gateway never resolve independent moving tags.

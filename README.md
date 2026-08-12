@@ -213,6 +213,8 @@ wget https://raw.githubusercontent.com/spfantop/fantetic-terminal/refs/heads/mai
 wget https://raw.githubusercontent.com/spfantop/fantetic-terminal/refs/heads/main/.env.example -O .env
 ```
 
+Set `FANTETIC_VERSION` in `.env` to the published release you want to deploy. The downloaded example uses a known published baseline; releases produced by the atomic workflow also provide a completed Docker release manifest for digest verification.
+
 ### Start Fantetic Terminal
 
 ```bash
@@ -304,7 +306,7 @@ guacamole/guacd:1.6.0-RC1
 
 For `armv7`, use [the dedicated Compose file](./docs/arm/docker-compose.yml). RDP/VNC is disabled on armv7 because guacd does not provide an armv7 image.
 
-The Compose file tracks the latest frontend, backend, and Remote Gateway images. Before restarting an existing deployment, pull all three images together and review the release notes for the deployed image set.
+The Compose file pins the frontend, backend, and Remote Gateway to one release version through `FANTETIC_VERSION`. For releases produced by the atomic workflow, change that value only after the matching Docker release manifest is complete; then pull all three images together and review the release notes.
 
 Source checkout is not required when you only use the published images.
 

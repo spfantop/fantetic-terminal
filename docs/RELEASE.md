@@ -11,6 +11,10 @@ The desktop release workflow publishes the following assets for each `v${version
 
 Verify a downloaded release asset with the matching entry in `SHA256SUMS.txt` before distribution.
 
+## Docker Release Asset
+
+For Docker versions produced by the atomic publication workflow, the same GitHub Release also contains `fantetic-terminal-docker-release-${version}.json`. A manifest with `status: complete` records the source revision, immutable image digests, and required platforms for the distributed release set.
+
 ## Code Signing
 
 Desktop releases use code signing when the corresponding CI credentials are configured. If signing credentials are absent, the workflow still publishes unsigned artifacts and emits a warning in the build log.

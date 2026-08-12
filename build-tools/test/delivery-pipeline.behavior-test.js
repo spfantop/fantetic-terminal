@@ -57,19 +57,30 @@ assert.doesNotMatch(
   'Docker images must only be published for release tags or explicit manual runs',
 );
 assert.match(dockerPublishWorkflow, /workflow_dispatch:\s*\n\s*inputs:\s*\n\s*version:/);
-assert.match(dockerPublishWorkflow, /Release version must use semantic versioning/);
+assert.match(dockerPublishWorkflow, /Validate release version and prepare image matrix/);
+assert.match(dockerPublishWorkflow, /node build-tools\/docker-release-set\.js prepare/);
+assert.match(dockerPublishWorkflow, /echo "tag=v\$\{release_tag\}"/);
+assert.match(dockerPublishWorkflow, /ref:\s*\$\{\{ steps\.release-tag\.outputs\.tag \}\}/);
+assert.match(dockerPublishWorkflow, /source-revision:\s*\$\{\{ steps\.source-revision\.outputs\.revision \}\}/);
+assert.equal(
+  (dockerPublishWorkflow.match(/ref:\s*\$\{\{ needs\.prepare\.outputs\.source-revision \}\}/g) ?? []).length,
+  2,
+  'build and publish jobs must use the source revision resolved by prepare',
+);
 assert.match(dockerPublishWorkflow, /DOCKERHUB_USERNAME/);
 assert.match(dockerPublishWorkflow, /DOCKERHUB_TOKEN/);
 assert.match(dockerPublishWorkflow, /linux\/amd64,linux\/arm64/);
-assert.match(dockerPublishWorkflow, /image:\s*frontend/);
-assert.match(dockerPublishWorkflow, /image:\s*backend/);
-assert.match(dockerPublishWorkflow, /image:\s*remote-gateway/);
-assert.match(dockerPublishWorkflow, /name:\s*All-in-one/);
-assert.match(dockerPublishWorkflow, /repository:\s*fantetic-terminal/);
-assert.match(dockerPublishWorkflow, /dockerfile:\s*packages\/single-image\/Dockerfile/);
-assert.match(dockerPublishWorkflow, /\$\{\{ secrets\.DOCKERHUB_USERNAME \}\}\/\$\{\{ matrix\.repository \}\}/);
-assert.match(dockerPublishWorkflow, /type=semver,pattern=\{\{version\}\}/);
-assert.match(dockerPublishWorkflow, /type=raw,value=latest/);
+assert.match(dockerPublishWorkflow, /matrix:\s*\$\{\{ fromJSON\(needs\.prepare\.outputs\.matrix\) \}\}/);
+assert.match(dockerPublishWorkflow, /outputs:\s*type=image,name=spfantop\/\$\{\{ matrix\.repository \}\},push-by-digest=true,name-canonical=true,push=true/);
+assert.match(dockerPublishWorkflow, /node build-tools\/docker-release-set\.js assemble/);
+assert.match(dockerPublishWorkflow, /node build-tools\/docker-release-set\.js promote/);
+assert.match(dockerPublishWorkflow, /name:\s*docker-release-manifest-\$\{\{ needs\.prepare\.outputs\.version \}\}/);
+assert.match(dockerPublishWorkflow, /publish:\s*[\s\S]*permissions:\s*\n\s*contents:\s*write/);
+assert.match(dockerPublishWorkflow, /softprops\/action-gh-release@[a-f0-9]{40}\s+# v3/);
+assert.match(dockerPublishWorkflow, /tag_name:\s*v\$\{\{ needs\.prepare\.outputs\.version \}\}/);
+assert.match(dockerPublishWorkflow, /fantetic-terminal-docker-release-\$\{\{ needs\.prepare\.outputs\.version \}\}\.json/);
+assert.doesNotMatch(dockerPublishWorkflow, /type=semver,pattern=\{\{version\}\}/);
+assert.doesNotMatch(dockerPublishWorkflow, /type=raw,value=latest/);
 assert.doesNotMatch(dockerPublishWorkflow, /type=ref,event=branch/);
 assert.doesNotMatch(dockerPublishWorkflow, /type=semver,pattern=\{\{major\}\}/);
 assert.doesNotMatch(dockerPublishWorkflow, /type=sha,prefix=sha-/);
@@ -177,9 +188,9 @@ assert.match(dockerCompose, /RECORDING_MIN_FREE_BYTES: "\$\{RECORDING_MIN_FREE_B
 assert.match(dockerCompose, /HEALTH_MIN_FREE_BYTES: "\$\{HEALTH_MIN_FREE_BYTES:-104857600\}"/);
 assert.match(dockerCompose, /METRICS_TOKEN: "\$\{METRICS_TOKEN:-\}"/);
 assert.match(dockerCompose, /\.\/data:\/app\/data:ro/);
-assert.match(dockerCompose, /image:\s*spfantop\/fantetic-terminal-frontend:latest/);
-assert.match(dockerCompose, /image:\s*spfantop\/fantetic-terminal-backend:latest/);
-assert.match(dockerCompose, /image:\s*spfantop\/fantetic-terminal-remote-gateway:latest/);
+assert.match(dockerCompose, /image:\s*spfantop\/fantetic-terminal-frontend:\$\{FANTETIC_VERSION:\?[^}]+\}/);
+assert.match(dockerCompose, /image:\s*spfantop\/fantetic-terminal-backend:\$\{FANTETIC_VERSION:\?[^}]+\}/);
+assert.match(dockerCompose, /image:\s*spfantop\/fantetic-terminal-remote-gateway:\$\{FANTETIC_VERSION:\?[^}]+\}/);
 assert.match(gatewayEntrypoint, /Waiting for Docker runtime secrets/);
 assert.match(gatewayEntrypoint, /id -u/);
 assert.match(gatewayEntrypoint, /exec su-exec guacd "\$0" --run/);

@@ -1,7 +1,7 @@
 
 services:
   frontend:
-    image: spfantop/fantetic-terminal-frontend:latest
+    image: spfantop/fantetic-terminal-frontend:${FANTETIC_VERSION:?Set FANTETIC_VERSION to a published release}
     container_name: fantetic-terminal-frontend
     ports:
       - "18111:80"
@@ -12,7 +12,7 @@ services:
       - fantetic-terminal-network
 
   backend:
-    image: spfantop/fantetic-terminal-backend:latest
+    image: spfantop/fantetic-terminal-backend:${FANTETIC_VERSION:?Set FANTETIC_VERSION to a published release}
     container_name: fantetic-terminal-backend
     env_file:
       - .env
@@ -26,7 +26,7 @@ services:
       - fantetic-terminal-network
 
   # remote-gateway:
-  #   image: spfantop/fantetic-terminal-remote-gateway:latest
+  #   image: spfantop/fantetic-terminal-remote-gateway:${FANTETIC_VERSION:?Set FANTETIC_VERSION to a published release}
   #   container_name: fantetic-terminal-remote-gateway
   #   environment:
   #     GUACD_HOST: guacd

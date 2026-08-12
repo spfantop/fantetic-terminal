@@ -207,6 +207,8 @@ wget https://raw.githubusercontent.com/spfantop/fantetic-terminal/refs/heads/mai
 wget https://raw.githubusercontent.com/spfantop/fantetic-terminal/refs/heads/main/.env.example -O .env
 ```
 
+将 `.env` 中的 `FANTETIC_VERSION` 设置为需要部署的已发布版本。下载的示例默认使用一个已确认发布的基线；由原子发布工作流生成的版本还会提供完整 Docker 发布清单，用于核对摘要。
+
 ### 启动 Fantetic Terminal
 
 ```bash id="gx9lyy"
@@ -284,7 +286,7 @@ guacamole/guacd:1.6.0-RC1
 
 对于 `armv7`，请使用专用 Compose 文件。由于 guacd 未提供 armv7 镜像，armv7 环境下 RDP/VNC 功能不可用。
 
-Compose 文件默认跟踪 frontend、backend 和 Remote Gateway 的最新镜像。升级已有部署前，请同时拉取三个镜像，并查看该镜像集对应的发布说明。
+Compose 文件通过 `FANTETIC_VERSION` 将 frontend、backend 和 Remote Gateway 锁定到同一发布版本。对于由原子发布工作流生成的版本，只有对应 Docker 发布清单完成后才能修改该值；升级时应同时拉取三个镜像并查看发布说明。
 
 ---
 
