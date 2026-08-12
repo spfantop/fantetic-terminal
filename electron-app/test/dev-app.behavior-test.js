@@ -1,12 +1,16 @@
 const assert = require('node:assert/strict');
 const path = require('node:path');
+const { waitForHttp: sharedWaitForHttp } = require('../service-readiness');
 
 const {
   DEV_FRONTEND_PORT,
   DEV_BACKEND_PORT,
   createDevProcessSpecs,
   createSpawnConfig,
+  waitForHttp,
 } = require('../dev-app');
+
+assert.equal(waitForHttp, sharedWaitForHttp, 'development and packaged runtimes must share readiness semantics');
 
 const rootDir = path.resolve('D:/repo/fantetic-terminal');
 const electronNonce = 'test-electron-runtime-nonce';

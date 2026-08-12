@@ -23,3 +23,6 @@
 4. Group membership alone does not grant connection access; an explicit connection grant is required.
 5. Desktop local-account behaviour never weakens Web-runtime authorization.
 6. Existing single-user data is assigned to the oldest user during the multi-user migration.
+7. User-supplied terminal background HTML executes only inside an opaque-origin sandbox with no network access.
+8. The desktop renderer receives its runtime nonce only after the packaged backend proves nonce possession and the spawned child is still alive.
+9. WebSocket session cleanup completes before database shutdown begins.

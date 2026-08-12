@@ -18,6 +18,7 @@ import TransferProgressModal from './TransferProgressModal.vue';
 import { isActionLayoutPane } from '../utils/layoutPanes';
 import { useDeviceDetection } from '../composables/useDeviceDetection';
 import { isRemoteDesktopFeatureAvailable, readRuntimeConfigEnv } from '../utils/runtimeConfig';
+import { buildTerminalBackgroundDocument } from '../features/appearance/terminal-background-document';
 
 
 // --- Props ---
@@ -127,7 +128,6 @@ const leftSidebarPanelRef = ref<HTMLElement | null>(null); // +++ Ref for left p
 const rightSidebarPanelRef = ref<HTMLElement | null>(null); // +++ Ref for right panel +++
 const leftResizeHandleRef = ref<HTMLElement | null>(null); // +++ Ref for left handle +++
 const rightResizeHandleRef = ref<HTMLElement | null>(null); // +++ Ref for right handle +++
-const customHtmlLayerRef = ref<HTMLElement | null>(null); // +++ Ref for custom HTML layer +++
 
 // --- Component Mapping ---
 // 使用 defineAsyncComponent 优化加载，并映射 PaneName 到实际组件
@@ -1033,14 +1033,6 @@ const getIconClasses = (paneName: PaneName): string[] => {
 };
 
 
-// --- Sidebar Resize Logic ---
-const handleStabilizedTerminalResize = ({ sessionId, width, height }: { sessionId: string; width: number; height: number }) => {
-  if (props.layoutNode.component === 'terminal' && sessionId === props.activeSessionId && customHtmlLayerRef.value) {
-    customHtmlLayerRef.value.style.width = `${width}px`;
-    customHtmlLayerRef.value.style.height = `${height}px`;
-  }
-};
-
 useSidebarResize({
   sidebarRef: leftSidebarPanelRef,
   handleRef: leftResizeHandleRef,
@@ -1066,7 +1058,6 @@ useSidebarResize({
 });
 
 onMounted(() => {
-  subscribeToWorkspaceEvent('terminal:stabilizedResize', handleStabilizedTerminalResize);
   subscribeToWorkspaceEvent('ui:openTransferProgressModal', openTransferProgressSidebar);
 });
 
@@ -1100,42 +1091,9 @@ const terminalBackgroundImageStyle = computed((): CSSProperties => {
   };
 });
 
-// +++ Function to execute scripts (migrated from Terminal.vue) +++
-const executeScriptsInElement = (container: HTMLElement) => {
-  if (!container) return;
-  const scripts = Array.from(container.getElementsByTagName('script'));
-  scripts.forEach((oldScript) => {
-    const newScript = document.createElement('script');
-    Array.from(oldScript.attributes).forEach(attr => {
-      newScript.setAttribute(attr.name, attr.value);
-    });
-    if (oldScript.textContent) {
-      newScript.textContent = oldScript.textContent;
-    }
-    if (oldScript.parentNode) {
-      oldScript.parentNode.replaceChild(newScript, oldScript);
-    } else {
-       container.appendChild(newScript); // Fallback, though less likely if script was in container
-    }
-  });
-};
-
-// +++ Watch for changes in terminalCustomHTML and execute scripts (migrated) +++
-watch(terminalCustomHTML, (newHtmlContent, oldHtmlContent) => {
-  if (props.layoutNode.component !== 'terminal') return; // Only for terminal panes
-
-  if (newHtmlContent === oldHtmlContent && oldHtmlContent !== undefined) {
-    return;
-  }
-  nextTick(() => {
-    const container = customHtmlLayerRef.value;
-    if (container) {
-      if (newHtmlContent) {
-        executeScriptsInElement(container);
-      }
-    }
-  });
-}, { immediate: true });
+const terminalBackgroundDocument = computed(() => (
+  terminalCustomHTML.value ? buildTerminalBackgroundDocument(terminalCustomHTML.value) : ''
+));
 
 
 onBeforeUnmount(() => {
@@ -1146,7 +1104,6 @@ onBeforeUnmount(() => {
   pendingTerminalGridResizeUpdate = null;
   cleanupTerminalGridResizeListeners?.();
   releaseSplitpaneResizeSelectionGuard();
-  unsubscribeFromWorkspaceEvent('terminal:stabilizedResize', handleStabilizedTerminalResize);
   unsubscribeFromWorkspaceEvent('ui:openTransferProgressModal', openTransferProgressSidebar);
 });
 
@@ -1265,13 +1222,15 @@ onBeforeUnmount(() => {
                                }"
                            ></div>
                            <!-- Custom HTML -->
-                           <div
-                               ref="customHtmlLayerRef"
-                               v-if="terminalCustomHTML"
-                               class="terminal-custom-html-layer"
-                               style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2;"
-                               v-html="terminalCustomHTML"
-                           ></div>
+                            <iframe
+                                v-if="terminalCustomHTML"
+                                class="terminal-custom-html-layer"
+                                sandbox="allow-scripts"
+                                :srcdoc="terminalBackgroundDocument"
+                                aria-hidden="true"
+                                tabindex="-1"
+                                style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2;"
+                            ></iframe>
                        </div>
 
                        <!-- Terminal Instances -->

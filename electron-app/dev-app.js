@@ -1,7 +1,7 @@
 const { spawn } = require('node:child_process');
-const http = require('node:http');
 const path = require('node:path');
 const { randomBytes } = require('node:crypto');
+const { createElectronBackendReadinessProbe, waitForHttp } = require('./service-readiness');
 
 const DEV_FRONTEND_PORT = 22457;
 const DEV_BACKEND_PORT = 22458;
@@ -99,51 +99,6 @@ const createDevProcessSpecs = ({
   },
 ];
 
-const wait = (ms) => new Promise((resolve) => {
-  setTimeout(resolve, ms);
-});
-
-const requestHttp = (url) => new Promise((resolve, reject) => {
-  const request = http.get(url, { timeout: 2000 }, (response) => {
-    response.resume();
-    response.on('end', () => {
-      if (response.statusCode && response.statusCode < 500) {
-        resolve();
-        return;
-      }
-
-      reject(new Error(`HTTP ${response.statusCode}`));
-    });
-  });
-
-  request.on('timeout', () => {
-    request.destroy(new Error(`Timed out waiting for ${url}`));
-  });
-  request.on('error', reject);
-});
-
-const waitForHttp = async (url, {
-  label = url,
-  timeoutMs = 60000,
-  intervalMs = 500,
-} = {}) => {
-  const startedAt = Date.now();
-  let lastError;
-
-  while (Date.now() - startedAt < timeoutMs) {
-    try {
-      await requestHttp(url);
-      return;
-    } catch (error) {
-      lastError = error;
-      await wait(intervalMs);
-    }
-  }
-
-  const reason = lastError instanceof Error ? lastError.message : 'timeout';
-  throw new Error(`${label} was not ready at ${url}: ${reason}`);
-};
-
 const startManagedProcess = (spec) => {
   console.log(`[dev:app] starting ${spec.name}: ${spec.command} ${spec.args.join(' ')}`);
   const spawnConfig = createSpawnConfig(spec);
@@ -210,14 +165,18 @@ const run = async () => {
   };
 
   try {
-    start(specs[0]);
-    start(specs[1]);
+    const backendChild = start(specs[0]);
+    const frontendChild = start(specs[1]);
+    const electronNonce = specs[0].env.FANTETIC_ELECTRON_NONCE;
 
     await waitForHttp(`http://localhost:${DEV_BACKEND_PORT}/api/v1/status`, {
       label: 'backend',
+      ...createElectronBackendReadinessProbe(electronNonce),
+      isTargetAlive: () => backendChild.exitCode === null && !backendChild.killed,
     });
     await waitForHttp(`http://localhost:${DEV_FRONTEND_PORT}/`, {
       label: 'frontend',
+      isTargetAlive: () => frontendChild.exitCode === null && !frontendChild.killed,
     });
 
     start(specs[2]);

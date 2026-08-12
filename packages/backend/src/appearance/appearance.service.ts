@@ -8,6 +8,7 @@ import axios from 'axios';
 import sanitize from 'sanitize-filename'; // 用于清理文件名
 import { getAppDataPath } from '../config/app-data-path';
 import { getDbInstance, getDb } from '../database/connection';
+import { fetchRemoteHtmlPreset } from './remote-html-preset-fetch';
 
 // 预设 HTML 主题的存储路径 (作为只读预设)
 const PRESET_HTML_THEMES_DIR_CANDIDATES = [
@@ -711,26 +712,14 @@ export const getRemoteHtmlPresetContent = async (fileUrl: string): Promise<strin
     if (!fileUrl || typeof fileUrl !== 'string') {
         throw new Error('无效的远程文件 URL。');
     }
-    // 基本的 URL 校验，确保它看起来像一个可下载的链接
-    if (!fileUrl.startsWith('http://') && !fileUrl.startsWith('https://')) {
-        throw new Error('文件 URL 必须是有效的 HTTP/HTTPS 链接。');
-    }
 
     try {
-        console.log(`[AppearanceService] 正在从远程 URL 获取主题内容: ${fileUrl}`);
-        const response = await axios.get(fileUrl, {
-            responseType: 'text', // 确保获取的是文本内容
-        });
-
-        if (response.status === 200 && typeof response.data === 'string') {
-            console.log(`[AppearanceService] 成功从 ${fileUrl} 获取主题内容。`);
-            return response.data;
-        } else {
-            console.error(`[AppearanceService] 从 ${fileUrl} 获取内容失败: 状态 ${response.status}`, response.data);
-            throw new Error(`无法从远程 URL (${fileUrl}) 获取内容。状态: ${response.status}`);
-        }
+        console.log('[AppearanceService] 正在获取远程 HTML 主题内容。');
+        const content = await fetchRemoteHtmlPreset(fileUrl, axios.get);
+        console.log('[AppearanceService] 成功获取远程 HTML 主题内容。');
+        return content;
     } catch (error: any) {
-        console.error(`[AppearanceService] 请求远程文件内容 (${fileUrl}) 时出错:`, error.response?.data || error.message);
+        console.error('[AppearanceService] 请求远程 HTML 主题内容时出错:', error.response?.data || error.message);
         throw new Error(`请求远程文件内容时出错: ${error.message}`);
     }
 };

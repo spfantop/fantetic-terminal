@@ -1,25 +1,49 @@
 const assert = require('node:assert/strict');
+const { createHmac } = require('node:crypto');
 const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
 
-const { waitForHttp } = require('../service-readiness');
+const {
+  createElectronBackendReadinessProbe,
+  waitForHttp,
+} = require('../service-readiness');
 
 const mainSource = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
 assert.match(
   mainSource,
-  /startBackendProcess\(backendDataPath\);\s+await waitForHttp\(`http:\/\/127\.0\.0\.1:\$\{PROD_BACKEND_PORT\}\/api\/v1\/health\/ready`,\s*\{\s*label: 'backend',\s*\}\);\s+await startFrontendServer\(\);/s,
-  'the renderer must wait for the packaged backend health endpoint before it starts serving the UI',
+  /const spawnedBackend = startBackendProcess\(backendDataPath\)/,
+  'the readiness check must retain the child process it is proving ownership for',
 );
+assert.match(mainSource, /createElectronBackendReadinessProbe\(electronRuntimeNonce\)/);
+assert.match(mainSource, /isTargetAlive:/);
 assert.match(mainSource, /let productionServicesPromise;/);
 assert.match(mainSource, /if \(productionServicesPromise\) return productionServicesPromise;/);
 assert.match(mainSource, /show:\s*false/);
 assert.match(mainSource, /once\('ready-to-show',[\s\S]*?\.show\(\)/);
 
+const runtimeNonce = 'test-electron-runtime-nonce';
 let ready = false;
+let responseMode = 'valid';
 let requestCount = 0;
-const server = http.createServer((_request, response) => {
+const server = http.createServer((request, response) => {
   requestCount += 1;
+  if (responseMode === 'not-found') {
+    response.writeHead(404, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ status: 'not-found' }));
+    return;
+  }
+
+  const challenge = request.headers['x-fantetic-readiness-challenge'];
+  const proof = typeof challenge === 'string'
+    ? createHmac('sha256', runtimeNonce).update(challenge).digest('hex')
+    : '';
+  if (ready) {
+    response.setHeader(
+      'x-fantetic-readiness-proof',
+      responseMode === 'forged' ? '0'.repeat(64) : proof,
+    );
+  }
   response.writeHead(ready ? 200 : 503, { 'content-type': 'application/json' });
   response.end(JSON.stringify({ status: ready ? 'ready' : 'starting' }));
 });
@@ -38,6 +62,7 @@ const close = () => new Promise((resolve, reject) => {
   const address = server.address();
   assert.ok(address && typeof address === 'object');
   const backendUrl = `http://127.0.0.1:${address.port}/api/v1/health/ready`;
+  const readinessProbe = createElectronBackendReadinessProbe(runtimeNonce);
   const delayedReady = setTimeout(() => {
     ready = true;
   }, 50);
@@ -47,8 +72,34 @@ const close = () => new Promise((resolve, reject) => {
       label: 'backend',
       timeoutMs: 1_000,
       intervalMs: 10,
+      ...readinessProbe,
+      isTargetAlive: () => true,
     });
     assert.ok(requestCount >= 2, 'health check should retry while the backend starts');
+
+    responseMode = 'not-found';
+    await assert.rejects(
+      waitForHttp(backendUrl, {
+        label: 'wrong service', timeoutMs: 30, intervalMs: 5, ...readinessProbe,
+      }),
+      /wrong service was not ready.*HTTP 404/,
+    );
+
+    responseMode = 'forged';
+    await assert.rejects(
+      waitForHttp(backendUrl, {
+        label: 'forged service', timeoutMs: 30, intervalMs: 5, ...readinessProbe,
+      }),
+      /forged service was not ready.*readiness proof/i,
+    );
+
+    await assert.rejects(
+      waitForHttp(backendUrl, {
+        label: 'exited backend', timeoutMs: 1_000, intervalMs: 10, ...readinessProbe,
+        isTargetAlive: () => false,
+      }),
+      /exited backend process exited before becoming ready/,
+    );
   } finally {
     clearTimeout(delayedReady);
     await close();
@@ -59,6 +110,7 @@ const close = () => new Promise((resolve, reject) => {
       label: 'unavailable backend',
       timeoutMs: 30,
       intervalMs: 10,
+      ...createElectronBackendReadinessProbe(runtimeNonce),
     }),
     /unavailable backend was not ready/,
   );

@@ -4,11 +4,18 @@ import { RequestHandler } from 'express';
 import { initializeHeartbeat } from './websocket/heartbeat';
 import { initializeUpgradeHandler } from './websocket/upgrade';
 import { initializeConnectionHandler } from './websocket/connection';
-import { clientStates, statusMonitorService } from './websocket/state';
+import { clientStates, sftpService, statusMonitorService } from './websocket/state';
 import { sshSuspendService } from './ssh-suspend/ssh-suspend.service';
-import { SftpService } from './sftp/sftp.service';
 import { cleanupClientConnection } from './websocket/utils';
 import { ClientIpResolver } from './config/client-ip';
+import { createWebSocketRuntimeLifecycle } from './websocket/runtime-lifecycle';
+import { createLogger } from './logging/logger';
+
+const logger = createLogger('WebSocketRuntime');
+
+export type WebSocketRuntime = WebSocketServer & {
+    drainSessions: () => Promise<void>;
+};
 
 
 export {
@@ -28,7 +35,7 @@ export const initializeWebSocket = async (
     clientIpResolver: ClientIpResolver,
     allowedOrigins: ReadonlySet<string>,
     onActiveConnectionCountChanged?: (count: number) => void,
-): Promise<WebSocketServer> => {
+): Promise<WebSocketRuntime> => {
     // Environment variables are expected to be loaded by index.ts
 
     const wss = new WebSocketServer({
@@ -58,11 +65,8 @@ export const initializeWebSocket = async (
     // 2. Initialize Upgrade Handler (handles authentication and protocol upgrade)
     initializeUpgradeHandler(server, wss, sessionParser, clientIpResolver, allowedOrigins);
 
-    // +++ 创建 SftpService 实例 +++
-    const sftpService = new SftpService(clientStates);
-
     // 3. Initialize Connection Handler (handles 'connection' event and message routing)
-    initializeConnectionHandler(wss, sshSuspendService, sftpService); // +++ 传递 sftpService 实例 +++
+    initializeConnectionHandler(wss, sshSuspendService, sftpService);
     const publishConnectionCount = () => onActiveConnectionCountChanged?.(wss.clients.size);
     wss.on('connection', ws => {
         publishConnectionCount();
@@ -70,21 +74,26 @@ export const initializeWebSocket = async (
     });
     publishConnectionCount();
 
-    // --- WebSocket 服务器关闭处理 ---
+    const lifecycle = createWebSocketRuntimeLifecycle({
+        listSessionIds: () => Array.from(clientStates.keys()),
+        cleanupSession: cleanupClientConnection,
+        stopHeartbeat: () => clearInterval(heartbeatTimer),
+        disposeStatusMonitor: () => statusMonitorService.dispose(),
+    });
+    const runtime = wss as WebSocketRuntime;
+    runtime.drainSessions = lifecycle.drain;
+
+    // This is a fallback for callers that close the server directly. Graceful shutdown
+    // explicitly awaits drainSessions before the storage phase starts.
     wss.on('close', () => {
-        console.log('WebSocket 服务器正在关闭，清理心跳定时器和所有活动会话...');
-        clearInterval(heartbeatTimer); // Clear heartbeat started by this function
-        statusMonitorService.dispose();
-        
-        clientStates.forEach((_state, sessionId) => {
-            cleanupClientConnection(sessionId);
+        void runtime.drainSessions().catch(error => {
+            logger.error('WebSocket server closed before all sessions were cleaned up', { error });
         });
-        console.log('所有活动会话已清理。');
     });
 
 
     console.log('WebSocket 服务器初始化完成。');
-    return wss;
+    return runtime;
 };
 
 export { clientStates };

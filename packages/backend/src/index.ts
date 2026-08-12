@@ -34,7 +34,6 @@ import express = require('express');
 import { Request, Response, NextFunction, RequestHandler } from 'express';
 import http from 'http';
 import cors from 'cors';
-import { WebSocketServer } from 'ws';
 
 
 import session from 'express-session';
@@ -63,6 +62,7 @@ import pathHistoryRoutes from './path-history/path-history.routes';
 import favoritePathsRouter from './favorite-paths/favorite-paths.routes';
 import aiRoutes from './ai-ops/ai.routes';
 import { initializeWebSocket } from './websocket';
+import type { WebSocketRuntime } from './websocket';
 import { ipWhitelistMiddleware } from './auth/ipWhitelist.middleware';
 import { ELECTRON_FRONTEND_ORIGINS, isCorsOriginAllowed, parseCorsOrigins, readForwardedHost } from './config/cors-origin';
 import { resolveServerBinding } from './config/server-binding';
@@ -79,6 +79,7 @@ import { createLogger } from './logging/logger';
 import { apiErrorHandler, securityHeaders, validateJsonComplexity, validateMutationOrigin } from './security/web-security.middleware';
 import { normalizeLegacyApiErrorResponse } from './security/legacy-api-error-normalizer.middleware';
 import { resolveSessionCookieSecure } from './config/session-cookie';
+import { createElectronRuntimeReadinessProof } from './security/electron-runtime-nonce';
 import { ensureElectronRuntimeUser } from './config/electron-runtime-user';
 import { isElectronAppMode } from './config/app-mode';
 import { createHealthHandlers } from './health/health.controller';
@@ -86,6 +87,7 @@ import { createFilesystemReadinessChecks } from './health/filesystem-readiness';
 import { backendMetrics, createMetricsHandlers } from './observability/metrics';
 import { acquireSingleNodeLease, resolveSingleNodeLeaseEnabled, type SingleNodeLease } from './config/single-node-lease';
 import { createGracefulDrainRegistry } from './config/graceful-drain';
+import { closeWebSocketRuntime } from './websocket/runtime-lifecycle';
 
 
 import './services/event.service'; 
@@ -112,6 +114,7 @@ const healthHandlers = createHealthHandlers({
     await new Promise<void>((resolve, reject) => db.get('SELECT 1', error => error ? reject(error) : resolve()));
   },
   ...filesystemReadiness,
+  createRuntimeReadinessProof: createElectronRuntimeReadinessProof,
 });
 const metricsHandlers = createMetricsHandlers({ registry: backendMetrics, token: process.env.METRICS_TOKEN });
 
@@ -211,7 +214,7 @@ const initializeDatabase = async () => {
 };
 
 // 启动服务器
-const startServer = async (): Promise<WebSocketServer> => {
+const startServer = async (): Promise<WebSocketRuntime> => {
     // --- 会话中间件配置 ---
     const FileStore = sessionFileStore(session);
     const sessionsPath = ensureAndGetPathInAppData('sessions');
@@ -286,7 +289,7 @@ const startServer = async (): Promise<WebSocketServer> => {
     return webSocketServer;
 };
 
-let webSocketServer: WebSocketServer | null = null;
+let webSocketServer: WebSocketRuntime | null = null;
 let shutdownPromise: Promise<void> | null = null;
 let stopBackupScheduler: (() => void | Promise<void>) | null = null;
 let singleNodeLease: SingleNodeLease | null = null;
@@ -295,8 +298,7 @@ const closeWebSocketServer = async (): Promise<void> => {
     if (!webSocketServer) return;
     const current = webSocketServer;
     webSocketServer = null;
-    current.clients.forEach(client => client.terminate());
-    await new Promise<void>((resolve, reject) => current.close(error => error ? reject(error) : resolve()));
+    await closeWebSocketRuntime(current);
 };
 
 const closeHttpServer = async (): Promise<void> => {

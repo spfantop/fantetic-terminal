@@ -5,7 +5,7 @@ const express = require('express');
 const http = require('http');
 const { spawn } = require('child_process');
 const fs = require('fs');
-const { waitForHttp } = require('./service-readiness');
+const { createElectronBackendReadinessProbe, waitForHttp } = require('./service-readiness');
 const {
   addElectronNonceHeader,
   isAllowedPopupUrl,
@@ -142,9 +142,15 @@ const startProductionServicesOnce = async () => {
   const backendDataPath = path.join(app.getPath('userData'), appNameForPath, 'backend-data');
   ensureDirectory(backendDataPath);
 
-  startBackendProcess(backendDataPath);
+  const spawnedBackend = startBackendProcess(backendDataPath);
   await waitForHttp(`http://127.0.0.1:${PROD_BACKEND_PORT}/api/v1/health/ready`, {
     label: 'backend',
+    ...createElectronBackendReadinessProbe(electronRuntimeNonce),
+    isTargetAlive: () => (
+      backendProcess === spawnedBackend
+      && spawnedBackend.exitCode === null
+      && spawnedBackend.signalCode === null
+    ),
   });
   await startFrontendServer();
 
@@ -163,7 +169,7 @@ const pipeProcessOutput = (processName, childProcess) => {
 
 const startBackendProcess = (backendDataPath) => {
   const backendResourcesPath = path.join(process.resourcesPath, 'packages/backend');
-  backendProcess = spawn(process.execPath, ['dist/index.js'], {
+  const spawnedBackend = spawn(process.execPath, ['dist/index.js'], {
     cwd: backendResourcesPath,
     stdio: ['ignore', 'pipe', 'pipe'],
     env: {
@@ -178,18 +184,21 @@ const startBackendProcess = (backendDataPath) => {
       NODE_ENV: 'production',
     },
   });
+  backendProcess = spawnedBackend;
 
-  pipeProcessOutput('Backend', backendProcess);
+  pipeProcessOutput('Backend', spawnedBackend);
 
-  backendProcess.on('close', (code) => {
+  spawnedBackend.on('close', (code) => {
     console.log(`[Backend Process] exited with code ${code}`);
-    backendProcess = null;
+    if (backendProcess === spawnedBackend) backendProcess = null;
   });
 
-  backendProcess.on('error', (error) => {
+  spawnedBackend.on('error', (error) => {
     console.error('[Backend Process] Failed to start:', error);
     app.quit();
   });
+
+  return spawnedBackend;
 };
 
 const startFrontendServer = async () => {
