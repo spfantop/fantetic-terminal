@@ -1,12 +1,5 @@
 import { Request } from 'express';
 
-declare module 'express-session' {
-  interface SessionData {
-    pendingTwoFactorUserId?: number;
-    authEpoch?: number;
-  }
-}
-
 type AuthenticatedIdentity = {
   id: number;
   username: string;

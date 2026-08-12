@@ -90,6 +90,11 @@ interface LogicalLineContext {
   rowTextOffset: number;
 }
 
+type XtermTextLine = Pick<
+  XtermBufferLine,
+  'length' | 'translateToString' | 'getTrimmedLength' | 'getWidth' | 'getString'
+>;
+
 interface LineTextProjection {
   text: string;
   columns: number[];
@@ -206,7 +211,7 @@ export function createTerminalRenderHighlighter(getOptions: () => TerminalRender
   };
 
   const resolveLine = (
-    line: Pick<XtermBufferLine, 'length' | 'translateToString'>,
+    line: XtermTextLine,
     logicalContext?: LogicalLineContext,
     textProjection?: LineTextProjection,
   ): TerminalRenderLineDecoration | undefined => {
@@ -508,7 +513,7 @@ function parseRgbColor(value: string): number | undefined {
  * accept on `translateToString`. Build the UTF-16-to-cell mapping directly so
  * the render bridge works with the version shipped by this application.
  */
-function getLineTextAndColumns(line: Pick<XtermBufferLine, 'length' | 'translateToString' | 'getTrimmedLength' | 'getWidth' | 'getString'>): {
+function getLineTextAndColumns(line: XtermTextLine): {
   text: string;
   columns: number[];
 } {

@@ -6,11 +6,11 @@ import { parseConnectionImportScript } from '../services/connection-import-scrip
 archiver.registerFormat('zip-encrypted', require('archiver-zip-encrypted'));
 
 const createEncryptedZip = async (password: string): Promise<Buffer> => new Promise((resolve, reject) => {
-  const archive = archiver.create('zip-encrypted' as archiver.Format, {
+  const archive = archiver.create('zip-encrypted', {
     zlib: { level: 9 },
     encryptionMethod: 'aes256',
     password,
-  } as archiver.ArchiverOptions & { encryptionMethod: string; password: string });
+  });
   const chunks: Buffer[] = [];
 
   archive.on('data', (chunk: Buffer) => chunks.push(chunk));

@@ -18,8 +18,9 @@ const quickCommandsModal = readFileSync(resolve('src/components/QuickCommandsMod
 const draggableDialogComposable = readFileSync(resolve('src/composables/useDraggableDialog.ts'), 'utf8');
 
 const tabKeys = createSettingsTabs((key, fallback) => fallback || key).map(tab => tab.key);
+const tabKeySet = new Set<string>(tabKeys);
 
-assert.equal(tabKeys.includes('dashboard'), false, 'dashboard should not appear in settings');
+assert.equal(tabKeySet.has('dashboard'), false, 'dashboard should not appear in settings');
 assert.equal(settingsView.includes('DashboardView'), false, 'settings should not load dashboard content');
 assert.equal(
   settingsView.includes("activeTab === 'dashboard'"),
@@ -27,8 +28,8 @@ assert.equal(
   'settings should not retain a dashboard rendering branch',
 );
 
-assert.equal(tabKeys.includes('dataManagement'), false, 'data management should live in the admin center');
-assert.equal(tabKeys.includes('auditLogs'), false, 'audit logs should live in the admin center');
+assert.equal(tabKeySet.has('dataManagement'), false, 'data management should live in the admin center');
+assert.equal(tabKeySet.has('auditLogs'), false, 'audit logs should live in the admin center');
 
 assert.equal(
   appVue.includes('class="app-dock"') || appVue.includes("'app-dock'"),

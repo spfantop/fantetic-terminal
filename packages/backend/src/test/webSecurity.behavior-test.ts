@@ -19,7 +19,7 @@ const limiter = createFixedWindowRateLimiter({
   windowMs: 1_000,
   maxRequests: 2,
   now: () => now,
-  key: request => request.ip,
+  key: request => request.ip ?? '',
 });
 const request = { ip: '192.0.2.1' } as any;
 for (let index = 0; index < 2; index += 1) {

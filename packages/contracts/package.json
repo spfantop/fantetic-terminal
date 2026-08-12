@@ -4,6 +4,7 @@
   "private": true,
   "types": "index.d.ts",
   "scripts": {
+    "typecheck": "tsc -p tsconfig.test.json",
     "test:websocket-core-protocol": "esbuild test/webSocketCoreProtocol.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/webSocketCoreProtocol.behavior-test.mjs && node ../../.vite-codex-cache/webSocketCoreProtocol.behavior-test.mjs"
   }
 }

@@ -175,14 +175,6 @@ const uploadsPath = ensureAndGetPathInAppData('uploads');
 // app.use('/uploads', express.static(uploadsPath)); // 不再需要，文件通过 API 提供
 
 
-// 扩展 Express Request 类型
-declare module 'express-session' {
-    interface SessionData {
-        userId?: number;
-        username?: string;
-    }
-}
-
 const serverBinding = resolveServerBinding({
     appMode: process.env.FANTETIC_APP_MODE,
     host: process.env.HOST,

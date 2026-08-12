@@ -46,6 +46,10 @@ interface BackupPolicyExecutor {
   createBackupWithPolicy(policy: BackupRetentionPolicy): Promise<unknown>;
 }
 
+type IntervalHandle = ReturnType<typeof global.setInterval>;
+type SetIntervalAdapter = (callback: () => void, intervalMs: number) => IntervalHandle;
+type ClearIntervalAdapter = (timer: IntervalHandle) => void;
+
 export const startBackupScheduler = ({
   config,
   backupService,
@@ -55,8 +59,8 @@ export const startBackupScheduler = ({
 }: {
   config: BackupScheduleConfig;
   backupService: BackupPolicyExecutor;
-  setInterval?: typeof global.setInterval;
-  clearInterval?: typeof global.clearInterval;
+  setInterval?: SetIntervalAdapter;
+  clearInterval?: ClearIntervalAdapter;
   logError?: (error: unknown) => void;
 }) => {
   if (!config.enabled) {

@@ -6,7 +6,7 @@ import { ref } from 'vue';
 import { createSingleFlight, waitForRefValue } from '../src/utils/asyncScheduling';
 
 let taskRunCount = 0;
-let resolveTask: ((value: number) => void) | null = null;
+let resolveTask!: (value: number) => void;
 const runTask = createSingleFlight(() => {
   taskRunCount += 1;
   return new Promise<number>((resolveTaskPromise) => {
@@ -18,14 +18,14 @@ const firstRun = runTask();
 const sharedRun = runTask();
 assert.equal(firstRun, sharedRun, 'overlapping calls must share the same promise');
 assert.equal(taskRunCount, 1, 'overlapping calls must execute the task once');
-resolveTask?.(1);
+resolveTask(1);
 assert.equal(await firstRun, 1);
 await Promise.resolve();
 
 const nextRun = runTask();
 assert.notEqual(nextRun, firstRun, 'a completed task must allow a new run');
 assert.equal(taskRunCount, 2);
-resolveTask?.(2);
+resolveTask(2);
 await nextRun;
 
 const connected = ref(false);

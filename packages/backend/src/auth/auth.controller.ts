@@ -51,19 +51,6 @@ const toPublicUser = (user: Pick<User, 'id' | 'username' | 'system_role'>) => ({
     systemRole: user.system_role,
 });
 
-declare module 'express-session' {
-    interface SessionData {
-        userId?: number;
-        username?: string;
-        tempTwoFactorSecret?: string;
-        tempTwoFactorSecretExpiresAt?: number;
-        requiresTwoFactor?: boolean;
-        currentChallenge?: string; // +++ For Passkey challenge storage
-        passkeyUserHandle?: string; // +++ For Passkey user handle (user ID as string)
-        rememberMe?: boolean;
-    }
-}
-
 // --- Passkey Controller Methods ---
 
 /**

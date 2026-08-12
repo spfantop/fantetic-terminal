@@ -5,6 +5,7 @@
    "main": "dist/index.js",
    "scripts": {
       "build": "tsc && copyfiles -u 1 \"src/locales/**/*.json\" dist && node src/test/packagedRuntimeLocales.behavior-test.js",
+      "typecheck": "tsc -p tsconfig.test.json",
       "verify:audit-chain": "node dist/audit/audit-chain-verify.js",
       "start": "node dist/index.js",
       "verify:backup-recovery": "npm run build && node dist/backup/verify-recovery.cli.js",

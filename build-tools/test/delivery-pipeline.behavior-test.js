@@ -23,6 +23,9 @@ const dockerPublishGuide = read('docs/DOCKER_IMAGE_PUBLISH.md');
 const dockerCompose = read('docker-compose.yml');
 const electronPackage = JSON.parse(read('electron-app/package.json'));
 const rootPackage = JSON.parse(read('package.json'));
+const backendPackage = JSON.parse(read('packages/backend/package.json'));
+const contractsPackage = JSON.parse(read('packages/contracts/package.json'));
+const frontendPackage = JSON.parse(read('packages/frontend/package.json'));
 
 assert.match(
   workflow,
@@ -134,6 +137,8 @@ assert.match(gatewayDockerfile, /HEALTHCHECK --interval=30s --timeout=5s --start
 assert.match(qualityWorkflow, /pull_request:/);
 assert.match(qualityWorkflow, /Run full behavior suite/);
 assert.match(qualityWorkflow, /run: npm test/);
+assert.match(qualityWorkflow, /Run strict type checks[\s\S]*run: npm run typecheck/);
+assert.ok(qualityWorkflow.indexOf('Run strict type checks') < qualityWorkflow.indexOf('Run full behavior suite'));
 assert.match(qualityWorkflow, /npm audit --audit-level=high/);
 assert.match(qualityWorkflow, /npm audit --prefix electron-app --package-lock-only --audit-level=high/);
 assert.match(rootPackage.scripts.test, /workspace-test-suite\.behavior-test\.js/);
@@ -143,6 +148,16 @@ assert.match(qualityWorkflow, /npm run build --workspace=@fantetic-terminal\/fro
 assert.match(qualityWorkflow, /npm run build --workspace=@fantetic-terminal\/remote-gateway/);
 assert.doesNotMatch(qualityWorkflow, /test:guacamole-lite-patch/);
 assert.match(rootPackage.scripts.test, /workspace-test-suite/);
+assert.match(rootPackage.scripts.typecheck, /@fantetic-terminal\/backend/);
+assert.match(rootPackage.scripts.typecheck, /@fantetic-terminal\/contracts/);
+assert.match(rootPackage.scripts.typecheck, /@fantetic-terminal\/frontend/);
+assert.match(rootPackage.scripts.typecheck, /@fantetic-terminal\/remote-gateway/);
+assert.equal(backendPackage.scripts.typecheck, 'tsc -p tsconfig.test.json');
+assert.equal(contractsPackage.scripts.typecheck, 'tsc -p tsconfig.test.json');
+assert.equal(frontendPackage.scripts.typecheck, 'vue-tsc -p tsconfig.test.json');
+assert.match(read('packages/backend/tsconfig.test.json'), /src\/test\/\*\*\/\*\.ts/);
+assert.match(read('packages/contracts/tsconfig.test.json'), /test\/\*\*\/\*\.ts/);
+assert.match(read('packages/frontend/tsconfig.test.json'), /test\/\*\*\/\*\.ts/);
 
 assert.match(releaseGuide, /Release Assets/);
 assert.match(releaseGuide, /v\$\{version\}/);

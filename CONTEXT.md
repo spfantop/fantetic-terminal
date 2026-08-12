@@ -27,3 +27,4 @@
 8. The desktop renderer receives its runtime nonce only after the packaged backend proves nonce possession and the spawned child is still alive.
 9. WebSocket session cleanup completes before database shutdown begins.
 10. Core WebSocket messages cross runtime boundaries through shared contracts and runtime validation before reaching stateful handlers.
+11. Workspace test sources pass strict type checks, and each discovered behavior group runs at most once under bounded concurrency.

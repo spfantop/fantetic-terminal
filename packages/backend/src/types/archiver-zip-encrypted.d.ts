@@ -12,6 +12,7 @@ declare module 'archiver' {
         on(event: 'data', listener: (data: Buffer) => void): this;
         on(event: 'error', listener: (err: Error) => void): this;
         on(event: 'warning', listener: (err: Error) => void): this; // 添加 'warning' 事件
+        on(event: 'end', listener: () => void): this;
         pipe(destination: NodeJS.WritableStream): NodeJS.WritableStream; // 添加 pipe 方法
         append(data: any, options: { name: string }): void;
         finalize(): Promise<void>;

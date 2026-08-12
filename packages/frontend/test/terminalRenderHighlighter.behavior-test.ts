@@ -47,7 +47,7 @@ assert.equal(cachedDecoration, decoration, 'unchanged lines should reuse the res
 
 const wideText = `INFO ERROR ${'x'.repeat(90)}`;
 let wideLineTranslations = 0;
-let invalidateAttachedWideLine = () => undefined;
+let invalidateAttachedWideLine: () => void = () => undefined;
 const wideRenderLine = {
   length: 4096,
   translateToString: (_trimRight: boolean, _start: number, _end: number, columns: number[]) => {
@@ -57,7 +57,7 @@ const wideRenderLine = {
   },
   loadCell: (_column: number, cell: typeof sourceCell) => cell,
 };
-const wideRowFactory = { createRow: () => undefined };
+const wideRowFactory: { createRow: (...args: unknown[]) => unknown } = { createRow: () => undefined };
 const wideTerminal = {
   onWriteParsed: (listener: () => void) => {
     invalidateAttachedWideLine = listener;
@@ -95,7 +95,7 @@ const wrappedLineList = Array.from({ length: 64 }, (_, index) => ({
   },
   loadCell: (_column: number, cell: typeof sourceCell) => cell,
 }));
-const wrappedRowFactory = { createRow: () => undefined };
+const wrappedRowFactory: { createRow: (...args: unknown[]) => unknown } = { createRow: () => undefined };
 const wrappedTerminal = {
   onWriteParsed: () => ({ dispose() {} }),
   onResize: () => ({ dispose() {} }),

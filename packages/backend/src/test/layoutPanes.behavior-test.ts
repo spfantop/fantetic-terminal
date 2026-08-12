@@ -11,10 +11,11 @@ import {
   createDefaultSidebarPanesStructure,
 } from '../settings/defaultLayoutConfig';
 
-const listPaneComponents = (node: { type: string; component?: string; children?: unknown[] } | null): string[] => {
-  if (!node) return [];
-  if (node.type === 'pane' && node.component) return [node.component];
-  return (node.children || []).flatMap((child) => listPaneComponents(child as any));
+const listPaneComponents = (node: unknown): string[] => {
+  if (!node || typeof node !== 'object' || Array.isArray(node)) return [];
+  const nodeRecord = node as Record<string, unknown>;
+  if (nodeRecord.type === 'pane' && typeof nodeRecord.component === 'string') return [nodeRecord.component];
+  return Array.isArray(nodeRecord.children) ? nodeRecord.children.flatMap(listPaneComponents) : [];
 };
 
 assert.ok(

@@ -27,7 +27,7 @@ const recorder = createSessionRecorder({
   startedAt: 1_000,
   flushIntervalMs: 5,
   maxPendingBytes: 1024,
-  onComplete: async summary => completed.push(summary),
+  onComplete: async summary => { completed.push(summary); },
 });
 
 recorder.recordOutput(Buffer.from('hello'));
@@ -103,7 +103,7 @@ const chainedRecorder = createSessionRecorder({
   recordingId: 'recording-chain',
   startedAt: 1_500,
   flushIntervalMs: 1,
-  onComplete: async summary => completed.push(summary),
+  onComplete: async summary => { completed.push(summary); },
 });
 chainedRecorder.recordOutput(Buffer.from('first batch'));
 await new Promise(resolve => setTimeout(resolve, 10));
@@ -149,7 +149,7 @@ const overflow = createSessionRecorder({
   startedAt: 2_000,
   flushIntervalMs: 60_000,
   maxPendingBytes: 4,
-  onComplete: async summary => completed.push(summary),
+  onComplete: async summary => { completed.push(summary); },
 });
 overflow.recordOutput(Buffer.from('12345'));
 await overflow.finish(2_100);
@@ -176,7 +176,7 @@ const slowRecorder = createSessionRecorder({
     slowWriteStarted?.();
     await slowWritePromise;
   },
-  onComplete: async summary => completed.push(summary),
+  onComplete: async summary => { completed.push(summary); },
 });
 slowRecorder.recordOutput(Buffer.from('1234'));
 await slowWriteStartedPromise;

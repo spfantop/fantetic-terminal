@@ -20,6 +20,6 @@ assert.deepEqual(normalizeLayoutTree(legacyLayout), {
   component: 'terminal',
   size: 100,
 });
-assert.equal(CONFIGURABLE_LAYOUT_PANES.includes('commandBar'), false);
+assert.equal(new Set<string>(CONFIGURABLE_LAYOUT_PANES).has('commandBar'), false);
 
 console.log('command bar removal behavior ok');

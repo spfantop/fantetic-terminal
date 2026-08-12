@@ -36,6 +36,9 @@ jobs:
           npm audit --audit-level=high
           npm audit --prefix electron-app --package-lock-only --audit-level=high
 
+      - name: Run strict type checks
+        run: npm run typecheck
+
       - name: Run full behavior suite
         run: npm test
 

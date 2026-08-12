@@ -5,6 +5,10 @@ interface PollingGroup {
   timer: NodeJS.Timeout;
 }
 
+type IntervalHandle = ReturnType<typeof global.setInterval>;
+type SetIntervalAdapter = (callback: () => void, intervalMs: number) => IntervalHandle;
+type ClearIntervalAdapter = (timer: IntervalHandle) => void;
+
 export const createConnectionPollingCoordinator = ({
   poll,
   setInterval = global.setInterval,
@@ -13,8 +17,8 @@ export const createConnectionPollingCoordinator = ({
   onPollError = () => undefined,
 }: {
   poll: (connectionId: number, sessionIdList: readonly string[]) => void | Promise<void>;
-  setInterval?: typeof global.setInterval;
-  clearInterval?: typeof global.clearInterval;
+  setInterval?: SetIntervalAdapter;
+  clearInterval?: ClearIntervalAdapter;
   onConnectionEmpty?: (connectionId: number) => void;
   onPollError?: (connectionId: number, error: unknown) => void;
 }) => {

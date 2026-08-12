@@ -123,7 +123,7 @@ globalThis.getComputedStyle = (() => ({
   paddingRight: '2px',
   paddingTop: '2px',
   paddingBottom: '2px',
-})) as typeof getComputedStyle;
+})) as unknown as typeof getComputedStyle;
 try {
   fitTerminalReplayViewport(host);
 } finally {
