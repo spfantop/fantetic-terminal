@@ -3,7 +3,7 @@ import { createApp } from 'vue';
 import { createPinia } from 'pinia';
 import App from './App.vue';
 import router from './router'; 
-import i18n from './i18n';
+import i18n, { initializeLocale } from './i18n';
 import { useAuthStore } from './stores/auth.store'; 
 import { useSettingsStore } from './stores/settings.store'; 
 import { useAppearanceStore } from './stores/appearance.store'; 
@@ -20,8 +20,7 @@ const app = createApp(App);
 app.use(pinia); // 使用配置好的 Pinia 实例
 // 注意：在状态初始化完成前，暂时不 use(router)
 app.use(i18n); // 使用 i18n
-
-
+const localeInitialization = initializeLocale();
 
 // --- 应用初始化逻辑 ---
 // 使用 async IIFE 来允许顶层 await
@@ -35,6 +34,7 @@ app.use(i18n); // 使用 i18n
     // 1. 同时检查设置和认证状态，并等待它们完成
     // 确保 checkAuthStatus 可以在 needsSetup=true 时也能安全运行并返回正确状态
     await Promise.all([
+      localeInitialization,
       authStore.checkSetupStatus(),
       authStore.checkAuthStatus()
     ]);

@@ -9,3 +9,4 @@
 | [0005](0005-deepen-workspace-quality-gate.md) | Accepted | Type-check tests and run behavior groups with bounded concurrency |
 | [0006](0006-manage-connection-catalog-consistency.md) | Accepted | Centralize connection catalog consistency behind one interface |
 | [0007](0007-publish-atomic-docker-release-sets.md) | Accepted | Publish distributed Docker images as one immutable release set |
+| [0008](0008-load-locales-on-demand.md) | Accepted | Load non-default locales on demand behind one runtime interface |

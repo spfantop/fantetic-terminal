@@ -2,12 +2,13 @@ import { debugLog, debugLogLazy } from '../composables/useDebugLog';
 import { defineStore } from 'pinia';
 import apiClient from '../utils/apiClient'; 
 import { ref, computed } from 'vue'; 
-import i18n, { setLocale, defaultLng, availableLocales } from '../i18n';
+import { setLocale, defaultLng, availableLocales, readActiveLocale } from '../i18n';
 import type { PaneName } from './layout.store';
 import { useAuthStore } from './auth.store';
 import type { ConnectionInfo } from './connections.store';
 import { normalizeTimezone } from '../utils/dateTimeFormat';
 import { CONFIGURABLE_LAYOUT_PANES } from '../utils/layoutPanes';
+import { applyInitialLocaleSetting, createLocaleSettingCoordinator } from '../locale-runtime';
 import {
   DEFAULT_TERMINAL_HIGHLIGHT_RULES_JSON,
   parseTerminalHighlightRules,
@@ -23,7 +24,7 @@ export function normalizeSettingsLocale(language?: string | null): string {
     return defaultLng;
   }
 
-  if (availableLocales.includes(language)) {
+  if (availableLocales.some(locale => locale === language)) {
     return language;
   }
 
@@ -31,10 +32,10 @@ export function normalizeSettingsLocale(language?: string | null): string {
   return matchedLocale || defaultLng;
 }
 
-function readActiveLocale(): string | undefined {
-  const locale = (i18n.global as any).locale;
-  return typeof locale === 'string' ? locale : locale?.value;
-}
+const localeSettingCoordinator = createLocaleSettingCoordinator({
+  readActiveLocale,
+  activateLocale: setLocale,
+});
 
 function resolveEffectiveSettingsLocale(language?: string | null): string {
   return normalizeSettingsLocale(language || readActiveLocale() || navigator.language);
@@ -149,7 +150,8 @@ export const useSettingsStore = defineStore('settings', () => {
         apiClient.get<{ enabled: boolean }>('/settings/show-quick-command-tags')
       ]);
 
-      settings.value = generalSettingsResponse.data; // Store fetched general settings
+      const { language: remoteLanguage, ...generalSettings } = generalSettingsResponse.data;
+      settings.value = generalSettings;
 
       // Store the specific boolean settings
       settings.value.showConnectionTags = String(showConnectionTagsResponse.data.enabled);
@@ -424,30 +426,37 @@ export const useSettingsStore = defineStore('settings', () => {
       }
         
       // --- 语言设置 ---
-      const langFromSettings = settings.value.language;
+      const langFromSettings = remoteLanguage;
       debugLog(`[SettingsStore] Language from fetched settings: ${langFromSettings}`); // <-- 添加日志
       determinedLang = resolveEffectiveSettingsLocale(langFromSettings);
-      settings.value.language = determinedLang;
       if (langFromSettings !== determinedLang) {
           console.warn(`[SettingsStore] Invalid or missing language setting ('${langFromSettings}') received from backend. Falling back to '${determinedLang}'.`);
       }
 
-      if (determinedLang) {
-        debugLog(`[SettingsStore] Determined language: ${determinedLang}. Calling setLocale...`); // <-- 添加日志
-        setLocale(determinedLang);
-      } else {
-        // This case should theoretically not happen with the fallback logic above
-        console.error('[SettingsStore] Could not determine a valid language. This should not happen.');
-        debugLog(`[SettingsStore] Falling back to default: ${defaultLng}. Calling setLocale...`); // <-- 添加日志
-        setLocale(defaultLng);
-      }
+      await applyInitialLocaleSetting({
+        targetLocale: determinedLang,
+        fallbackLocale: defaultLng,
+        activateLocale: setLocale,
+        commitLocale: locale => {
+          settings.value.language = locale;
+        },
+        reportError: error => console.error('[SettingsStore] Failed to activate configured locale:', error),
+      });
 
     } catch (err: any) {
       console.error('Error loading general settings:', err); // <-- 修改日志
       error.value = err.response?.data?.message || err.message || 'Failed to load settings';
       const fallbackLang = resolveEffectiveSettingsLocale();
       debugLog(`[SettingsStore] Error loading settings. Falling back to language: ${fallbackLang}. Calling setLocale...`); // <-- 添加日志
-      setLocale(fallbackLang);
+      await applyInitialLocaleSetting({
+        targetLocale: fallbackLang,
+        fallbackLocale: defaultLng,
+        activateLocale: setLocale,
+        commitLocale: locale => {
+          settings.value.language = locale;
+        },
+        reportError: error => console.error('[SettingsStore] Failed to activate fallback locale:', error),
+      });
     } finally {
       isLoading.value = false;
     }
@@ -515,12 +524,12 @@ export const useSettingsStore = defineStore('settings', () => {
     };
 
     try {
-        let apiPromise: Promise<any>;
+        let persistSetting: () => Promise<unknown>;
         const endpoint = booleanEndpoints[key];
 
         if (endpoint && typeof value === 'boolean') {
             debugLog(`[SettingsStore] Attempting to update boolean setting via specific endpoint - Key: ${key}, Value: ${value}, Endpoint: ${endpoint}`);
-            apiPromise = apiClient.put(endpoint, { enabled: value });
+            persistSetting = () => apiClient.put(endpoint, { enabled: value });
         } else if (typeof value === 'string') {
             // --- 添加针对 terminalEnableRightClickPaste 的特定日志 ---
             if (key === 'terminalEnableRightClickPaste') {
@@ -533,18 +542,29 @@ export const useSettingsStore = defineStore('settings', () => {
             debugLog(`[SettingsStore] Attempting to update general setting - Key: ${key}, Value: ${valueToSave}`);
             const payload = { [key]: valueToSave };
             debugLog('[SettingsStore] Sending PUT request to /settings with payload:', payload);
-            apiPromise = apiClient.put('/settings', payload);
+            persistSetting = () => apiClient.put('/settings', payload);
         } else {
             throw new Error(`Invalid value type for setting '${key}': expected boolean for specific endpoint or string for general.`);
         }
 
-        await apiPromise;
+        let storedValue = key === 'terminalHighlightRules' && typeof value === 'string'
+          ? serializeTerminalHighlightRules(parseTerminalHighlightRules(value))
+          : String(value);
+        if (key === 'language' && typeof value === 'string') {
+          const nextLocale = normalizeSettingsLocale(value);
+          if (nextLocale !== value) {
+            throw new Error(`Unsupported locale '${value}'.`);
+          }
+          await localeSettingCoordinator.change(nextLocale, async () => {
+            await persistSetting();
+          });
+          storedValue = nextLocale;
+        } else {
+          await persistSetting();
+        }
         debugLog(`[SettingsStore] Successfully updated setting via API - Key: ${key}`);
 
         // Update store state *after* successful API call
-        const storedValue = key === 'terminalHighlightRules' && typeof value === 'string'
-          ? serializeTerminalHighlightRules(parseTerminalHighlightRules(value))
-          : String(value);
         settings.value = { ...settings.value, [key]: storedValue }; // Store as string internally
 
         // --- 保存到 localStorage  ---
@@ -560,14 +580,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
       // If updating language/timezone, normalize the local source of truth immediately.
       if (key === 'language' && typeof value === 'string') {
-        const nextLocale = normalizeSettingsLocale(value);
-        settings.value.language = nextLocale;
-        if (nextLocale === value) {
-          debugLog(`[SettingsStore] updateSetting: Language updated to ${nextLocale}. Calling setLocale...`);
-          setLocale(nextLocale);
-        } else {
-          console.warn(`[SettingsStore] updateSetting: Attempted to set invalid language '${value}'. Falling back to '${nextLocale}'.`);
-        }
+        settings.value.language = storedValue;
       } else if (key === 'timezone' && typeof value === 'string') {
         settings.value.timezone = normalizeTimezone(value);
       } else if (key === 'language') {
@@ -665,16 +678,16 @@ export const useSettingsStore = defineStore('settings', () => {
     }
 
     try {
-      // 注意：后端 controller 现在会过滤，但前端也做一层检查更好
-      await apiClient.put('/settings', filteredUpdates); // 使用 apiClient
+      const persistSettings = async () => {
+        await apiClient.put('/settings', filteredUpdates);
+      };
+      if (languageUpdate) {
+        await localeSettingCoordinator.change(languageUpdate, persistSettings);
+      } else {
+        await persistSettings();
+      }
       // Update store state *after* successful API call
       settings.value = { ...settings.value, ...filteredUpdates };
-
-      // If language is updated, apply it
-      if (languageUpdate) {
-        debugLog(`[SettingsStore] updateMultipleSettings: Language updated to ${languageUpdate}. Calling setLocale...`); // <-- 添加日志
-        setLocale(languageUpdate);
-      }
     } catch (err: any) {
       console.error('批量更新设置失败:', err);
       throw new Error(err.response?.data?.message || err.message || '批量更新设置失败');

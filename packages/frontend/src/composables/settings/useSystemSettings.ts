@@ -29,6 +29,7 @@ export function useSystemSettings() {
   };
 
   const handleUpdateLanguage = async () => {
+    if (languageLoading.value) return;
     languageLoading.value = true;
     languageMessage.value = '';
     languageSuccess.value = false;

@@ -18,11 +18,8 @@ const props = defineProps<{
   initialFolderId?: number | null;
 }>();
 
-import { getTranslation } from '../utils/languageUtils';
-
-
-const { t, locale } = useI18n();
-const scriptModeFormatInfo = ref(getTranslation('connections.form.scriptModeFormatInfo', locale.value));
+const { t } = useI18n();
+const scriptModeFormatInfo = computed(() => t('connections.form.scriptModeFormatInfo'));
 const modalRootRef = ref<HTMLElement | null>(null);
 const modalContentRef = ref<HTMLElement | null>(null);
 const isMobileViewport = computed(() => (
