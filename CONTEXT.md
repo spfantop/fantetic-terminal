@@ -37,3 +37,4 @@
 14. Live SSH resources have exactly one owner: the WebSocket session or the suspended-session runtime; failed transfer closes the detached channel and client before session cleanup completes.
 15. The locale runtime installs the default fallback before mounting, loads non-default languages on demand, and serializes persisted language changes so the active locale, document language, and settings projection cannot diverge.
 16. The authentication runtime is installed before the first protected HTTP request; concurrent invalidations share one completion, Desktop invalidation is a no-op, and authentication modules remain outside runtime import cycles.
+17. Each dependency is declared by the workspace that calls it; root dependencies serve root build tools, browser manifests exclude server-native packages, and runtime packaging follows manifest ownership without ignore lists.

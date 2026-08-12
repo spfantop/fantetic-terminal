@@ -11,12 +11,6 @@ const runtimeBackendNodeModulesDir = path.join(runtimeBackendDir, 'node_modules'
 
 const BACKEND_LOCK_KEY = 'packages/backend';
 const BACKEND_NODE_MODULES_LOCK_PREFIX = `${BACKEND_LOCK_KEY}/node_modules/`;
-const IGNORED_BACKEND_RUNTIME_DEPENDENCY_NAMES = new Set([
-  '@types/archiver',
-  '@types/multer',
-  '@types/session-file-store',
-  '@types/uuid',
-]);
 
 const toPathParts = (packageName) => packageName.split('/');
 
@@ -75,9 +69,7 @@ const listRuntimeDependencyNames = (packageEntry) => {
   return Object.keys({
     ...dependencies,
     ...optionalDependencies,
-  }).filter((dependencyName) => (
-    !IGNORED_BACKEND_RUNTIME_DEPENDENCY_NAMES.has(dependencyName)
-  ));
+  });
 };
 
 const collectRuntimeDependencyLockKeys = (lockData) => {
@@ -190,7 +182,6 @@ if (require.main === module) {
 
 module.exports = {
   BACKEND_LOCK_KEY,
-  IGNORED_BACKEND_RUNTIME_DEPENDENCY_NAMES,
   collectRuntimeDependencyLockKeys,
   copyBackendRuntimeDependencies,
   prepareRuntime,

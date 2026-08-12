@@ -4,7 +4,6 @@ const os = require('node:os');
 const path = require('node:path');
 
 const {
-  IGNORED_BACKEND_RUNTIME_DEPENDENCY_NAMES,
   collectRuntimeDependencyLockKeys,
   copyBackendRuntimeDependencies,
   resolveDependencyLockKey,
@@ -15,7 +14,6 @@ const backendPackage = require('../../packages/backend/package.json');
 const actualRuntimeDependencyLockKeys = collectRuntimeDependencyLockKeys(rootLockData);
 
 for (const dependencyName of Object.keys(backendPackage.dependencies)) {
-  if (IGNORED_BACKEND_RUNTIME_DEPENDENCY_NAMES?.has?.(dependencyName)) continue;
   assert.ok(
     actualRuntimeDependencyLockKeys.some((lockKey) => (
       lockKey === `node_modules/${dependencyName}`
@@ -34,6 +32,8 @@ const lockData = {
         ssh2: '^1.16.0',
         'express-session': '^1.19.0',
         '@simplewebauthn/server': '^13.1.1',
+      },
+      devDependencies: {
         '@types/uuid': '^10.0.0',
       },
     },
