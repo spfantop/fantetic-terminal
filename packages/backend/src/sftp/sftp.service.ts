@@ -35,6 +35,13 @@ const UPLOAD_PROGRESS_THROTTLE_MS = 150;
 const MAX_SFTP_COMMAND_STDERR_LENGTH = 16 * 1024;
 const logger = createLogger('SftpService');
 
+export class SftpSessionCleanupError extends Error {
+    constructor(public readonly errors: unknown[]) {
+        super(`Failed to clean up ${errors.length} SFTP session resource(s).`);
+        this.name = 'SftpSessionCleanupError';
+    }
+}
+
 const appendSftpCommandStderr = (output: string, data: Buffer): string => {
     if (output.length >= MAX_SFTP_COMMAND_STDERR_LENGTH) return output;
     return output + data.subarray(0, MAX_SFTP_COMMAND_STDERR_LENGTH - output.length).toString();
@@ -61,12 +68,9 @@ export class SftpService {
             console.warn(`[SFTP] 无法为会话 ${sessionId} 初始化 SFTP：状态无效、SSH客户端不存在或 SFTP 已初始化。`);
             return;
         }
-        if (!state.sshClient) {
-             console.error(`[SFTP] 会话 ${sessionId} 的 SSH 客户端不存在，无法初始化 SFTP。`);
-             return;
-        }
+        const sshClient = state.sshClient;
         return new Promise((resolve, reject) => {
-            state.sshClient.sftp((err, sftpInstance) => {
+            sshClient.sftp((err, sftpInstance) => {
                 if (err) {
                     console.error(`[SFTP] 为会话 ${sessionId} 初始化 SFTP 会话失败:`, err);
                     state.ws.send(JSON.stringify({ type: 'sftp_error', payload: { connectionId: state.dbConnectionId, message: 'SFTP 初始化失败' } }));
@@ -100,18 +104,29 @@ export class SftpService {
      */
     cleanupSftpSession(sessionId: string): void {
         const state = this.clientStates.get(sessionId);
+        const errorList: unknown[] = [];
         if (state?.sftp) {
-            console.log(`[SFTP] 正在清理 ${sessionId} 的 SFTP 会话...`);
-            state.sftp.end();
+            logger.info('开始清理 SFTP 会话', { sessionId });
+            const sftp = state.sftp;
             state.sftp = undefined;
+            try {
+                sftp.end();
+            } catch (error) {
+                errorList.push(error);
+            }
         }
         // Also clean up any active uploads associated with this session
         this.activeUploads.forEach((upload, uploadId) => {
             if (upload.sessionId === sessionId) {
-                console.warn(`[SFTP] Cleaning up active upload ${uploadId} for session ${sessionId} due to SFTP session cleanup.`);
-                this.cancelUploadInternal(uploadId, 'SFTP session ended'); // Internal cancel without sending message
+                logger.warn('SFTP 会话清理正在取消活动上传', { sessionId, uploadId });
+                try {
+                    this.cancelUploadInternal(uploadId, 'SFTP session ended');
+                } catch (error) {
+                    errorList.push(error);
+                }
             }
         });
+        if (errorList.length > 0) throw new SftpSessionCleanupError(errorList);
     }
 
     // --- SFTP 操作方法 ---
@@ -1114,7 +1129,8 @@ export class SftpService {
     /** 检查远程服务器上是否存在指定的命令 */
     private checkCommandExists(state: ClientState, sessionId: string, commandName: string): Promise<boolean> {
         return new Promise((resolve, reject) => {
-            if (!state.sshClient) {
+            const sshClient = state.sshClient;
+            if (!sshClient) {
                 return reject(new Error('SSH client is not available.'));
             }
             // 优先使用 command -v, 其次 which
@@ -1128,7 +1144,7 @@ export class SftpService {
                 }
                 const checkCmd = checkCommands[currentCheckIndex];
                 console.log(`[SFTP Command Check ${sessionId}] Executing: ${checkCmd}`);
-                state.sshClient.exec(checkCmd, (err, stream) => {
+                sshClient.exec(checkCmd, (err, stream) => {
                     if (err) {
                         console.error(`[SFTP Command Check ${sessionId}] Failed to start exec for "${checkCmd}":`, err);
                         currentCheckIndex++;

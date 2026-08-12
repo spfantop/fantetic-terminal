@@ -18,7 +18,7 @@ export interface AuthenticatedWebSocket extends WebSocket {
 // 中心化的客户端状态接口 (统一版本)
 export interface ClientState { // 导出以便 Service 可以导入
     ws: AuthenticatedWebSocket;
-    sshClient: Client;
+    sshClient?: Client;
     sshShellStream?: ClientChannel;
     dbConnectionId: number;
     connectionName?: string; // 连接名称字段

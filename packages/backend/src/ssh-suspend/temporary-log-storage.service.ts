@@ -1,32 +1,32 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { createLogger } from '../logging/logger';
 
 const MAX_LOG_SIZE_BYTES = 100 * 1024 * 1024; // 100MB
 const LOG_DIRECTORY = './data/temp_suspended_ssh_logs/';
+const logger = createLogger('SshSuspendLogStorage');
 
 /**
  * TemporaryLogStorageService负责管理临时日志文件的原子化读、写、删除及轮替操作。
  */
 export class TemporaryLogStorageService {
-  constructor() {
-    this.ensureLogDirectoryExists();
-  }
+  constructor(private readonly logDirectory = LOG_DIRECTORY) {}
 
   /**
    * 确保日志目录存在，如果不存在则创建它。
    */
   async ensureLogDirectoryExists(): Promise<void> {
     try {
-      await fs.mkdir(LOG_DIRECTORY, { recursive: true });
-      // console.log(`日志目录 '${LOG_DIRECTORY}' 已确保存在。`);
+      await fs.mkdir(this.logDirectory, { recursive: true });
+      // console.log(`日志目录 '${this.logDirectory}' 已确保存在。`);
     } catch (error) {
-      console.error(`创建日志目录 '${LOG_DIRECTORY}' 失败:`, error);
-      // 在实际应用中，这里可能需要更健壮的错误处理
+      logger.error('创建挂起 SSH 日志目录失败', { logDirectory: this.logDirectory, error });
+      throw error;
     }
   }
 
   private getLogFilePath(suspendSessionId: string): string {
-    return path.join(LOG_DIRECTORY, `${suspendSessionId}.log`);
+    return path.join(this.logDirectory, `${suspendSessionId}.log`);
   }
 
   /**
@@ -109,12 +109,12 @@ export class TemporaryLogStorageService {
   async listLogFiles(): Promise<string[]> {
     try {
       await this.ensureLogDirectoryExists();
-      const files = await fs.readdir(LOG_DIRECTORY);
+      const files = await fs.readdir(this.logDirectory);
       return files
         .filter(file => file.endsWith('.log'))
         .map(file => file.replace(/\.log$/, ''));
     } catch (error) {
-      console.error(`列出日志目录 '${LOG_DIRECTORY}' 中的文件失败:`, error);
+      console.error(`列出日志目录 '${this.logDirectory}' 中的文件失败:`, error);
       return []; // 发生错误时返回空数组
     }
   }

@@ -24,7 +24,7 @@ import {
 } from './types';
 import { SshSuspendService } from '../ssh-suspend/ssh-suspend.service';
 import { SftpService } from '../sftp/sftp.service';
-import { cleanupClientConnection } from './utils';
+import { requestClientConnectionCleanup } from './utils';
 import { flushSshOutput, scheduleSshOutput } from './ssh-output-buffer';
 import { clientStates } from './state';
 import { temporaryLogStorageService } from '../ssh-suspend/temporary-log-storage.service';
@@ -316,13 +316,13 @@ export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendServ
                                             if (ws.readyState === WebSocket.OPEN) {
                                                 ws.send(JSON.stringify({ type: 'ssh:disconnected', payload: { sessionId: newFrontendSessionId } }));
                                             }
-                                            cleanupClientConnection(newFrontendSessionId);
+                                            requestClientConnectionCleanup(newFrontendSessionId);
                                         });
                                          result.sshClient.on('error', (err: Error) => {
                                             flushSshOutput(newSessionState, { force: true });
                                             logger.error('恢复后的 SSH 客户端发生错误', { sessionId: newFrontendSessionId, error: err });
                                             if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ssh:error', payload: { sessionId: newFrontendSessionId, error: err.message } }));
-                                            cleanupClientConnection(newFrontendSessionId);
+                                            requestClientConnectionCleanup(newFrontendSessionId);
                                         });
                                         if (process.env.DEBUG_SSH_SUSPEND === 'true') {
                                             logger.debug('准备发送恢复会话缓存输出', { sessionId: newFrontendSessionId, byteLength: Buffer.byteLength(result.logData) });
@@ -543,12 +543,12 @@ export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendServ
 
             ws.on('close', (code, reason) => {
                 logger.info('WebSocket 客户端已断开连接', { userId: ws.userId, sessionId: ws.sessionId, code });
-                cleanupClientConnection(ws.sessionId);
+                requestClientConnectionCleanup(ws.sessionId);
             });
 
             ws.on('error', (error) => {
                 logger.error('WebSocket 客户端发生错误', { userId: ws.userId, sessionId: ws.sessionId, error });
-                cleanupClientConnection(ws.sessionId); // Ensure cleanup on error too
+                requestClientConnectionCleanup(ws.sessionId); // Ensure cleanup on error too
             });
         }
     });

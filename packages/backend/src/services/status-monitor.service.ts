@@ -841,13 +841,13 @@ export class StatusMonitorService {
         return [];
       }
       if (state.ws.bufferedAmount > STATUS_UPDATE_BUFFERED_AMOUNT_LIMIT) return [];
-      return [{ sessionId, state }];
+      return [{ sessionId, state, sshClient: state.sshClient }];
     });
     if (receiverList.length === 0) return;
 
     this.inFlightConnections.add(connectionId);
     try {
-      const status = await this.fetchServerStatus(receiverList[0].state.sshClient, String(connectionId));
+      const status = await this.fetchServerStatus(receiverList[0].sshClient, String(connectionId));
       for (const { sessionId, state } of receiverList) {
         this.sendPollingMessage(sessionId, state, {
           type: 'status_update',

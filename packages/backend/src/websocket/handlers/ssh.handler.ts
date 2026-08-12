@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { AuthenticatedWebSocket, ClientState } from '../types';
 import { clientStates, sftpService, statusMonitorService, auditLogService, notificationService } from '../state';
 import * as SshService from '../../services/ssh.service';
-import { cleanupClientConnection } from '../utils';
+import { requestClientConnectionCleanup } from '../utils';
 import { startDockerStatusPolling } from './docker.handler';
 import WebSocket from 'ws';
 import { flushSshOutput, scheduleSshOutput } from '../ssh-output-buffer';
@@ -137,7 +137,7 @@ export async function handleSshConnect(
                     if (ws.readyState === WebSocket.OPEN) {
                         ws.send(JSON.stringify({ type: 'ssh:error', payload: `打开 Shell 失败: ${err.message}` }));
                     }
-                    cleanupClientConnection(newSessionId);
+                    requestClientConnectionCleanup(newSessionId);
                     return;
                 }
 
@@ -177,7 +177,7 @@ export async function handleSshConnect(
                     if (ws.readyState === WebSocket.OPEN) {
                         ws.send(JSON.stringify({ type: 'ssh:disconnected', payload: 'Shell 通道已关闭。' }));
                     }
-                    cleanupClientConnection(newSessionId);
+                    requestClientConnectionCleanup(newSessionId);
                 });
 
                 if (ws.readyState === WebSocket.OPEN) ws.send(encodeCoreServerMessage({
@@ -217,7 +217,7 @@ export async function handleSshConnect(
             if (ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'ssh:error', payload: `打开 Shell 时发生意外错误: ${shellError.message}` }));
             }
-            cleanupClientConnection(newSessionId);
+            requestClientConnectionCleanup(newSessionId);
         }
 
         sshClient.on('close', () => {
@@ -228,7 +228,7 @@ export async function handleSshConnect(
                 });
             }
             logger.info('SSH 客户端连接已关闭', { sessionId: newSessionId });
-            cleanupClientConnection(newSessionId);
+            requestClientConnectionCleanup(newSessionId);
         });
         sshClient.on('error', (err: Error) => {
             flushSshOutput(newState, { force: true });
@@ -241,7 +241,7 @@ export async function handleSshConnect(
             if (ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'ssh:error', payload: `SSH 连接错误: ${err.message}` }));
             }
-            cleanupClientConnection(newSessionId);
+            requestClientConnectionCleanup(newSessionId);
         });
 
     } catch (connectError: any) {

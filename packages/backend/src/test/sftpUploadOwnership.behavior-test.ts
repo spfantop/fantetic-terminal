@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { WebSocket } from 'ws';
-import { SftpService } from '../sftp/sftp.service';
+import { SftpService, SftpSessionCleanupError } from '../sftp/sftp.service';
 
 const ownerMessages: string[] = [];
 const otherMessages: string[] = [];
@@ -57,5 +57,40 @@ assert.ok(activeUploads.has('owned-upload'), 'a foreign session must not remove 
 assert.equal(ownerMessages.length, 0, 'the owner should not receive a message caused by a foreign request');
 assert.equal(otherMessages.length, 2, 'the foreign session should receive explicit denial errors');
 assert.ok(otherMessages.every(message => JSON.parse(message).type === 'sftp:upload:error'));
+
+const sftpCloseError = new Error('SFTP transport close failed');
+clientStates.set('cleanup-session', {
+  sftp: { end: () => { throw sftpCloseError; } },
+  ws: { readyState: WebSocket.OPEN, send: () => undefined },
+});
+let cleanupUploadEndCount = 0;
+activeUploads.set('cleanup-upload', {
+  remotePath: '/cleanup/partial.txt',
+  totalSize: 10,
+  bytesWritten: 1,
+  stream: {
+    destroyed: false,
+    writableEnded: false,
+    end: (callback?: (error?: Error) => void) => {
+      cleanupUploadEndCount += 1;
+      callback?.();
+    },
+    destroy: () => undefined,
+  },
+  sessionId: 'cleanup-session',
+  chunkQueue: Promise.resolve(),
+  expectedChunkIndex: 1,
+  lastProgressSentAt: 0,
+});
+assert.throws(
+  () => service.cleanupSftpSession('cleanup-session'),
+  error => (
+    error instanceof SftpSessionCleanupError
+    && error.errors.includes(sftpCloseError)
+  ),
+);
+assert.equal(clientStates.get('cleanup-session')?.sftp, undefined);
+assert.equal(cleanupUploadEndCount, 1);
+assert.equal(activeUploads.has('cleanup-upload'), false);
 
 console.log('SFTP upload ownership behavior ok');

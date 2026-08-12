@@ -111,13 +111,14 @@ const executeSshCommand = (channelOwner: AuthenticatedWebSocket, command: string
   if (!state?.sshClient) {
     throw new Error('SSH 连接未就绪');
   }
+  const sshClient = state.sshClient;
 
   return new Promise((resolve, reject) => {
     let stdout = '';
     let stderr = '';
     let exitCode = 0;
 
-    state.sshClient.exec(command, (err, stream: ClientChannel) => {
+    sshClient.exec(command, (err, stream: ClientChannel) => {
       if (err) {
         reject(err);
         return;

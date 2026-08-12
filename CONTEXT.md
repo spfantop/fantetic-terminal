@@ -32,3 +32,4 @@
 11. Workspace test sources pass strict type checks, and each discovered behavior group runs at most once under bounded concurrency.
 12. Managed connection catalog reads are validated and single-flight per user scope; stale scope or pre-mutation responses never replace the current projection.
 13. A distributed Docker deployment selects one completed Docker release set; frontend, backend, and Remote Gateway never resolve independent moving tags.
+14. Live SSH resources have exactly one owner: the WebSocket session or the suspended-session runtime; failed transfer closes the detached channel and client before session cleanup completes.

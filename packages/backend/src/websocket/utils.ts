@@ -1,12 +1,15 @@
 import { PortInfo, ClientState } from './types';
-import { SftpService } from '../sftp/sftp.service';
-import { StatusMonitorService } from '../services/status-monitor.service';
 import { clientStates, sftpService, statusMonitorService } from './state';
 import { sshSuspendService } from '../ssh-suspend/ssh-suspend.service';
 import { clearSshOutputQueue } from './ssh-output-buffer';
 import { clearSshInputQueue } from './ssh-input-writer';
 import { finishSessionRecording } from '../session-recording/session-recording.service';
 import { createKeyedRunOnce } from '../utils/keyed-run-once';
+import { resolveSshSessionOwnership } from './ssh-session-ownership';
+import { createLogger } from '../logging/logger';
+import { runWebSocketSessionCleanup } from './session-cleanup';
+
+const logger = createLogger('WebSocketCleanup');
 
 // --- 解析 Ports 字符串的辅助函数 ---
 export function parsePortsString(portsString: string | undefined | null): PortInfo[] {
@@ -76,94 +79,41 @@ const cleanupClientConnectionImpl = async (sessionId: string | undefined) => { /
 
     const state = clientStates.get(sessionId);
     if (state) {
-        console.log(`WebSocket: 清理会话 ${sessionId} (用户: ${state.ws.username}, DB 连接 ID: ${state.dbConnectionId})...`);
-
-        // 清理会话时取消延迟输出任务，避免关闭后继续向旧 WebSocket 写入。
-        clearSshOutputQueue(state);
-        clearSshInputQueue(state);
-        await finishSessionRecording(state.sessionRecorder);
-
-        // 1. 停止状态轮询 (如果存在)
-        if (statusMonitorService) statusMonitorService.stopStatusPolling(sessionId);
-
-        // 2. 清理 SFTP 会话 (如果存在)
-        if (sftpService) sftpService.cleanupSftpSession(sessionId);
-
-        if (state.telnetService) {
-            state.telnetService.disconnect();
-        }
-
-        // 3. 处理 SSH 连接 (核心修改点)
-        if (state.isMarkedForSuspend && state.sshClient && state.sshShellStream && state.suspendLogPath && state.ws.userId !== undefined) {
-            console.log(`WebSocket: 会话 ${sessionId} 已被标记为待挂起，尝试移交给 SshSuspendService...`);
-            try {
-                const takeoverDetails = {
+        logger.info('开始清理 WebSocket 会话', { sessionId, userId: state.ws.userId, connectionId: state.dbConnectionId });
+        await runWebSocketSessionCleanup({
+            clearOutput: () => clearSshOutputQueue(state),
+            clearInput: () => clearSshInputQueue(state),
+            finishRecording: () => finishSessionRecording(state.sessionRecorder),
+            stopStatusPolling: () => statusMonitorService.stopStatusPolling(sessionId),
+            cleanupSftp: () => sftpService.cleanupSftpSession(sessionId),
+            disconnectTelnet: () => state.telnetService?.disconnect(),
+            resolveSshOwnership: async () => {
+                const ownershipResult = await resolveSshSessionOwnership({
+                    sessionId,
                     userId: state.ws.userId,
-                    originalSessionId: sessionId, // sessionId 是原始活动会话的ID
-                    sshClient: state.sshClient,
-                    channel: state.sshShellStream,
-                    connectionName: state.connectionName || '未知连接',
-                    connectionId: String(state.dbConnectionId),
-                    logIdentifier: state.suspendLogPath, // 这是基于 originalSessionId 的日志标识
-                    customSuspendName: undefined, // 如果需要，可以从 state 或其他地方获取
-                };
-                
-                // 从 state 中“分离”SSH资源，防止后续意外关闭
-                const sshClientToPass = state.sshClient;
-                const channelToPass = state.sshShellStream;
-                state.sshClient = undefined as any; // 清除引用
-                state.sshShellStream = undefined; // 清除引用
-                state.isSuspendedByService = true; // 标记为已被服务接管（即使是尝试接管）
-
-                const newSuspendId = await sshSuspendService.takeOverMarkedSession({
-                    ...takeoverDetails,
-                    sshClient: sshClientToPass, // 传递分离出来的实例
-                    channel: channelToPass,     // 传递分离出来的实例
+                    state,
+                    takeOver: details => sshSuspendService.takeOverMarkedSession(details),
                 });
-
-                if (newSuspendId) {
-                    console.log(`WebSocket: 会话 ${sessionId} 已成功移交给 SshSuspendService，新的挂起ID: ${newSuspendId}。SSH 连接将由服务管理。`);
-                    // SSH 资源已移交，不需要在这里关闭它们
-                } else {
-                    console.warn(`WebSocket: 会话 ${sessionId} 移交给 SshSuspendService 失败 (takeOverMarkedSession 返回 null)。可能 SSH 连接在标记后已断开。将执行常规清理。`);
-                    // 移交失败，执行常规关闭
-                    channelToPass?.end();
-                    sshClientToPass?.end();
-                    state.isSuspendedByService = false; // 重置标记，因为接管失败
+                if (ownershipResult === 'transferred') {
+                    logger.info('SSH 会话资源已移交给挂起 runtime', { sessionId });
+                } else if (ownershipResult === 'closed') {
+                    logger.info('SSH 会话资源已关闭', { sessionId });
+                } else if (state.isSuspendedByService) {
+                    logger.info('SSH 会话资源已由挂起 runtime 管理', { sessionId });
                 }
-            } catch (error) {
-                console.error(`WebSocket: 会话 ${sessionId} 移交给 SshSuspendService 时发生错误:`, error);
-                // 发生错误，也执行常规关闭以防资源泄露
-                if (state.sshClient) state.sshClient.end(); // 如果引用还在，尝试关闭
-                if (state.sshShellStream) state.sshShellStream.end(); // 如果引用还在，尝试关闭
-                state.isSuspendedByService = false; // 重置标记
-            }
-        } else if (!state.isSuspendedByService && state.sshClient) {
-            // 未标记挂起，也未被服务接管，执行常规关闭
-            state.sshShellStream?.end();
-            state.sshClient?.end();
-            console.log(`WebSocket: 会话 ${sessionId} 的 SSH 连接已关闭 (未标记挂起，未被服务接管)。`);
-        } else if (state.isSuspendedByService) {
-            // 已被服务接管（例如通过旧的 startSuspend 流程，或成功移交后），不在此处关闭
-            console.log(`WebSocket: 会话 ${sessionId} 的 SSH 连接已由挂起服务管理，跳过关闭。`);
-        }
-
-
-        // 4. 清理 Docker 状态轮询定时器
-        if (state.dockerStatusIntervalId) {
-            clearInterval(state.dockerStatusIntervalId);
-            console.log(`WebSocket: Cleared Docker status interval for session ${sessionId}.`);
-        }
-
-        // 5. 从状态 Map 中移除
-        clientStates.delete(sessionId);
-
-        // 6. 清除 WebSocket 上的 sessionId 关联 (可选，因为 ws 可能已关闭)
-        if (state.ws && state.ws.sessionId === sessionId) {
-            delete state.ws.sessionId;
-        }
-
-        console.log(`WebSocket: 会话 ${sessionId} 已清理。`);
+            },
+            stopDockerPolling: () => {
+                if (state.dockerStatusIntervalId) {
+                    clearInterval(state.dockerStatusIntervalId);
+                    logger.debug('已停止 WebSocket 会话的 Docker 状态轮询', { sessionId });
+                }
+            },
+            detachState: () => {
+                clientStates.delete(sessionId);
+                if (state.ws.sessionId === sessionId) delete state.ws.sessionId;
+            },
+        });
+        logger.info('WebSocket 会话清理完成', { sessionId });
     } else {
         // console.warn(`[WebSocket Utils] cleanupClientConnection: No state found for session ID ${sessionId}.`);
     }
@@ -174,3 +124,9 @@ const cleanupExistingClientConnection = createKeyedRunOnce(cleanupClientConnecti
 export const cleanupClientConnection = (sessionId: string | undefined): Promise<void> => (
     sessionId ? cleanupExistingClientConnection(sessionId) : Promise.resolve()
 );
+
+export const requestClientConnectionCleanup = (sessionId: string | undefined): void => {
+    void cleanupClientConnection(sessionId).catch(error => {
+        logger.error('WebSocket 会话资源清理失败', { sessionId, error });
+    });
+};

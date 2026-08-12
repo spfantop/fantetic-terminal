@@ -6,7 +6,7 @@ import { initializeUpgradeHandler } from './websocket/upgrade';
 import { initializeConnectionHandler } from './websocket/connection';
 import { clientStates, sftpService, statusMonitorService } from './websocket/state';
 import { sshSuspendService } from './ssh-suspend/ssh-suspend.service';
-import { cleanupClientConnection } from './websocket/utils';
+import { cleanupClientConnection, requestClientConnectionCleanup } from './websocket/utils';
 import { ClientIpResolver } from './config/client-ip';
 import { createWebSocketRuntimeLifecycle } from './websocket/runtime-lifecycle';
 import { createLogger } from './logging/logger';
@@ -57,9 +57,7 @@ export const initializeWebSocket = async (
 
     // 1. Initialize Heartbeat
     const heartbeatTimer = initializeHeartbeat(wss, {
-        cleanupClientConnection: sessionId => {
-            void cleanupClientConnection(sessionId);
-        },
+        cleanupClientConnection: requestClientConnectionCleanup,
     }); // Store timer to potentially clear it, though heartbeat.ts handles its own wss.on('close')
 
     // 2. Initialize Upgrade Handler (handles authentication and protocol upgrade)

@@ -7,20 +7,30 @@ import {
   BackendSshStatus,
   SuspendedSessionInfo,
 } from '../types/ssh-suspend.types';
-import { temporaryLogStorageService, TemporaryLogStorageService } from './temporary-log-storage.service';
+import { temporaryLogStorageService } from './temporary-log-storage.service';
 import { ClientState } from '../websocket/types';
+import { createLogger } from '../logging/logger';
 // clientStates 的直接访问已移除，因为takeOverMarkedSession现在从调用者接收所需信息
+
+const logger = createLogger('SshSuspendRuntime');
+
+interface SshSuspendLogStorage {
+  ensureLogDirectoryExists(): Promise<void>;
+  writeToLog(suspendSessionId: string, data: string): Promise<void>;
+  readLog(suspendSessionId: string): Promise<string>;
+  deleteLog(suspendSessionId: string): Promise<void>;
+}
 
 /**
  * SshSuspendService 负责管理所有用户的挂起 SSH 会话的生命周期。
  */
 export class SshSuspendService extends EventEmitter {
   private suspendedSessions: SuspendedSessionsMap = new Map();
-  private readonly logStorageService: TemporaryLogStorageService;
+  private readonly logStorageService: SshSuspendLogStorage;
 
-  constructor(logStorage?: TemporaryLogStorageService) {
+  constructor(logStorage: SshSuspendLogStorage = temporaryLogStorageService) {
     super(); // 调用 EventEmitter 的构造函数
-    this.logStorageService = logStorage || temporaryLogStorageService;
+    this.logStorageService = logStorage;
     // TODO: 考虑在服务启动时从日志目录加载持久化的 'disconnected_by_backend' 会话信息。
     // 这需要日志文件本身包含可解析的元数据。
   }
@@ -62,19 +72,28 @@ export class SshSuspendService extends EventEmitter {
       logIdentifier,
       customSuspendName,
     } = details;
-    console.log(`[SshSuspendService DEBUG] takeOverMarkedSession: Called for userId=${userId}, originalSessionId=${originalSessionId}`);
+    logger.debug('开始接管已标记的 SSH 会话', { userId, originalSessionId });
 
     // 检查 SSH client 和 channel 是否仍然可用
     // ClientChannel 有 readable 和 writable, Client 本身没有直接的此类属性
     // 如果 channel 不可读写，通常意味着底层连接有问题。
-    console.log(`[SshSuspendService DEBUG] takeOverMarkedSession: Checking channel for originalSessionId=${originalSessionId}. Readable: ${channel?.readable}, Writable: ${channel?.writable}`);
+    logger.debug('检查待接管 SSH channel 状态', { userId, originalSessionId, readable: channel?.readable, writable: channel?.writable });
     if (!channel || !channel.readable || !channel.writable) {
-        console.warn(`[SshSuspendService WARN] takeOverMarkedSession: userId=${userId}, originalSessionId=${originalSessionId}. SSH channel is not usable. readable=${channel?.readable}, writable=${channel?.writable}. Cannot take over.`);
-        // 确保如果 SSH 连接已经关闭，日志文件仍然保留，但不创建挂起条目。
-        // SshSuspendService 不会管理这个“已经断开”的会话，但日志保留供用户清理。
-        try { channel?.end(); } catch (e) { /* ignore */ }
-        try { sshClient?.end(); } catch (e) { /* ignore */ }
-        return null; // 无法接管
+        logger.warn('SSH channel 不可用，拒绝接管会话', { userId, originalSessionId, readable: channel?.readable, writable: channel?.writable });
+        // 返回 null 时资源所有权仍属于调用方，由 ownership module 统一关闭。
+        return null;
+    }
+
+    // 先完成可能失败的准备；返回 suspendSessionId 前才提交 registry ownership。
+    await this.logStorageService.ensureLogDirectoryExists();
+    if (!channel.readable || !channel.writable) {
+      logger.warn('SSH channel 在接管准备期间失效，拒绝接管会话', {
+        userId,
+        originalSessionId,
+        readable: channel.readable,
+        writable: channel.writable,
+      });
+      return null;
     }
 
     const suspendSessionId = uuidv4();
@@ -102,12 +121,7 @@ export class SshSuspendService extends EventEmitter {
       userId,
     };
 
-    userSessions.set(suspendSessionId, sessionDetails);
-    console.log(`[SshSuspendService INFO] takeOverMarkedSession: userId=${userId}, originalSessionId=${originalSessionId} taken over. New suspendSessionId=${suspendSessionId}, initial status=${sessionDetails.backendSshStatus}. Log identifier=${logIdentifier}`);
-
-    await this.logStorageService.ensureLogDirectoryExists();
-    
-    console.log(`[SshSuspendService DEBUG] takeOverMarkedSession: Setting up channel 'data' listener for suspendSessionId=${suspendSessionId}`);
+    logger.debug('为挂起 SSH 会话安装 channel 监听器', { userId, originalSessionId, suspendSessionId });
     channel.on('data', (data: Buffer) => {
       const currentDetails = userSessions.get(suspendSessionId);
       if (currentDetails?.backendSshStatus === 'hanging') {
@@ -145,7 +159,7 @@ export class SshSuspendService extends EventEmitter {
       }
     };
     
-    console.log(`[SshSuspendService DEBUG] takeOverMarkedSession: Setting up channel/client event listeners for suspendSessionId=${suspendSessionId}`);
+    logger.debug('为挂起 SSH 会话安装资源终止监听器', { userId, originalSessionId, suspendSessionId });
     channel.on('close', () => {
       console.log(`[SshSuspendService DEBUG] channel.on('close') triggered for suspendSessionId=${suspendSessionId}`);
       handleSessionTermination('channel closed');
@@ -171,6 +185,9 @@ export class SshSuspendService extends EventEmitter {
       console.log(`[SshSuspendService DEBUG] sshClient.on('end') triggered for suspendSessionId=${suspendSessionId}`);
       handleSessionTermination('client ended');
     });
+
+    userSessions.set(suspendSessionId, sessionDetails);
+    logger.info('SSH 会话资源接管完成', { userId, originalSessionId, suspendSessionId, backendSshStatus: sessionDetails.backendSshStatus });
 
     return suspendSessionId;
   }
