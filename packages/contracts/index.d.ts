@@ -73,6 +73,46 @@ export interface TerminalServerCapabilities {
   sshBinaryOutput: boolean;
 }
 
+export type TerminalConnectionProtocol = 'ssh' | 'telnet';
+
+export interface TerminalConnectedPayload {
+  connectionId: number;
+  sessionId: string;
+  serverCapabilities: TerminalServerCapabilities;
+}
+
+export type TerminalConnectedServerMessage = {
+  [Protocol in TerminalConnectionProtocol]: {
+    type: `${Protocol}:connected`;
+    payload: TerminalConnectedPayload;
+  };
+}[TerminalConnectionProtocol];
+
+export interface LatencyProbePayload {
+  id: string;
+  sentAt: number;
+  sessionId: string;
+}
+
+export interface LatencyPingMessage {
+  type: 'client:ping';
+  payload: LatencyProbePayload;
+}
+
+export interface LatencyPongMessage {
+  type: 'client:pong';
+  payload: LatencyProbePayload & { serverAt: number };
+}
+
+export interface SshOutputServerMessage {
+  type: 'ssh:output';
+  payload: string | Uint8Array;
+  encoding: 'binary' | 'base64';
+}
+
+export type CoreClientMessage = LatencyPingMessage;
+export type CoreServerMessage = TerminalConnectedServerMessage | LatencyPongMessage;
+
 export type ApiErrorArgument = string | number | boolean | null;
 
 /**

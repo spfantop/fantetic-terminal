@@ -7,6 +7,7 @@ import { AccessControlApplication } from '../access-control/access-control.appli
 import { accessControlRepository } from '../access-control/access-control.repository';
 import { finishSessionRecording, startSessionRecording } from '../session-recording/session-recording.service';
 import { createLogger } from '../logging/logger';
+import { encodeCoreServerMessage } from '../websocket/core-server-message';
 
 const accessControlApplication = new AccessControlApplication(accessControlRepository);
 const logger = createLogger('TelnetHandler');
@@ -119,11 +120,16 @@ export async function handleTelnetConnect(ws: AuthenticatedWebSocket, payload: T
   });
 
   await updateLastConnected(connectionId, Math.floor(Date.now() / 1000));
-  sendJson(ws, 'telnet:connected', {
-    connectionId,
-    sessionId,
-    serverCapabilities: { sshBinaryInput: false, sshBinaryOutput: true },
-  });
+  if (ws.readyState === 1) {
+    ws.send(encodeCoreServerMessage({
+      type: 'telnet:connected',
+      payload: {
+        connectionId,
+        sessionId,
+        serverCapabilities: { sshBinaryInput: false, sshBinaryOutput: true },
+      },
+    }));
+  }
 }
 
 export function handleTelnetInput(ws: AuthenticatedWebSocket, payload: TelnetInputPayload): void {

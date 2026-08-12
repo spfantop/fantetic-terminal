@@ -30,7 +30,8 @@ assert(
 assert.match(connectionStore, /'TELNET'/);
 assert.match(sessionTypes, /'telnet'/);
 assert.match(sessionActions, /openTelnetSession/);
-assert.match(webSocketManager, /telnet:connect/);
+assert.match(webSocketManager, /protocol\?: 'ssh' \| 'telnet'/);
+assert.match(webSocketManager, /type:\s*`\$\{connectionProtocol\}:connect`/);
 assert.match(webSocketManager, /frontendSessionId:\s*instanceSessionId/);
 assert.match(webSocketManager, /sendTelnetInput/);
 assert.match(terminalManager, /telnet:output/);

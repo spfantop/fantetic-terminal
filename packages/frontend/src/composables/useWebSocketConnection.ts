@@ -1,5 +1,10 @@
 import { ref, shallowRef, computed, readonly } from 'vue';
 import { useI18n } from 'vue-i18n'; // +++ Add import for useI18n +++
+import type {
+    LatencyPingMessage,
+    LatencyPongMessage,
+    SshOutputServerMessage,
+} from '@fantetic-terminal/contracts';
 // 从 websocket.types.ts 导入并重新导出 ConnectionStatus
 import type { ConnectionStatus as WsConnectionStatusType, MessagePayload, WebSocketMessage, MessageHandler } from '../types/websocket.types';
 import { debugLog } from './useDebugLog';
@@ -7,6 +12,7 @@ import {
     MAX_WEBSOCKET_RECONNECT_ATTEMPTS,
     resolveWebSocketReconnectDelayMs,
 } from '../utils/webSocketReconnectPolicy';
+import { decodeServerMessageFrame } from '../websocket/decode-server-message';
 
 // 导出类型别名，以便其他模块可以使用
 export type WsConnectionStatus = WsConnectionStatusType;
@@ -82,6 +88,13 @@ export function createWebSocketConnectionManager(
         ws.value === socket && activeConnectionGeneration === generation
     );
 
+    const describeFrame = (rawData: unknown) => {
+        if (typeof rawData === 'string') return { dataType: 'text', charLength: rawData.length };
+        if (rawData instanceof ArrayBuffer) return { dataType: 'binary', byteLength: rawData.byteLength };
+        if (ArrayBuffer.isView(rawData)) return { dataType: 'binary', byteLength: rawData.byteLength };
+        return { dataType: typeof rawData, byteLength: 0 };
+    };
+
     /**
      * 安全地获取状态文本的辅助函数
      * @param {string} statusKey - i18n 键名 (例如 'connectingWs')
@@ -104,7 +117,7 @@ export function createWebSocketConnectionManager(
      * @param {MessagePayload} payload - 消息负载
      * @param {WebSocketMessage} fullMessage - 完整的消息对象
      */
-    const dispatchSshOutputMessage = (message: SshOutputFastMessage) => {
+    const dispatchSshOutputMessage = (message: SshOutputServerMessage) => {
         connectionDiagnostics.value.lastMessageAt = Date.now();
         if (sshOutputHandlers.size > 0) {
             sshOutputHandlers.forEach(handler => {
@@ -145,10 +158,6 @@ export function createWebSocketConnectionManager(
         }
     };
 
-    const SSH_OUTPUT_MESSAGE_PREFIX = '{"type":"ssh:output","payload":"';
-    const SSH_OUTPUT_MESSAGE_SUFFIX = '","encoding":"base64"}';
-    const BASE64_PAYLOAD_PATTERN = /^[A-Za-z0-9+/=]*$/;
-    const SSH_OUTPUT_BINARY_HEADER = new Uint8Array([0x53, 0x53, 0x48, 0x4f]); // SSHO
     const SSH_INPUT_BINARY_HEADER = new Uint8Array([0x53, 0x53, 0x48, 0x49]); // SSHI
     const SSH_INPUT_BINARY_HEADER_LENGTH = SSH_INPUT_BINARY_HEADER.length;
     const SSH_INPUT_ASCII_FRAME_CACHE: Uint8Array[] = Array.from({ length: 128 }, (_, code) => {
@@ -158,56 +167,6 @@ export function createWebSocketConnectionManager(
         return frame;
     });
     const textEncoder = new TextEncoder();
-    const SSH_OUTPUT_BINARY_HEADER_LENGTH = SSH_OUTPUT_BINARY_HEADER.length;
-
-    const hasSshOutputBinaryHeader = (bytes: Uint8Array) => (
-        bytes.length >= SSH_OUTPUT_BINARY_HEADER_LENGTH
-        && bytes[0] === SSH_OUTPUT_BINARY_HEADER[0]
-        && bytes[1] === SSH_OUTPUT_BINARY_HEADER[1]
-        && bytes[2] === SSH_OUTPUT_BINARY_HEADER[2]
-        && bytes[3] === SSH_OUTPUT_BINARY_HEADER[3]
-    );
-
-    type SshOutputFastMessage = {
-        payload: string | Uint8Array;
-        encoding: 'binary' | 'base64';
-    };
-
-    const parseSshBinaryOutputMessage = (rawData: unknown): SshOutputFastMessage | null => {
-        let bytes: Uint8Array | null = null;
-        if (rawData instanceof ArrayBuffer) {
-            bytes = new Uint8Array(rawData);
-        } else if (ArrayBuffer.isView(rawData)) {
-            bytes = new Uint8Array(rawData.buffer, rawData.byteOffset, rawData.byteLength);
-        }
-
-        if (!bytes || !hasSshOutputBinaryHeader(bytes)) return null;
-
-        return {
-            payload: bytes.subarray(SSH_OUTPUT_BINARY_HEADER_LENGTH),
-            encoding: 'binary',
-        };
-    };
-
-    const parseSshOutputMessageFastPath = (rawData: unknown): SshOutputFastMessage | null => {
-        if (typeof rawData !== 'string') return null;
-        if (!rawData.startsWith(SSH_OUTPUT_MESSAGE_PREFIX) || !rawData.endsWith(SSH_OUTPUT_MESSAGE_SUFFIX)) return null;
-
-        const payload = rawData.slice(SSH_OUTPUT_MESSAGE_PREFIX.length, -SSH_OUTPUT_MESSAGE_SUFFIX.length);
-        if (!BASE64_PAYLOAD_PATTERN.test(payload)) return null;
-
-        return {
-            payload,
-            encoding: 'base64',
-        };
-    };
-
-    const parseSshOutputFastMessage = (rawData: unknown): SshOutputFastMessage | null => (
-        parseSshBinaryOutputMessage(rawData) ?? parseSshOutputMessageFastPath(rawData)
-    );
-
-    const parseIncomingMessage = (rawData: unknown): WebSocketMessage => JSON.parse(rawData?.toString?.() ?? String(rawData));
-
     const clearActiveLatencyProbe = () => {
         activeLatencyProbeId = '';
         activeLatencyProbeSentAt = 0;
@@ -248,14 +207,15 @@ export function createWebSocketConnectionManager(
         connectionDiagnostics.value.lastBufferedAmount = currentWs.bufferedAmount;
 
         try {
-            currentWs.send(JSON.stringify({
+            const pingMessage: LatencyPingMessage = {
                 type: 'client:ping',
                 payload: {
                     id: activeLatencyProbeId,
                     sentAt: activeLatencyProbeSentAt,
                     sessionId: instanceSessionId,
                 },
-            }));
+            };
+            currentWs.send(JSON.stringify(pingMessage));
         } catch (error) {
             connectionDiagnostics.value.sendFailureCount += 1;
             console.error(`[WebSocket ${instanceSessionId}] 发送应用层延迟探针失败:`, error);
@@ -277,17 +237,9 @@ export function createWebSocketConnectionManager(
         appLatencyProbeTimer = setInterval(sendAppLatencyProbe, APP_LATENCY_PROBE_INTERVAL_MS);
     };
 
-    const handleAppLatencyPong = (payload: MessagePayload) => {
-        if (!payload || typeof payload !== 'object') return;
-
-        const payloadRecord = payload as Record<string, unknown>;
-        const pongId = typeof payloadRecord.id === 'string' ? payloadRecord.id : '';
-        if (activeLatencyProbeId && pongId && pongId !== activeLatencyProbeId) return;
-
-        const sentAt = Number(payloadRecord.sentAt ?? activeLatencyProbeSentAt);
-        if (!Number.isFinite(sentAt) || sentAt <= 0) return;
-
-        recordLatencySample(Date.now() - sentAt);
+    const handleAppLatencyPong = (payload: LatencyPongMessage['payload']) => {
+        if (activeLatencyProbeId && payload.id !== activeLatencyProbeId) return;
+        recordLatencySample(Date.now() - payload.sentAt);
         clearActiveLatencyProbe();
     };
 
@@ -430,55 +382,56 @@ export function createWebSocketConnectionManager(
 
             currentSocket.onmessage = (event: MessageEvent) => {
                 if (!isCurrentConnection(currentSocket, connectionGeneration)) return;
+                const rawData = event.data;
                 try {
                     connectionDiagnostics.value.lastMessageAt = Date.now();
-                    const rawData = event.data;
-                    const sshOutputMessage = parseSshOutputFastMessage(rawData);
-                    if (sshOutputMessage) {
-                        dispatchSshOutputMessage(sshOutputMessage);
+                    const decodedMessage = decodeServerMessageFrame(rawData);
+                    if (decodedMessage.kind === 'ssh-output') {
+                        dispatchSshOutputMessage(decodedMessage.message);
                         return;
                     }
-
-                    const message = parseIncomingMessage(rawData);
-                    if (message.type === 'client:pong') {
-                        handleAppLatencyPong(message.payload);
+                    const message = decodedMessage.message;
+                    if (decodedMessage.kind === 'latency-pong') {
+                        handleAppLatencyPong(decodedMessage.message.payload);
                     }
 
                     // --- 更新此实例的连接状态 ---
-                    if (message.type === 'ssh:connected' || message.type === 'telnet:connected') {
+                    if (decodedMessage.kind === 'terminal-connected') {
                         reconnectAttempts = 0;
                         connectionDiagnostics.value.reconnectAttempts = 0;
-                        serverSupportsSshBinaryInput = message.payload?.serverCapabilities?.sshBinaryInput === true;
+                        serverSupportsSshBinaryInput = decodedMessage.message.payload.serverCapabilities.sshBinaryInput;
                         if (connectionStatus.value !== 'connected') {
                             connectionStatus.value = 'connected';
                             statusMessage.value = getStatusText('connected');
                         }
-                    } else if (message.type === 'ssh:disconnected' || message.type === 'telnet:disconnected') {
+                    } else if (decodedMessage.kind === 'legacy' && (message.type === 'ssh:disconnected' || message.type === 'telnet:disconnected')) {
                         if (connectionStatus.value !== 'disconnected') {
                             connectionStatus.value = 'disconnected';
                             statusMessage.value = getStatusText('disconnected', { reason: message.payload || '未知原因' });
                             isSftpReady.value = false; // SSH 断开，SFTP 也应不可用
                         }
-                    } else if (message.type === 'ssh:error' || message.type === 'telnet:error' || message.type === 'error') {
+                    } else if (decodedMessage.kind === 'legacy' && (message.type === 'ssh:error' || message.type === 'telnet:error' || message.type === 'error')) {
                         if (connectionStatus.value !== 'disconnected' && connectionStatus.value !== 'error') {
                             connectionStatus.value = 'error';
-                            let errorMsg = message.payload || '未知错误';
-                            if (typeof errorMsg === 'object' && errorMsg.message) errorMsg = errorMsg.message;
+                            const rawError = message.payload;
+                            const errorMsg = rawError && typeof rawError === 'object' && 'message' in rawError
+                                ? String(rawError.message)
+                                : String(rawError || '未知错误');
                             statusMessage.value = getStatusText('error', { message: errorMsg });
                             isSftpReady.value = false;
                         }
-                    } else if (message.type === 'sftp_ready') {
+                    } else if (decodedMessage.kind === 'legacy' && message.type === 'sftp_ready') {
                         debugLog(`[WebSocket ${instanceSessionId}] SFTP 会话已就绪。`);
                         isSftpReady.value = true;
                     }
                     // --- 状态更新结束 ---
 
                     // 分发消息给此实例的处理器
-                    dispatchMessage(message.type, message.payload, message);
+                    dispatchMessage(message.type, message.payload, message as WebSocketMessage);
 
                 } catch (e) {
-                    console.error(`[WebSocket ${instanceSessionId}] 处理消息时出错:`, e, '原始数据:', event.data);
-                    dispatchMessage('internal:raw', event.data, { type: 'internal:raw' });
+                    console.error(`[WebSocket ${instanceSessionId}] 处理消息时出错:`, e, describeFrame(rawData));
+                    dispatchMessage('internal:raw', rawData, { type: 'internal:raw' });
                 }
             };
 

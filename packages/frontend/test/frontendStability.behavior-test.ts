@@ -33,7 +33,7 @@ assert.doesNotMatch(
   /reconnectAttempts = 0/,
 );
 assert.match(
-  websocket.match(/message\.type === 'ssh:connected'[\s\S]*?\n\s{20}\}/)?.[0] ?? '',
+  websocket.match(/decodedMessage\.kind === 'terminal-connected'[\s\S]*?\n\s{20}\}/)?.[0] ?? '',
   /reconnectAttempts = 0/,
 );
 

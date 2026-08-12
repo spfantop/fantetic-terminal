@@ -39,7 +39,6 @@ assert.match(wsConnectionSource, /startAppLatencyProbe/);
 assert.match(wsConnectionSource, /lastLatencyMs/);
 assert.match(wsConnectionSource, /missedLatencyProbeCount/);
 assert.match(wsConnectionHandlerSource, /case 'client:ping'/);
-assert.match(wsConnectionHandlerSource, /client:pong/);
 assert.match(sshServiceSource, /resolveSshKeepaliveConfig/);
 assert.match(sshServiceSource, /SSH_KEEPALIVE_INTERVAL_MS/);
 assert.match(sshServiceSource, /SSH_KEEPALIVE_COUNT_MAX/);

@@ -34,6 +34,7 @@ import { readOwnedClientState } from './session-access';
 import { BoundedTaskQueue } from './bounded-task-queue';
 import { installWebSocketErrorSanitizer } from './error-sanitizer';
 import { createLogger } from '../logging/logger';
+import { createLatencyPongMessage, encodeCoreServerMessage } from './core-server-message';
 import { backendMetrics } from '../observability/metrics';
 
 const logger = createLogger('WebSocketConnection');
@@ -177,13 +178,7 @@ export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendServ
                         switch (type) {
                             case 'client:ping':
                                 if (ws.readyState === WebSocket.OPEN) {
-                                    ws.send(JSON.stringify({
-                                        type: 'client:pong',
-                                        payload: {
-                                            ...(payload && typeof payload === 'object' ? payload : {}),
-                                            serverAt: Date.now(),
-                                        },
-                                    }));
+                                    ws.send(encodeCoreServerMessage(createLatencyPongMessage(parsedMessage)));
                                 }
                                 break;
 
@@ -342,7 +337,7 @@ export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendServ
 
                                         // +++ 发送 ssh:connected 消息 +++
                                         if (ws.readyState === WebSocket.OPEN) {
-                                            ws.send(JSON.stringify({
+                                            ws.send(encodeCoreServerMessage({
                                                 type: 'ssh:connected',
                                                 payload: {
                                                     connectionId: newSessionState.dbConnectionId, // 使用已恢复的 dbConnectionId

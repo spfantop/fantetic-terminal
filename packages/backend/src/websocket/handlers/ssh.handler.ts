@@ -13,6 +13,7 @@ import { AccessControlApplication } from '../../access-control/access-control.ap
 import { accessControlRepository } from '../../access-control/access-control.repository';
 import { startSessionRecording } from '../../session-recording/session-recording.service';
 import { createLogger } from '../../logging/logger';
+import { encodeCoreServerMessage } from '../core-server-message';
 
 const accessControlApplication = new AccessControlApplication(accessControlRepository);
 const logger = createLogger('SshHandler');
@@ -179,7 +180,7 @@ export async function handleSshConnect(
                     cleanupClientConnection(newSessionId);
                 });
 
-                if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({
+                if (ws.readyState === WebSocket.OPEN) ws.send(encodeCoreServerMessage({
                     type: 'ssh:connected',
                     payload: {
                         connectionId: dbConnectionIdAsNumber,
