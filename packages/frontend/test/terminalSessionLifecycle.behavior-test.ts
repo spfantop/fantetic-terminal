@@ -4,14 +4,6 @@ import { createPinia, setActivePinia } from 'pinia';
 import { FakeWebSocket } from './support/terminal-session-runtime';
 
 const main = async () => {
-  const { default: apiClient } = await import('../src/utils/apiClient');
-  apiClient.defaults.adapter = async config => ({
-    data: config.url?.includes('nav-bar-visibility') ? { visible: true } : null,
-    status: 200,
-    statusText: 'OK',
-    headers: {},
-    config,
-  });
   const [{ createTerminalSessionLifecycle }, sessionState, connectionStoreModule] = await Promise.all([
     import('../src/stores/session/terminal-session-lifecycle'),
     import('../src/stores/session/state'),

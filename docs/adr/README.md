@@ -14,3 +14,4 @@
 | [0010](0010-own-dependencies-in-caller-workspaces.md) | Accepted | Make caller workspaces authoritative for dependency ownership |
 | [0011](0011-defer-optional-connection-forms.md) | Accepted | Defer optional connection forms behind one loading boundary |
 | [0012](0012-own-terminal-session-lifecycle.md) | Accepted | Own terminal session lifecycle behind one runtime interface |
+| [0013](0013-initialize-layout-explicitly.md) | Accepted | Initialize the authenticated layout projection explicitly before mount |

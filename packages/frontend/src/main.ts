@@ -7,6 +7,7 @@ import i18n, { initializeLocale } from './i18n';
 import { useAuthStore } from './stores/auth.store'; 
 import { useSettingsStore } from './stores/settings.store'; 
 import { useAppearanceStore } from './stores/appearance.store'; 
+import { useLayoutStore } from './stores/layout.store';
 import './style.css';
 import '@fortawesome/fontawesome-free/css/all.min.css';
 import 'splitpanes/dist/splitpanes.css';
@@ -55,16 +56,18 @@ const localeInitialization = initializeLocale();
 
     // 2. 如果不需要设置且用户已认证，则加载用户特定数据
     if (!authStore.needsSetup && authStore.isAuthenticated) {
-      debugLog("[main.ts] 用户已认证且无需设置，加载设置和外观数据...");
+      debugLog("[main.ts] 用户已认证且无需设置，加载设置、外观和布局数据...");
       const settingsStore = useSettingsStore(pinia);
+      const layoutStore = useLayoutStore(pinia);
       try {
         await Promise.all([
           settingsStore.loadInitialSettings(),
-          appearanceStore.loadInitialAppearanceData() // 调用已实例化的 store 的 action
+          appearanceStore.loadInitialAppearanceData(),
+          layoutStore.initialize(),
         ]);
-        debugLog("[main.ts] 用户设置和外观数据加载完成。");
+        debugLog("[main.ts] 用户设置、外观和布局数据加载完成。");
       } catch (error) {
-         console.error("[main.ts] 加载用户设置或外观数据失败:", error);
+         console.error("[main.ts] 加载用户设置、外观或布局数据失败:", error);
          // 加载失败也继续，可能使用默认值或显示错误
       }
     } else if (authStore.needsSetup) {
