@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const sshTerminalManager = readFileSync(resolve('src/composables/useSshTerminal.ts'), 'utf8');
-const sshSuspendActions = readFileSync(resolve('src/stores/session/actions/sshSuspendActions.ts'), 'utf8');
+const terminalSessionLifecycle = readFileSync(resolve('src/stores/session/terminal-session-lifecycle.ts'), 'utf8');
 
 assert.match(
   sshTerminalManager,
@@ -12,8 +12,8 @@ assert.match(
 );
 
 assert.match(
-  sshSuspendActions,
-  /session\.terminalManager\.writeOutput\(payload\.data\)/,
+  terminalSessionLifecycle,
+  /terminalManager\.writeOutput\(result\.data\)/,
   'restored SSH cached chunks should be written through terminalManager.writeOutput so xterm receives the original output',
 );
 
@@ -24,7 +24,7 @@ assert.match(
 );
 
 assert.doesNotMatch(
-  sshSuspendActions,
+  terminalSessionLifecycle,
   /SSH Suspend Frontend[\s\S]{0,220}terminalInstance\.value\.write\(payload\.data\)/,
   'restored SSH cached chunks must not bypass the terminal output scheduler',
 );

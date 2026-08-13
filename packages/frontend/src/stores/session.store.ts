@@ -27,6 +27,7 @@ import * as editorActions from './session/actions/editorActions';
 import * as sftpManagerActions from './session/actions/sftpManagerActions';
 import * as modalActions from './session/actions/modalActions';
 import * as sshSuspendActions from './session/actions/sshSuspendActions'; 
+import { createTerminalSessionLifecycle } from './session/terminal-session-lifecycle';
 
 
 import type { FileInfo } from './fileEditor.store';
@@ -42,6 +43,7 @@ export const useSessionStore = defineStore('session', () => {
   const router = useRouter();
   const overlayStore = useGlobalOverlayStore();
   const { isRdpModalOpen, rdpConnectionInfo, isVncModalOpen, vncConnectionInfo } = storeToRefs(overlayStore);
+  const terminalSessionLifecycle = createTerminalSessionLifecycle({ connectionsStore, t });
 
   // --- 包装 Actions 以注入依赖 ---
 
@@ -59,20 +61,30 @@ export const useSessionStore = defineStore('session', () => {
 
   // Session Actions
   const openNewSession = (connectionId: number | string) =>
-    sessionActions.openNewSession(connectionId, { connectionsStore, t }); // 移除了 router 和不正确的 registerSshSuspendHandlers
-  const activateSession = (sessionId: string) => sessionActions.activateSession(sessionId);
-  const closeSession = (sessionId: string) => sessionActions.closeSession(sessionId);
-  const handleConnectRequest = (connection: ConnectionInfo, options?: { navigateToWorkspace?: boolean }) =>
-    sessionActions.handleConnectRequest(connection, {
-      connectionsStore,
-      router,
-      openRdpSessionAction: openRdpSession,
-      t,
-      navigateToWorkspace: options?.navigateToWorkspace,
-    });
+    terminalSessionLifecycle.open(connectionId);
+  const activateSession = (sessionId: string) => terminalSessionLifecycle.activate(sessionId);
+  const closeSession = (sessionId: string) => (
+    terminalSessionLifecycle.close(sessionId) || sessionActions.closeRemoteDesktopSession(sessionId)
+  );
+  const handleConnectRequest = (connection: ConnectionInfo, options?: { navigateToWorkspace?: boolean }) => {
+    const sessionId = connection.type === 'RDP'
+      ? openRdpSession(connection)
+      : connection.type === 'VNC'
+        ? openRemoteDesktopSession(connection)
+        : terminalSessionLifecycle.connect(connection);
+    if (sessionId && options?.navigateToWorkspace !== false) {
+      void router.push({ name: 'Connections' });
+    }
+    return sessionId;
+  };
   const handleOpenNewSession = (connectionId: number | string) =>
-    sessionActions.handleOpenNewSession(connectionId, { connectionsStore, t }); // 移除了 router 和不正确的 registerSshSuspendHandlers
-  const cleanupAllSessions = () => sessionActions.cleanupAllSessions();
+    terminalSessionLifecycle.open(connectionId);
+  const cleanupAllSessions = () => {
+    for (const sessionId of Array.from(sessions.value.keys())) closeSession(sessionId);
+    activeSessionId.value = null;
+    poppedOutSessionIds.value = [];
+  };
+  const resumeSshSession = (suspendSessionId: string) => terminalSessionLifecycle.resume(suspendSessionId);
 
   // SFTP Manager Actions
   const getOrCreateSftpManager = (sessionId: string, instanceId: string) =>
@@ -181,5 +193,6 @@ export const useSessionStore = defineStore('session', () => {
 
     // SSH Suspend Actions (直接从模块导出，Pinia 会处理)
     ...sshSuspendActions,
+    resumeSshSession,
   };
 });

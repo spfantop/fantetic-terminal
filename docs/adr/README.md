@@ -13,3 +13,4 @@
 | [0009](0009-centralize-authentication-invalidation.md) | Accepted | Centralize authentication invalidation behind one runtime interface |
 | [0010](0010-own-dependencies-in-caller-workspaces.md) | Accepted | Make caller workspaces authoritative for dependency ownership |
 | [0011](0011-defer-optional-connection-forms.md) | Accepted | Defer optional connection forms behind one loading boundary |
+| [0012](0012-own-terminal-session-lifecycle.md) | Accepted | Own terminal session lifecycle behind one runtime interface |

@@ -7,6 +7,8 @@ const basicInfo = fs.readFileSync(path.resolve('src/components/AddConnectionForm
 const connectionStore = fs.readFileSync(path.resolve('src/stores/connections.store.ts'), 'utf8');
 const sessionTypes = fs.readFileSync(path.resolve('src/stores/session/types.ts'), 'utf8');
 const sessionActions = fs.readFileSync(path.resolve('src/stores/session/actions/sessionActions.ts'), 'utf8');
+const sessionStore = fs.readFileSync(path.resolve('src/stores/session.store.ts'), 'utf8');
+const terminalSessionLifecycle = fs.readFileSync(path.resolve('src/stores/session/terminal-session-lifecycle.ts'), 'utf8');
 const webSocketManager = fs.readFileSync(path.resolve('src/composables/useWebSocketConnection.ts'), 'utf8');
 const terminalManager = fs.readFileSync(path.resolve('src/composables/useSshTerminal.ts'), 'utf8');
 const layoutRenderer = fs.readFileSync(path.resolve('src/components/LayoutRenderer.vue'), 'utf8');
@@ -29,7 +31,8 @@ assert(
 );
 assert.match(connectionStore, /'TELNET'/);
 assert.match(sessionTypes, /'telnet'/);
-assert.match(sessionActions, /openTelnetSession/);
+assert.match(terminalSessionLifecycle, /connection\.type === 'TELNET' \? 'telnet' : 'ssh'/);
+assert.match(sessionStore, /terminalSessionLifecycle\.connect\(connection\)/);
 assert.match(webSocketManager, /protocol\?: 'ssh' \| 'telnet'/);
 assert.match(webSocketManager, /type:\s*`\$\{connectionProtocol\}:connect`/);
 assert.match(webSocketManager, /frontendSessionId:\s*instanceSessionId/);
@@ -72,7 +75,7 @@ assert.doesNotMatch(
 assert.match(workspaceView, /isTerminalShellSessionKind = \(kind\?: string\) => kind === 'ssh' \|\| kind === 'telnet'/);
 assert.match(workspaceView, /const manager = isTerminalShellSessionKind\(session\?\.kind\)\s*\?\s*\(session\.terminalManager/);
 assert.match(sessionActions, /isTerminalShellSessionKind = \(kind\?: string\) => kind === 'ssh' \|\| kind === 'telnet'/);
-assert.match(sessionActions, /else if \(connection\.type === 'TELNET'\) \{\s*const connIdStr = String\(connection\.id\);\s*openTelnetSession\(connIdStr, \{ connectionsStore, t \}\);/s);
+assert.match(terminalSessionLifecycle, /connection\.type !== 'SSH' && connection\.type !== 'TELNET'/);
 assert.doesNotMatch(sessionActions, /currentActiveSession\?\.kind === 'ssh' \|\| currentActiveSession\?\.kind === 'telnet'/);
 assert.match(terminalTabBar, /isTerminalShellSessionKind = \(kind\?: string\) => kind === 'ssh' \|\| kind === 'telnet'/);
 assert.match(terminalTabBar, /isTerminalShellSessionKind\(activeSessionState\.value\?\.kind\)/);

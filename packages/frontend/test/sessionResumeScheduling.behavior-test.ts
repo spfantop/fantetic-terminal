@@ -40,13 +40,17 @@ assert.equal(
   'connection wait must stop at its timeout',
 );
 
+const lifecycleSource = readFileSync(
+  resolve(import.meta.dirname, '..', 'packages/frontend/src/stores/session/terminal-session-lifecycle.ts'),
+  'utf8',
+);
 const actionSource = readFileSync(
   resolve(import.meta.dirname, '..', 'packages/frontend/src/stores/session/actions/sshSuspendActions.ts'),
   'utf8',
 );
 assert.match(actionSource, /createSingleFlight/, 'suspended-session refresh must use single-flight');
-assert.match(actionSource, /waitForRefValue/, 'session resume must wait reactively for WebSocket connection');
-assert.doesNotMatch(actionSource, /MAX_WAIT_ITERATIONS/, 'session resume must not use timer polling');
+assert.match(lifecycleSource, /waitForRefValue/, 'session resume must wait reactively for WebSocket connection');
+assert.doesNotMatch(lifecycleSource, /MAX_WAIT_ITERATIONS/, 'session resume must not use timer polling');
 
 const viewSource = readFileSync(
   resolve(import.meta.dirname, '..', 'packages/frontend/src/views/SuspendedSshSessionsView.vue'),

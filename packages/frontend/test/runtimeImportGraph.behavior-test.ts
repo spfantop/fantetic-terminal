@@ -50,7 +50,8 @@ assert.equal(
   false,
   'authentication runtime modules must remain outside runtime import cycles',
 );
-assert.ok(
-  frontendCycleList.every(group => group.length <= 2),
-  'frontend runtime SCCs must not regress beyond the current two-module baseline',
+assert.deepEqual(
+  frontendCycleList,
+  [],
+  'frontend source modules must remain free of runtime import cycles',
 );

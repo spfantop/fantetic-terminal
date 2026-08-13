@@ -7,6 +7,7 @@
 - **Docker release set**: the four image digests built from one source revision and published under one immutable version.
 - **Locale runtime**: the frontend projection that loads one selected language, keeps the default fallback available, and commits language changes across vue-i18n, the document, local preference, and persisted settings.
 - **Authentication runtime**: the frontend coordinator that invalidates a Web session projection, clears user-scoped cache data, and completes login navigation without coupling the HTTP client or auth store to the router.
+- **Terminal session lifecycle**: the frontend owner of SSH/Telnet manager creation, protocol-handler registration, suspended-session resume, activation, and deterministic resource cleanup.
 
 ## Access-control language
 
@@ -38,3 +39,4 @@
 15. The locale runtime installs the default fallback before mounting, loads non-default languages on demand, and serializes persisted language changes so the active locale, document language, and settings projection cannot diverge.
 16. The authentication runtime is installed before the first protected HTTP request; concurrent invalidations share one completion, Desktop invalidation is a no-op, and authentication modules remain outside runtime import cycles.
 17. Each dependency is declared by the workspace that calls it; root dependencies serve root build tools, browser manifests exclude server-native packages, and runtime packaging follows manifest ownership without ignore lists.
+18. A terminal session registers protocol handlers before connecting, resume failures clean the pre-created frontend session exactly once, Telnet never receives SSH suspend handlers, and frontend source modules remain free of runtime import cycles.

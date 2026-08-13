@@ -25,8 +25,8 @@ assert.equal(oversized.pendingBytes, 0);
 assert.equal(oversized.droppedBytes, 14);
 assert.equal(oversized.accepted, false);
 
-const suspendActions = readFileSync(resolve('src/stores/session/actions/sshSuspendActions.ts'), 'utf8');
-assert.match(suspendActions, /handleSshOutputCachedChunk[\s\S]*terminalManager\.writeOutput\(payload\.data\)/);
-assert.doesNotMatch(suspendActions, /pendingOutput\.push\(payload\.data\)/);
+const terminalSessionLifecycle = readFileSync(resolve('src/stores/session/terminal-session-lifecycle.ts'), 'utf8');
+assert.match(terminalSessionLifecycle, /SSH_OUTPUT_CACHED_CHUNK[\s\S]*terminalManager\.writeOutput\(result\.data\)/);
+assert.doesNotMatch(terminalSessionLifecycle, /pendingOutput\.push\(result\.data\)/);
 
 console.log('terminal output bounds behavior ok');
