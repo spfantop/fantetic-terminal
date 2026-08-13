@@ -3,8 +3,7 @@ import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue';
 import { RouterLink } from 'vue-router';
 import type { ComponentPublicInstance } from 'vue';
 import draggable from 'vuedraggable';
-import AddConnectionForm from '../components/AddConnectionForm.vue';
-import BatchEditConnectionForm from '../components/BatchEditConnectionForm.vue';
+import LazyConnectionForm from '../components/LazyConnectionForm.vue';
 import ServerIcon from '../components/ServerIcon.vue';
 import WorkspaceView from './WorkspaceView.vue';
 import { useConnectionsStore } from '../stores/connections.store';
@@ -2319,9 +2318,10 @@ const handleOpenAllTargetConnections = async () => {
       </div>
     </teleport>
 
-    <AddConnectionForm
+    <LazyConnectionForm
       v-if="showAddEditConnectionForm"
-      :connectionToEdit="connectionToEdit"
+      mode="single"
+      :connection-to-edit="connectionToEdit"
       :initial-tag-ids="initialConnectionTagIds"
       :initial-folder-id="initialConnectionFolderId"
       @close="handleFormClose"
@@ -2329,8 +2329,9 @@ const handleOpenAllTargetConnections = async () => {
       @connection-updated="handleConnectionModified"
     />
 
-    <BatchEditConnectionForm
+    <LazyConnectionForm
       v-if="showBatchEditForm"
+      mode="batch"
       :visible="showBatchEditForm"
       :connection-ids="Array.from(selectedConnectionIdsForBatch)"
       @update:visible="handleBatchEditFormClose"

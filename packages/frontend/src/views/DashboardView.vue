@@ -6,7 +6,7 @@ import { storeToRefs } from 'pinia';
 import { formatDistanceToNow } from 'date-fns';
 import { zhCN, enUS, ja } from 'date-fns/locale';
 import type { Locale } from 'date-fns';
-import AddConnectionForm from '../components/AddConnectionForm.vue';
+import LazyConnectionForm from '../components/LazyConnectionForm.vue';
 import { useConnectionsStore } from '../stores/connections.store';
 import { useAuditLogStore } from '../stores/audit.store';
 import { useSessionStore } from '../stores/session.store';
@@ -718,9 +718,10 @@ const formatAuditDetails = (details: AuditLogEntry['details']) => {
       </section>
     </div>
 
-    <AddConnectionForm
+    <LazyConnectionForm
       v-if="showAddEditConnectionForm"
-      :connectionToEdit="connectionToEdit"
+      mode="single"
+      :connection-to-edit="connectionToEdit"
       @close="handleFormClose"
       @connection-added="handleConnectionModified"
       @connection-updated="handleConnectionModified"

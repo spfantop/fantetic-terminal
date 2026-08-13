@@ -8,6 +8,10 @@ const app = source('App.vue');
 const adminCenter = source('views/AdminCenterView.vue');
 const settings = source('views/SettingsView.vue');
 const fileEditorOverlay = source('components/FileEditorOverlay.vue');
+const connections = source('views/ConnectionsView.vue');
+const workspace = source('views/WorkspaceView.vue');
+const dashboard = source('views/DashboardView.vue');
+const lazyConnectionForm = source('components/LazyConnectionForm.vue');
 
 assert.doesNotMatch(main, /element-plus/);
 assert.match(app, /useGlobalOverlayStore/);
@@ -27,5 +31,12 @@ for (const component of ['WorkspaceSettingsSection', 'AISettingsSection', 'Syste
   assert.match(settings, new RegExp(`const ${component} = defineAsyncComponent`));
   assert.doesNotMatch(settings, new RegExp(`import ${component} from`));
 }
+
+for (const caller of [connections, workspace, dashboard]) {
+  assert.match(caller, /import LazyConnectionForm from ['"]\.\.\/components\/LazyConnectionForm\.vue['"]/);
+  assert.doesNotMatch(caller, /import .* from ['"]\.\.\/components\/(?:AddConnectionForm|BatchEditConnectionForm)\.vue['"]/);
+}
+assert.match(lazyConnectionForm, /import\(['"]\.\/AddConnectionForm\.vue['"]\)/);
+assert.match(lazyConnectionForm, /import\(['"]\.\/BatchEditConnectionForm\.vue['"]\)/);
 
 console.log('frontend performance guards behavior ok');

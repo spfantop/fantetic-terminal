@@ -5,7 +5,7 @@ import { storeToRefs } from 'pinia';
 import { useLayoutStore, type LayoutNode } from '../stores/layout.store'; // +++ Import LayoutNode +++
 import { useDeviceDetection } from '../composables/useDeviceDetection';
 import { useConnectionsStore, type ConnectionInfo } from '../stores/connections.store';
-import AddConnectionFormComponent from '../components/AddConnectionForm.vue';
+import LazyConnectionForm from '../components/LazyConnectionForm.vue';
 import TerminalTabBar from '../components/TerminalTabBar.vue';
 import LayoutRenderer from '../components/LayoutRenderer.vue';
 import LayoutConfigurator from '../components/LayoutConfigurator.vue';
@@ -1714,8 +1714,9 @@ const closeFileManagerModal = () => {
     </template>
 
     <!-- Modals 保持不变，应在布局之外 -->
-    <AddConnectionFormComponent
+    <LazyConnectionForm
       v-if="showAddEditForm"
+      mode="single"
       :connection-to-edit="connectionToEdit"
       @close="handleFormClose"
       @connection-added="handleConnectionAdded"
