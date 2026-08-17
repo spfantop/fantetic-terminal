@@ -1920,17 +1920,6 @@ const handleOpenAllTargetConnections = async () => {
                         </template>
                       </div>
                     </div>
-                    <button
-                      v-if="!isBatchEditMode && canConnectConnection(conn)"
-                      type="button"
-                      class="server-entry-connect"
-                      :aria-label="t('connections.actions.connect', '连接')"
-                      :title="t('connections.actions.connect', '连接')"
-                      @click.stop="connectTo(conn)"
-                      @dblclick.stop
-                    >
-                      <i :class="['fas', conn.type === 'SSH' || conn.type === 'TELNET' ? 'fa-terminal' : 'fa-desktop']"></i>
-                    </button>
                   </li>
                 </template>
               </draggable>
@@ -2074,17 +2063,6 @@ const handleOpenAllTargetConnections = async () => {
                         </template>
                       </div>
                     </div>
-                    <button
-                      v-if="!isBatchEditMode && canConnectConnection(conn)"
-                      type="button"
-                      class="server-entry-connect"
-                      :aria-label="t('connections.actions.connect', '连接')"
-                      :title="t('connections.actions.connect', '连接')"
-                      @click.stop="connectTo(conn)"
-                      @dblclick.stop
-                    >
-                      <i :class="['fas', conn.type === 'SSH' || conn.type === 'TELNET' ? 'fa-terminal' : 'fa-desktop']"></i>
-                    </button>
                   </li>
                   </template>
                 </draggable>
@@ -2364,6 +2342,9 @@ const handleOpenAllTargetConnections = async () => {
   flex-shrink: 0;
   --server-control-size: 2.1rem;
   --server-control-radius: 0.35rem;
+  --server-list-primary-font-size: 1rem;
+  --server-list-secondary-font-size: 0.86rem;
+  --server-list-badge-font-size: 0.76rem;
   border-right: 2px solid color-mix(in srgb, var(--border-color) 78%, transparent);
   background: color-mix(in srgb, var(--header-bg-color) 92%, var(--app-bg-color));
   overflow: hidden;
@@ -2418,7 +2399,7 @@ const handleOpenAllTargetConnections = async () => {
   border: 1px solid var(--border-color);
   border-radius: 999px;
   color: var(--text-color-secondary);
-  font-size: 0.72rem;
+  font-size: var(--server-list-badge-font-size);
   font-weight: 700;
   line-height: 1.2;
   text-align: center;
@@ -2472,7 +2453,7 @@ const handleOpenAllTargetConnections = async () => {
   border-radius: var(--server-control-radius);
   background: var(--app-bg-color);
   color: var(--text-color);
-  font-size: 0.8rem;
+  font-size: var(--server-list-secondary-font-size);
   outline: none;
   transition: border-color 0.12s ease, background-color 0.12s ease, box-shadow 0.12s ease;
 }
@@ -2508,14 +2489,14 @@ const handleOpenAllTargetConnections = async () => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 0.9rem;
-  height: 0.9rem;
+  min-width: 1.05rem;
+  height: 1.05rem;
   padding: 0 0.2rem;
   border: 1px solid var(--app-bg-color);
   border-radius: 999px;
   background: var(--button-bg-color);
   color: var(--button-text-color);
-  font-size: 0.58rem;
+  font-size: var(--server-list-badge-font-size);
   font-weight: 800;
   line-height: 1;
 }
@@ -2539,7 +2520,7 @@ const handleOpenAllTargetConnections = async () => {
   gap: 0.4rem;
   padding: 0.3rem 0.4rem 0.35rem;
   color: var(--text-color-secondary);
-  font-size: 0.68rem;
+  font-size: var(--server-list-badge-font-size);
   font-weight: 800;
 }
 
@@ -2548,7 +2529,7 @@ const handleOpenAllTargetConnections = async () => {
   background: transparent;
   color: var(--text-color-secondary);
   cursor: pointer;
-  font-size: 0.68rem;
+  font-size: var(--server-list-badge-font-size);
   font-weight: 700;
 }
 
@@ -2569,7 +2550,7 @@ const handleOpenAllTargetConnections = async () => {
   background: transparent;
   color: var(--text-color);
   cursor: pointer;
-  font-size: 0.78rem;
+  font-size: var(--server-list-secondary-font-size);
   text-align: left;
 }
 
@@ -2599,7 +2580,7 @@ const handleOpenAllTargetConnections = async () => {
 .server-tag-filter-empty {
   padding: 0.65rem 0.4rem;
   color: var(--text-color-secondary);
-  font-size: 0.76rem;
+  font-size: var(--server-list-secondary-font-size);
   text-align: center;
 }
 
@@ -2672,7 +2653,7 @@ const handleOpenAllTargetConnections = async () => {
   align-items: center;
   gap: 0.35rem;
   color: var(--text-color-secondary);
-  font-size: 0.74rem;
+  font-size: var(--server-list-secondary-font-size);
   font-weight: 600;
   user-select: none;
 }
@@ -2738,7 +2719,7 @@ const handleOpenAllTargetConnections = async () => {
   background: transparent;
   color: var(--text-color);
   cursor: pointer;
-  font-size: 0.72rem;
+  font-size: var(--server-list-secondary-font-size);
   font-weight: 600;
 }
 
@@ -2911,7 +2892,7 @@ const handleOpenAllTargetConnections = async () => {
   background: transparent;
   color: var(--text-color);
   cursor: pointer;
-  font-size: 0.75rem;
+  font-size: var(--server-list-primary-font-size);
   font-weight: 600;
   text-align: left;
   transition: background-color 0.12s ease, border-color 0.12s ease;
@@ -2965,7 +2946,7 @@ const handleOpenAllTargetConnections = async () => {
   border: 1px solid var(--border-color);
   border-radius: 999px;
   color: var(--text-color-secondary);
-  font-size: 0.6rem;
+  font-size: var(--server-list-badge-font-size);
   font-weight: 600;
   line-height: 1.15;
   text-align: center;
@@ -3047,41 +3028,6 @@ const handleOpenAllTargetConnections = async () => {
   min-width: 0;
   flex: 1;
   padding-top: 0.05rem;
-  padding-right: 1.3rem;
-}
-
-.server-entry-connect {
-  position: absolute;
-  top: 50%;
-  right: 0.35rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.25rem;
-  height: 1.25rem;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: 0.28rem;
-  background: transparent;
-  color: var(--text-color-secondary);
-  font-size: .68rem;
-  opacity: .72;
-  transform: translateY(-50%);
-  transition: opacity .12s ease, background-color .12s ease;
-}
-
-.server-entry:hover .server-entry-connect,
-.server-entry:focus-within .server-entry-connect {
-  border-color: var(--border-color);
-  background: var(--app-bg-color);
-  color: var(--link-active-color);
-  opacity: 1;
-}
-
-.server-entry-connect:focus-visible {
-  opacity: 1;
-  outline: 2px solid var(--link-active-color);
-  outline-offset: 1px;
 }
 
 .server-entry-mainline {
@@ -3095,7 +3041,7 @@ const handleOpenAllTargetConnections = async () => {
   min-width: 0;
   flex: 1;
   overflow: hidden;
-  font-size: 0.78rem;
+  font-size: var(--server-list-primary-font-size);
   font-weight: 500;
   line-height: 1.2;
   text-overflow: ellipsis;
@@ -3107,7 +3053,7 @@ const handleOpenAllTargetConnections = async () => {
   border: 1px solid var(--border-color);
   border-radius: 999px;
   color: var(--text-color-secondary);
-  font-size: 0.55rem;
+  font-size: var(--server-list-badge-font-size);
   font-weight: 600;
   line-height: 1.2;
   text-transform: uppercase;
@@ -3116,7 +3062,7 @@ const handleOpenAllTargetConnections = async () => {
 .server-entry-meta {
   overflow: hidden;
   color: var(--text-color-secondary);
-  font-size: 0.68rem;
+  font-size: var(--server-list-secondary-font-size);
   font-weight: 400;
   line-height: 1.3;
   text-overflow: ellipsis;
@@ -3177,7 +3123,7 @@ const handleOpenAllTargetConnections = async () => {
   align-items: baseline;
   min-width: 0;
   color: var(--text-color);
-  font-size: 0.75rem;
+  font-size: var(--server-list-secondary-font-size);
   line-height: 1.25;
 }
 
@@ -3212,7 +3158,8 @@ const handleOpenAllTargetConnections = async () => {
   border: 1px solid var(--border-color);
   border-radius: 999px;
   color: var(--text-color-secondary);
-  font-size: 0.58rem;
+  font-size: var(--server-list-badge-font-size);
+  line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3233,7 +3180,7 @@ const handleOpenAllTargetConnections = async () => {
   border: 1px solid color-mix(in srgb, currentColor 28%, var(--border-color));
   border-radius: 0.32rem;
   background: var(--app-bg-color);
-  font-size: 0.64rem;
+  font-size: var(--server-list-secondary-font-size);
   font-weight: 700;
   line-height: 1;
   overflow: hidden;
@@ -3260,7 +3207,7 @@ const handleOpenAllTargetConnections = async () => {
   gap: 0.45rem;
   padding: 1rem;
   color: var(--text-color-secondary);
-  font-size: 0.84rem;
+  font-size: var(--server-list-primary-font-size);
   text-align: center;
 }
 

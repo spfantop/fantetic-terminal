@@ -43,8 +43,8 @@ assert.doesNotMatch(component, /<td><div class="inline"><input v-model="resetPas
 assert.match(api, /effective_permission/);
 assert.match(connectionsView, /canConnectConnection/);
 assert.match(connectionsView, /canManageConnection/);
-assert.match(connectionsView, /server-entry-connect/);
+assert.doesNotMatch(connectionsView, /server-entry-connect/);
+assert.match(connectionsView, /@dblclick="!isBatchEditMode && canConnectConnection\(conn\) && connectTo\(conn\)"/);
 assert.match(connectionsView, /knownFolderIds/);
-assert.match(connectionsView, /width: 1\.25rem/);
 
 console.log('access control UI behavior ok');

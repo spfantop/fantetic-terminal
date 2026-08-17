@@ -8,6 +8,9 @@ const backendWebSocketProxyTarget = backendProxyTarget.replace(/^http/, 'ws');
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  optimizeDeps: {
+    include: ['guacamole-common-js'],
+  },
   plugins: [
     vue(),
     tailwindcss(),

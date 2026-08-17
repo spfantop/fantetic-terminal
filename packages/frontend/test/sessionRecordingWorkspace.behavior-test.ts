@@ -11,6 +11,7 @@ const component = readFileSync(resolve('src/components/settings/SessionRecording
 const adminCenter = readFileSync(resolve('src/views/AdminCenterView.vue'), 'utf8');
 const api = readFileSync(resolve('src/services/sessionRecording.api.ts'), 'utf8');
 const dialogDrag = readFileSync(resolve('src/composables/useDraggableDialog.ts'), 'utf8');
+const viteConfig = readFileSync(resolve('vite.config.ts'), 'utf8');
 
 assert.match(api, /SessionRecordingListQuery/);
 assert.match(api, /SessionRecordingListPage/);
@@ -75,6 +76,11 @@ assert.match(adminCenter, /activeSection === 'sessionRecordings' && !isMobile/);
 assert.match(dialogDrag, /setPointerCapture/);
 assert.match(dialogDrag, /maxLeft/);
 assert.match(dialogDrag, /pointercancel/);
+assert.match(
+  viteConfig,
+  /optimizeDeps:\s*\{[\s\S]*include:\s*\[[^\]]*['"]guacamole-common-js['"]/,
+  'Guacamole must be pre-bundled before the lazy-loaded recording workspace opens',
+);
 
 const encode = (value: string) => Buffer.from(value).toString('base64');
 const writeList: string[] = [];
