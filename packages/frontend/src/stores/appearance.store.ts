@@ -9,6 +9,7 @@ import type { AppearanceSettings, UpdateAppearanceDto } from '../types/appearanc
 import { darkUiTheme, defaultUiTheme } from '../features/appearance/config/default-themes';
 import { resolveTerminalTheme } from '../utils/terminalThemeFallback';
 import { TERMINAL_DEFAULT_FONT_SIZE } from '../utils/terminalZoom';
+import { resolveTerminalBackgroundReadability } from '../utils/terminalBackgroundReadability';
 import {
     createUiThemeModeUpdate,
     readUiThemeMode,
@@ -192,6 +193,23 @@ export const useAppearanceStore = defineStore('appearance', () => {
     const terminalTextShadowColor = computed<string>(() => {
         return appearanceSettings.value.terminalTextShadowColor ?? 'rgba(0,0,0,0.5)';
     });
+
+    const terminalBackgroundReadability = computed(() => resolveTerminalBackgroundReadability({
+        enabled: isTerminalBackgroundEnabled.value,
+        hasVisualBackground: Boolean(terminalBackgroundImage.value || terminalCustomHTML.value),
+        configuredOverlayOpacity: currentTerminalBackgroundOverlayOpacity.value,
+        terminalThemeBackground: effectiveTerminalTheme.value.background,
+        hasUserTextEffect: terminalTextStrokeEnabled.value || terminalTextShadowEnabled.value,
+    }));
+    const effectiveTerminalBackgroundOverlayOpacity = computed(
+        () => terminalBackgroundReadability.value.overlayOpacity,
+    );
+    const effectiveTerminalHighlightBackground = computed(
+        () => terminalBackgroundReadability.value.highlightBackground,
+    );
+    const shouldUseTerminalAutomaticTextShadow = computed(
+        () => terminalBackgroundReadability.value.useAutomaticTextShadow,
+    );
 
     // --- Actions ---
 
@@ -999,6 +1017,9 @@ export const useAppearanceStore = defineStore('appearance', () => {
         pageBackgroundImage,
         terminalBackgroundImage,
         currentTerminalBackgroundOverlayOpacity,
+        effectiveTerminalBackgroundOverlayOpacity,
+        effectiveTerminalHighlightBackground,
+        shouldUseTerminalAutomaticTextShadow,
         // Actions
         loadInitialAppearanceData,
         updateAppearanceSettings,

@@ -1226,6 +1226,16 @@
       "addRule": "Add rule",
       "resetPresets": "Restore presets",
       "previewText": "Test text",
+      "previewTheme": "Preview background",
+      "previewMode": {
+        "current": "Current theme",
+        "dark": "Dark",
+        "light": "Light"
+      },
+      "contrast": {
+        "passed": "All preset colors meet AA contrast on this background.",
+        "customWarning": "{count} custom color does not meet AA contrast. Adjust it manually. | {count} custom colors do not meet AA contrast. Adjust them manually."
+      },
       "formMode": "Form editor",
       "jsonMode": "JSON editor",
       "jsonLabel": "Rules JSON",

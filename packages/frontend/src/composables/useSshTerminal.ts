@@ -1,4 +1,4 @@
-import { ref, readonly, watch, type Ref, ComputedRef } from 'vue';
+import { computed, ref, readonly, watch, type Ref, ComputedRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
 import { sessions as globalSessionsRef, poppedOutSessionIds } from '../stores/session/state'; // +++ 导入全局 sessions state +++
@@ -8,9 +8,11 @@ import type { WebSocketMessage, MessagePayload } from '../types/websocket.types'
 import type { SshOutputHandler } from './useWebSocketConnection';
 import { debugLog } from './useDebugLog';
 import { useSettingsStore } from '../stores/settings.store';
+import { useAppearanceStore } from '../stores/appearance.store';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
 import { appendToBoundedQueue } from '../utils/boundedTerminalOutput';
 import { createTerminalRenderHighlighter } from '../utils/terminalRenderHighlighter';
+import { resolveTerminalHighlightRulesForTheme } from '../utils/terminalOutputHighlighter';
 import {
     consumeLocalEchoFromOutput,
     createTerminalLocalEchoState,
@@ -44,8 +46,10 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
     const { sendMessage, sendSshInput, sendTelnetInput, onMessage, onSshOutput, isConnected } = wsDeps;
     const protocol = options.protocol ?? 'ssh';
     const settingsStore = useSettingsStore();
+    const appearanceStore = useAppearanceStore();
     const uiNotificationsStore = useUiNotificationsStore();
     const { terminalHighlightEnabledBoolean, terminalHighlightRulesList } = storeToRefs(settingsStore);
+    const { effectiveTerminalHighlightBackground } = storeToRefs(appearanceStore);
 
     const terminalInstance = ref<Terminal | null>(null);
     let terminalWriteParsedDisposable: { dispose(): void } | null = null;
@@ -195,9 +199,13 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         writeTerminalOutput(term, data);
     };
 
+    const resolvedTerminalHighlightRules = computed(() => resolveTerminalHighlightRulesForTheme(
+        terminalHighlightRulesList.value,
+        effectiveTerminalHighlightBackground.value,
+    ));
     const getTerminalHighlightOptions = () => ({
         enabled: terminalHighlightEnabledBoolean.value,
-        rules: terminalHighlightRulesList.value,
+        rules: resolvedTerminalHighlightRules.value,
     });
     const terminalRenderHighlighter = createTerminalRenderHighlighter(getTerminalHighlightOptions);
     let hasWarnedAboutUnsupportedHighlighter = false;
@@ -217,7 +225,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         return attached;
     };
     const stopTerminalHighlightWatcher = watch(
-        [terminalHighlightEnabledBoolean, terminalHighlightRulesList],
+        [terminalHighlightEnabledBoolean, terminalHighlightRulesList, effectiveTerminalHighlightBackground],
         () => {
             terminalRenderHighlighter.invalidate();
             const term = terminalInstance.value;

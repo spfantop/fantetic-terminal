@@ -1211,6 +1211,16 @@
       "addRule": "添加规则",
       "resetPresets": "恢复系统预设",
       "previewText": "测试文本",
+      "previewTheme": "预览背景",
+      "previewMode": {
+        "current": "当前主题",
+        "dark": "深色",
+        "light": "浅色"
+      },
+      "contrast": {
+        "passed": "系统预设颜色在此背景下均达到 AA 对比度。",
+        "customWarning": "有 {count} 条自定义颜色未达到 AA 对比度，请手动调整。"
+      },
       "formMode": "表单编辑",
       "jsonMode": "JSON 编辑",
       "jsonLabel": "规则 JSON",

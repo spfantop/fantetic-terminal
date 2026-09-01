@@ -2,15 +2,19 @@ import { strict as assert } from 'node:assert';
 import {
   DEFAULT_TERMINAL_HIGHLIGHT_RULES,
   DEFAULT_TERMINAL_HIGHLIGHT_RULES_JSON,
+  cloneDefaultTerminalHighlightRules,
   createTerminalHighlightThroughputGuard,
   highlightTerminalOutput,
   parseTerminalHighlightRules,
   parseTerminalHighlightRulesDocument,
   previewTerminalHighlightSegments,
+  getTerminalHighlightContrastSummary,
+  resolveTerminalHighlightRulesForTheme,
   serializeTerminalHighlightRules,
   createTerminalOutputHighlightStream,
   type TerminalHighlightRule,
 } from '../src/utils/terminalOutputHighlighter';
+import { presetTerminalThemes } from '../src/features/appearance/config/iterm-themes';
 
 const rules: TerminalHighlightRule[] = [
   {
@@ -116,6 +120,107 @@ assert.throws(() => parseTerminalHighlightRulesDocument('{"rules":{}}'), /array/
 assert.equal(DEFAULT_TERMINAL_HIGHLIGHT_RULES.length, 62);
 assert.ok(DEFAULT_TERMINAL_HIGHLIGHT_RULES.some(rule => rule.id === 'preset-common-command'));
 assert.equal(parseTerminalHighlightRules(DEFAULT_TERMINAL_HIGHLIGHT_RULES_JSON).length, 62);
+
+const darkThemeRules = resolveTerminalHighlightRulesForTheme(
+  cloneDefaultTerminalHighlightRules(),
+  '#1e1e1e',
+);
+const lightThemeRules = resolveTerminalHighlightRulesForTheme(
+  cloneDefaultTerminalHighlightRules(),
+  '#ffffff',
+);
+const darkPresetColors = new Set(
+  darkThemeRules.filter(rule => rule.enabled && rule.presetId).map(rule => rule.foreground),
+);
+assert.ok(darkPresetColors.size <= 12, 'system presets must share a compact semantic palette');
+assert.notEqual(
+  darkThemeRules.find(rule => rule.id === 'preset-info')?.foreground,
+  lightThemeRules.find(rule => rule.id === 'preset-info')?.foreground,
+  'system preset colors must adapt to the active terminal background',
+);
+assert.equal(
+  getTerminalHighlightContrastSummary(darkThemeRules, '#1e1e1e').failingRuleCount,
+  0,
+  'theme-managed preset colors must meet WCAG AA contrast on the dark terminal background',
+);
+assert.equal(
+  getTerminalHighlightContrastSummary(lightThemeRules, '#ffffff').failingRuleCount,
+  0,
+  'theme-managed preset colors must meet WCAG AA contrast on the light terminal background',
+);
+for (const terminalTheme of presetTerminalThemes) {
+  const background = terminalTheme.themeData.background;
+  if (typeof background !== 'string') continue;
+  const resolvedRules = resolveTerminalHighlightRulesForTheme(
+    cloneDefaultTerminalHighlightRules(),
+    background,
+  );
+  assert.equal(
+    getTerminalHighlightContrastSummary(resolvedRules, background).failingRuleCount,
+    0,
+    `system preset colors must meet WCAG AA contrast on ${terminalTheme.name}`,
+  );
+}
+
+const customizedColorRules = cloneDefaultTerminalHighlightRules();
+const customizedInfoRule = customizedColorRules.find(rule => rule.id === 'preset-info');
+assert.ok(customizedInfoRule);
+customizedInfoRule.foreground = '#abcdef';
+const resolvedCustomizedColorRules = resolveTerminalHighlightRulesForTheme(customizedColorRules, '#ffffff');
+assert.equal(
+  resolvedCustomizedColorRules.find(rule => rule.id === 'preset-info')?.foreground,
+  '#abcdef',
+  'a user-customized preset color must never be overwritten by theme adaptation',
+);
+assert.equal(
+  getTerminalHighlightContrastSummary(resolvedCustomizedColorRules, '#ffffff').customFailingRuleCount,
+  1,
+  'unsafe custom colors must be reported without being changed',
+);
+
+const currentStackTraceRule = DEFAULT_TERMINAL_HIGHLIGHT_RULES.find(rule => rule.id === 'preset-stacktrace');
+assert.ok(currentStackTraceRule);
+const migratedStackTraceRule = parseTerminalHighlightRules(JSON.stringify([{
+  ...currentStackTraceRule,
+  enabled: false,
+  foreground: '#123456',
+  pattern: '^\\s*at\\s+(?:[a-zA-Z_$][\\w$]*\\.)+[A-Za-z_$][\\w$]*\\([^)]*\\)',
+  priority: 129,
+}]))[0];
+assert.deepEqual(
+  [
+    migratedStackTraceRule.pattern,
+    migratedStackTraceRule.priority,
+    migratedStackTraceRule.enabled,
+    migratedStackTraceRule.foreground,
+  ],
+  [currentStackTraceRule.pattern, currentStackTraceRule.priority, false, '#123456'],
+  'legacy default fields must migrate without replacing user style choices',
+);
+
+const customizedStackTraceRule = parseTerminalHighlightRules(JSON.stringify([{
+  ...currentStackTraceRule,
+  pattern: '^custom-stack-frame$',
+  priority: 17,
+}]))[0];
+assert.deepEqual(
+  [customizedStackTraceRule.pattern, customizedStackTraceRule.priority],
+  ['^custom-stack-frame$', 17],
+  'customized stack-trace fields must not be migrated',
+);
+
+const currentCausedByRule = DEFAULT_TERMINAL_HIGHLIGHT_RULES.find(rule => rule.id === 'preset-caused-by');
+assert.ok(currentCausedByRule);
+const migratedCausedByRule = parseTerminalHighlightRules(JSON.stringify([{
+  ...currentCausedByRule,
+  pattern: '^\\s*Caused by:\\s+.*$',
+  priority: 130,
+}]))[0];
+assert.deepEqual(
+  [migratedCausedByRule.pattern, migratedCausedByRule.priority],
+  [currentCausedByRule.pattern, currentCausedByRule.priority],
+  'persisted legacy cause-chain defaults must migrate to the current behavior',
+);
 
 const previewSegments = previewTerminalHighlightSegments('ERROR failed', {
   enabled: true,

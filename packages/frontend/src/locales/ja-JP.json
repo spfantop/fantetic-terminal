@@ -1399,6 +1399,16 @@
           "addRule": "ルールを追加",
           "resetPresets": "プリセットを復元",
           "previewText": "テストテキスト",
+          "previewTheme": "プレビュー背景",
+          "previewMode": {
+            "current": "現在のテーマ",
+            "dark": "ダーク",
+            "light": "ライト"
+          },
+          "contrast": {
+            "passed": "すべてのプリセット色がこの背景で AA コントラストを満たしています。",
+            "customWarning": "AA コントラストを満たさないカスタム色が {count} 件あります。手動で調整してください。"
+          },
           "formMode": "フォーム編集",
           "jsonMode": "JSON 編集",
           "jsonLabel": "ルール JSON",

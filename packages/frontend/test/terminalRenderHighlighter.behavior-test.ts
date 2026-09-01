@@ -45,7 +45,7 @@ assert.equal(decoration?.styles[9]?.underline, true);
 const cachedDecoration = highlighter.resolveLine(line);
 assert.equal(cachedDecoration, decoration, 'unchanged lines should reuse the resolved style cache');
 
-const wideText = `INFO ERROR ${'x'.repeat(90)}`;
+let wideText = `INFO ERROR ${'x'.repeat(90)}`;
 let wideLineTranslations = 0;
 let invalidateAttachedWideLine: () => void = () => undefined;
 const wideRenderLine = {
@@ -80,9 +80,28 @@ assert.equal(
 );
 wideRowFactory.createRow(wideRenderLine, 0);
 assert.equal(wideLineTranslations, 2, 'renderer cache hits must not translate an unchanged 4096-column line again');
+const decorationBuildsBeforeWrite = attachedWideHighlighter.getStats().lineDecorationBuildCount;
 invalidateAttachedWideLine();
 wideRowFactory.createRow(wideRenderLine, 0);
 assert.equal(wideLineTranslations, 3, 'parsed terminal writes must invalidate the renderer fast cache');
+assert.equal(
+  attachedWideHighlighter.getStats().lineDecorationBuildCount,
+  decorationBuildsBeforeWrite,
+  'parsed writes must not rebuild per-cell styles for unchanged rows',
+);
+wideText = `INFO READY ${'x'.repeat(90)}`;
+invalidateAttachedWideLine();
+wideRowFactory.createRow(wideRenderLine, 0);
+assert.equal(
+  attachedWideHighlighter.getStats().lineDecorationBuildCount,
+  decorationBuildsBeforeWrite + 1,
+  'a BufferLine mutated in place must rebuild its decoration exactly once',
+);
+assert.equal(
+  attachedWideHighlighter.resolveLine(wideRenderLine),
+  undefined,
+  'a changed row must not retain stale highlight styles from the previous write',
+);
 
 let wrappedLineTranslations = 0;
 const wrappedLineList = Array.from({ length: 64 }, (_, index) => ({
@@ -153,6 +172,27 @@ assert.equal(
 );
 
 const defaultSemanticRules = cloneDefaultTerminalHighlightRules();
+const assertDefaultWholeLineHighlight = (
+  text: string,
+  foreground: string,
+  bold: boolean,
+  message: string,
+) => {
+  assert.deepEqual(
+    previewTerminalRenderHighlightSegments(text, {
+      enabled: true,
+      rules: defaultSemanticRules,
+    }),
+    [{
+      text,
+      foreground,
+      background: undefined,
+      bold,
+      underline: false,
+    }],
+    message,
+  );
+};
 const semanticPreview = previewTerminalRenderHighlightSegments('{"code":200,"ok":true}', {
   enabled: true,
   rules: defaultSemanticRules,
@@ -169,6 +209,23 @@ assert.equal(
   headerPreview.find(segment => segment.text.includes('gunicorn'))?.foreground,
   undefined,
   'quoted values in non-JSON log metadata must remain neutral',
+);
+const sensitiveHeaderPreview = previewTerminalRenderHighlightSegments(
+  '=====Headers==== access_token: Bearer eyJhbGciOiJIUzI1NiJ9.172.16.0.1.deadbeef',
+  { enabled: true, rules: defaultSemanticRules },
+);
+assert.equal(
+  sensitiveHeaderPreview.some(segment => segment.foreground || segment.background || segment.bold || segment.underline),
+  false,
+  'sensitive request-header values must stay visually neutral instead of matching generic token rules',
+);
+const refererHeaderPreview = previewTerminalRenderHighlightSegments(
+  '=====Headers==== referer: http://localhost:5173/authorization/manage',
+  { enabled: true, rules: defaultSemanticRules },
+);
+assert.ok(
+  refererHeaderPreview.some(segment => segment.text.includes('http://localhost:5173') && segment.foreground),
+  'URL-valued request headers should retain useful scoped highlighting',
 );
 const multipleJsonPreview = previewTerminalRenderHighlightSegments('headers=[], body={"account":1}', {
   enabled: true,
@@ -213,6 +270,41 @@ assert.match(
   terminalManagerSource,
   /syncTerminalRenderHighlighter\(term\)/,
   'terminal readiness and renderer replacement must share highlighter lifecycle synchronization',
+);
+assert.match(
+  terminalManagerSource,
+  /resolveTerminalHighlightRulesForTheme\([\s\S]{0,180}effectiveTerminalHighlightBackground\.value/,
+  'the live renderer must resolve preset colors against the active terminal background',
+);
+assert.match(
+  terminalManagerSource,
+  /watch\([\s\S]{0,180}effectiveTerminalHighlightBackground/,
+  'changing the terminal theme must invalidate and refresh semantic highlighting',
+);
+
+const terminalHighlightSettingsSource = readFileSync(
+  resolve(import.meta.dirname, '..', 'packages/frontend/src/composables/settings/useTerminalHighlightSettings.ts'),
+  'utf8',
+);
+assert.match(
+  terminalHighlightSettingsSource,
+  /terminalHighlightPreviewMode[\s\S]*darkXtermTheme[\s\S]*lightXtermTheme/,
+  'settings must support current, dark, and light terminal preview backgrounds',
+);
+assert.match(
+  terminalHighlightSettingsSource,
+  /resolveTerminalHighlightRulesForTheme\([\s\S]{0,180}terminalHighlightPreviewBackground/,
+  'settings preview must use the same theme-aware palette as the live terminal',
+);
+
+const terminalHighlightSettingsComponentSource = readFileSync(
+  resolve(import.meta.dirname, '..', 'packages/frontend/src/components/settings/TerminalHighlightSettings.vue'),
+  'utf8',
+);
+assert.match(
+  terminalHighlightSettingsComponentSource,
+  /:style="terminalHighlightPreviewStyle"/,
+  'the preview surface must render on the selected terminal theme rather than the UI panel background',
 );
 
 const densePresetHighlighter = createTerminalRenderHighlighter(() => ({
@@ -266,6 +358,77 @@ assert.equal(jsonDecoration?.styles[21]?.foreground, '#B5CEA8', 'JSON numbers mu
 assert.equal(jsonDecoration?.styles[31]?.foreground, '#569CD6', 'JSON literals must use their semantic colour');
 assert.equal(jsonDecoration?.styles[40], undefined, 'JSON range must stop before following log fields');
 
+const longJsonText = `===Result=== {${Array.from(
+  { length: 80 },
+  (_, index) => `"field${index}":${index % 2 === 0 ? `"value${index}"` : index}`,
+).join(',')}}`;
+const longJsonPreview = previewTerminalRenderHighlightSegments(longJsonText, {
+  enabled: true,
+  rules: defaultSemanticRules,
+});
+const longJsonStyledSegments = longJsonPreview.filter(
+  segment => segment.foreground || segment.background || segment.bold || segment.underline,
+);
+assert.ok(
+  longJsonStyledSegments.length <= 100,
+  `long JSON must use a bounded low-fragmentation palette, received ${longJsonStyledSegments.length} styled segments`,
+);
+assert.equal(
+  longJsonPreview.find(segment => segment.text.includes('"value0"'))?.foreground,
+  undefined,
+  'long JSON string values should remain neutral so keys and primitive values keep visual priority',
+);
+assert.equal(
+  longJsonPreview.filter(segment => segment.text.includes(',')).some(segment => segment.foreground),
+  false,
+  'long JSON punctuation should remain neutral to reduce renderer span fragmentation',
+);
+assert.ok(
+  longJsonPreview.find(segment => segment.text === '"field79"')?.foreground,
+  'long JSON key highlighting must remain consistent through the end of the payload',
+);
+
+const veryLongJsonText = `===Result=== {${Array.from(
+  { length: 220 },
+  (_, index) => `"option${index}":${index}`,
+).join(',')}}`;
+const veryLongJsonPreview = previewTerminalRenderHighlightSegments(veryLongJsonText, {
+  enabled: true,
+  rules: defaultSemanticRules,
+});
+assert.ok(
+  veryLongJsonPreview.find(segment => segment.text === '"option219"')?.foreground,
+  'dense JSON must not stop highlighting keys after the logical-line range budget is exhausted',
+);
+const veryLongJsonTail = veryLongJsonText.slice(-180);
+const veryLongJsonTailColumns = Array.from({ length: veryLongJsonTail.length + 1 }, (_, index) => index);
+const veryLongJsonTailDecoration = jsonHighlighter.resolveLine({
+  length: veryLongJsonTail.length,
+  translateToString: (_trimRight: boolean, _start: number, _end: number, columns: number[]) => {
+    columns.push(...veryLongJsonTailColumns);
+    return veryLongJsonTail;
+  },
+}, {
+  text: veryLongJsonText,
+  rowTextOffset: veryLongJsonText.length - veryLongJsonTail.length,
+});
+assert.ok(
+  veryLongJsonTailDecoration?.styles.some(style => style?.foreground === '#9CDCFE'),
+  'the final visual row of dense JSON must retain key highlighting',
+);
+let veryLongJsonTailStyleRuns = 0;
+let previousTailStyle = veryLongJsonTailDecoration?.styles[0];
+for (const style of veryLongJsonTailDecoration?.styles.slice(1) ?? []) {
+  if (style !== previousTailStyle) {
+    if (style) veryLongJsonTailStyleRuns += 1;
+    previousTailStyle = style;
+  }
+}
+assert.ok(
+  veryLongJsonTailStyleRuns <= 24,
+  `a dense JSON visual row must remain low-fragmentation, received ${veryLongJsonTailStyleRuns} style runs`,
+);
+
 const wrappedJsonText = '  "account":1855,"ok":true';
 const wrappedColumns = Array.from({ length: wrappedJsonText.length + 1 }, (_, index) => index);
 assert.equal(
@@ -310,6 +473,106 @@ assert.equal(
   }),
   undefined,
   'ordinary Java thread/source brackets must never be classified as JSON arrays',
+);
+
+const cglibStackFrame = '    at org.springframework.aop.framework.CglibAopProxy$CglibMethodInvocation.invokeJoinpoint(CglibAopProxy.java:793)';
+assertDefaultWholeLineHighlight(
+  cglibStackFrame,
+  '#C586C0',
+  false,
+  'Java inner-class stack frames must keep one consistent stack-trace style',
+);
+
+const modularStackFrame = '    at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)';
+assertDefaultWholeLineHighlight(
+  modularStackFrame,
+  '#C586C0',
+  false,
+  'Java module-prefixed stack frames must keep one consistent stack-trace style',
+);
+
+const keywordMethodStackFrame = '    at com.example.Worker.error(Worker.java:42)';
+assertDefaultWholeLineHighlight(
+  keywordMethodStackFrame,
+  '#C586C0',
+  false,
+  'Java stack-frame structure must take precedence over generic keyword matches',
+);
+
+const versionedModuleStackFrame = '    at app/java.base@21.0.2/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)';
+assertDefaultWholeLineHighlight(
+  versionedModuleStackFrame,
+  '#C586C0',
+  false,
+  'Java class-loader and versioned-module stack frames must keep one stack-trace style',
+);
+
+const classLoaderStackFrame = '    at app//com.example.Worker.run(Worker.java:18)';
+assertDefaultWholeLineHighlight(
+  classLoaderStackFrame,
+  '#C586C0',
+  false,
+  'Java class-loader-only stack frames must keep one consistent stack-trace style',
+);
+
+const constructorStackFrame = '    at com.example.Worker.<init>(Worker.java:12)';
+assertDefaultWholeLineHighlight(
+  constructorStackFrame,
+  '#C586C0',
+  false,
+  'Java constructor stack frames must keep one consistent stack-trace style',
+);
+
+const causedByLine = 'Caused by: java.net.ConnectException: Connection refused';
+assertDefaultWholeLineHighlight(
+  causedByLine,
+  '#FF8080',
+  true,
+  'Java cause-chain lines must keep their dedicated whole-line style',
+);
+
+const suppressedLine = '    Suppressed: java.io.IOException: close failed';
+assertDefaultWholeLineHighlight(
+  suppressedLine,
+  '#FF8080',
+  true,
+  'Java suppressed-exception lines must keep the cause-chain style',
+);
+
+const collapsedStackFramesLine = '    ... 7 more';
+assertDefaultWholeLineHighlight(
+  collapsedStackFramesLine,
+  '#C586C0',
+  false,
+  'Java collapsed stack-frame counts must keep the stack-trace style',
+);
+
+const omittedStackFramesLine = '    ... 4 common frames omitted';
+assertDefaultWholeLineHighlight(
+  omittedStackFramesLine,
+  '#C586C0',
+  false,
+  'Java common-frame omission lines must keep the stack-trace style',
+);
+
+const shellVariablePreview = previewTerminalRenderHighlightSegments('echo $HOME', {
+  enabled: true,
+  rules: defaultSemanticRules,
+});
+assert.equal(
+  shellVariablePreview.find(segment => segment.text === '$HOME')?.foreground,
+  '#40C8AE',
+  'Java stack-trace precedence must not disable shell-variable highlighting',
+);
+
+const nonStackAtLinePreview = previewTerminalRenderHighlightSegments('at /tmp/report.log', {
+  enabled: true,
+  rules: defaultSemanticRules,
+});
+assert.equal(
+  nonStackAtLinePreview.some(segment => segment.foreground === '#C586C0'),
+  false,
+  'non-Java lines beginning with at must not receive the stack-trace style',
 );
 
 const sourceCell = {

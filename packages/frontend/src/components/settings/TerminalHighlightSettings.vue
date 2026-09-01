@@ -201,22 +201,54 @@
       </template>
 
       <div>
-        <label for="terminalHighlightPreviewText" class="block text-sm font-medium text-text-secondary mb-1">
-          {{ t('settings.terminalHighlight.previewText') }}
-        </label>
+        <div class="mb-1 flex flex-wrap items-center justify-between gap-2">
+          <label for="terminalHighlightPreviewText" class="block text-sm font-medium text-text-secondary">
+            {{ t('settings.terminalHighlight.previewText') }}
+          </label>
+          <div class="inline-flex overflow-hidden rounded-md border border-border" role="group" :aria-label="t('settings.terminalHighlight.previewTheme')">
+            <button
+              v-for="mode in ['current', 'dark', 'light'] as const"
+              :key="mode"
+              type="button"
+              :aria-pressed="terminalHighlightPreviewMode === mode"
+              :class="[
+                'border-0 border-l border-border px-2.5 py-1 text-xs first:border-l-0',
+                terminalHighlightPreviewMode === mode ? 'bg-button text-button-text' : 'bg-background text-foreground hover:bg-border',
+              ]"
+              @click="terminalHighlightPreviewMode = mode"
+            >
+              {{ t(`settings.terminalHighlight.previewMode.${mode}`) }}
+            </button>
+          </div>
+        </div>
         <textarea
           id="terminalHighlightPreviewText"
           v-model="terminalHighlightPreviewText"
           rows="3"
           class="w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
         ></textarea>
-        <div class="mt-2 rounded-md border border-border bg-background p-3 font-mono text-sm whitespace-pre-wrap break-words">
+        <div
+          class="mt-2 min-h-24 rounded-md border border-border p-3 font-mono text-sm whitespace-pre-wrap break-words"
+          :style="terminalHighlightPreviewStyle"
+        >
           <span
             v-for="(segment, segmentIndex) in terminalHighlightPreviewSegments"
             :key="segmentIndex"
             :style="getTerminalHighlightPreviewSegmentStyle(segment)"
           >{{ segment.text }}</span>
         </div>
+        <p
+          :class="[
+            'mt-1.5 flex items-center gap-1.5 text-xs',
+            terminalHighlightContrastSummary.customFailingRuleCount > 0 ? 'text-warning' : 'text-success',
+          ]"
+          role="status"
+        >
+          <i :class="terminalHighlightContrastSummary.customFailingRuleCount > 0 ? 'fas fa-triangle-exclamation' : 'fas fa-circle-check'" aria-hidden="true"></i>
+          {{ terminalHighlightContrastSummary.customFailingRuleCount > 0
+            ? t('settings.terminalHighlight.contrast.customWarning', { count: terminalHighlightContrastSummary.customFailingRuleCount })
+            : t('settings.terminalHighlight.contrast.passed') }}
+        </p>
       </div>
 
       <div class="flex items-center justify-between pt-2">
@@ -250,7 +282,10 @@ const {
   terminalHighlightRulesJson,
   terminalHighlightRulesJsonError,
   terminalHighlightPreviewText,
+  terminalHighlightPreviewMode,
   terminalHighlightPreviewSegments,
+  terminalHighlightPreviewStyle,
+  terminalHighlightContrastSummary,
   addTerminalHighlightRule,
   removeTerminalHighlightRule,
   resetTerminalHighlightRules,

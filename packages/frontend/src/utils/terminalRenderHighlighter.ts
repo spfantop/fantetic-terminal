@@ -126,6 +126,7 @@ interface CachedLineDecoration extends TerminalRenderLineDecoration {
   rules: TerminalHighlightRule[];
   enabled: boolean;
   hasStyles: boolean;
+  contentRevision: number;
 }
 
 /**
@@ -144,19 +145,29 @@ export function createTerminalRenderHighlighter(getOptions: () => TerminalRender
   let jsonStyles: JsonHighlightStyles = createJsonHighlightStyles([]);
   let resolveRanges: ReturnType<typeof createTerminalHighlightRangeResolver> = () => [];
   let resolvedTextRanges = new Map<string, TerminalHighlightRange[]>();
+  let resolvedTextRangeCacheWeight = 0;
   let logicalLineContexts = new Map<XtermBufferLine, LogicalLineContext | null>();
   let lineTextProjections = new Map<XtermBufferLine, LineTextProjection>();
   let contentCacheDisposables: Array<{ dispose(): void }> = [];
   let rangeResolutionCount = 0;
+  let lineDecorationBuildCount = 0;
+  // A write can mutate BufferLine objects in place. Validate rendered rows once
+  // per write cycle, while retaining exact-text decorations for unchanged rows.
+  let contentRevision = 0;
   let attachedTerminal: Terminal | undefined;
   let attachedRowFactory: XtermRowFactory | undefined;
   let attachedCreateRow: XtermRowFactory['createRow'] | undefined;
   const MAX_RESOLVED_TEXT_CACHE_ENTRIES = 4096;
+  const MAX_RESOLVED_RANGE_CACHE_WEIGHT = 32_768;
   const MAX_LINE_DECORATION_CACHE_ENTRIES = 1024;
   const MAX_LOGICAL_LINE_CONTEXT_CACHE_ENTRIES = 1024;
 
   const clearLineCaches = () => {
     cache = new Map();
+    clearLogicalLineCaches();
+  };
+
+  const clearLogicalLineCaches = () => {
     logicalLineContexts = new Map();
     lineTextProjections = new Map();
   };
@@ -164,6 +175,7 @@ export function createTerminalRenderHighlighter(getOptions: () => TerminalRender
   const clearResolvedCaches = () => {
     clearLineCaches();
     resolvedTextRanges = new Map();
+    resolvedTextRangeCacheWeight = 0;
   };
 
   const readRenderOptions = () => {
@@ -172,7 +184,7 @@ export function createTerminalRenderHighlighter(getOptions: () => TerminalRender
       sourceRules = sourceOptions.rules;
       renderRules = sourceRules.filter(rule => !DENSE_RENDER_PRESET_IDS.has(rule.id));
       jsonStyles = createJsonHighlightStyles(sourceRules);
-      resolveRanges = createTerminalHighlightRangeResolver({ ...sourceOptions, rules: renderRules });
+      resolveRanges = createScopedHighlightRangeResolver(sourceOptions, renderRules);
       clearResolvedCaches();
     }
     return { ...sourceOptions, rules: renderRules };
@@ -182,7 +194,8 @@ export function createTerminalRenderHighlighter(getOptions: () => TerminalRender
     const options = readRenderOptions();
     if (!options.enabled) return undefined;
     const cached = cache.get(line);
-    if (!cached || cached.rules !== renderRules || cached.enabled !== options.enabled) return undefined;
+    if (!cached || cached.contentRevision !== contentRevision
+      || cached.rules !== renderRules || cached.enabled !== options.enabled) return undefined;
     cache.delete(line);
     cache.set(line, cached);
     return cached;
@@ -198,14 +211,16 @@ export function createTerminalRenderHighlighter(getOptions: () => TerminalRender
     }
 
     rangeResolutionCount += 1;
-    const ranges = [
-      ...resolveRanges(text),
-      ...resolveJsonRanges(text, jsonStyles),
-    ];
+    const ranges = resolveRenderRanges(text, resolveRanges, jsonStyles)
+      .sort((left, right) => left.start - right.start || left.end - right.end);
     resolvedTextRanges.set(text, ranges);
-    if (resolvedTextRanges.size > MAX_RESOLVED_TEXT_CACHE_ENTRIES) {
+    resolvedTextRangeCacheWeight += ranges.length;
+    while (resolvedTextRanges.size > MAX_RESOLVED_TEXT_CACHE_ENTRIES
+      || resolvedTextRangeCacheWeight > MAX_RESOLVED_RANGE_CACHE_WEIGHT) {
       const oldest = resolvedTextRanges.keys().next().value;
-      if (oldest !== undefined) resolvedTextRanges.delete(oldest);
+      if (oldest === undefined) break;
+      resolvedTextRangeCacheWeight -= resolvedTextRanges.get(oldest)?.length ?? 0;
+      resolvedTextRanges.delete(oldest);
     }
     return ranges;
   };
@@ -230,6 +245,7 @@ export function createTerminalRenderHighlighter(getOptions: () => TerminalRender
       && cached.logicalText === logicalContext?.text
       && cached.rowTextOffset === (logicalContext?.rowTextOffset ?? 0)
       && cached.rules === options.rules && cached.enabled === options.enabled) {
+      cached.contentRevision = contentRevision;
       cache.delete(line as XtermBufferLine);
       cache.set(line as XtermBufferLine, cached);
       return cached.hasStyles ? cached : undefined;
@@ -239,8 +255,11 @@ export function createTerminalRenderHighlighter(getOptions: () => TerminalRender
     const styles: Array<ResolvedCellStyle | undefined> = new Array(renderedCellCount);
     const highlightText = logicalContext?.text ?? text;
     const rowTextOffset = logicalContext?.rowTextOffset ?? 0;
-    const ranges = resolveTextRanges(highlightText)
-      .filter(range => range.end > rowTextOffset && range.start < rowTextOffset + text.length)
+    const ranges = findRangesIntersectingRow(
+      resolveTextRanges(highlightText),
+      rowTextOffset,
+      rowTextOffset + text.length,
+    )
       .map(range => ({
         ...range,
         start: Math.max(0, range.start - rowTextOffset),
@@ -268,7 +287,9 @@ export function createTerminalRenderHighlighter(getOptions: () => TerminalRender
       enabled: options.enabled,
       styles,
       hasStyles: styles.some(Boolean),
+      contentRevision,
     };
+    lineDecorationBuildCount += 1;
     cache.set(line as XtermBufferLine, decoration);
     if (cache.size > MAX_LINE_DECORATION_CACHE_ENTRIES) {
       const oldest = cache.keys().next().value;
@@ -358,7 +379,10 @@ export function createTerminalRenderHighlighter(getOptions: () => TerminalRender
     attachedCreateRow = createHighlightedRow;
     const contentEvents = terminal as Partial<Pick<Terminal, 'onWriteParsed' | 'onResize'>>;
     contentCacheDisposables = [
-      contentEvents.onWriteParsed?.(() => clearLineCaches()),
+      contentEvents.onWriteParsed?.(() => {
+        contentRevision += 1;
+        clearLogicalLineCaches();
+      }),
       contentEvents.onResize?.(() => clearLineCaches()),
     ].filter((disposable): disposable is { dispose(): void } => Boolean(disposable));
 
@@ -373,7 +397,10 @@ export function createTerminalRenderHighlighter(getOptions: () => TerminalRender
       contentCacheDisposables.forEach(disposable => disposable.dispose());
       contentCacheDisposables = [];
       clearLineCaches();
-      if (!preserveTextCache) resolvedTextRanges = new Map();
+      if (!preserveTextCache) {
+        resolvedTextRanges = new Map();
+        resolvedTextRangeCacheWeight = 0;
+      }
     };
     return true;
   };
@@ -390,6 +417,8 @@ export function createTerminalRenderHighlighter(getOptions: () => TerminalRender
     },
     getStats: () => ({
       rangeResolutionCount,
+      lineDecorationBuildCount,
+      resolvedTextRangeCacheWeight,
       resolvedTextCacheSize: resolvedTextRanges.size,
       lineDecorationCacheSize: cache.size,
       logicalLineContextCacheSize: logicalLineContexts.size,
@@ -409,13 +438,13 @@ export function previewTerminalRenderHighlightSegments(
 ): TerminalHighlightPreviewSegment[] {
   if (!options.enabled || !input) return [{ text: input }];
   const renderRules = options.rules.filter(rule => !DENSE_RENDER_PRESET_IDS.has(rule.id));
-  const resolveRanges = createTerminalHighlightRangeResolver({ ...options, rules: renderRules });
+  const resolveRanges = createScopedHighlightRangeResolver(options, renderRules);
   const jsonStyles = createJsonHighlightStyles(options.rules);
 
   return input.split(/(\r\n|\n|\r)/).flatMap(part => {
     if (part === '\r\n' || part === '\n' || part === '\r' || !part) return [{ text: part }];
     const styles: Array<TerminalHighlightRange | undefined> = new Array(part.length);
-    const ranges = [...resolveRanges(part), ...resolveJsonRanges(part, jsonStyles)];
+    const ranges = resolveRenderRanges(part, resolveRanges, jsonStyles);
     for (const range of ranges) {
       for (let index = Math.max(0, range.start); index < Math.min(part.length, range.end); index += 1) {
         styles[index] = range;
@@ -446,6 +475,93 @@ function sameHighlightStyle(left?: TerminalHighlightRange, right?: TerminalHighl
     && left?.bold === right?.bold
     && left?.underline === right?.underline;
 }
+
+// Request headers frequently carry opaque cookies and credentials. Apply only
+// field-relevant presets there so generic token rules cannot fragment secrets.
+const REQUEST_HEADER_PATTERN = /^\s*=+Headers=+\s+([^:\s]+)\s*:\s*/i;
+const URL_HEADER_NAMES = new Set(['referer', 'referrer', 'origin', 'location', 'content-location']);
+const HOST_HEADER_NAMES = new Set(['host', 'x-forwarded-host', 'forwarded']);
+const URL_HEADER_PRESET_IDS = new Set(['url', 'domain', 'ipv4', 'ipv4Port', 'ipv6']);
+const HOST_HEADER_PRESET_IDS = new Set(['domain', 'ipv4', 'ipv4Port', 'ipv6']);
+const JSON_SHADOWED_PRESET_IDS = new Set(['doubleQuotedString']);
+
+function createScopedHighlightRangeResolver(
+  options: TerminalHighlightOptions,
+  rules: TerminalHighlightRule[],
+): ReturnType<typeof createTerminalHighlightRangeResolver> {
+  const createResolver = (scopedRules: TerminalHighlightRule[]) => createTerminalHighlightRangeResolver({
+    ...options,
+    rules: scopedRules,
+  });
+  const generalResolver = createResolver(rules);
+  const customRules = rules.filter(rule => !rule.presetId);
+  const customResolver = createResolver(customRules);
+  const urlHeaderResolver = createResolver(rules.filter(
+    rule => !rule.presetId || URL_HEADER_PRESET_IDS.has(rule.presetId),
+  ));
+  const hostHeaderResolver = createResolver(rules.filter(
+    rule => !rule.presetId || HOST_HEADER_PRESET_IDS.has(rule.presetId),
+  ));
+  const jsonResolver = createResolver(rules.filter(
+    rule => !rule.presetId || !JSON_SHADOWED_PRESET_IDS.has(rule.presetId),
+  ));
+
+  return (text: string) => {
+    const header = REQUEST_HEADER_PATTERN.exec(text);
+    if (header) {
+      const headerName = header[1].toLowerCase().replaceAll('_', '-');
+      if (URL_HEADER_NAMES.has(headerName)) return urlHeaderResolver(text);
+      if (HOST_HEADER_NAMES.has(headerName)) return hostHeaderResolver(text);
+      return customResolver(text);
+    }
+    if (text.length <= MAX_JSON_SCAN_LENGTH && findJsonStart(text) >= 0) return jsonResolver(text);
+    return generalResolver(text);
+  };
+}
+
+function resolveRenderRanges(
+  text: string,
+  resolveRanges: ReturnType<typeof createTerminalHighlightRangeResolver>,
+  jsonStyles: JsonHighlightStyles,
+): TerminalHighlightRange[] {
+  const ruleRanges = resolveRanges(text);
+  if (REQUEST_HEADER_PATTERN.test(text)) return ruleRanges;
+  return [...ruleRanges, ...resolveJsonRanges(text, jsonStyles)];
+}
+
+function findRangesIntersectingRow(
+  ranges: TerminalHighlightRange[],
+  rowStart: number,
+  rowEnd: number,
+): TerminalHighlightRange[] {
+  let prefixMaxEnds = RANGE_PREFIX_MAX_END_CACHE.get(ranges);
+  if (!prefixMaxEnds) {
+    prefixMaxEnds = new Array(ranges.length);
+    let maxEnd = 0;
+    for (let index = 0; index < ranges.length; index += 1) {
+      maxEnd = Math.max(maxEnd, ranges[index].end);
+      prefixMaxEnds[index] = maxEnd;
+    }
+    RANGE_PREFIX_MAX_END_CACHE.set(ranges, prefixMaxEnds);
+  }
+
+  let low = 0;
+  let high = ranges.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (prefixMaxEnds[middle] <= rowStart) low = middle + 1;
+    else high = middle;
+  }
+
+  const matches: TerminalHighlightRange[] = [];
+  while (low < ranges.length && ranges[low].start < rowEnd) {
+    const range = ranges[low++];
+    if (range.end > rowStart) matches.push(range);
+  }
+  return matches;
+}
+
+const RANGE_PREFIX_MAX_END_CACHE = new WeakMap<TerminalHighlightRange[], number[]>();
 
 function getLogicalLineContext(
   lines: { get(index: number): XtermBufferLine | undefined; length?: number },
@@ -540,13 +656,17 @@ function getLineTextAndColumns(line: XtermTextLine): {
 }
 
 /** Linear JSON lexer for visual rows. It does not require a complete object,
- * so wrapped JSON remains highlighted after resize. Each JSON fragment is one
- * range, avoiding the hundreds of DOM spans produced by token regexes. */
-// Bound work for pathological payloads while still covering a full 4KB logical
-// line. Only tokens intersecting the current visual row become cell styles.
-const MAX_JSON_TOKENS_PER_LOGICAL_LINE = 256;
-const MAX_JSON_TOKENS_TOTAL = 512;
+ * so wrapped JSON remains highlighted after resize. Dense payloads omit string
+ * values and punctuation to keep xterm DOM span creation predictably bounded. */
+// Bound work for pathological payloads while covering the 16KB logical-line
+// window. Only ranges intersecting the current visual row become cell styles.
+const MAX_JSON_TOKENS_PER_LOGICAL_LINE = 128;
+const MAX_JSON_TOKENS_TOTAL = 4096;
 const MAX_JSON_STRUCTURES_PER_LINE = 8;
+const MAX_JSON_SCAN_LENGTH = 16_384;
+const DENSE_JSON_STRUCTURE_LENGTH = 768;
+const MAX_DENSE_JSON_RANGES_PER_STRUCTURE = 4096;
+const MAX_DENSE_JSON_PRIMITIVE_RANGES = 8;
 
 function createJsonHighlightStyles(rules: TerminalHighlightRule[]): JsonHighlightStyles {
   // IDs are ordered by preference: semantic JSON slots must win over generic
@@ -597,7 +717,7 @@ function createJsonHighlightStyles(rules: TerminalHighlightRule[]): JsonHighligh
 }
 
 function resolveJsonRanges(text: string, styles: JsonHighlightStyles): TerminalHighlightRange[] {
-  if (!styles.enabled) return [];
+  if (!styles.enabled || text.length > MAX_JSON_SCAN_LENGTH) return [];
   const ranges: TerminalHighlightRange[] = [];
   const push = (tokenStart: number, tokenEnd: number, style: Partial<TerminalHighlightRange>) => {
     if (ranges.length >= MAX_JSON_TOKENS_TOTAL || tokenEnd <= tokenStart) return;
@@ -611,12 +731,19 @@ function resolveJsonRanges(text: string, styles: JsonHighlightStyles): TerminalH
     const outerEnd = findJsonStructureEnd(text, start);
     const structureEnd = outerEnd > start ? outerEnd : text.length;
     const rangeCountBeforeStructure = ranges.length;
+    const denseStructure = structureEnd - start > DENSE_JSON_STRUCTURE_LENGTH;
+    const structureRangeLimit = denseStructure
+      ? MAX_DENSE_JSON_RANGES_PER_STRUCTURE
+      : MAX_JSON_TOKENS_PER_LOGICAL_LINE;
+    let densePrimitiveRangeCount = 0;
 
-    for (let index = start; index < structureEnd && ranges.length - rangeCountBeforeStructure < MAX_JSON_TOKENS_PER_LOGICAL_LINE;) {
+    for (let index = start; index < structureEnd && ranges.length - rangeCountBeforeStructure < structureRangeLimit;) {
       const char = text[index];
       if ('{}[],:'.includes(char)) {
         const isOuterBoundary = index === start || (outerEnd > start && index === outerEnd - 1);
-        push(index, index + 1, isOuterBoundary ? styles.boundary : styles.punctuation);
+        if (isOuterBoundary || !denseStructure) {
+          push(index, index + 1, isOuterBoundary ? styles.boundary : styles.punctuation);
+        }
         index += 1;
         continue;
       }
@@ -631,33 +758,83 @@ function resolveJsonRanges(text: string, styles: JsonHighlightStyles): TerminalH
         }
         let next = index;
         while (next < structureEnd && /\s/.test(text[next])) next += 1;
-        const value = text.slice(tokenStart + 1, Math.max(tokenStart + 1, index - 1));
-        if (!/^https?:\/\//i.test(value)) {
-          push(tokenStart, index, text[next] === ':' ? styles.key : styles.string);
+        const isKey = text[next] === ':';
+        const isUrl = text.startsWith('http://', tokenStart + 1) || text.startsWith('https://', tokenStart + 1);
+        if (!isUrl && (isKey || !denseStructure)) {
+          push(tokenStart, index, isKey ? styles.key : styles.string);
         }
         continue;
       }
-      if ((char === '-' || char === '+' || /\d/.test(char)) && isJsonValueBoundary(text, index - 1)) {
-        const match = /^[-+]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/.exec(text.slice(index, structureEnd));
-        if (match) {
-          push(index, index + match[0].length, styles.number);
-          index += match[0].length;
+      if ((char === '-' || char === '+' || isAsciiDigit(char)) && isJsonValueBoundary(text, index - 1)) {
+        const numberEnd = findJsonNumberEnd(text, index, structureEnd);
+        if (numberEnd > index) {
+          if (!denseStructure || densePrimitiveRangeCount < MAX_DENSE_JSON_PRIMITIVE_RANGES) {
+            push(index, numberEnd, styles.number);
+            if (denseStructure) densePrimitiveRangeCount += 1;
+          }
+          index = numberEnd;
           continue;
         }
       }
-      const literal = /^(?:true|false|null)(?![\w-])/.exec(text.slice(index, structureEnd));
-      if (literal && isJsonValueBoundary(text, index - 1)) {
-        push(index, index + literal[0].length, styles.literal);
-        index += literal[0].length;
+      const literalLength = findJsonLiteralLength(text, index, structureEnd);
+      if (literalLength > 0 && isJsonValueBoundary(text, index - 1)) {
+        if (!denseStructure || densePrimitiveRangeCount < MAX_DENSE_JSON_PRIMITIVE_RANGES) {
+          push(index, index + literalLength, styles.literal);
+          if (denseStructure) densePrimitiveRangeCount += 1;
+        }
+        index += literalLength;
         continue;
       }
       index += 1;
+    }
+
+    if (denseStructure && outerEnd > start && ranges.length < MAX_JSON_TOKENS_TOTAL) {
+      const closingStart = outerEnd - 1;
+      if (!ranges.some(range => range.start === closingStart)) {
+        push(closingStart, outerEnd, styles.boundary);
+      }
     }
 
     if (outerEnd <= start) break;
     searchOffset = outerEnd;
   }
   return ranges;
+}
+
+function findJsonNumberEnd(text: string, start: number, end: number): number {
+  let index = start;
+  if (text[index] === '-' || text[index] === '+') index += 1;
+  const integerStart = index;
+  while (index < end && isAsciiDigit(text[index])) index += 1;
+  if (index === integerStart) return start;
+  if (text[index] === '.') {
+    const fractionStart = ++index;
+    while (index < end && isAsciiDigit(text[index])) index += 1;
+    if (index === fractionStart) return start;
+  }
+  if (text[index] === 'e' || text[index] === 'E') {
+    index += 1;
+    if (text[index] === '-' || text[index] === '+') index += 1;
+    const exponentStart = index;
+    while (index < end && isAsciiDigit(text[index])) index += 1;
+    if (index === exponentStart) return start;
+  }
+  return index;
+}
+
+function findJsonLiteralLength(text: string, start: number, end: number): number {
+  for (const literal of ['true', 'false', 'null']) {
+    const literalEnd = start + literal.length;
+    if (literalEnd <= end && text.startsWith(literal, start)
+      && (literalEnd === end || !/[\w-]/.test(text[literalEnd]))) {
+      return literal.length;
+    }
+  }
+  return 0;
+}
+
+function isAsciiDigit(value: string | undefined): boolean {
+  return value !== undefined && value >= '0' && value <= '9';
 }
 
 function findJsonStructureEnd(text: string, start: number): number {

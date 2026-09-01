@@ -170,6 +170,7 @@ const {
   terminalTextShadowOffsetY,
   terminalTextShadowBlur,
   terminalTextShadowColor,
+  shouldUseTerminalAutomaticTextShadow,
   initialAppearanceDataLoaded, 
 } = storeToRefs(appearanceStore);
 const terminalThemeSignature = computed(() => JSON.stringify(effectiveTerminalTheme.value));
@@ -182,6 +183,7 @@ const terminalTextStyleSignature = computed(() => [
   terminalTextShadowOffsetY.value,
   terminalTextShadowBlur.value,
   terminalTextShadowColor.value,
+  shouldUseTerminalAutomaticTextShadow.value,
 ].join('|'));
 const originalTerminalFontSize = ref(currentTerminalFontSize.value);
 const activeTerminalFontSize = ref(currentTerminalFontSize.value);
@@ -1317,7 +1319,7 @@ const applyTerminalTextStyles = () => {
     const hostElement = terminalRef.value; // .terminal-inner-container
 
     // 清理类名
-    hostElement.classList.remove('has-text-stroke', 'has-text-shadow');
+    hostElement.classList.remove('has-text-stroke', 'has-text-shadow', 'has-auto-text-shadow');
 
     // 文字描边
     if (!terminalPerformanceModeBoolean.value && terminalTextStrokeEnabled.value) {
@@ -1336,6 +1338,9 @@ const applyTerminalTextStyles = () => {
       hostElement.style.setProperty('--terminal-shadow', shadowValue);
     } else {
       hostElement.style.removeProperty('--terminal-shadow');
+      if (!terminalPerformanceModeBoolean.value && shouldUseTerminalAutomaticTextShadow.value) {
+        hostElement.classList.add('has-auto-text-shadow');
+      }
     }
   }
 };
@@ -1658,6 +1663,12 @@ const terminalInnerStyle = computed(() => (
 .terminal-inner-container.has-text-shadow :deep(.xterm-rows div > span),
 .terminal-inner-container.has-text-shadow :deep(.xterm-rows div) {
   text-shadow: var(--terminal-shadow);
+}
+
+.terminal-inner-container.has-auto-text-shadow :deep(.xterm-rows span),
+.terminal-inner-container.has-auto-text-shadow :deep(.xterm-rows div > span),
+.terminal-inner-container.has-auto-text-shadow :deep(.xterm-rows div) {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 4px rgba(0, 0, 0, 0.9);
 }
 
 /*

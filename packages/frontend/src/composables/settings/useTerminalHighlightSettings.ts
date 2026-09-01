@@ -2,10 +2,14 @@ import { computed, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useI18n } from 'vue-i18n';
 import { useSettingsStore } from '../../stores/settings.store';
+import { useAppearanceStore } from '../../stores/appearance.store';
+import { darkXtermTheme, lightXtermTheme } from '../../features/appearance/config/default-themes';
 import {
   cloneDefaultTerminalHighlightRules,
+  getTerminalHighlightContrastSummary,
   normalizeTerminalHighlightRules,
   parseTerminalHighlightRulesDocument,
+  resolveTerminalHighlightRulesForTheme,
   serializeTerminalHighlightRules,
   type TerminalHighlightRule,
 } from '../../utils/terminalOutputHighlighter';
@@ -36,11 +40,19 @@ const createTerminalHighlightRulesDocument = (rules: TerminalHighlightRule[]) =>
 
 export function useTerminalHighlightSettings() {
   const settingsStore = useSettingsStore();
+  const appearanceStore = useAppearanceStore();
   const { t } = useI18n();
   const {
     terminalHighlightEnabledBoolean,
     terminalHighlightRulesList,
   } = storeToRefs(settingsStore);
+  const {
+    effectiveTerminalTheme,
+    effectiveTerminalHighlightBackground,
+    effectiveTerminalBackgroundOverlayOpacity,
+    isTerminalBackgroundEnabled,
+    terminalBackgroundImage,
+  } = storeToRefs(appearanceStore);
 
   const terminalHighlightEnabledLocal = ref(false);
   const terminalHighlightRulesLocal = ref<TerminalHighlightRule[]>([]);
@@ -51,12 +63,49 @@ export function useTerminalHighlightSettings() {
   const terminalHighlightRulesJson = ref('');
   const terminalHighlightRulesJsonError = ref('');
   const terminalHighlightPreviewText = ref(DEFAULT_PREVIEW_TEXT);
+  const terminalHighlightPreviewMode = ref<'current' | 'dark' | 'light'>('current');
+  const terminalHighlightPreviewTheme = computed(() => {
+    if (terminalHighlightPreviewMode.value === 'dark') return darkXtermTheme;
+    if (terminalHighlightPreviewMode.value === 'light') return lightXtermTheme;
+    return effectiveTerminalTheme.value;
+  });
+  const terminalHighlightPreviewBackground = computed(() => (
+    terminalHighlightPreviewMode.value === 'current'
+      ? effectiveTerminalHighlightBackground.value
+      : terminalHighlightPreviewTheme.value.background ?? '#1e1e1e'
+  ));
+  const terminalHighlightResolvedRules = computed(() => resolveTerminalHighlightRulesForTheme(
+    terminalHighlightRulesLocal.value,
+    terminalHighlightPreviewBackground.value,
+  ));
   const terminalHighlightPreviewSegments = computed(() => previewTerminalRenderHighlightSegments(
     terminalHighlightPreviewText.value,
     {
       enabled: terminalHighlightEnabledLocal.value,
-      rules: terminalHighlightRulesLocal.value,
+      rules: terminalHighlightResolvedRules.value,
     },
+  ));
+  const terminalHighlightPreviewStyle = computed(() => {
+    const style: Record<string, string> = {
+      backgroundColor: terminalHighlightPreviewBackground.value,
+      color: terminalHighlightPreviewTheme.value.foreground ?? '#d4d4d4',
+    };
+    if (
+      terminalHighlightPreviewMode.value === 'current'
+      && isTerminalBackgroundEnabled.value
+      && terminalBackgroundImage.value
+    ) {
+      const backendUrl = import.meta.env.VITE_API_BASE_URL || '';
+      const overlay = `rgba(0, 0, 0, ${effectiveTerminalBackgroundOverlayOpacity.value})`;
+      style.backgroundImage = `linear-gradient(${overlay}, ${overlay}), url(${backendUrl}${terminalBackgroundImage.value})`;
+      style.backgroundPosition = 'center';
+      style.backgroundSize = 'cover';
+    }
+    return style;
+  });
+  const terminalHighlightContrastSummary = computed(() => getTerminalHighlightContrastSummary(
+    terminalHighlightResolvedRules.value,
+    terminalHighlightPreviewBackground.value,
   ));
 
   const cloneTerminalHighlightRule = (rule: TerminalHighlightRule): TerminalHighlightRule => ({ ...rule });
@@ -184,7 +233,10 @@ export function useTerminalHighlightSettings() {
     terminalHighlightRulesJson,
     terminalHighlightRulesJsonError,
     terminalHighlightPreviewText,
+    terminalHighlightPreviewMode,
     terminalHighlightPreviewSegments,
+    terminalHighlightPreviewStyle,
+    terminalHighlightContrastSummary,
     addTerminalHighlightRule,
     removeTerminalHighlightRule,
     resetTerminalHighlightRules,

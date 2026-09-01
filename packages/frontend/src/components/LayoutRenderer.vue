@@ -113,7 +113,7 @@ const appearanceStore = useAppearanceStore();
 const {
   terminalBackgroundImage,
   isTerminalBackgroundEnabled,
-  currentTerminalBackgroundOverlayOpacity,
+  effectiveTerminalBackgroundOverlayOpacity,
   terminalCustomHTML,
 } = storeToRefs(appearanceStore);
 
@@ -1212,25 +1212,25 @@ onBeforeUnmount(() => {
                                class="terminal-background-image-layer"
                                :style="terminalBackgroundImageStyle"
                            ></div>
-                           <!-- Color Overlay -->
-                           <div
-                               class="terminal-background-overlay-layer"
-                               :style="{
-                                   position: 'absolute', top: '0', left: '0', width: '100%', height: '100%',
-                                   backgroundColor: `rgba(0, 0, 0, ${currentTerminalBackgroundOverlayOpacity})`,
-                                   zIndex: 1, pointerEvents: 'none'
-                               }"
-                           ></div>
-                           <!-- Custom HTML -->
-                            <iframe
+                            <!-- Custom HTML -->
+                             <iframe
                                 v-if="terminalCustomHTML"
                                 class="terminal-custom-html-layer"
                                 sandbox="allow-scripts"
                                 :srcdoc="terminalBackgroundDocument"
                                 aria-hidden="true"
                                 tabindex="-1"
-                                style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2;"
-                            ></iframe>
+                                style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1;"
+                             ></iframe>
+                            <!-- Keep the readability overlay above every visual background source. -->
+                            <div
+                                class="terminal-background-overlay-layer"
+                                :style="{
+                                    position: 'absolute', top: '0', left: '0', width: '100%', height: '100%',
+                                    backgroundColor: `rgba(0, 0, 0, ${effectiveTerminalBackgroundOverlayOpacity})`,
+                                    zIndex: 2, pointerEvents: 'none'
+                                }"
+                            ></div>
                        </div>
 
                        <!-- Terminal Instances -->

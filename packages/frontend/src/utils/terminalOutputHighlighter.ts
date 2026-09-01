@@ -21,6 +21,13 @@ export interface TerminalHighlightOptions {
   maxLineLength?: number;
 }
 
+export interface TerminalHighlightContrastSummary {
+  totalRuleCount: number;
+  failingRuleCount: number;
+  customFailingRuleCount: number;
+  minimumContrastRatio: number;
+}
+
 export interface TerminalHighlightPreviewSegment {
   text: string;
   foreground?: string;
@@ -99,6 +106,8 @@ const MAX_PATTERN_LENGTH = 1024;
 const VALID_FLAG_PATTERN = /^[gimsuy]*$/;
 const CONTROL_SEQUENCE_PATTERN = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/;
 const HEX_COLOR_PATTERN = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+const MINIMUM_TEXT_CONTRAST_RATIO = 4.5;
+const CONTRAST_QUANTIZATION_MARGIN = 0.05;
 const compiledTerminalHighlightRulesCache = new WeakMap<TerminalHighlightRule[], CompiledTerminalHighlightRuleCacheEntry>();
 
 const DEFAULT_TERMINAL_HIGHLIGHT_RULES_DOCUMENT = defaultTerminalHighlightRulesDocument as { rules: TerminalHighlightRule[] };
@@ -107,10 +116,244 @@ export const DEFAULT_TERMINAL_HIGHLIGHT_RULES: TerminalHighlightRule[] = normali
   DEFAULT_TERMINAL_HIGHLIGHT_RULES_DOCUMENT.rules,
 );
 
+const DEFAULT_TERMINAL_HIGHLIGHT_RULES_BY_ID = new Map(
+  DEFAULT_TERMINAL_HIGHLIGHT_RULES.map(rule => [rule.id, rule]),
+);
+
+type TerminalHighlightSemanticRole =
+  | 'critical'
+  | 'warning'
+  | 'success'
+  | 'info'
+  | 'muted'
+  | 'timestamp'
+  | 'identity'
+  | 'command'
+  | 'syntax'
+  | 'string'
+  | 'value'
+  | 'structure';
+
+const TERMINAL_HIGHLIGHT_ROLE_BY_PRESET_ID: Readonly<Record<string, TerminalHighlightSemanticRole>> = {
+  fatal: 'critical', error: 'critical', exceptionWord: 'critical', httpStatusError: 'critical',
+  javaException: 'critical', causedBy: 'critical', sqlDanger: 'critical',
+  warning: 'warning', httpStatusRedirect: 'warning',
+  success: 'success', httpStatusOk: 'success',
+  info: 'info', httpMethod: 'info',
+  debug: 'muted', commentLine: 'muted', hash: 'muted',
+  timestampIso: 'timestamp', timestampSlash: 'timestamp', timestampChinese: 'timestamp',
+  dateOnly: 'timestamp', timeOnly: 'timestamp',
+  javaThread: 'identity', rootPrompt: 'identity', userHostPrompt: 'identity', promptPath: 'identity',
+  shellPromptSymbol: 'identity', gitBranchPrompt: 'identity', url: 'identity', linuxPath: 'identity',
+  windowsPath: 'identity', fileLine: 'identity', ipv4Port: 'identity', ipv4: 'identity',
+  ipv6: 'identity', domain: 'identity', traceId: 'identity', uuid: 'identity', configFile: 'identity',
+  commonCommand: 'command', devopsCommand: 'command', gitSubcommand: 'command',
+  dockerSubcommand: 'command', kubectlWord: 'command', sqlKeyword: 'command',
+  longOption: 'syntax', shortOption: 'syntax', envAssignment: 'syntax', shellVariable: 'syntax', operator: 'syntax',
+  doubleQuotedString: 'string', singleQuotedString: 'string', jsonString: 'string',
+  size: 'value', duration: 'value', percent: 'value', number: 'value', jsonNumber: 'value', jsonLiteral: 'value',
+  stackTrace: 'structure', jsonBoundary: 'structure', jsonKey: 'structure', jsonPunctuation: 'structure',
+};
+
+const DARK_TERMINAL_HIGHLIGHT_PALETTE: Readonly<Record<TerminalHighlightSemanticRole, string>> = {
+  critical: '#FF8080',
+  warning: '#F5C451',
+  success: '#5FE08B',
+  info: '#6CCFF6',
+  muted: '#A8B3CF',
+  timestamp: '#9AA7B8',
+  identity: '#82D2FF',
+  command: '#F0DF86',
+  syntax: '#7FE0C3',
+  string: '#F1AD8D',
+  value: '#B8E58E',
+  structure: '#D6A8E5',
+};
+
+const LIGHT_TERMINAL_HIGHLIGHT_PALETTE: Readonly<Record<TerminalHighlightSemanticRole, string>> = {
+  critical: '#B42318',
+  warning: '#7A4A00',
+  success: '#087A43',
+  info: '#006A85',
+  muted: '#4B5563',
+  timestamp: '#536171',
+  identity: '#005EA8',
+  command: '#5B4B00',
+  syntax: '#006B57',
+  string: '#8A3D1F',
+  value: '#3C6E13',
+  structure: '#6B3FA0',
+};
+const LEGACY_TERMINAL_HIGHLIGHT_RULE_DEFAULTS: Readonly<Record<string, Pick<TerminalHighlightRule, 'pattern' | 'priority'>>> = {
+  'preset-stacktrace': {
+    pattern: '^\\s*at\\s+(?:[a-zA-Z_$][\\w$]*\\.)+[A-Za-z_$][\\w$]*\\([^)]*\\)',
+    priority: 129,
+  },
+  'preset-caused-by': {
+    pattern: '^\\s*Caused by:\\s+.*$',
+    priority: 130,
+  },
+};
+
 export const DEFAULT_TERMINAL_HIGHLIGHT_RULES_JSON = JSON.stringify(DEFAULT_TERMINAL_HIGHLIGHT_RULES_DOCUMENT);
 
 export function cloneDefaultTerminalHighlightRules(): TerminalHighlightRule[] {
   return DEFAULT_TERMINAL_HIGHLIGHT_RULES.map(rule => ({ ...rule }));
+}
+
+export function resolveTerminalHighlightRulesForTheme(
+  rules: TerminalHighlightRule[],
+  terminalBackground?: string,
+): TerminalHighlightRule[] {
+  const background = parseRgbHexColor(terminalBackground) ?? parseRgbHexColor('#1e1e1e')!;
+  const palette = relativeLuminance(background) > 0.45
+    ? LIGHT_TERMINAL_HIGHLIGHT_PALETTE
+    : DARK_TERMINAL_HIGHLIGHT_PALETTE;
+
+  return rules.map(rule => {
+    const semanticRole = getTerminalHighlightSemanticRole(rule);
+    if (!semanticRole || !isTerminalHighlightRuleUsingDefaultColor(rule)) return rule;
+    return {
+      ...rule,
+      foreground: ensureMinimumContrast(palette[semanticRole], background),
+    };
+  });
+}
+
+export function getTerminalHighlightContrastSummary(
+  rules: TerminalHighlightRule[],
+  terminalBackground?: string,
+): TerminalHighlightContrastSummary {
+  const fallbackBackground = parseRgbHexColor(terminalBackground) ?? parseRgbHexColor('#1e1e1e')!;
+  let totalRuleCount = 0;
+  let failingRuleCount = 0;
+  let customFailingRuleCount = 0;
+  let minimumContrastRatio = Number.POSITIVE_INFINITY;
+
+  for (const rule of rules) {
+    if (!rule.enabled || !rule.foreground) continue;
+    const foreground = parseRgbHexColor(rule.foreground);
+    const background = parseRgbHexColor(rule.background) ?? fallbackBackground;
+    if (!foreground) continue;
+    totalRuleCount += 1;
+    const contrastRatio = calculateContrastRatio(foreground, background);
+    minimumContrastRatio = Math.min(minimumContrastRatio, contrastRatio);
+    if (contrastRatio >= MINIMUM_TEXT_CONTRAST_RATIO) continue;
+    failingRuleCount += 1;
+    if (!isThemeManagedTerminalHighlightRule(rule, fallbackBackground)) {
+      customFailingRuleCount += 1;
+    }
+  }
+
+  return {
+    totalRuleCount,
+    failingRuleCount,
+    customFailingRuleCount,
+    minimumContrastRatio: Number.isFinite(minimumContrastRatio) ? minimumContrastRatio : 0,
+  };
+}
+
+function getTerminalHighlightSemanticRole(rule: TerminalHighlightRule): TerminalHighlightSemanticRole | undefined {
+  return rule.presetId ? TERMINAL_HIGHLIGHT_ROLE_BY_PRESET_ID[rule.presetId] : undefined;
+}
+
+function isTerminalHighlightRuleUsingDefaultColor(rule: TerminalHighlightRule): boolean {
+  const defaultRule = DEFAULT_TERMINAL_HIGHLIGHT_RULES_BY_ID.get(rule.id);
+  return Boolean(
+    defaultRule?.presetId
+    && rule.presetId === defaultRule.presetId
+    && normalizeComparableColor(rule.foreground) === normalizeComparableColor(defaultRule.foreground),
+  );
+}
+
+function isThemeManagedTerminalHighlightRule(rule: TerminalHighlightRule, background: RgbColor): boolean {
+  if (isTerminalHighlightRuleUsingDefaultColor(rule)) return true;
+  const semanticRole = getTerminalHighlightSemanticRole(rule);
+  if (!semanticRole) return false;
+  const palette = relativeLuminance(background) > 0.45
+    ? LIGHT_TERMINAL_HIGHLIGHT_PALETTE
+    : DARK_TERMINAL_HIGHLIGHT_PALETTE;
+  return normalizeComparableColor(rule.foreground) === normalizeComparableColor(
+    ensureMinimumContrast(palette[semanticRole], background),
+  );
+}
+
+interface RgbColor {
+  red: number;
+  green: number;
+  blue: number;
+}
+
+function normalizeComparableColor(value?: string): string | undefined {
+  const color = parseRgbHexColor(value);
+  return color ? rgbToHex(color) : undefined;
+}
+
+function parseRgbHexColor(value?: string): RgbColor | undefined {
+  const match = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(value?.trim() ?? '');
+  if (!match) return undefined;
+  const hex = match[1].length === 3
+    ? match[1].split('').map(character => character + character).join('')
+    : match[1];
+  return {
+    red: Number.parseInt(hex.slice(0, 2), 16),
+    green: Number.parseInt(hex.slice(2, 4), 16),
+    blue: Number.parseInt(hex.slice(4, 6), 16),
+  };
+}
+
+function rgbToHex(color: RgbColor): string {
+  const channel = (value: number) => Math.round(value).toString(16).padStart(2, '0').toUpperCase();
+  return `#${channel(color.red)}${channel(color.green)}${channel(color.blue)}`;
+}
+
+function relativeLuminance(color: RgbColor): number {
+  const linearize = (channel: number) => {
+    const normalized = channel / 255;
+    return normalized <= 0.04045
+      ? normalized / 12.92
+      : ((normalized + 0.055) / 1.055) ** 2.4;
+  };
+  return (0.2126 * linearize(color.red))
+    + (0.7152 * linearize(color.green))
+    + (0.0722 * linearize(color.blue));
+}
+
+function calculateContrastRatio(left: RgbColor, right: RgbColor): number {
+  const lighter = Math.max(relativeLuminance(left), relativeLuminance(right));
+  const darker = Math.min(relativeLuminance(left), relativeLuminance(right));
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function ensureMinimumContrast(foregroundValue: string, background: RgbColor): string {
+  const foreground = parseRgbHexColor(foregroundValue)!;
+  if (calculateContrastRatio(foreground, background) >= MINIMUM_TEXT_CONTRAST_RATIO) {
+    return rgbToHex(foreground);
+  }
+
+  const black = parseRgbHexColor('#000000')!;
+  const white = parseRgbHexColor('#ffffff')!;
+  const target = calculateContrastRatio(black, background) > calculateContrastRatio(white, background)
+    ? black
+    : white;
+  const adjustmentTarget = MINIMUM_TEXT_CONTRAST_RATIO + CONTRAST_QUANTIZATION_MARGIN;
+  let low = 0;
+  let high = 1;
+  for (let iteration = 0; iteration < 16; iteration += 1) {
+    const amount = (low + high) / 2;
+    const candidate = mixRgbColors(foreground, target, amount);
+    if (calculateContrastRatio(candidate, background) >= adjustmentTarget) high = amount;
+    else low = amount;
+  }
+  return rgbToHex(mixRgbColors(foreground, target, high));
+}
+
+function mixRgbColors(source: RgbColor, target: RgbColor, amount: number): RgbColor {
+  return {
+    red: source.red + (target.red - source.red) * amount,
+    green: source.green + (target.green - source.green) * amount,
+    blue: source.blue + (target.blue - source.blue) * amount,
+  };
 }
 
 export function parseTerminalHighlightRules(value?: string | null): TerminalHighlightRule[] {
@@ -126,10 +369,24 @@ export function parseTerminalHighlightRules(value?: string | null): TerminalHigh
     if (!Array.isArray(rules)) {
       return cloneDefaultTerminalHighlightRules();
     }
-    return normalizeTerminalHighlightRules(rules);
+    return migrateLegacyTerminalHighlightRuleDefaults(normalizeTerminalHighlightRules(rules));
   } catch {
     return cloneDefaultTerminalHighlightRules();
   }
+}
+
+function migrateLegacyTerminalHighlightRuleDefaults(rules: TerminalHighlightRule[]): TerminalHighlightRule[] {
+  return rules.map(rule => {
+    const legacyDefaults = LEGACY_TERMINAL_HIGHLIGHT_RULE_DEFAULTS[rule.id];
+    const currentDefaults = DEFAULT_TERMINAL_HIGHLIGHT_RULES_BY_ID.get(rule.id);
+    if (!legacyDefaults || !currentDefaults) return rule;
+
+    return {
+      ...rule,
+      pattern: rule.pattern === legacyDefaults.pattern ? currentDefaults.pattern : rule.pattern,
+      priority: rule.priority === legacyDefaults.priority ? currentDefaults.priority : rule.priority,
+    };
+  });
 }
 
 export function parseTerminalHighlightRulesDocument(value: string): TerminalHighlightRule[] {

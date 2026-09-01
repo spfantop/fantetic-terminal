@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { darkXtermTheme, lightXtermTheme } from '../src/features/appearance/config/default-themes';
 import { resolveTerminalTheme } from '../src/utils/terminalThemeFallback';
 import { calculateCenteredTerminalHorizontalPadding } from '../src/utils/terminalLayout';
+import { resolveTerminalBackgroundReadability } from '../src/utils/terminalBackgroundReadability';
 
 const light = { _id: '1', name: 'Builtin Light', themeData: { background: '#fff' }, isPreset: true };
 const dark = { _id: '2', name: 'Builtin Dark', themeData: { background: '#000' }, isPreset: true };
@@ -16,6 +17,39 @@ assert.equal(
   calculateCenteredTerminalHorizontalPadding(1400, 0, 153, 9),
   11.5,
   'remaining terminal grid space should be evenly distributed between both edges',
+);
+assert.deepEqual(
+  resolveTerminalBackgroundReadability({
+    enabled: true,
+    hasVisualBackground: true,
+    configuredOverlayOpacity: 0,
+    terminalThemeBackground: '#ffffff',
+    hasUserTextEffect: false,
+  }),
+  { overlayOpacity: 0.45, highlightBackground: '#1e1e1e', useAutomaticTextShadow: true },
+  'visual terminal backgrounds must receive non-persistent readability safeguards',
+);
+assert.deepEqual(
+  resolveTerminalBackgroundReadability({
+    enabled: true,
+    hasVisualBackground: true,
+    configuredOverlayOpacity: 0.7,
+    terminalThemeBackground: '#ffffff',
+    hasUserTextEffect: true,
+  }),
+  { overlayOpacity: 0.7, highlightBackground: '#1e1e1e', useAutomaticTextShadow: false },
+  'stronger user overlay and explicit text effects must be preserved',
+);
+assert.deepEqual(
+  resolveTerminalBackgroundReadability({
+    enabled: false,
+    hasVisualBackground: true,
+    configuredOverlayOpacity: 0,
+    terminalThemeBackground: '#ffffff',
+    hasUserTextEffect: false,
+  }),
+  { overlayOpacity: 0, highlightBackground: '#ffffff', useAutomaticTextShadow: false },
+  'disabled visual backgrounds must not alter terminal presentation',
 );
 
 const style = readFileSync(resolve('src/style.css'), 'utf8');
@@ -55,6 +89,7 @@ assert.doesNotMatch(terminal, /terminal-search-popover button\.is-active[\s\S]{0
 assert.match(terminal, /terminal-search-popover button:focus-visible/);
 assert.doesNotMatch(terminal, /backdrop-filter:\s*blur/, 'live terminal overlays must not continuously blur changing content');
 assert.match(terminal, /prefers-reduced-motion:\s*reduce/, 'terminal popovers must honor reduced-motion preferences');
+assert.match(terminal, /has-auto-text-shadow/, 'visual backgrounds must provide an automatic text readability fallback');
 
 const workspace = readFileSync(resolve('src/views/WorkspaceView.vue'), 'utf8');
 assert.doesNotMatch(workspace, /transition:\s*height/, 'workspace resizing must not animate layout dimensions');
@@ -82,6 +117,12 @@ assert.match(connectionsView, /\.server-test-result\s*\{[\s\S]*font-size:\s*var\
 assert.match(connectionsView, /\.server-state\s*\{[\s\S]*font-size:\s*var\(--server-list-primary-font-size\)/);
 
 const layoutRenderer = readFileSync(resolve('src/components/LayoutRenderer.vue'), 'utf8');
+assert.match(layoutRenderer, /effectiveTerminalBackgroundOverlayOpacity/);
+assert.match(
+  layoutRenderer,
+  /terminal-custom-html-layer[\s\S]{0,700}terminal-background-overlay-layer/,
+  'the readability overlay must render above both image and custom HTML backgrounds',
+);
 assert.match(layoutRenderer, /overflow-hidden pt-8/);
 assert.match(layoutRenderer, /items-center justify-center p-6/);
 assert.match(layoutRenderer, /text-sm font-medium/);
