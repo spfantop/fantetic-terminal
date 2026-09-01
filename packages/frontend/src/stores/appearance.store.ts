@@ -913,6 +913,7 @@ export const useAppearanceStore = defineStore('appearance', () => {
      * @param theme 要应用的 UI 主题对象。
      */
     function applyUiTheme(theme: Record<string, string>) {
+        if (typeof document === 'undefined') return;
         const root = document.documentElement;
         // 先移除可能存在的旧变量（可选，但更干净）
         // Object.keys(defaultUiTheme).forEach(key => root.style.removeProperty(key));
