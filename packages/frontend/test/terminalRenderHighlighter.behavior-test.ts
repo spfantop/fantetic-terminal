@@ -157,6 +157,32 @@ for (let index = 0; index < 1100; index += 1) {
 }
 assert.ok(highlighter.getStats().lineDecorationCacheSize <= 1024, 'scrolling must not retain unbounded per-cell style arrays');
 
+const textCacheBoundHighlighter = createTerminalRenderHighlighter(() => ({
+  enabled: true,
+  rules: [{
+    id: 'never-match',
+    name: 'never match',
+    enabled: true,
+    pattern: 'NEVER_MATCH_THIS_TEXT',
+    flags: 'g',
+    foreground: '#FFFFFF',
+  }],
+}));
+for (let index = 0; index < 1300; index += 1) {
+  const text = `plain-${index}-${'x'.repeat(3390)}`;
+  textCacheBoundHighlighter.resolveLine({
+    length: 1,
+    translateToString: (_trimRight: boolean, _start: number, _end: number, columns: number[]) => {
+      columns.push(0, 1);
+      return text;
+    },
+  });
+}
+assert.ok(
+  textCacheBoundHighlighter.getStats().resolvedTextCacheCharacters <= 4 * 1024 * 1024,
+  'long unmatched lines must not make the semantic text cache retain more than its character budget',
+);
+
 const legacyText = 'INFO ERROR';
 const legacyLine = {
   length: legacyText.length,
@@ -382,6 +408,50 @@ assert.equal(
   longJsonPreview.filter(segment => segment.text.includes(',')).some(segment => segment.foreground),
   false,
   'long JSON punctuation should remain neutral to reduce renderer span fragmentation',
+);
+const denseJsonWithSqlLikeString = `{"query":"SELECT UPDATE FROM records",${Array.from(
+  { length: 80 },
+  (_, index) => `"field${index}":"value${index}"`,
+).join(',')}}`;
+assert.equal(
+  previewTerminalRenderHighlightSegments(denseJsonWithSqlLikeString, {
+    enabled: true,
+    rules: defaultSemanticRules,
+  }).find(segment => segment.text === 'SELECT')?.foreground,
+  undefined,
+  'dense JSON string values must not be fragmented by unrelated SQL or shell presets',
+);
+const denseJsonWithRelevantSignals = `{"endpoint":"https://api.example.com/v1","status":"ERROR",${Array.from(
+  { length: 80 },
+  (_, index) => `"field${index}":"value${index}"`,
+).join(',')}}`;
+const denseJsonRelevantSignalPreview = previewTerminalRenderHighlightSegments(denseJsonWithRelevantSignals, {
+  enabled: true,
+  rules: defaultSemanticRules,
+});
+assert.ok(
+  denseJsonRelevantSignalPreview.find(segment => segment.text.startsWith('https://api.example.com/v1'))?.foreground,
+  'JSON rule routing must retain URL highlighting',
+);
+assert.ok(
+  denseJsonRelevantSignalPreview.find(segment => segment.text === 'ERROR')?.foreground,
+  'JSON rule routing must retain operational error highlighting',
+);
+const customJsonRule = {
+  id: 'custom-tenant-code',
+  name: 'tenant code',
+  enabled: true,
+  pattern: 'tenant_[a-z]+',
+  flags: 'g',
+  foreground: '#FF00FF',
+};
+assert.equal(
+  previewTerminalRenderHighlightSegments(`${denseJsonWithRelevantSignals.slice(0, -1)},"tenant":"tenant_alpha"}`, {
+    enabled: true,
+    rules: [...defaultSemanticRules, customJsonRule],
+  }).find(segment => segment.text === 'tenant_alpha')?.foreground,
+  '#FF00FF',
+  'JSON rule routing must always retain user-defined rules',
 );
 assert.ok(
   longJsonPreview.find(segment => segment.text === '"field79"')?.foreground,

@@ -836,11 +836,14 @@ function collectHighlightRanges(line: string, rules: CompiledTerminalHighlightRu
 
       const start = match.index ?? 0;
       const end = start + matchText.length;
-      if (ranges.some(range => start < range.end && end > range.start)) {
+      const insertionIndex = findHighlightRangeInsertionIndex(ranges, start);
+      const previousRange = ranges[insertionIndex - 1];
+      const nextRange = ranges[insertionIndex];
+      if ((previousRange && start < previousRange.end) || (nextRange && end > nextRange.start)) {
         continue;
       }
 
-      ranges.push({ start, end, ansiStart: compiled.ansiStart, rule: compiled.rule });
+      ranges.splice(insertionIndex, 0, { start, end, ansiStart: compiled.ansiStart, rule: compiled.rule });
       matchedCurrentRule = true;
       if (ranges.length >= MAX_HIGHLIGHT_RANGES_PER_LINE) {
         break;
@@ -855,8 +858,18 @@ function collectHighlightRanges(line: string, rules: CompiledTerminalHighlightRu
     }
   }
 
-  ranges.sort((left, right) => left.start - right.start || left.end - right.end);
   return ranges;
+}
+
+function findHighlightRangeInsertionIndex(ranges: HighlightRange[], start: number): number {
+  let low = 0;
+  let high = ranges.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (ranges[middle].start < start) low = middle + 1;
+    else high = middle;
+  }
+  return low;
 }
 
 function createEmptySgrStyleState(): SgrStyleState {
