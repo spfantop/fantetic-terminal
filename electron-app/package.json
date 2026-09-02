@@ -1,6 +1,6 @@
 {
   "name": "fantetic-electron-app",
-  "version": "2.1.7",
+  "version": "2.1.8",
   "description": "Electron application for Fantetic Terminal",
   "main": "main.js",
   "scripts": {
