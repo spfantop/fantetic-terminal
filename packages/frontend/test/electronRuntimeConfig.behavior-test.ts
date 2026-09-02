@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {
   isAccountFeatureAvailable,
   isRemoteDesktopFeatureAvailable,
+  readRuntimeConfigEnv,
   resolveIsElectronRuntime,
   resolveApiBaseUrl,
   resolveRemoteDesktopProxyWebSocketUrl,
@@ -9,6 +10,12 @@ import {
 } from '../src/utils/runtimeConfig';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+
+const nodeRuntimeEnv = readRuntimeConfigEnv();
+assert.equal(nodeRuntimeEnv.isElectron, false, 'Node runtime must default to web capabilities');
+assert.equal(nodeRuntimeEnv.isProd, false, 'Node runtime must default to non-production mode');
+assert.equal(nodeRuntimeEnv.locationProtocol, 'http:');
+assert.equal(nodeRuntimeEnv.locationHost, '');
 
 assert.equal(
   resolveIsElectronRuntime('Mozilla/5.0 (Windows NT 10.0; Win64; x64)', false),

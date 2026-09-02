@@ -20,14 +20,19 @@ export const resolveIsElectronRuntime = (userAgent: string, hasElectronBridge: b
 );
 
 export const readRuntimeConfigEnv = (): RuntimeConfigEnv => {
+  const browserWindow = typeof window === 'undefined'
+    ? undefined
+    : window as Window & { electronAPI?: unknown };
+  const userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent;
+
   return {
     isElectron: resolveIsElectronRuntime(
-      navigator.userAgent,
-      Boolean((window as Window & { electronAPI?: unknown }).electronAPI),
+      userAgent,
+      Boolean(browserWindow?.electronAPI),
     ),
-    isProd: import.meta.env.PROD,
-    locationProtocol: window.location.protocol,
-    locationHost: window.location.host,
+    isProd: Boolean(import.meta.env?.PROD),
+    locationProtocol: browserWindow?.location.protocol ?? 'http:',
+    locationHost: browserWindow?.location.host ?? '',
   };
 };
 

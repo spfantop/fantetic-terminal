@@ -123,6 +123,8 @@ assert.match(backendDockerfile, /ENTRYPOINT \["\/entrypoint\.sh"\]/);
 assert.match(backendDockerfile, /apt-get upgrade -y/);
 assert.match(backendDockerfile, /rm -rf \/usr\/local\/lib\/node_modules\/npm/);
 assert.doesNotMatch(backendDockerfile, /\bgosu\b/);
+assert.match(backendDockerfile, /rm -rf \.\/node_modules\/esbuild \.\/node_modules\/@esbuild/);
+assert.match(backendDockerfile, /rm -f \.\/node_modules\/\.bin\/esbuild/);
 assert.match(read('packages\/backend\/entrypoint\.sh'), /exec setpriv --reuid=node --regid=node --init-groups/);
 assert.match(backendDockerfile, /HEALTHCHECK/);
 assert.match(frontendDockerfile, /HEALTHCHECK/);

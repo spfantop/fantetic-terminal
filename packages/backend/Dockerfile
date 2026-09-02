@@ -49,7 +49,9 @@ RUN apt-get update \
     && apt-get purge -y --auto-remove python3 make g++ \
     && rm -rf /var/lib/apt/lists/* \
     && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn \
-    && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg \
+    && rm -rf ./node_modules/esbuild ./node_modules/@esbuild \
+    && rm -f ./node_modules/.bin/esbuild
 
 COPY packages/backend/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
