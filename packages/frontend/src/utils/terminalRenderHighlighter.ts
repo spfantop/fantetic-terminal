@@ -630,6 +630,9 @@ function findFirstRangeIntersectingRow(
 }
 
 const RANGE_PREFIX_MAX_END_CACHE = new WeakMap<TerminalHighlightRange[], number[]>();
+// Zoom changes xterm's visual row count without changing the payload. Bound
+// logical context by the semantic scan budget so reflow cannot change colours.
+const MAX_LOGICAL_LINE_CONTEXT_CHARACTERS = 128 * 1024;
 
 function getLogicalLineContext(
   lines: { get(index: number): XtermBufferLine | undefined; length?: number },
@@ -644,25 +647,49 @@ function getLogicalLineContext(
     cache?.set(currentLine, null);
     return undefined;
   }
-  let startRow = row;
-  let inspected = 0;
-  while (startRow > 0 && lines.get(startRow)?.isWrapped && inspected++ < 64) startRow -= 1;
-
-  let text = '';
-  let rowTextOffset = 0;
-  const logicalLineList: Array<{ line: XtermBufferLine; rowTextOffset: number }> = [];
-  const maxRow = typeof lines.length === 'number' ? lines.length - 1 : row + 64;
-  for (let currentRow = startRow; currentRow <= maxRow && currentRow <= startRow + 64; currentRow += 1) {
-    const line = lines.get(currentRow);
-    if (!line) break;
-    logicalLineList.push({ line, rowTextOffset: text.length });
-    if (currentRow === row) rowTextOffset = text.length;
+  const readProjection = (line: XtermBufferLine) => {
+    const cached = projectionCache?.get(line);
+    if (cached) return cached;
     const projection = getLineTextAndColumns(line);
-    text += projection.text;
     if (projectionCache) {
-      projectionCache.delete(line);
       projectionCache.set(line, projection);
     }
+    return projection;
+  };
+  let startRow = row;
+  let contextWeight = 0;
+  while (startRow > 0 && lines.get(startRow)?.isWrapped) {
+    const previousLine = lines.get(startRow - 1);
+    if (!previousLine) break;
+    contextWeight += Math.max(1, readProjection(previousLine).text.length);
+    if (contextWeight > MAX_LOGICAL_LINE_CONTEXT_CHARACTERS) {
+      cache?.set(currentLine, null);
+      return undefined;
+    }
+    startRow -= 1;
+  }
+
+  let text = '';
+  let assembledWeight = 0;
+  let rowTextOffset = 0;
+  const logicalLineList: Array<{ line: XtermBufferLine; rowTextOffset: number }> = [];
+  const maxRow = typeof lines.length === 'number' ? lines.length - 1 : Number.MAX_SAFE_INTEGER;
+  for (let currentRow = startRow; currentRow <= maxRow; currentRow += 1) {
+    const line = lines.get(currentRow);
+    if (!line) break;
+    const projection = readProjection(line);
+    const nextWeight = assembledWeight + Math.max(1, projection.text.length);
+    if (nextWeight > MAX_LOGICAL_LINE_CONTEXT_CHARACTERS) {
+      if (currentRow <= row) {
+        cache?.set(currentLine, null);
+        return undefined;
+      }
+      break;
+    }
+    logicalLineList.push({ line, rowTextOffset: text.length });
+    if (currentRow === row) rowTextOffset = text.length;
+    text += projection.text;
+    assembledWeight = nextWeight;
     if (!lines.get(currentRow + 1)?.isWrapped) break;
   }
   if (text && cache) {
@@ -733,7 +760,7 @@ const MAX_JSON_TOKENS_PER_LOGICAL_LINE = 128;
 const MAX_JSON_TOKENS_TOTAL = 4096;
 const MAX_JSON_STRUCTURES_PER_LINE = 8;
 const MAX_JSON_SCAN_LENGTH = 16_384;
-const MAX_JSON_TOTAL_SCAN_LENGTH = MAX_JSON_SCAN_LENGTH * MAX_JSON_STRUCTURES_PER_LINE;
+const MAX_JSON_TOTAL_SCAN_LENGTH = MAX_LOGICAL_LINE_CONTEXT_CHARACTERS;
 const DENSE_JSON_STRUCTURE_LENGTH = 768;
 const MAX_DENSE_JSON_RANGES_PER_STRUCTURE = 4096;
 const MAX_DENSE_JSON_PRIMITIVE_RANGES = 8;

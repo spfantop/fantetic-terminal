@@ -832,6 +832,69 @@ const sourceCell = {
     },
   },
 };
+
+const zoomSensitiveJsonText = `{${Array.from(
+  { length: 260 },
+  (_, index) => `"field${String(index).padStart(3, '0')}":"value${String(index).padStart(3, '0')}"`,
+).join(',')},"zoomTail":500}`;
+const renderJsonTailAtWidth = (cols: number): number => {
+  const lineList = Array.from(
+    { length: Math.ceil(zoomSensitiveJsonText.length / cols) },
+    (_, row) => {
+      const text = zoomSensitiveJsonText.slice(row * cols, (row + 1) * cols);
+      return {
+        length: text.length,
+        isWrapped: row > 0,
+        translateToString: (_trimRight: boolean, _start: number, _end: number, columns: number[]) => {
+          columns.push(...Array.from({ length: text.length + 1 }, (_, column) => column));
+          return text;
+        },
+        loadCell: (_column: number, target: typeof sourceCell) => {
+          target.fg = 0;
+          target.bg = 0;
+          target.extended = sourceCell.extended;
+          return target;
+        },
+      };
+    },
+  );
+  const tailOffset = zoomSensitiveJsonText.indexOf('"zoomTail"');
+  const tailRow = Math.floor(tailOffset / cols);
+  const tailColumn = tailOffset % cols;
+  const zoomRowFactory = {
+    createRow(renderedLine: (typeof lineList)[number], _row?: number) {
+      const cell = { fg: 0, bg: 0, extended: sourceCell.extended };
+      renderedLine.loadCell(tailColumn, cell);
+      return cell;
+    },
+  };
+  const zoomTerminal = {
+    onWriteParsed: () => ({ dispose() {} }),
+    onResize: () => ({ dispose() {} }),
+    _core: {
+      _renderService: { _renderer: { value: { _rowFactory: zoomRowFactory } } },
+      _bufferService: {
+        buffer: { lines: { length: lineList.length, get: (row: number) => lineList[row] } },
+      },
+    },
+  };
+  const zoomHighlighter = createTerminalRenderHighlighter(() => ({
+    enabled: true,
+    rules: defaultSemanticRules,
+  }));
+  assert.equal(zoomHighlighter.attach(zoomTerminal as never), true);
+  const color = zoomRowFactory.createRow(lineList[tailRow], tailRow).fg & 0x00ffffff;
+  zoomHighlighter.dispose();
+  return color;
+};
+
+assert.equal(renderJsonTailAtWidth(112), 0x61afef, 'JSON tail keys must be highlighted below 64 visual rows');
+assert.equal(
+  renderJsonTailAtWidth(80),
+  0x61afef,
+  'JSON tail keys must remain highlighted when 100% zoom wraps the same payload beyond 64 visual rows',
+);
+
 const renderLine = {
   length: 12,
   translateToString: line.translateToString,
