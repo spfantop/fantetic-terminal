@@ -15,6 +15,7 @@ import {
   type TerminalHighlightRule,
 } from '../src/utils/terminalOutputHighlighter';
 import { presetTerminalThemes } from '../src/features/appearance/config/iterm-themes';
+import backendDefaultTerminalHighlightRulesDocument from '../../backend/src/settings/defaultTerminalHighlightRules.json';
 
 const rules: TerminalHighlightRule[] = [
   {
@@ -120,6 +121,11 @@ assert.throws(() => parseTerminalHighlightRulesDocument('{"rules":{}}'), /array/
 assert.equal(DEFAULT_TERMINAL_HIGHLIGHT_RULES.length, 62);
 assert.ok(DEFAULT_TERMINAL_HIGHLIGHT_RULES.some(rule => rule.id === 'preset-common-command'));
 assert.equal(parseTerminalHighlightRules(DEFAULT_TERMINAL_HIGHLIGHT_RULES_JSON).length, 62);
+assert.deepEqual(
+  backendDefaultTerminalHighlightRulesDocument,
+  JSON.parse(DEFAULT_TERMINAL_HIGHLIGHT_RULES_JSON),
+  'frontend and backend terminal highlight defaults must never drift',
+);
 
 const darkThemeRules = resolveTerminalHighlightRulesForTheme(
   cloneDefaultTerminalHighlightRules(),
@@ -133,10 +139,63 @@ const darkPresetColors = new Set(
   darkThemeRules.filter(rule => rule.enabled && rule.presetId).map(rule => rule.foreground),
 );
 assert.ok(darkPresetColors.size <= 12, 'system presets must share a compact semantic palette');
+assert.deepEqual(
+  Object.fromEntries([
+    'preset-java-thread',
+    'preset-info',
+    'preset-file-line',
+    'preset-url',
+    'preset-json-boundary',
+    'preset-json-key',
+    'preset-json-string',
+    'preset-json-number',
+    'preset-json-literal',
+    'preset-json-punctuation',
+  ].map(id => [id, darkThemeRules.find(rule => rule.id === id)?.foreground])),
+  {
+    'preset-java-thread': '#A8B3CF',
+    'preset-info': '#6CCFF6',
+    'preset-file-line': '#F0DF86',
+    'preset-url': '#82D2FF',
+    'preset-json-boundary': '#D6A8E5',
+    'preset-json-key': '#82D2FF',
+    'preset-json-string': '#F1AD8D',
+    'preset-json-number': '#B8E58E',
+    'preset-json-literal': '#D6A8E5',
+    'preset-json-punctuation': '#A8B3CF',
+  },
+  'dark defaults must preserve a readable hierarchy between context, source, network and JSON syntax',
+);
 assert.notEqual(
   darkThemeRules.find(rule => rule.id === 'preset-info')?.foreground,
   lightThemeRules.find(rule => rule.id === 'preset-info')?.foreground,
   'system preset colors must adapt to the active terminal background',
+);
+const previewDarkDefault = (text: string) => previewTerminalHighlightSegments(text, {
+  enabled: true,
+  rules: darkThemeRules,
+});
+for (const ipv6Address of [
+  '1:2:3:4:5:6:7:8',
+  '2001:db8::1',
+  'fe80::1',
+  '::1',
+]) {
+  assert.equal(
+    previewDarkDefault(ipv6Address).find(segment => segment.text === ipv6Address)?.foreground,
+    '#82D2FF',
+    `valid IPv6 address must use the network style: ${ipv6Address}`,
+  );
+}
+assert.equal(
+  previewDarkDefault('11:26:00').find(segment => segment.text === '11:26:00')?.foreground,
+  '#9AA7B8',
+  'a bare time must use the timestamp style instead of being misclassified as IPv6',
+);
+assert.equal(
+  previewDarkDefault('aa:bb:cc:dd:ee:ff').some(segment => segment.foreground),
+  false,
+  'a MAC address must not be misclassified as IPv6',
 );
 assert.equal(
   getTerminalHighlightContrastSummary(darkThemeRules, '#1e1e1e').failingRuleCount,
@@ -207,6 +266,172 @@ assert.deepEqual(
   [customizedStackTraceRule.pattern, customizedStackTraceRule.priority],
   ['^custom-stack-frame$', 17],
   'customized stack-trace fields must not be migrated',
+);
+
+const currentPromptPathRule = DEFAULT_TERMINAL_HIGHLIGHT_RULES.find(rule => rule.id === 'preset-prompt-path');
+assert.ok(currentPromptPathRule);
+const migratedPromptPathRule = parseTerminalHighlightRules(JSON.stringify([{
+  ...currentPromptPathRule,
+  pattern: '(?<=:)(?:~|/)[A-Za-z0-9._~:@%+\\-\\/]*(?=\\s|[$#❯➜])',
+}]))[0];
+assert.equal(
+  migratedPromptPathRule.pattern,
+  currentPromptPathRule.pattern,
+  'legacy prompt-path defaults must migrate so URLs are no longer split at their double slash',
+);
+
+const currentIpv6Rule = DEFAULT_TERMINAL_HIGHLIGHT_RULES.find(rule => rule.id === 'preset-ipv6');
+assert.ok(currentIpv6Rule);
+const legacyIpv6Pattern = '\\b(?:[A-Fa-f0-9]{1,4}:){2,7}[A-Fa-f0-9]{1,4}\\b';
+const migratedIpv6Rule = parseTerminalHighlightRules(JSON.stringify([{
+  ...currentIpv6Rule,
+  pattern: legacyIpv6Pattern,
+}]))[0];
+assert.equal(
+  migratedIpv6Rule.pattern,
+  currentIpv6Rule.pattern,
+  'legacy IPv6 defaults must migrate away from time and MAC false positives',
+);
+const customizedIpv6Rule = parseTerminalHighlightRules(JSON.stringify([{
+  ...currentIpv6Rule,
+  pattern: `${legacyIpv6Pattern}|CUSTOM_IPV6`,
+}]))[0];
+assert.equal(
+  customizedIpv6Rule.pattern,
+  `${legacyIpv6Pattern}|CUSTOM_IPV6`,
+  'customized IPv6 patterns must not be migrated',
+);
+
+const legacyBackendDefaultRules = cloneDefaultTerminalHighlightRules()
+  .filter(rule => [
+    'preset-success',
+    'preset-git-subcommand',
+    'preset-double-quoted-string',
+    'preset-file-line',
+    'preset-sql-keyword',
+  ].includes(rule.id))
+  .map(rule => {
+    if (rule.id === 'preset-success') {
+      return {
+        ...rule,
+        pattern: '\\b(SUCCESS|SUCCEEDED|PASS(?:ED)?|OK|DONE|READY|STARTED|RUNNING|UP|COMPLETED)\\b',
+        flags: 'gi',
+      };
+    }
+    if (rule.id === 'preset-git-subcommand' || rule.id === 'preset-double-quoted-string') {
+      return { ...rule, enabled: true };
+    }
+    if (rule.id === 'preset-file-line') {
+      return { ...rule, foreground: '#FFD866', underline: true };
+    }
+    return { ...rule, flags: 'gi' };
+  });
+const migratedLegacyBackendDefaults = parseTerminalHighlightRules(JSON.stringify(legacyBackendDefaultRules));
+for (const migratedRule of migratedLegacyBackendDefaults) {
+  const currentRule = DEFAULT_TERMINAL_HIGHLIGHT_RULES.find(rule => rule.id === migratedRule.id);
+  assert.ok(currentRule);
+  assert.deepEqual(
+    migratedRule,
+    currentRule,
+    `untouched historical backend default must migrate completely: ${migratedRule.id}`,
+  );
+}
+const customizedLegacyFileLine = parseTerminalHighlightRules(JSON.stringify([{
+  ...DEFAULT_TERMINAL_HIGHLIGHT_RULES.find(rule => rule.id === 'preset-file-line'),
+  foreground: '#123456',
+  underline: true,
+}]))[0];
+assert.equal(customizedLegacyFileLine.foreground, '#123456');
+assert.equal(
+  customizedLegacyFileLine.underline,
+  true,
+  'a historical rule with customized fields must not be rewritten as an untouched default',
+);
+
+const legacyJsonPresetDefinitions: Array<[string, string, string, string, number, string]> = [
+  [
+    'preset-json-inline-object',
+    'jsonInlineObject',
+    '\\{(?:[^{}\\"\\\\]+|\\\\.|\\"(?:\\\\.|[^\\"\\\\])*\\"|\\[(?:[^\\[\\]\\"\\\\]+|\\\\.|\\"(?:\\\\.|[^\\"\\\\])*\\")*\\]|\\{(?:[^{}\\"\\\\]+|\\\\.|\\"(?:\\\\.|[^\\"\\\\])*\\")*\\})*\\}',
+    'g',
+    240,
+    'jsonInlineObject',
+  ],
+  [
+    'preset-json-inline-array',
+    'jsonInlineArray',
+    '\\[(?:[^\\[\\]{}\\"\\\\]+|\\\\.|\\"(?:\\\\.|[^\\"\\\\])*\\"|\\{(?:[^{}\\"\\\\]+|\\\\.|\\"(?:\\\\.|[^\\"\\\\])*\\")*\\})*\\]',
+    'g',
+    239,
+    'jsonInlineArray',
+  ],
+  [
+    'preset-json-pretty-key-value-line',
+    'jsonPrettyKeyValueLine',
+    '^\\s*\\"(?:\\\\.|[^\\"\\\\])+\\"\\s*:\\s*(?:\\"(?:\\\\.|[^\\"\\\\])*\\"|[-+]?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?|true|false|null|\\{.*\\}|\\[.*\\])\\s*,?\\s*$',
+    'gim',
+    238,
+    'jsonPrettyKeyValueLine',
+  ],
+  [
+    'preset-json-pretty-bracket-line',
+    'jsonPrettyBracketLine',
+    '^\\s*[\\{\\}\\[\\]],?\\s*$',
+    'gm',
+    237,
+    'jsonPrettyBracketLine',
+  ],
+];
+const legacyJsonPresetRules: TerminalHighlightRule[] = legacyJsonPresetDefinitions
+  .map(([id, name, pattern, flags, priority, presetId]) => ({
+  id,
+  name,
+  enabled: true,
+  pattern: String(pattern),
+  flags: String(flags),
+  foreground: '#98C379',
+  bold: false,
+  underline: false,
+  priority: Number(priority),
+  stopOnMatch: false,
+  presetId,
+}));
+const historicalJsonDefaults = cloneDefaultTerminalHighlightRules()
+  .filter(rule => rule.id !== 'preset-java-thread' && !rule.id.startsWith('preset-json-'));
+historicalJsonDefaults.push(...legacyJsonPresetRules);
+const migratedHistoricalJsonDefaults = parseTerminalHighlightRules(JSON.stringify(historicalJsonDefaults));
+assert.equal(migratedHistoricalJsonDefaults.length, DEFAULT_TERMINAL_HIGHLIGHT_RULES.length);
+assert.ok(migratedHistoricalJsonDefaults.some(rule => rule.id === 'preset-java-thread'));
+for (const semanticJsonRuleId of [
+  'preset-json-boundary',
+  'preset-json-key',
+  'preset-json-string',
+  'preset-json-number',
+  'preset-json-literal',
+  'preset-json-punctuation',
+]) {
+  assert.ok(
+    migratedHistoricalJsonDefaults.some(rule => rule.id === semanticJsonRuleId),
+    `historical JSON defaults must gain the semantic preset: ${semanticJsonRuleId}`,
+  );
+}
+assert.equal(
+  migratedHistoricalJsonDefaults.some(rule => rule.id === 'preset-json-inline-object'),
+  false,
+  'obsolete untouched JSON regex presets must be removed after migration',
+);
+const customizedLegacyJsonRules = legacyJsonPresetRules.map((rule, index) => (
+  index === 0 ? { ...rule, foreground: '#123456' } : rule
+));
+const preservedCustomizedLegacyJsonRules = parseTerminalHighlightRules(JSON.stringify(customizedLegacyJsonRules));
+assert.ok(
+  preservedCustomizedLegacyJsonRules.some(rule => rule.id === 'preset-json-inline-object'),
+  'customized legacy JSON presets must remain in compatibility mode',
+);
+assert.equal(
+  preservedCustomizedLegacyJsonRules.some(rule => rule.id === 'preset-json-boundary'),
+  false,
+  'semantic JSON defaults must not be injected into a customized legacy JSON group',
 );
 
 const currentCausedByRule = DEFAULT_TERMINAL_HIGHLIGHT_RULES.find(rule => rule.id === 'preset-caused-by');

@@ -227,6 +227,94 @@ assert.equal(semanticPreview[0].foreground, '#C678DD', 'settings preview must us
 assert.ok(semanticPreview.some(segment => segment.text === '"code"' && segment.foreground === '#61AFEF'));
 assert.ok(semanticPreview.some(segment => segment.text === '200' && segment.foreground === '#D19A66'));
 assert.ok(semanticPreview.some(segment => segment.text === 'true' && segment.foreground === '#C678DD'));
+const prefixedJsonPreview = previewTerminalRenderHighlightSegments(
+  '2026-09-02 11:26:00.341 [scheduling-1] INFO [ThirdPartyFeignLogger.java:46] - '
+    + '[ThirdPartyFeign] [Client#read] {"errCode":0,"success":true}',
+  { enabled: true, rules: defaultSemanticRules },
+);
+assert.equal(
+  prefixedJsonPreview.find(segment => segment.text === '2026-09-02 11:26:00.341')?.foreground,
+  '#7A8599',
+  'JSON log lines must preserve the normal timestamp style in their prefix',
+);
+assert.equal(
+  prefixedJsonPreview.some(segment => segment.text === '11:26:00' && segment.foreground === '#A78BFA'),
+  false,
+  'time components before a JSON payload must not be misclassified as IPv6 addresses',
+);
+const errorCodePreview = previewTerminalRenderHighlightSegments(
+  '{"errCode":500,"status":503,"status":200,"success":false,"errMsg":"系统异常，请联系管理员","errCode":0}',
+  { enabled: true, rules: defaultSemanticRules },
+);
+const errorCodeSegments = errorCodePreview.filter(segment => segment.text === '500' || segment.text === '503');
+assert.equal(errorCodeSegments.length, 2);
+assert.ok(
+  errorCodeSegments.every(segment => segment.foreground === '#F44747' && segment.bold === true),
+  'error-code and status fields must render failing HTTP-style values as critical',
+);
+assert.equal(
+  errorCodePreview.find(segment => segment.text === '200')?.foreground,
+  '#D19A66',
+  'successful status values must retain the normal JSON number style',
+);
+assert.equal(
+  errorCodePreview.find(segment => segment.text === '0')?.foreground,
+  '#D19A66',
+  'zero-valued error codes must retain the normal JSON number style',
+);
+assert.deepEqual(
+  errorCodePreview.find(segment => segment.text === 'false'),
+  {
+    text: 'false',
+    foreground: '#F44747',
+    background: undefined,
+    bold: true,
+    underline: false,
+  },
+  'success=false must use the same critical style as a failing error code',
+);
+assert.deepEqual(
+  errorCodePreview.find(segment => segment.text === '"系统异常，请联系管理员"'),
+  {
+    text: '"系统异常，请联系管理员"',
+    foreground: '#F44747',
+    background: undefined,
+    bold: true,
+    underline: false,
+  },
+  'error messages in a failed JSON response must use the critical style',
+);
+const customizedErrorRules = defaultSemanticRules.map((rule) => {
+  if (rule.id === 'preset-error') return { ...rule, foreground: '#E5484D' };
+  if (rule.id === 'preset-http-status-error') return { ...rule, foreground: '#FFB224' };
+  return rule;
+});
+const customizedErrorPreview = previewTerminalRenderHighlightSegments(
+  '{"errCode":500,"success":false,"errMsg":"失败"}',
+  { enabled: true, rules: customizedErrorRules },
+);
+for (const text of ['500', 'false', '"失败"']) {
+  assert.equal(
+    customizedErrorPreview.find(segment => segment.text === text)?.foreground,
+    '#E5484D',
+    `JSON business failure token ${text} must use the general ERROR semantic style`,
+  );
+}
+const successMessagePreview = previewTerminalRenderHighlightSegments(
+  '{"errCode":0,"success":true,"errMsg":"操作成功"}',
+  { enabled: true, rules: defaultSemanticRules },
+);
+assert.equal(successMessagePreview.find(segment => segment.text === 'true')?.foreground, '#C678DD');
+assert.equal(successMessagePreview.find(segment => segment.text === '"操作成功"')?.foreground, '#98C379');
+const denseErrorCodePreview = previewTerminalRenderHighlightSegments(
+  `{${Array.from({ length: 80 }, (_, index) => `"field${index}":${index}`).join(',')},"errCode":500}`,
+  { enabled: true, rules: defaultSemanticRules },
+);
+assert.equal(
+  denseErrorCodePreview.find(segment => segment.text === '500')?.foreground,
+  '#F44747',
+  'critical error codes must survive the dense JSON primitive budget',
+);
 const headerPreview = previewTerminalRenderHighlightSegments('headers=[Server:"gunicorn", Date:"Fri"]', {
   enabled: true,
   rules: defaultSemanticRules,
@@ -252,6 +340,77 @@ const refererHeaderPreview = previewTerminalRenderHighlightSegments(
 assert.ok(
   refererHeaderPreview.some(segment => segment.text.includes('http://localhost:5173') && segment.foreground),
   'URL-valued request headers should retain useful scoped highlighting',
+);
+const feignRequestUrl = 'http://172.16.0.109:6656/zhengqi-openapi/openapi/invoice-delivery/listByRequestId';
+const feignRequestPreview = previewTerminalRenderHighlightSegments(
+  `[ThirdPartyFeign] ---> POST ${feignRequestUrl} HTTP/1.1`,
+  { enabled: true, rules: defaultSemanticRules },
+);
+assert.deepEqual(
+  feignRequestPreview.find(segment => segment.text.includes('listByRequestId')),
+  {
+    text: feignRequestUrl,
+    foreground: '#61AFEF',
+    background: undefined,
+    bold: false,
+    underline: true,
+  },
+  'HTTP URLs must not be split or overridden by shell prompt-path highlighting',
+);
+for (const feignHeaderLine of [
+  '[ThirdPartyFeign] [Client#read] date: Wed, 02 Sep 2026 01:23:00 GMT',
+  '[ThirdPartyFeign] [Client#read] keep-alive: timeout=60',
+  '[ThirdPartyFeign] [Client#read] content-type: application/json;charset=UTF-8',
+]) {
+  assert.equal(
+    previewTerminalRenderHighlightSegments(feignHeaderLine, {
+      enabled: true,
+      rules: defaultSemanticRules,
+    }).some(segment => segment.foreground || segment.background || segment.bold || segment.underline),
+    false,
+    `Feign metadata headers must stay visually neutral: ${feignHeaderLine}`,
+  );
+}
+const prefixedFeignHeaderPreview = previewTerminalRenderHighlightSegments(
+  '2026-09-02 11:26:00.341 [scheduling-1] INFO [ThirdPartyFeignLogger.java:46] - '
+    + '[ThirdPartyFeign] [Client#read] content-type: application/json;charset=UTF-8',
+  { enabled: true, rules: defaultSemanticRules },
+);
+assert.equal(
+  prefixedFeignHeaderPreview.find(segment => segment.text === '2026-09-02 11:26:00.341')?.foreground,
+  '#7A8599',
+  'Feign metadata lines must preserve the normal timestamp style in their log prefix',
+);
+assert.equal(
+  prefixedFeignHeaderPreview.find(segment => segment.text === '[scheduling-1]')?.foreground,
+  '#98C379',
+  'Feign metadata lines must preserve the normal thread style in their log prefix',
+);
+assert.equal(
+  prefixedFeignHeaderPreview.find(segment => segment.text === 'INFO')?.foreground,
+  '#8BE9FD',
+  'Feign metadata lines must preserve the normal log-level style in their prefix',
+);
+assert.equal(
+  prefixedFeignHeaderPreview.find(segment => segment.text === 'ThirdPartyFeignLogger.java:46')?.foreground,
+  '#DCDCAA',
+  'Feign metadata lines must preserve the normal source-location style in their prefix',
+);
+assert.equal(
+  prefixedFeignHeaderPreview.some(segment => (
+    segment.text.includes('application/json')
+    && (segment.foreground || segment.background || segment.bold || segment.underline)
+  )),
+  false,
+  'Feign metadata values must remain neutral after restoring prefix highlighting',
+);
+const feignHostHeaderPreview = previewTerminalRenderHighlightSegments(
+  '[ThirdPartyFeign] [Client#read] host: 172.16.0.109:6656',
+  { enabled: true, rules: defaultSemanticRules },
+);
+assert.ok(
+  feignHostHeaderPreview.some(segment => segment.text === '172.16.0.109:6656' && segment.foreground),
+  'Feign host headers should retain scoped network-address highlighting',
 );
 const multipleJsonPreview = previewTerminalRenderHighlightSegments('headers=[], body={"account":1}', {
   enabled: true,
@@ -469,6 +628,24 @@ const veryLongJsonPreview = previewTerminalRenderHighlightSegments(veryLongJsonT
 assert.ok(
   veryLongJsonPreview.find(segment => segment.text === '"option219"')?.foreground,
   'dense JSON must not stop highlighting keys after the logical-line range budget is exhausted',
+);
+const oversizedJsonText = `===Result=== {${Array.from(
+  { length: 760 },
+  (_, index) => `"oversizedField${index}":"value${index}"`,
+).join(',')},"oversizedTail":500}`;
+assert.ok(oversizedJsonText.length > 16_384, 'oversized JSON fixture must cross the previous scan cutoff');
+const oversizedJsonPreview = previewTerminalRenderHighlightSegments(oversizedJsonText, {
+  enabled: true,
+  rules: defaultSemanticRules,
+});
+assert.equal(
+  oversizedJsonPreview.find(segment => segment.text === '"oversizedTail"')?.foreground,
+  '#61AFEF',
+  'JSON keys after the first 16KB scan window must remain highlighted',
+);
+assert.ok(
+  oversizedJsonPreview.filter(segment => segment.foreground).length <= 4096,
+  'oversized JSON highlighting must remain bounded by the global range budget',
 );
 const veryLongJsonTail = veryLongJsonText.slice(-180);
 const veryLongJsonTailColumns = Array.from({ length: veryLongJsonTail.length + 1 }, (_, index) => index);

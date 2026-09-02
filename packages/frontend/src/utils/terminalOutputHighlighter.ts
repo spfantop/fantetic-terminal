@@ -127,11 +127,17 @@ type TerminalHighlightSemanticRole =
   | 'info'
   | 'muted'
   | 'timestamp'
+  | 'context'
+  | 'source'
+  | 'network'
   | 'identity'
   | 'command'
   | 'syntax'
   | 'string'
   | 'value'
+  | 'key'
+  | 'literal'
+  | 'punctuation'
   | 'structure';
 
 const TERMINAL_HIGHLIGHT_ROLE_BY_PRESET_ID: Readonly<Record<string, TerminalHighlightSemanticRole>> = {
@@ -143,16 +149,18 @@ const TERMINAL_HIGHLIGHT_ROLE_BY_PRESET_ID: Readonly<Record<string, TerminalHigh
   debug: 'muted', commentLine: 'muted', hash: 'muted',
   timestampIso: 'timestamp', timestampSlash: 'timestamp', timestampChinese: 'timestamp',
   dateOnly: 'timestamp', timeOnly: 'timestamp',
-  javaThread: 'identity', rootPrompt: 'identity', userHostPrompt: 'identity', promptPath: 'identity',
-  shellPromptSymbol: 'identity', gitBranchPrompt: 'identity', url: 'identity', linuxPath: 'identity',
-  windowsPath: 'identity', fileLine: 'identity', ipv4Port: 'identity', ipv4: 'identity',
-  ipv6: 'identity', domain: 'identity', traceId: 'identity', uuid: 'identity', configFile: 'identity',
+  javaThread: 'context',
+  linuxPath: 'source', windowsPath: 'source', fileLine: 'source', configFile: 'source',
+  url: 'network', ipv4Port: 'network', ipv4: 'network', ipv6: 'network', domain: 'network',
+  rootPrompt: 'identity', userHostPrompt: 'identity', promptPath: 'identity',
+  shellPromptSymbol: 'identity', gitBranchPrompt: 'identity', traceId: 'identity', uuid: 'identity',
   commonCommand: 'command', devopsCommand: 'command', gitSubcommand: 'command',
   dockerSubcommand: 'command', kubectlWord: 'command', sqlKeyword: 'command',
   longOption: 'syntax', shortOption: 'syntax', envAssignment: 'syntax', shellVariable: 'syntax', operator: 'syntax',
   doubleQuotedString: 'string', singleQuotedString: 'string', jsonString: 'string',
-  size: 'value', duration: 'value', percent: 'value', number: 'value', jsonNumber: 'value', jsonLiteral: 'value',
-  stackTrace: 'structure', jsonBoundary: 'structure', jsonKey: 'structure', jsonPunctuation: 'structure',
+  size: 'value', duration: 'value', percent: 'value', number: 'value', jsonNumber: 'value',
+  jsonKey: 'key', jsonLiteral: 'literal', jsonPunctuation: 'punctuation',
+  stackTrace: 'structure', jsonBoundary: 'structure',
 };
 
 const DARK_TERMINAL_HIGHLIGHT_PALETTE: Readonly<Record<TerminalHighlightSemanticRole, string>> = {
@@ -162,11 +170,17 @@ const DARK_TERMINAL_HIGHLIGHT_PALETTE: Readonly<Record<TerminalHighlightSemantic
   info: '#6CCFF6',
   muted: '#A8B3CF',
   timestamp: '#9AA7B8',
+  context: '#A8B3CF',
+  source: '#F0DF86',
+  network: '#82D2FF',
   identity: '#82D2FF',
   command: '#F0DF86',
   syntax: '#7FE0C3',
   string: '#F1AD8D',
   value: '#B8E58E',
+  key: '#82D2FF',
+  literal: '#D6A8E5',
+  punctuation: '#A8B3CF',
   structure: '#D6A8E5',
 };
 
@@ -177,23 +191,112 @@ const LIGHT_TERMINAL_HIGHLIGHT_PALETTE: Readonly<Record<TerminalHighlightSemanti
   info: '#006A85',
   muted: '#4B5563',
   timestamp: '#536171',
+  context: '#4B5563',
+  source: '#5B4B00',
+  network: '#005EA8',
   identity: '#005EA8',
   command: '#5B4B00',
   syntax: '#006B57',
   string: '#8A3D1F',
   value: '#3C6E13',
+  key: '#005EA8',
+  literal: '#6B3FA0',
+  punctuation: '#4B5563',
   structure: '#6B3FA0',
 };
-const LEGACY_TERMINAL_HIGHLIGHT_RULE_DEFAULTS: Readonly<Record<string, Pick<TerminalHighlightRule, 'pattern' | 'priority'>>> = {
-  'preset-stacktrace': {
+type LegacyTerminalHighlightRuleDefaults = Partial<Pick<
+  TerminalHighlightRule,
+  'enabled' | 'pattern' | 'flags' | 'foreground' | 'background'
+  | 'bold' | 'underline' | 'priority' | 'stopOnMatch'
+>>;
+
+const LEGACY_TERMINAL_HIGHLIGHT_RULE_DEFAULTS: Readonly<Record<
+  string,
+  readonly LegacyTerminalHighlightRuleDefaults[]
+>> = {
+  'preset-success': [{
+    pattern: '\\b(SUCCESS|SUCCEEDED|PASS(?:ED)?|OK|DONE|READY|STARTED|RUNNING|UP|COMPLETED)\\b',
+    flags: 'gi',
+  }],
+  'preset-prompt-path': [{
+    pattern: '(?<=:)(?:~|/)[A-Za-z0-9._~:@%+\\-\\/]*(?=\\s|[$#❯➜])',
+    priority: 153,
+  }],
+  'preset-common-command': [{ flags: 'gi' }],
+  'preset-git-subcommand': [{ enabled: true }],
+  'preset-docker-subcommand': [{ enabled: true }],
+  'preset-kubectl-word': [{ enabled: true }],
+  'preset-double-quoted-string': [{ enabled: true }],
+  'preset-single-quoted-string': [{ enabled: true }],
+  'preset-file-line': [{ foreground: '#FFD866', underline: true }],
+  'preset-ipv6': [{
+    pattern: '\\b(?:[A-Fa-f0-9]{1,4}:){2,7}[A-Fa-f0-9]{1,4}\\b',
+    priority: 110,
+  }],
+  'preset-stacktrace': [{
     pattern: '^\\s*at\\s+(?:[a-zA-Z_$][\\w$]*\\.)+[A-Za-z_$][\\w$]*\\([^)]*\\)',
     priority: 129,
-  },
-  'preset-caused-by': {
+  }],
+  'preset-caused-by': [{
     pattern: '^\\s*Caused by:\\s+.*$',
     priority: 130,
-  },
+  }],
+  'preset-sql-danger': [{ flags: 'gi' }],
+  'preset-sql-keyword': [{ flags: 'gi' }],
 };
+
+interface LegacyJsonPresetDefaults {
+  id: string;
+  name: string;
+  pattern: string;
+  flags: string;
+  priority: number;
+  presetId: string;
+}
+
+const LEGACY_JSON_PRESET_DEFAULTS: readonly LegacyJsonPresetDefaults[] = [
+  {
+    id: 'preset-json-inline-object',
+    name: 'jsonInlineObject',
+    pattern: '\\{(?:[^{}\\"\\\\]+|\\\\.|\\"(?:\\\\.|[^\\"\\\\])*\\"|\\[(?:[^\\[\\]\\"\\\\]+|\\\\.|\\"(?:\\\\.|[^\\"\\\\])*\\")*\\]|\\{(?:[^{}\\"\\\\]+|\\\\.|\\"(?:\\\\.|[^\\"\\\\])*\\")*\\})*\\}',
+    flags: 'g',
+    priority: 240,
+    presetId: 'jsonInlineObject',
+  },
+  {
+    id: 'preset-json-inline-array',
+    name: 'jsonInlineArray',
+    pattern: '\\[(?:[^\\[\\]{}\\"\\\\]+|\\\\.|\\"(?:\\\\.|[^\\"\\\\])*\\"|\\{(?:[^{}\\"\\\\]+|\\\\.|\\"(?:\\\\.|[^\\"\\\\])*\\")*\\})*\\]',
+    flags: 'g',
+    priority: 239,
+    presetId: 'jsonInlineArray',
+  },
+  {
+    id: 'preset-json-pretty-key-value-line',
+    name: 'jsonPrettyKeyValueLine',
+    pattern: '^\\s*\\"(?:\\\\.|[^\\"\\\\])+\\"\\s*:\\s*(?:\\"(?:\\\\.|[^\\"\\\\])*\\"|[-+]?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?|true|false|null|\\{.*\\}|\\[.*\\])\\s*,?\\s*$',
+    flags: 'gim',
+    priority: 238,
+    presetId: 'jsonPrettyKeyValueLine',
+  },
+  {
+    id: 'preset-json-pretty-bracket-line',
+    name: 'jsonPrettyBracketLine',
+    pattern: '^\\s*[\\{\\}\\[\\]],?\\s*$',
+    flags: 'gm',
+    priority: 237,
+    presetId: 'jsonPrettyBracketLine',
+  },
+];
+
+const SEMANTIC_JSON_PRESET_IDS = new Set([
+  'preset-json-boundary',
+  'preset-json-key',
+  'preset-json-string',
+  'preset-json-number',
+  'preset-json-literal',
+  'preset-json-punctuation',
+]);
 
 export const DEFAULT_TERMINAL_HIGHLIGHT_RULES_JSON = JSON.stringify(DEFAULT_TERMINAL_HIGHLIGHT_RULES_DOCUMENT);
 
@@ -376,17 +479,83 @@ export function parseTerminalHighlightRules(value?: string | null): TerminalHigh
 }
 
 function migrateLegacyTerminalHighlightRuleDefaults(rules: TerminalHighlightRule[]): TerminalHighlightRule[] {
-  return rules.map(rule => {
-    const legacyDefaults = LEGACY_TERMINAL_HIGHLIGHT_RULE_DEFAULTS[rule.id];
+  const migratedRules = rules.map(rule => {
     const currentDefaults = DEFAULT_TERMINAL_HIGHLIGHT_RULES_BY_ID.get(rule.id);
-    if (!legacyDefaults || !currentDefaults) return rule;
+    const legacyDefaultList = LEGACY_TERMINAL_HIGHLIGHT_RULE_DEFAULTS[rule.id];
+    if (!currentDefaults || !legacyDefaultList) return rule;
 
-    return {
-      ...rule,
-      pattern: rule.pattern === legacyDefaults.pattern ? currentDefaults.pattern : rule.pattern,
-      priority: rule.priority === legacyDefaults.priority ? currentDefaults.priority : rule.priority,
-    };
+    return legacyDefaultList.reduce<TerminalHighlightRule>((migratedRule, legacyDefaults) => {
+      const matchesLegacyDefaults = (
+        migratedRule.pattern === (legacyDefaults.pattern ?? currentDefaults.pattern)
+        && (legacyDefaults.enabled === undefined || migratedRule.enabled === legacyDefaults.enabled)
+        && (legacyDefaults.flags === undefined || migratedRule.flags === legacyDefaults.flags)
+        && (legacyDefaults.foreground === undefined || migratedRule.foreground === legacyDefaults.foreground)
+        && (legacyDefaults.background === undefined || migratedRule.background === legacyDefaults.background)
+        && (legacyDefaults.bold === undefined || migratedRule.bold === legacyDefaults.bold)
+        && (legacyDefaults.underline === undefined || migratedRule.underline === legacyDefaults.underline)
+        && (legacyDefaults.priority === undefined || migratedRule.priority === legacyDefaults.priority)
+        && (legacyDefaults.stopOnMatch === undefined || migratedRule.stopOnMatch === legacyDefaults.stopOnMatch)
+      );
+      if (!matchesLegacyDefaults) return migratedRule;
+
+      return {
+        ...migratedRule,
+        enabled: legacyDefaults.enabled === undefined ? migratedRule.enabled : currentDefaults.enabled,
+        pattern: legacyDefaults.pattern === undefined ? migratedRule.pattern : currentDefaults.pattern,
+        flags: legacyDefaults.flags === undefined ? migratedRule.flags : currentDefaults.flags,
+        foreground: legacyDefaults.foreground === undefined ? migratedRule.foreground : currentDefaults.foreground,
+        background: legacyDefaults.background === undefined ? migratedRule.background : currentDefaults.background,
+        bold: legacyDefaults.bold === undefined ? migratedRule.bold : currentDefaults.bold,
+        underline: legacyDefaults.underline === undefined ? migratedRule.underline : currentDefaults.underline,
+        priority: legacyDefaults.priority === undefined ? migratedRule.priority : currentDefaults.priority,
+        stopOnMatch: legacyDefaults.stopOnMatch === undefined
+          ? migratedRule.stopOnMatch
+          : currentDefaults.stopOnMatch,
+      };
+    }, rule);
   });
+  return migrateLegacyJsonPresetDefaults(migratedRules);
+}
+
+function migrateLegacyJsonPresetDefaults(rules: TerminalHighlightRule[]): TerminalHighlightRule[] {
+  if (rules.some(rule => SEMANTIC_JSON_PRESET_IDS.has(rule.id))) return rules;
+
+  const legacyRuleList = LEGACY_JSON_PRESET_DEFAULTS.map(defaults => (
+    rules.find(rule => rule.id === defaults.id)
+  ));
+  const hasUntouchedLegacyDefaults = legacyRuleList.every((rule, index) => {
+    const defaults = LEGACY_JSON_PRESET_DEFAULTS[index];
+    return Boolean(
+      rule
+      && rule.name === defaults.name
+      && rule.enabled
+      && rule.pattern === defaults.pattern
+      && rule.flags === defaults.flags
+      && rule.foreground?.toUpperCase() === '#98C379'
+      && rule.background === undefined
+      && !rule.bold
+      && !rule.underline
+      && rule.priority === defaults.priority
+      && !rule.stopOnMatch
+      && rule.presetId === defaults.presetId
+    );
+  });
+  if (!hasUntouchedLegacyDefaults) return rules;
+
+  const legacyIdSet = new Set(LEGACY_JSON_PRESET_DEFAULTS.map(defaults => defaults.id));
+  const firstLegacyIndex = rules.findIndex(rule => legacyIdSet.has(rule.id));
+  const migratedRules = rules.filter(rule => !legacyIdSet.has(rule.id));
+  const semanticJsonDefaults = DEFAULT_TERMINAL_HIGHLIGHT_RULES
+    .filter(rule => SEMANTIC_JSON_PRESET_IDS.has(rule.id))
+    .map(rule => ({ ...rule }));
+  migratedRules.splice(firstLegacyIndex, 0, ...semanticJsonDefaults);
+
+  if (!migratedRules.some(rule => rule.id === 'preset-java-thread')) {
+    const javaThreadDefaults = DEFAULT_TERMINAL_HIGHLIGHT_RULES_BY_ID.get('preset-java-thread');
+    const timeRuleIndex = migratedRules.findIndex(rule => rule.id === 'preset-time-only');
+    if (javaThreadDefaults) migratedRules.splice(timeRuleIndex + 1, 0, { ...javaThreadDefaults });
+  }
+  return migratedRules;
 }
 
 export function parseTerminalHighlightRulesDocument(value: string): TerminalHighlightRule[] {

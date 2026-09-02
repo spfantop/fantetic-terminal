@@ -115,13 +115,14 @@ interface JsonHighlightStyles {
   string: Partial<TerminalHighlightRange>;
   number: Partial<TerminalHighlightRange>;
   literal: Partial<TerminalHighlightRange>;
+  error: Partial<TerminalHighlightRange>;
   boundary: Partial<TerminalHighlightRange>;
   punctuation: Partial<TerminalHighlightRange>;
 }
 
 type TerminalRenderTextScope =
   | { kind: 'general' }
-  | { kind: 'header'; headerName: string }
+  | { kind: 'header'; headerName: string; prefixEnd: number; valueStart: number }
   | { kind: 'json'; jsonStart: number };
 
 type ScopedHighlightRangeResolver = (
@@ -509,6 +510,7 @@ function sameHighlightStyle(left?: TerminalHighlightRange, right?: TerminalHighl
 // Request headers frequently carry opaque cookies and credentials. Apply only
 // field-relevant presets there so generic token rules cannot fragment secrets.
 const REQUEST_HEADER_PATTERN = /^\s*=+Headers=+\s+([^:\s]+)\s*:\s*/i;
+const FEIGN_HEADER_PATTERN = /\[ThirdPartyFeign\]\s+(?:\[[^\]\r\n]+\]\s+)?([A-Za-z][A-Za-z0-9-]*)\s*:\s*/i;
 const URL_HEADER_NAMES = new Set(['referer', 'referrer', 'origin', 'location', 'content-location']);
 const HOST_HEADER_NAMES = new Set(['host', 'x-forwarded-host', 'forwarded']);
 const URL_HEADER_PRESET_IDS = new Set(['url', 'domain', 'ipv4', 'ipv4Port', 'ipv6']);
@@ -542,14 +544,35 @@ function createScopedHighlightRangeResolver(
   const jsonResolver = createResolver(rules.filter(
     rule => !rule.presetId || JSON_RELEVANT_PRESET_IDS.has(rule.presetId),
   ));
+  const resolveSlice = (
+    resolver: (text: string) => TerminalHighlightRange[],
+    text: string,
+    start: number,
+    end = text.length,
+  ) => resolver(text.slice(start, end)).map(range => ({
+    ...range,
+    start: range.start + start,
+    end: range.end + start,
+  }));
 
   return (text: string, scope: TerminalRenderTextScope) => {
     if (scope.kind === 'header') {
-      if (URL_HEADER_NAMES.has(scope.headerName)) return urlHeaderResolver(text);
-      if (HOST_HEADER_NAMES.has(scope.headerName)) return hostHeaderResolver(text);
-      return customResolver(text);
+      const valueResolver = URL_HEADER_NAMES.has(scope.headerName)
+        ? urlHeaderResolver
+        : HOST_HEADER_NAMES.has(scope.headerName)
+          ? hostHeaderResolver
+          : customResolver;
+      return [
+        ...resolveSlice(generalResolver, text, 0, scope.prefixEnd),
+        ...resolveSlice(valueResolver, text, scope.valueStart),
+      ];
     }
-    if (scope.kind === 'json') return jsonResolver(text);
+    if (scope.kind === 'json') {
+      return [
+        ...resolveSlice(generalResolver, text, 0, scope.jsonStart),
+        ...resolveSlice(jsonResolver, text, scope.jsonStart),
+      ];
+    }
     return generalResolver(text);
   };
 }
@@ -566,14 +589,17 @@ function resolveRenderRanges(
 }
 
 function classifyTerminalRenderText(text: string): TerminalRenderTextScope {
-  const header = REQUEST_HEADER_PATTERN.exec(text);
+  const header = REQUEST_HEADER_PATTERN.exec(text) ?? FEIGN_HEADER_PATTERN.exec(text);
   if (header) {
-    return { kind: 'header', headerName: header[1].toLowerCase().replaceAll('_', '-') };
+    return {
+      kind: 'header',
+      headerName: header[1].toLowerCase().replaceAll('_', '-'),
+      prefixEnd: header.index,
+      valueStart: header.index + header[0].length,
+    };
   }
-  if (text.length <= MAX_JSON_SCAN_LENGTH) {
-    const jsonStart = findJsonStart(text);
-    if (jsonStart >= 0) return { kind: 'json', jsonStart };
-  }
+  const jsonStart = findJsonStart(text, 0, Math.min(text.length, MAX_JSON_SCAN_LENGTH));
+  if (jsonStart >= 0) return { kind: 'json', jsonStart };
   return { kind: 'general' };
 }
 
@@ -700,12 +726,14 @@ function getLineTextAndColumns(line: XtermTextLine): {
 /** Linear JSON lexer for visual rows. It does not require a complete object,
  * so wrapped JSON remains highlighted after resize. Dense payloads omit string
  * values and punctuation to keep xterm DOM span creation predictably bounded. */
-// Bound work for pathological payloads while covering the 16KB logical-line
-// window. Only ranges intersecting the current visual row become cell styles.
+// Bound pathological payload work: detect JSON within the first 16KB and scan
+// at most 128KB continuously so string state survives internal boundaries.
+// Only ranges intersecting the current visual row become cell styles.
 const MAX_JSON_TOKENS_PER_LOGICAL_LINE = 128;
 const MAX_JSON_TOKENS_TOTAL = 4096;
 const MAX_JSON_STRUCTURES_PER_LINE = 8;
 const MAX_JSON_SCAN_LENGTH = 16_384;
+const MAX_JSON_TOTAL_SCAN_LENGTH = MAX_JSON_SCAN_LENGTH * MAX_JSON_STRUCTURES_PER_LINE;
 const DENSE_JSON_STRUCTURE_LENGTH = 768;
 const MAX_DENSE_JSON_RANGES_PER_STRUCTURE = 4096;
 const MAX_DENSE_JSON_PRIMITIVE_RANGES = 8;
@@ -728,6 +756,7 @@ function createJsonHighlightStyles(rules: TerminalHighlightRule[]): JsonHighligh
     'preset-json-pretty-key-value-line', 'preset-json-pretty-bracket-line',
   );
   const enabledJsonRules = rules.filter(rule => rule.enabled && rule.id.startsWith('preset-json-'));
+  const errorRule = find('preset-error', 'preset-http-status-error', 'preset-fatal');
   // Older saved defaults used the same green for every JSON rule. Treat that
   // exact legacy palette as defaults so users receive semantic colours without
   // having to reset their customised rule document.
@@ -749,6 +778,7 @@ function createJsonHighlightStyles(rules: TerminalHighlightRule[]): JsonHighligh
     string: slot(['preset-json-string', 'preset-double-quoted-string'], '#CE9178'),
     number: slot(['preset-json-number', 'preset-number'], '#B5CEA8'),
     literal: slot(['preset-json-literal'], '#569CD6'),
+    error: errorRule ? style(errorRule, '#FF6363') : {},
     boundary: semanticMode
       ? slot(['preset-json-boundary'], '#C586C0')
       : legacyMonochromeJson
@@ -763,7 +793,7 @@ function resolveJsonRanges(
   styles: JsonHighlightStyles,
   firstJsonStart: number,
 ): TerminalHighlightRange[] {
-  if (!styles.enabled || text.length > MAX_JSON_SCAN_LENGTH) return [];
+  if (!styles.enabled) return [];
   const ranges: TerminalHighlightRange[] = [];
   const push = (tokenStart: number, tokenEnd: number, style: Partial<TerminalHighlightRange>) => {
     if (ranges.length >= MAX_JSON_TOKENS_TOTAL || tokenEnd <= tokenStart) return;
@@ -771,17 +801,21 @@ function resolveJsonRanges(
   };
 
   let searchOffset = firstJsonStart;
+  const scanLimit = Math.min(text.length, firstJsonStart + MAX_JSON_TOTAL_SCAN_LENGTH);
   for (let structureCount = 0; structureCount < MAX_JSON_STRUCTURES_PER_LINE && ranges.length < MAX_JSON_TOKENS_TOTAL; structureCount += 1) {
-    const start = structureCount === 0 ? firstJsonStart : findJsonStart(text, searchOffset);
+    const start = structureCount === 0 ? firstJsonStart : findJsonStart(text, searchOffset, scanLimit);
     if (start < 0) break;
-    const outerEnd = findJsonStructureEnd(text, start);
-    const structureEnd = outerEnd > start ? outerEnd : text.length;
+    const outerEnd = findJsonStructureEnd(text, start, scanLimit);
+    const structureEnd = outerEnd > start ? outerEnd : scanLimit;
     const rangeCountBeforeStructure = ranges.length;
     const denseStructure = structureEnd - start > DENSE_JSON_STRUCTURE_LENGTH;
     const structureRangeLimit = denseStructure
       ? MAX_DENSE_JSON_RANGES_PER_STRUCTURE
       : MAX_JSON_TOKENS_PER_LOGICAL_LINE;
     let densePrimitiveRangeCount = 0;
+    let activeKey: string | undefined;
+    let structureHasError = false;
+    const pendingErrorMessageList: Array<{ start: number; end: number }> = [];
 
     for (let index = start; index < structureEnd && ranges.length - rangeCountBeforeStructure < structureRangeLimit;) {
       const char = text[index];
@@ -806,32 +840,48 @@ function resolveJsonRanges(
         while (next < structureEnd && /\s/.test(text[next])) next += 1;
         const isKey = text[next] === ':';
         const isUrl = text.startsWith('http://', tokenStart + 1) || text.startsWith('https://', tokenStart + 1);
-        if (!isUrl && (isKey || !denseStructure)) {
+        const isErrorMessage = !isKey && isJsonErrorMessageKey(activeKey) && index > tokenStart + 2;
+        if (isErrorMessage) {
+          pendingErrorMessageList.push({ start: tokenStart, end: index });
+        } else if (!isUrl && (isKey || !denseStructure)) {
           push(tokenStart, index, isKey ? styles.key : styles.string);
         }
+        activeKey = isKey ? text.slice(tokenStart + 1, index - 1).toLowerCase() : undefined;
         continue;
       }
       if ((char === '-' || char === '+' || isAsciiDigit(char)) && isJsonValueBoundary(text, index - 1)) {
         const numberEnd = findJsonNumberEnd(text, index, structureEnd);
         if (numberEnd > index) {
-          if (!denseStructure || densePrimitiveRangeCount < MAX_DENSE_JSON_PRIMITIVE_RANGES) {
-            push(index, numberEnd, styles.number);
-            if (denseStructure) densePrimitiveRangeCount += 1;
+          const value = Number(text.slice(index, numberEnd));
+          const isErrorCode = isJsonErrorCode(activeKey, value);
+          if (isErrorCode) structureHasError = true;
+          if (!denseStructure || isErrorCode || densePrimitiveRangeCount < MAX_DENSE_JSON_PRIMITIVE_RANGES) {
+            push(index, numberEnd, isErrorCode ? styles.error : styles.number);
+            if (denseStructure && !isErrorCode) densePrimitiveRangeCount += 1;
           }
+          activeKey = undefined;
           index = numberEnd;
           continue;
         }
       }
       const literalLength = findJsonLiteralLength(text, index, structureEnd);
       if (literalLength > 0 && isJsonValueBoundary(text, index - 1)) {
-        if (!denseStructure || densePrimitiveRangeCount < MAX_DENSE_JSON_PRIMITIVE_RANGES) {
-          push(index, index + literalLength, styles.literal);
-          if (denseStructure) densePrimitiveRangeCount += 1;
+        const literal = text.slice(index, index + literalLength);
+        const isFailure = isJsonFailureLiteral(activeKey, literal);
+        if (isFailure) structureHasError = true;
+        if (!denseStructure || isFailure || densePrimitiveRangeCount < MAX_DENSE_JSON_PRIMITIVE_RANGES) {
+          push(index, index + literalLength, isFailure ? styles.error : styles.literal);
+          if (denseStructure && !isFailure) densePrimitiveRangeCount += 1;
         }
+        activeKey = undefined;
         index += literalLength;
         continue;
       }
       index += 1;
+    }
+
+    for (const message of pendingErrorMessageList) {
+      push(message.start, message.end, structureHasError ? styles.error : styles.string);
     }
 
     if (denseStructure && outerEnd > start && ranges.length < MAX_JSON_TOKENS_TOTAL) {
@@ -883,13 +933,35 @@ function isAsciiDigit(value: string | undefined): boolean {
   return value !== undefined && value >= '0' && value <= '9';
 }
 
-function findJsonStructureEnd(text: string, start: number): number {
+function isJsonErrorCode(key: string | undefined, value: number): boolean {
+  if (!key || !Number.isFinite(value)) return false;
+  const normalizedKey = key.replace(/[-_]/g, '');
+  if (normalizedKey === 'errcode' || normalizedKey === 'errorcode') return value !== 0;
+  return (normalizedKey === 'code' || normalizedKey === 'status' || normalizedKey === 'statuscode'
+    || normalizedKey === 'httpstatus' || normalizedKey === 'httpstatuscode') && value >= 400;
+}
+
+function isJsonFailureLiteral(key: string | undefined, value: string): boolean {
+  if (!key) return false;
+  const normalizedKey = key.replace(/[-_]/g, '');
+  return (normalizedKey === 'success' || normalizedKey === 'ok') && value === 'false';
+}
+
+function isJsonErrorMessageKey(key: string | undefined): boolean {
+  if (!key) return false;
+  const normalizedKey = key.replace(/[-_]/g, '');
+  return normalizedKey === 'errmsg' || normalizedKey === 'errormsg'
+    || normalizedKey === 'errormessage' || normalizedKey === 'error'
+    || normalizedKey === 'message';
+}
+
+function findJsonStructureEnd(text: string, start: number, end = text.length): number {
   const opener = text[start];
   if (opener !== '{' && opener !== '[') return -1;
   const stack: string[] = [opener];
   let inString = false;
   let escaped = false;
-  for (let index = start + 1; index < text.length; index += 1) {
+  for (let index = start + 1; index < end; index += 1) {
     const char = text[index];
     if (inString) {
       if (escaped) escaped = false;
@@ -912,34 +984,36 @@ function findJsonStructureEnd(text: string, start: number): number {
   return -1;
 }
 
-function findJsonStart(text: string, from = 0): number {
-  for (let index = from; index < text.length; index += 1) {
+function findJsonStart(text: string, from = 0, end = text.length): number {
+  for (let index = from; index < end; index += 1) {
     const char = text[index];
     if (char === '"') {
-      const closingQuote = findClosingJsonQuote(text, index + 1);
+      const closingQuote = findClosingJsonQuote(text, index + 1, end);
       if (closingQuote > index) {
         let next = closingQuote + 1;
-        while (next < text.length && /\s/.test(text[next])) next += 1;
-        if (text[next] === ':') return index;
+        while (next < end && /\s/.test(text[next])) next += 1;
+        if (next < end && text[next] === ':') return index;
         index = closingQuote;
       }
       continue;
     }
     if (char !== '{' && char !== '[') continue;
     let next = index + 1;
-    while (next < text.length && /\s/.test(text[next])) next += 1;
+    while (next < end && /\s/.test(text[next])) next += 1;
+    if (next >= end) continue;
     const candidate = text[next];
     if (char === '{' && (candidate === '"' || candidate === '}')) return index;
     if (char === '[' && (candidate === '"' || candidate === '{' || candidate === '[' || candidate === ']'
-      || candidate === '-' || /\d/.test(candidate) || text.startsWith('true', next)
-      || text.startsWith('false', next) || text.startsWith('null', next))) return index;
+      || candidate === '-' || /\d/.test(candidate)
+      || (next + 4 <= end && (text.startsWith('true', next) || text.startsWith('null', next)))
+      || (next + 5 <= end && text.startsWith('false', next)))) return index;
   }
   return -1;
 }
 
-function findClosingJsonQuote(text: string, start: number): number {
+function findClosingJsonQuote(text: string, start: number, end = text.length): number {
   let escaped = false;
-  for (let index = start; index < text.length; index += 1) {
+  for (let index = start; index < end; index += 1) {
     if (escaped) escaped = false;
     else if (text[index] === '\\') escaped = true;
     else if (text[index] === '"') return index;
