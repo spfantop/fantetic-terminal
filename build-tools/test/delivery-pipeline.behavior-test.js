@@ -38,6 +38,9 @@ assert.match(workflow, /build:linux/);
 assert.match(workflow, /build:macos:x64/);
 assert.match(workflow, /build:macos:arm64/);
 assert.match(workflow, /Validate Electron packaging behavior/);
+assert.match(workflow, /node-version: 22/);
+assert.match(securityWorkflow, /node-version: 22/);
+assert.match(electronPackage.devDependencies.electron, /^\^44\./);
 assert.match(workflow, /release-assets\/SHA256SUMS\.txt/);
 assert.match(workflow, /cd release-assets[\s\S]*! -name SHA256SUMS\.txt/);
 assert.doesNotMatch(workflow, /find release-assets -maxdepth 1 -type f -print0[\s\S]*> release-assets\/SHA256SUMS\.txt/);
@@ -112,14 +115,15 @@ assert.match(backendDockerfile, /COPY --from=builder \/app\/packages\/backend\/d
 assert.match(backendDockerfile, /^FROM node:20-bookworm-slim$/m);
 assert.match(
   backendDockerfile,
-  /RUN apt-get update(?:(?!\r?\nRUN )[\s\S])*apt-get upgrade -y(?:(?!\r?\nRUN )[\s\S])*apt-get install -y --no-install-recommends gosu python3 make g\+\+(?:(?!\r?\nRUN )[\s\S])*npm ci --omit=dev --workspace=@fantetic-terminal\/backend(?:(?!\r?\nRUN )[\s\S])*npm cache clean --force(?:(?!\r?\nRUN )[\s\S])*apt-get purge -y --auto-remove python3 make g\+\+/,
+  /RUN apt-get update(?:(?!\r?\nRUN )[\s\S])*apt-get upgrade -y(?:(?!\r?\nRUN )[\s\S])*apt-get install -y --no-install-recommends util-linux python3 make g\+\+(?:(?!\r?\nRUN )[\s\S])*npm ci --omit=dev --workspace=@fantetic-terminal\/backend(?:(?!\r?\nRUN )[\s\S])*npm cache clean --force(?:(?!\r?\nRUN )[\s\S])*apt-get purge -y --auto-remove python3 make g\+\+/,
   'Backend build dependencies must be installed and removed in the same layer so compilers do not remain in the published image',
 );
 assert.match(backendDockerfile, /CMD \["node", "packages\/backend\/dist\/index\.js"\]/);
 assert.match(backendDockerfile, /ENTRYPOINT \["\/entrypoint\.sh"\]/);
 assert.match(backendDockerfile, /apt-get upgrade -y/);
 assert.match(backendDockerfile, /rm -rf \/usr\/local\/lib\/node_modules\/npm/);
-assert.match(read('packages\/backend\/entrypoint\.sh'), /exec gosu node/);
+assert.doesNotMatch(backendDockerfile, /\bgosu\b/);
+assert.match(read('packages\/backend\/entrypoint\.sh'), /exec setpriv --reuid=node --regid=node --init-groups/);
 assert.match(backendDockerfile, /HEALTHCHECK/);
 assert.match(frontendDockerfile, /HEALTHCHECK/);
 assert.match(backendDockerfile, /HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3/);
@@ -173,6 +177,9 @@ assert.match(read('packages/frontend/tsconfig.test.json'), /test\/\*\*\/\*\.ts/)
 assert.match(releaseGuide, /Release Assets/);
 assert.match(releaseGuide, /v\$\{version\}/);
 assert.match(releaseGuide, /-portable\.zip/);
+assert.match(releaseGuide, /Electron 44/);
+assert.match(releaseGuide, /Node\.js 22\.12/);
+assert.match(releaseGuide, /macOS 13/);
 assert.deepEqual(electronPackage.build.win.target, ['nsis', 'zip']);
 assert.match(workflow, /electron-app\/dist_electron\/\*\.zip/);
 assert.match(workflow, /release-assets\/\*\.zip/);

@@ -43,7 +43,7 @@ COPY build-tools/apply-patches.js ./build-tools/
 # so deleting build dependencies in a later RUN would not reduce the published image.
 RUN apt-get update \
     && apt-get upgrade -y \
-    && apt-get install -y --no-install-recommends gosu python3 make g++ \
+    && apt-get install -y --no-install-recommends util-linux python3 make g++ \
     && npm ci --omit=dev --workspace=@fantetic-terminal/backend \
     && npm cache clean --force \
     && apt-get purge -y --auto-remove python3 make g++ \
