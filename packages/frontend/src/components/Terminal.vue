@@ -27,6 +27,9 @@ import {
   createTerminalSearchOptions,
   shouldDecorateTerminalSearch,
   TERMINAL_SEARCH_HIGHLIGHT_LIMIT,
+  searchTerminalBuffer,
+  type TerminalBufferSearchResult,
+  TERMINAL_SEARCH_ACTIVE_BACKGROUND,
 } from '../utils/terminalSearch';
 import { calculateCenteredTerminalHorizontalPadding } from '../utils/terminalLayout';
 import {
@@ -92,19 +95,34 @@ const terminalSearchCaseSensitive = ref(false);
 const terminalSearchResultIndex = ref(-1);
 const terminalSearchResultCount = ref(0);
 const terminalSearchResultCountLimited = ref(false);
+const terminalSearchResultCountExact = ref(false);
 let lastTerminalSearchDecorated: boolean | null = null;
+let terminalSearchActiveMarker: IDisposable | null = null;
+let terminalSearchActiveDecoration: IDisposable | null = null;
+let terminalSearchAbortController: AbortController | null = null;
+let terminalSearchGeneration = 0;
+let terminalSearchPositions: TerminalBufferSearchResult['positions'] = [];
+let terminalSearchPositionIndex = -1;
+let terminalSearchPositionTerm = '';
+const terminalSearchRunning = ref(false);
 const terminalSearchResultCurrent = computed(() => (
-  terminalSearchResultIndex.value >= 0 ? terminalSearchResultIndex.value + 1 : 0
+  terminalSearchResultIndex.value >= 0
+    ? terminalSearchResultIndex.value + 1
+    : terminalSearchResultCount.value > 0 ? 1 : 0
 ));
 const terminalSearchResultTotal = computed(() => (
-  terminalSearchResultCountLimited.value
+  terminalSearchResultCountExact.value
+    ? String(terminalSearchResultCount.value)
+    : terminalSearchResultCountLimited.value
     ? '?'
     : terminalSearchResultCount.value >= TERMINAL_SEARCH_HIGHLIGHT_LIMIT
     ? `${TERMINAL_SEARCH_HIGHLIGHT_LIMIT}+`
     : String(terminalSearchResultCount.value)
 ));
 const terminalSearchResultLabel = computed(() => (
-  `${terminalSearchResultCurrent.value}/${terminalSearchResultTotal.value}`
+  terminalSearchRunning.value
+    ? `${terminalSearchResultCount.value}+`
+    : `${terminalSearchResultCurrent.value}/${terminalSearchResultTotal.value}`
 ));
 const terminalSearchCaseSensitiveLabel = computed(() => (
   terminalSearchCaseSensitive.value
@@ -558,7 +576,9 @@ const ensureSearchAddonLoaded = (): SearchAddon | null => {
     terminal.loadAddon(addon);
     searchResultDisposable = addon.onDidChangeResults(({ resultIndex, resultCount }) => {
       terminalSearchResultCountLimited.value = false;
-      terminalSearchResultIndex.value = resultIndex;
+      // SearchAddon reports -1 once its decoration limit is reached. There is
+      // still a valid first match; keep the counter user-facing instead of 0/N.
+      terminalSearchResultIndex.value = resultIndex >= 0 ? resultIndex : resultCount > 0 ? 0 : -1;
       terminalSearchResultCount.value = resultCount;
     });
     searchAddon = addon;
@@ -566,19 +586,154 @@ const ensureSearchAddonLoaded = (): SearchAddon | null => {
   return searchAddon;
 };
 
+const clearTerminalSearchActiveDecoration = () => {
+  terminalSearchActiveDecoration?.dispose();
+  terminalSearchActiveDecoration = null;
+  terminalSearchActiveMarker?.dispose();
+  terminalSearchActiveMarker = null;
+};
+
+const decorateTerminalSearchPosition = (position: TerminalBufferSearchResult['positions'][number]) => {
+  if (!terminal) return;
+  clearTerminalSearchActiveDecoration();
+  const marker = terminal.registerMarker(-terminal.buffer.active.baseY - terminal.buffer.active.cursorY + position.row);
+  if (!marker) return;
+  const decoration = terminal.registerDecoration({
+    marker,
+    x: position.col,
+    width: position.length,
+    backgroundColor: TERMINAL_SEARCH_ACTIVE_BACKGROUND,
+    layer: 'top',
+  });
+  if (!decoration) {
+    marker.dispose();
+    return;
+  }
+  terminalSearchActiveMarker = marker;
+  terminalSearchActiveDecoration = decoration;
+};
+
 const resetTerminalSearchResults = () => {
+  terminalSearchAbortController?.abort();
+  terminalSearchAbortController = null;
+  clearTerminalSearchActiveDecoration();
+  terminalSearchRunning.value = false;
+  terminalSearchPositions = [];
+  terminalSearchPositionIndex = -1;
+  terminalSearchPositionTerm = '';
   terminalSearchResultIndex.value = -1;
   terminalSearchResultCount.value = 0;
   terminalSearchResultCountLimited.value = false;
+  terminalSearchResultCountExact.value = false;
 };
 
-const runTerminalSearch = (term: string, direction: 'next' | 'previous'): boolean => {
+const selectTerminalSearchPosition = (position: TerminalBufferSearchResult['positions'][number]) => {
+  if (!terminal) return false;
+  terminal.select(position.col, position.row, position.length);
+  terminal.scrollToLine(position.row);
+  decorateTerminalSearchPosition(position);
+  return true;
+};
+
+const resolveTerminalSearchPositionIndex = (positions: TerminalBufferSearchResult['positions']) => {
+  if (!terminal || positions.length === 0) return -1;
+  const selection = terminal.getSelectionPosition();
+  if (!selection) return 0;
+  const exactIndex = positions.findIndex(position => (
+    position.row === selection.start.y && position.col === selection.start.x
+  ));
+  if (exactIndex >= 0) return exactIndex;
+  const nextIndex = positions.findIndex(position => (
+    position.row > selection.start.y
+      || (position.row === selection.start.y && position.col >= selection.start.x)
+  ));
+  return nextIndex >= 0 ? nextIndex : positions.length - 1;
+};
+
+const runLargeTerminalSearch = async (term: string, direction: 'next' | 'previous', generation: number) => {
+  if (!terminal) return false;
+  const controller = new AbortController();
+  terminalSearchAbortController = controller;
+  terminalSearchRunning.value = true;
+  const result = await searchTerminalBuffer({
+    getLine: row => terminal?.buffer.active.getLine(row),
+    lineCount: terminal.buffer.active.length,
+    term,
+    caseSensitive: terminalSearchCaseSensitive.value,
+    signal: controller.signal,
+    onProgress: count => {
+      if (generation === terminalSearchGeneration) terminalSearchResultCount.value = count;
+    },
+  });
+  if (generation !== terminalSearchGeneration || controller.signal.aborted || !terminal) return false;
+
+  terminalSearchAbortController = null;
+  terminalSearchRunning.value = false;
+  terminalSearchPositions = result.positions;
+  terminalSearchPositionTerm = term;
+  terminalSearchResultCount.value = result.count;
+  // The count is exact even when only the first positions are retained for navigation.
+  terminalSearchResultCountLimited.value = false;
+  terminalSearchResultCountExact.value = true;
+  if (result.positions.length === 0) {
+    terminalSearchPositionIndex = -1;
+    terminalSearchResultIndex.value = -1;
+    return false;
+  }
+  terminalSearchPositionIndex = direction === 'previous' ? result.positions.length - 1 : 0;
+  terminalSearchResultIndex.value = terminalSearchPositionIndex;
+  return selectTerminalSearchPosition(result.positions[terminalSearchPositionIndex]);
+};
+
+const updateTerminalSearchCount = async (term: string, generation: number) => {
+  if (!terminal) return;
+  const controller = new AbortController();
+  terminalSearchAbortController = controller;
+  terminalSearchRunning.value = true;
+  const result = await searchTerminalBuffer({
+    getLine: row => terminal?.buffer.active.getLine(row),
+    lineCount: terminal.buffer.active.length,
+    term,
+    caseSensitive: terminalSearchCaseSensitive.value,
+    signal: controller.signal,
+    onProgress: count => {
+      if (generation === terminalSearchGeneration) terminalSearchResultCount.value = count;
+    },
+  });
+  if (generation !== terminalSearchGeneration || controller.signal.aborted || !terminal) return;
+  terminalSearchAbortController = null;
+  terminalSearchRunning.value = false;
+  terminalSearchResultCount.value = result.count;
+  terminalSearchResultCountLimited.value = false;
+  terminalSearchResultCountExact.value = true;
+  terminalSearchPositions = result.positions;
+  terminalSearchPositionTerm = term;
+  terminalSearchPositionIndex = resolveTerminalSearchPositionIndex(result.positions);
+  if (terminalSearchPositionIndex >= 0) {
+    terminalSearchResultIndex.value = terminalSearchPositionIndex;
+  }
+};
+
+const runTerminalSearch = async (term: string, direction: 'next' | 'previous'): Promise<boolean> => {
   const addon = ensureSearchAddonLoaded();
   if (!addon || !terminal) return false;
+  terminalSearchAbortController?.abort();
+  terminalSearchAbortController = null;
   const decorateMatches = shouldDecorateTerminalSearch({
     bufferLineCount: terminal.buffer.active.length,
     cols: terminal.cols,
   });
+  const generation = ++terminalSearchGeneration;
+  if (terminalSearchPositionTerm === term && terminalSearchPositions.length > 0 && !terminalSearchRunning.value) {
+    terminalSearchPositionIndex = (terminalSearchPositionIndex + (direction === 'next' ? 1 : -1) + terminalSearchPositions.length)
+      % terminalSearchPositions.length;
+    terminalSearchResultIndex.value = terminalSearchPositionIndex;
+    return selectTerminalSearchPosition(terminalSearchPositions[terminalSearchPositionIndex]);
+  }
+  if (!decorateMatches) {
+    return runLargeTerminalSearch(term, direction, generation);
+  }
+  clearTerminalSearchActiveDecoration();
   if (lastTerminalSearchDecorated !== null && lastTerminalSearchDecorated !== decorateMatches) {
     addon.clearDecorations();
   }
@@ -587,15 +742,11 @@ const runTerminalSearch = (term: string, direction: 'next' | 'previous'): boolea
   const found = direction === 'next'
     ? addon.findNext(term, options)
     : addon.findPrevious(term, options);
-  if (!decorateMatches) {
-    terminalSearchResultCountLimited.value = found;
-    terminalSearchResultIndex.value = found ? 0 : -1;
-    terminalSearchResultCount.value = found ? 1 : 0;
-  }
+  void updateTerminalSearchCount(term, generation);
   return found;
 };
 
-const runTerminalSearchNext = (term: string) => runTerminalSearch(term, 'next');
+const runTerminalSearchNext = (term: string) => { void runTerminalSearch(term, 'next'); };
 
 const terminalSearchScheduler = createTerminalSearchScheduler<string>({
   onSearch: runTerminalSearchNext,
@@ -613,7 +764,16 @@ const updateTerminalSearch = () => {
     resetTerminalSearchResults();
     return;
   }
-  resetTerminalSearchResults();
+  terminalSearchAbortController?.abort();
+  clearTerminalSearchActiveDecoration();
+  terminalSearchRunning.value = false;
+  terminalSearchPositionTerm = '';
+  terminalSearchPositions = [];
+  terminalSearchPositionIndex = -1;
+  terminalSearchResultIndex.value = -1;
+  terminalSearchResultCount.value = 0;
+  terminalSearchResultCountLimited.value = false;
+  terminalSearchResultCountExact.value = false;
   terminalSearchScheduler.schedule(terminalSearchTerm.value);
 };
 
@@ -625,12 +785,16 @@ const findTerminalSearchNext = () => {
 const findTerminalSearchPrevious = () => {
   if (!terminalSearchTerm.value) return;
   terminalSearchScheduler.cancel();
-  runTerminalSearch(terminalSearchTerm.value, 'previous');
+  void runTerminalSearch(terminalSearchTerm.value, 'previous');
 };
 
 const toggleTerminalSearchCaseSensitive = () => {
   terminalSearchCaseSensitive.value = !terminalSearchCaseSensitive.value;
   if (!terminalSearchTerm.value) return;
+  terminalSearchPositionTerm = '';
+  terminalSearchPositions = [];
+  terminalSearchPositionIndex = -1;
+  terminalSearchResultCountExact.value = false;
   terminalSearchScheduler.runNow(terminalSearchTerm.value);
 };
 
