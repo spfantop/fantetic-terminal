@@ -32,6 +32,11 @@ try {
   execFileSync(process.execPath, [path.resolve('build-tools/apply-patches.js')], {
     env: { ...process.env, npm_config_omit: 'dev', PATH: '' }, stdio: 'pipe',
   });
+  const productionEnv = { ...process.env, NODE_ENV: 'production', PATH: '' };
+  delete productionEnv.npm_config_omit;
+  execFileSync(process.execPath, [path.resolve('build-tools/apply-patches.js')], {
+    env: productionEnv, stdio: 'pipe',
+  });
   const cryptPath = path.join(gateway, 'node_modules/guacamole-lite/lib/Crypt.js');
   writeFileSync(cryptPath, readFileSync(cryptPath, 'utf8').replace('decrypt(encodedString)', 'decryptIncompatible(encodedString)'));
   assert.throws(() => applyGuacamolePatch(root), /patch|apply/i, 'unexpected upstream content must fail, never silently skip');

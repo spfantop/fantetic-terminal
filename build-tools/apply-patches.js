@@ -30,7 +30,8 @@ if (require.main === module) {
   // Production Docker stages copy the verified patched module from the builder;
   // they must not require Git (or any development patch tooling) at runtime.
   const omitted = (process.env.npm_config_omit ?? '').split(/[\s,]+/);
-  if (!omitted.includes('dev')) applyGuacamolePatch(path.resolve(__dirname, '..'));
+  // npm may omit npm_config_omit when production already makes dev omission the default.
+  if (process.env.NODE_ENV !== 'production' && !omitted.includes('dev')) applyGuacamolePatch(path.resolve(__dirname, '..'));
 }
 
 module.exports = { applyGuacamolePatch };
