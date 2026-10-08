@@ -74,7 +74,7 @@ COPY --from=builder /app/packages/backend/src/locales ./packages/backend/dist/lo
 COPY --from=builder /app/packages/backend/html-presets ./packages/backend/html-presets
 COPY --from=builder /app/packages/frontend/dist /usr/share/nginx/html
 COPY --from=builder /app/packages/remote-gateway/dist ./packages/remote-gateway/dist
-# Production dependencies omit patch-package. Preserve the verified patched module
+# Production dependencies skip build-time patching. Preserve the verified patched module
 # produced in the build stage for the gateway's AES-GCM token handling.
 COPY --from=builder /app/packages/remote-gateway/node_modules/guacamole-lite ./packages/remote-gateway/node_modules/guacamole-lite
 COPY --from=guacd-runtime / /opt/guacd-runtime/

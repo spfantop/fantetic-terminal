@@ -9,7 +9,7 @@
       "verify:audit-chain": "node dist/audit/audit-chain-verify.js",
       "start": "node dist/index.js",
       "verify:backup-recovery": "npm run build && node dist/backup/verify-recovery.cli.js",
-      "dev": "cross-env NODE_ENV=development npx ts-node-dev --respawn --transpile-only src/index.ts",
+      "dev": "cross-env NODE_ENV=development node --watch --require ts-node/register/transpile-only src/index.ts",
       "test:remote-linux-monitoring": "esbuild src/test/remoteLinuxMonitoring.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/remoteLinuxMonitoring.behavior-test.mjs && node ../../.vite-codex-cache/remoteLinuxMonitoring.behavior-test.mjs",
       "test:ai-provider": "esbuild src/test/aiProvider.behavior-test.ts --bundle --platform=node --format=esm --packages=external --outfile=../../.vite-codex-cache/aiProvider.behavior-test.mjs && node ../../.vite-codex-cache/aiProvider.behavior-test.mjs",
       "test:ai-nl2cmd": "esbuild src/test/aiNl2cmd.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/aiNl2cmd.behavior-test.mjs && node ../../.vite-codex-cache/aiNl2cmd.behavior-test.mjs",
@@ -121,7 +121,7 @@
       "ipaddr.js": "^1.9.1",
       "jschardet": "^3.1.4",
       "multer": "^2.4.0",
-      "nodemailer": "^9.1.1",
+      "nodemailer": "^10.0.16",
       "qrcode": "^1.5.4",
       "sanitize-filename": "^1.6.3",
       "session-file-store": "^1.5.0",
@@ -154,7 +154,7 @@
       "copyfiles": "^2.4.1",
       "cross-env": "^7.0.3",
       "esbuild": "^0.25.0",
-      "ts-node-dev": "^2.0.0",
-      "typescript": "^5.0.0"
+      "typescript": "^5.0.0",
+      "ts-node": "^10.9.2"
    }
 }

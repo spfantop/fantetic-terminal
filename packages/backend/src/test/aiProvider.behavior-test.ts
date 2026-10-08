@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { NL2CMD_CONFIG } from '../ai-ops/nl2cmd.constants';
 import axios from 'axios';
 import { createServer } from 'node:http';
-import { callOpenAI, callClaude } from '../ai-ops/nl2cmd.provider';
+import { callOpenAI, callClaude, readAIErrorCode } from '../ai-ops/nl2cmd.provider';
 import type { AISettings } from '../ai-ops/nl2cmd.types';
 
 let attempts = 0;
@@ -71,11 +71,22 @@ async function run() {
     assert.equal(attempts, 1, 'Retry-After exceeding the budget must not retry early');
     retryAfter = undefined;
     alwaysFail = false;
+    responseBody = {
+      object: 'response', status: 'completed', error: null, incomplete_details: null,
+      output: [{ type: 'message', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: '{"command":"pwd"}' }] }],
+    };
+    assert.equal((await callOpenAI({ ...settings, openaiEndpoint: '/responses' }, 'directory')).command, '{"command":"pwd"}', 'successful Responses payloads include error: null');
     responseBody = { error: { message: 'provider failure' }, message: 'must never be a command' };
     await assert.rejects(callOpenAI(settings, 'directory'), /ai\.serviceUnavailable/);
+    assert.equal(readAIErrorCode(new Error('ai.serviceUnavailable')), 'ai.serviceUnavailable', 'provider failures retain their actionable error code');
+    assert.equal(readAIErrorCode(new Error('private upstream details')), 'ai.generateFailed', 'unknown error messages must not leak');
+    for (const status of ['failed', 'cancelled', 'queued', 'in_progress']) {
+      responseBody = { status, error: null, output_text: 'must not be returned' };
+      await assert.rejects(callOpenAI({ ...settings, openaiEndpoint: '/responses' }, 'directory'), /ai\.serviceUnavailable/);
+    }
     responseBody = { output_text: { invalid: true } };
     await assert.rejects(callOpenAI({ ...settings, openaiEndpoint: '/responses' }, 'directory'), /ai\.emptyCommand/);
-    responseBody = { status: 'incomplete', output_text: 'rm -r' };
+    responseBody = { status: 'incomplete', error: null, output_text: 'rm -r' };
     await assert.rejects(callOpenAI({ ...settings, openaiEndpoint: '/responses' }, 'directory'), /ai\.outputTruncated/);
     responseBody = { stop_reason: 'max_tokens', content: [{ text: 'rm -r' }] };
     await assert.rejects(callClaude(settings, 'directory'), /ai\.outputTruncated/);

@@ -38,7 +38,8 @@ function assertProviderJsonResponse(data: unknown, contentType: unknown): void {
     throw new Error('ai.htmlResponse');
   }
   if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('ai.emptyCommand');
-  if ('error' in data) throw new Error('ai.serviceUnavailable');
+  // Responses 成功响应也含 error: null；仅非空错误才表示上游失败。
+  if ('error' in data && data.error != null) throw new Error('ai.serviceUnavailable');
 }
 
 function readCommand(data: unknown): string {
@@ -69,6 +70,7 @@ export async function callOpenAI(config: AISettings, prompt: string): Promise<Pr
       assertProviderJsonResponse(response.data, response.headers['content-type']);
 
       if (response.data.status === 'incomplete') throw new Error('ai.outputTruncated');
+      if (response.data.status && response.data.status !== 'completed') throw new Error('ai.serviceUnavailable');
       return { command: readCommand(response.data), usage: response.data.usage };
     });
   }
@@ -140,3 +142,12 @@ export async function callClaude(config: AISettings, prompt: string): Promise<Pr
   });
 }
 
+export function readAIErrorCode(error: unknown): string {
+  if (axios.isAxiosError(error)) {
+    if (['ECONNABORTED', 'ETIMEDOUT'].includes(error.code || '')) return 'ai.timeout';
+    const codes: Record<number, string> = { 400: 'requestBadModel', 401: 'invalidApiKey', 403: 'permissionDenied', 404: 'endpointNotFound', 429: 'rateLimited' };
+    return error.response ? `ai.${codes[error.response.status] || 'serviceUnavailable'}` : 'ai.connectFailed';
+  }
+  const allowed = ['unsupportedProvider', 'baseUrlProtocolInvalid', 'baseUrlLocalBlocked', 'modelRequired', 'apiKeyRequired', 'htmlResponse', 'emptyCommand', 'outputTruncated', 'serviceUnavailable'];
+  return error instanceof Error && allowed.some(key => error.message === `ai.${key}`) ? error.message : 'ai.generateFailed';
+}

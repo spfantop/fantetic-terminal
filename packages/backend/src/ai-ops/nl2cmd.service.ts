@@ -1,4 +1,4 @@
-import { callOpenAI, callClaude } from './nl2cmd.provider';
+import { callOpenAI, callClaude, readAIErrorCode } from './nl2cmd.provider';
 import axios from 'axios';
 import i18next from '../i18n';
 import { createLogger } from '../logging/logger';
@@ -106,16 +106,6 @@ export function validateAISettings(settings: AISettings): void {
   }
 }
 
-function readErrorCode(error: unknown): string {
-  if (axios.isAxiosError(error)) {
-    if (['ECONNABORTED', 'ETIMEDOUT'].includes(error.code || '')) return 'ai.timeout';
-    const codes: Record<number, string> = { 400: 'requestBadModel', 401: 'invalidApiKey', 403: 'permissionDenied', 404: 'endpointNotFound', 429: 'rateLimited' };
-    return error.response ? `ai.${codes[error.response.status] || 'serviceUnavailable'}` : 'ai.connectFailed';
-  }
-  const allowed = ['unsupportedProvider', 'baseUrlProtocolInvalid', 'baseUrlLocalBlocked', 'modelRequired', 'apiKeyRequired', 'htmlResponse', 'emptyCommand', 'outputTruncated'];
-  return error instanceof Error && allowed.some(key => error.message === `ai.${key}`) ? error.message : 'ai.generateFailed';
-}
-
 export async function generateCommand(request: NL2CMDRequest): Promise<NL2CMDResponse> {
   const query = sanitizeUserInput(request.query || '');
   if (!query) {
@@ -175,12 +165,14 @@ export async function generateCommand(request: NL2CMDRequest): Promise<NL2CMDRes
       warning,
     };
   } catch (error) {
-    const errorCode = readErrorCode(error);
+    const errorCode = readAIErrorCode(error);
     const errorMessage = i18next.t(errorCode, { timeout: NL2CMD_CONFIG.TOTAL_TIMEOUT_MS });
     logger.error('AI 聊天请求失败', {
       provider: settings?.provider,
       model: settings?.model,
+      endpoint: settings?.provider === 'claude' ? '/messages' : settings?.openaiEndpoint || DEFAULT_AI_SETTINGS.openaiEndpoint,
       status: axios.isAxiosError(error) ? error.response?.status : undefined,
+      errorCode,
       error: sanitizeAIChatLogText(errorMessage),
     });
     return { success: false, error: errorMessage, errorCode };

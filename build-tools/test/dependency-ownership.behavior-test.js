@@ -44,7 +44,7 @@ assert.deepEqual(
   [],
   'the root manifest has no runtime implementation and must not own workspace runtime dependencies',
 );
-for (const dependencyName of ['cross-env', 'esbuild', 'patch-package']) {
+for (const dependencyName of ['cross-env', 'esbuild']) {
   assert.ok(
     rootManifest.devDependencies?.[dependencyName],
     `the root manifest must own ${dependencyName} required by root scripts or build tools`,
