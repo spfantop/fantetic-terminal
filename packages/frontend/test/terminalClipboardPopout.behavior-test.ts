@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import vm from 'node:vm';
+import ts from 'typescript';
 
 const terminalSource = fs.readFileSync(path.resolve('src/components/Terminal.vue'), 'utf8');
 
@@ -63,5 +65,38 @@ assert.match(
   /removeTerminalClipboardKeydownListener\(\)/,
   'terminal clipboard shortcut listener should be removed on unmount',
 );
+
+// Execute the component handlers so bypassing xterm's paste protocol is caught.
+const readHandler = (name: string, nextName: string): string => {
+  const start = terminalSource.indexOf(`const ${name} =`);
+  const end = terminalSource.indexOf(`const ${nextName} =`, start);
+  assert.ok(start >= 0 && end > start, `missing clipboard handler ${name}`);
+  return ts.transpileModule(terminalSource.slice(start, end), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+};
+
+for (const [handler, nextHandler] of [
+  ['handleContextMenuPaste', 'addContextMenuListener'],
+  ['terminalClipboardKeyDownHandler', 'addTerminalClipboardKeydownListener'],
+]) {
+  for (const text of ['sudo sh /tmp/install-hub.sh \\\r\n  --yes\r\n\r\n', '中文选项', '']) {
+    const pasted: string[] = [];
+    const sent: string[] = [];
+    const context = vm.createContext({
+      readTerminalClipboard: () => ({ readText: async () => text }),
+      terminal: { paste: (value: string) => pasted.push(value) },
+      emitTerminalInput: (value: string) => sent.push(value),
+      console,
+      event: {
+        ctrlKey: true, shiftKey: true, altKey: false, code: 'KeyV',
+        preventDefault() {}, stopPropagation() {},
+      },
+    });
+    await vm.runInContext(`${readHandler(handler, nextHandler)}\n${handler}(event)`, context);
+    assert.deepEqual(sent, [], `${handler} must not send clipboard newlines directly to the remote shell`);
+    assert.deepEqual(pasted, text ? [text] : [], `${handler} should delegate unchanged clipboard text to xterm exactly once`);
+  }
+}
 
 console.log('terminal clipboard popout behavior ok');

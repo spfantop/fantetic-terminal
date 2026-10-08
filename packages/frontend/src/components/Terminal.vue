@@ -970,8 +970,8 @@ const handleContextMenuPaste = async (event: MouseEvent) => {
   try {
     const text = await readTerminalClipboard()?.readText();
     if (text && terminal) {
-      const processedText = text.replace(/\r\n?/g, '\n');
-      emitTerminalInput(processedText);
+      // 交给 xterm 保留括号粘贴保护，避免末尾换行被交互菜单当成输入。
+      terminal.paste(text);
     }
   } catch (err) {
     console.error('[Terminal] Failed to paste via Right Click:', err);
@@ -1023,8 +1023,8 @@ const terminalClipboardKeyDownHandler = async (event: KeyboardEvent) => {
     try {
       const text = await readTerminalClipboard()?.readText();
       if (text) {
-        const processedText = text.replace(/\r\n?/g, '\n');
-        emitTerminalInput(processedText);
+        // 与原生粘贴一致，由 xterm 处理换行和远端的括号粘贴模式。
+        terminal?.paste(text);
       }
     } catch (err) {
       console.error('[Terminal] Failed to paste via Ctrl+Shift+V:', err);
