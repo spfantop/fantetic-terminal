@@ -134,7 +134,18 @@ jobs:
           # v0.65.0 is no longer published upstream; pin a released scanner version explicitly.
           version: v0.70.0
           image-ref: fantetic-${{ matrix.name }}:${{ github.sha }}
-          format: table
+          format: json
+          output: trivy-report.json
           exit-code: '1'
           ignore-unfixed: true
           severity: HIGH,CRITICAL
+      - name: Summarize image vulnerabilities
+        if: always()
+        run: node build-tools/vulnerability-report.js trivy trivy-report.json
+      - name: Upload image vulnerability report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: trivy-${{ matrix.name }}-${{ github.sha }}
+          path: trivy-report.json
+          if-no-files-found: error

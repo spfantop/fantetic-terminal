@@ -1,4 +1,6 @@
-import { computed, onMounted, ref } from 'vue';
+import axios from 'axios';
+import { resolveAIErrorKey } from '../../utils/apiError';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import apiClient from '../../utils/apiClient';
 import { AI_REQUEST_TIMEOUT_MS } from '../../utils/aiConstants';
@@ -16,6 +18,8 @@ export function useNL2CMD() {
   const aiSettingsStore = useAISettingsStore();
   const notificationsStore = useUiNotificationsStore();
   const { t } = useI18n();
+  let requestController: AbortController | undefined;
+  onBeforeUnmount(() => requestController?.abort());
   const query = ref('');
   const isLoading = ref(false);
   const lastResponse = ref<NL2CMDResponse | null>(null);
@@ -42,11 +46,13 @@ export function useNL2CMD() {
   }
 
   async function generateCommand(): Promise<string | null> {
+    if (isLoading.value) return null;
     if (!query.value.trim()) {
       notificationsStore.showWarning(t('ai.nl2cmd.emptyPrompt'));
       return null;
     }
 
+    requestController = new AbortController();
     isLoading.value = true;
     lastResponse.value = null;
     lastError.value = '';
@@ -59,7 +65,9 @@ export function useNL2CMD() {
       };
       const response = await apiClient.post<NL2CMDResponse>('/ai/nl2cmd', request, {
         timeout: AI_REQUEST_TIMEOUT_MS,
+        signal: requestController.signal,
       });
+      if (requestController.signal.aborted) return null;
       lastResponse.value = response.data;
 
       if (!response.data.success || !response.data.command) {
@@ -74,14 +82,17 @@ export function useNL2CMD() {
         notificationsStore.showSuccess(t('ai.nl2cmd.generated'));
       }
       return response.data.command;
-    } catch (error: any) {
-      const message = error.response?.data?.error || error.message || t('ai.nl2cmd.generateFailed');
-      lastResponse.value = error.response?.data || null;
+    } catch (error: unknown) {
+      if (requestController.signal.aborted || axios.isCancel(error)) return null;
+      const message = t(axios.isAxiosError(error) && error.code === 'ECONNABORTED'
+        ? 'ai.errors.timeout'
+        : resolveAIErrorKey(error));
+      lastResponse.value = null;
       lastError.value = message;
       notificationsStore.showError(message);
       return null;
     } finally {
-      isLoading.value = false;
+      if (!requestController.signal.aborted) isLoading.value = false;
     }
   }
 

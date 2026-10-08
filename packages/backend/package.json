@@ -10,6 +10,8 @@
       "start": "node dist/index.js",
       "verify:backup-recovery": "npm run build && node dist/backup/verify-recovery.cli.js",
       "dev": "cross-env NODE_ENV=development npx ts-node-dev --respawn --transpile-only src/index.ts",
+      "test:remote-linux-monitoring": "esbuild src/test/remoteLinuxMonitoring.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/remoteLinuxMonitoring.behavior-test.mjs && node ../../.vite-codex-cache/remoteLinuxMonitoring.behavior-test.mjs",
+      "test:ai-provider": "esbuild src/test/aiProvider.behavior-test.ts --bundle --platform=node --format=esm --packages=external --outfile=../../.vite-codex-cache/aiProvider.behavior-test.mjs && node ../../.vite-codex-cache/aiProvider.behavior-test.mjs",
       "test:ai-nl2cmd": "esbuild src/test/aiNl2cmd.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/aiNl2cmd.behavior-test.mjs && node ../../.vite-codex-cache/aiNl2cmd.behavior-test.mjs",
       "test:connection-import": "esbuild src/test/connectionImport.behavior-test.ts --bundle --platform=node --format=cjs --outfile=../../.vite-codex-cache/backend-connectionImport.behavior-test.cjs && node ../../.vite-codex-cache/backend-connectionImport.behavior-test.cjs",
       "test:layout-panes": "esbuild src/test/layoutPanes.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/backend-layoutPanes.behavior-test.mjs && node ../../.vite-codex-cache/backend-layoutPanes.behavior-test.mjs",

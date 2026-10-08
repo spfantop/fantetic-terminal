@@ -2,6 +2,7 @@ import WebSocket from 'ws';
 import type { ClientChannel } from 'ssh2';
 import type { AuthenticatedWebSocket } from '../types';
 import { clientStates } from '../state';
+import { withProcProcessFallback, parseProcProcesses, PROCESS_STATISTICS_UNAVAILABLE } from '../../services/remote-linux-monitoring';
 
 export interface RemoteProcessInfo {
   pid: number;
@@ -30,7 +31,7 @@ const PROCESS_LIST_LIMIT_DEFAULT = 200;
 
 const buildProcessListCommand = (limit = PROCESS_LIST_LIMIT_DEFAULT): string => {
   const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(500, Math.floor(limit)) : PROCESS_LIST_LIMIT_DEFAULT;
-  return `ps -eo pid=,user=,state=,pcpu=,pmem=,rss=,lstart=,args= --sort=-pcpu | awk 'NR<=${safeLimit}{cmd=""; for(i=12;i<=NF;i++) cmd=cmd (i==12?"":" ") $i; print $1 "\\t" $2 "\\t" $3 "\\t" $4 "\\t" $5 "\\t" $6 "\\t" $7 " " $8 " " $9 " " $10 " " $11 "\\t" cmd}'`;
+  return withProcProcessFallback('ps -eo pid=,user=,state=,pcpu=,pmem=,rss=,lstart=,args= --sort=-pcpu', `awk 'NR<=${safeLimit}{cmd=""; for(i=12;i<=NF;i++) cmd=cmd (i==12?"":" ") $i; print $1 "\\t" $2 "\\t" $3 "\\t" $4 "\\t" $5 "\\t" $6 "\\t" $7 " " $8 " " $9 " " $10 " " $11 "\\t" cmd}'`);
 };
 
 const PROCESS_SUMMARY_COMMAND = `ps -eo state= | awk 'BEGIN{total=0; running=0; sleeping=0} {state=substr($1,1,1); total++; if(state=="R") running++; if(state=="S" || state=="D" || state=="I") sleeping++;} END {printf "%d\\t%d\\t%d", total, running, sleeping}'`;
@@ -118,7 +119,7 @@ const executeSshCommand = (channelOwner: AuthenticatedWebSocket, command: string
     let stderr = '';
     let exitCode = 0;
 
-    sshClient.exec(command, (err, stream: ClientChannel) => {
+    sshClient.exec(command, { env: { LC_ALL: 'C' } }, (err, stream: ClientChannel) => {
       if (err) {
         reject(err);
         return;
@@ -158,9 +159,16 @@ export const fetchRemoteProcessSnapshot = async (
     executeSshCommand(ws, PROCESS_SUMMARY_COMMAND),
   ]);
 
-  if (listResult.code !== 0 && listResult.stderr) {
-    throw new Error(listResult.stderr);
+  if (listResult.code !== 0) {
+    throw new Error(listResult.stderr || PROCESS_STATISTICS_UNAVAILABLE);
   }
+
+  if (listResult.stdout.startsWith('__PROC__')) {
+    const snapshot = parseProcProcesses(listResult.stdout, ws);
+    const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(500, Math.floor(limit)) : PROCESS_LIST_LIMIT_DEFAULT;
+    return { processes: snapshot.processes.slice(0, safeLimit), summary: snapshot.summary };
+  }
+
 
   if (summaryResult.code !== 0 && summaryResult.stderr) {
     throw new Error(summaryResult.stderr);

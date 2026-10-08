@@ -206,7 +206,7 @@
           <span class="sm-disk-device__type">{{ t('statusMonitor.diskTypeLabel') }} {{ diskFsTypeDisplay }}</span>
         </div>
 
-        <div class="sm-disk-io">
+        <div class="sm-disk-io" :title="currentServerStatus?.diskIoUnsupported ? t('statusMonitor.diskIoUnsupportedHint') : undefined">
           <div class="sm-disk-io__item">
             <div class="sm-disk-io__icon sm-disk-io__icon--read"></div>
             <div class="sm-disk-io__col">
@@ -503,8 +503,8 @@ const diskUsageDisplay = computed(() => {
 });
 
 const diskFsTypeDisplay = computed(() => currentServerStatus.value?.diskFsType || t('statusMonitor.notAvailable'));
-const diskReadRateDisplay = computed(() => formatCompactBytes(currentServerStatus.value?.diskReadRate));
-const diskWriteRateDisplay = computed(() => formatCompactBytes(currentServerStatus.value?.diskWriteRate));
+const diskReadRateDisplay = computed(() => currentServerStatus.value?.diskIoUnsupported ? t('statusMonitor.diskIoUnsupported') : formatCompactBytes(currentServerStatus.value?.diskReadRate));
+const diskWriteRateDisplay = computed(() => currentServerStatus.value?.diskIoUnsupported ? t('statusMonitor.diskIoUnsupported') : formatCompactBytes(currentServerStatus.value?.diskWriteRate));
 const diskMountPointDisplay = computed(() => currentServerStatus.value?.diskMountPoint || t('statusMonitor.notAvailable'));
 const diskSizeDisplay = computed(() => formatStorageSizeFromKb(currentServerStatus.value?.diskTotal, true));
 const diskAvailableDisplay = computed(() => formatStorageSizeFromKb(currentServerStatus.value?.diskAvailable, true));

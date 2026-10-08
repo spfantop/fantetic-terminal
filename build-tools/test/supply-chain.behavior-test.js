@@ -49,8 +49,8 @@ assert.match(dockerPublishWorkflow, /node build-tools\/docker-release-set\.js as
 assert.match(dockerPublishWorkflow, /node build-tools\/docker-release-set\.js promote/);
 assert.doesNotMatch(dockerPublishWorkflow, /type=raw,value=latest/);
 
-assert.match(qualityWorkflow, /npm audit --audit-level=high/);
-assert.match(qualityWorkflow, /npm audit --prefix electron-app --package-lock-only --audit-level=high/);
+assert.match(qualityWorkflow, /audit:[\s\S]*node build-tools\/vulnerability-report\.js npm/);
+assert.doesNotMatch(qualityWorkflow.split("  verify:")[1], /npm audit|needs:.*audit/);
 assert.match(rootPackage.scripts['test:delivery'], /security-scan/);
 assert.match(desktopWorkflow, /name: Verify release checksums[\s\S]*sha256sum --check SHA256SUMS\.txt/);
 assert.match(gatewayDockerfile, /FROM guacamole\/guacd:1\.6\.0@sha256:8974eaa9ba32f713daf311e7cc8cd7e4cdfba1edea39eed75524e78ef4b08f4f/);
@@ -68,3 +68,12 @@ for (const workflow of [qualityWorkflow, desktopWorkflow, securityWorkflow, dock
 }
 
 console.log('Supply-chain delivery behavior checks passed');
+
+require('./vulnerability-report.behavior-test');
+assert.match(securityWorkflow, /exit-code: '1'/);
+assert.match(securityWorkflow, /node build-tools\/vulnerability-report\.js trivy trivy-report\.json/);
+assert.match(qualityWorkflow, /path: artifacts\/npm-audit-\*\.json/);
+assert.match(securityWorkflow, /path: trivy-report\.json/);
+assert.doesNotMatch(securityWorkflow, /continue-on-error/);
+assert.doesNotMatch(qualityWorkflow, /continue-on-error/);
+assert.match(securityWorkflow, /schedule:/);

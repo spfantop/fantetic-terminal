@@ -49,3 +49,9 @@ docker pull spfantop/fantetic-terminal-backend:2.1.3
 ```
 
 `imagetools inspect` 的 manifest 列表应同时包含 `linux/amd64` 和 `linux/arm64`，且摘要应与 completed release manifest 一致。Compose 部署必须把 `.env` 中的 `FANTETIC_VERSION` 设置为这个完成版本。
+
+## 安全扫描与打包失败的区别
+
+`Security gates` 的镜像扫描独立于标签发布工作流；它变红不代表 Docker candidate 构建或发布失败。查看失败步骤：`Build image`、运行时 smoke test 失败属于构建/运行故障；`Scan image` 可能是漏洞发现，也可能是扫描器或漏洞库下载失败。HIGH/CRITICAL 且已有修复的漏洞继续阻断安全作业，不通过忽略错误放行。
+
+每个镜像上传 `trivy-<image>-<revision>` JSON 报告，发现漏洞时也保留报告和摘要。依赖审计在 Quality checks 的独立 `audit` 作业中运行，不再使类型检查、测试和构建被跳过。漏洞数据库和可变基础镜像标签会随时间变化，旧代码重新构建也可能产生新的扫描结果；应按报告定位并单独处理依赖修复。发布依赖关系与风险说明见 [Release Guide](RELEASE.md#quality-and-security-check-failures)。

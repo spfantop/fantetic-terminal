@@ -4,6 +4,7 @@ import path from 'node:path';
 
 import {
   readApiErrorEnvelope,
+  resolveAIErrorKey,
   resolveLoginErrorKey,
   resolvePasskeyErrorKey,
   resolvePasswordChangeErrorKey,
@@ -83,3 +84,15 @@ assert.match(twoFactorComposableSource, /resolveTwoFactorErrorKey\(error\)/);
 assert.doesNotMatch(twoFactorComposableSource, /response\?\.data\?\.message/);
 
 console.log('api error client behavior ok');
+
+for (const code of ['emptyCommand', 'outputTruncated', 'requestBadModel', 'serviceUnavailable', 'timeout']) {
+  const key = resolveAIErrorKey({ response: { data: { code: `ai.${code}`, args: [], requestId: 'ai-request' } } });
+  assert.equal(key, `ai.errors.${code}`, 'AI failures preserve their specific error across the standard envelope');
+  for (const language of ['zh-CN', 'en-US', 'ja-JP']) {
+    const locale = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), `src/locales/${language}.json`), 'utf8'));
+    assert.equal(typeof locale.ai.errors[code], 'string');
+    assert.ok(!locale.ai.errors[code].includes('{{'), 'AI messages must not leave interpolation placeholders');
+  }
+}
+assert.equal(resolveAIErrorKey({ response: { data: { error: 'secret-provider-response' } } }), 'ai.nl2cmd.generateFailed');
+assert.equal(resolveAIErrorKey({ response: { data: { code: 'ai.secret', args: [], requestId: 'ai-request' } } }), 'ai.nl2cmd.generateFailed');

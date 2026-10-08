@@ -24,6 +24,7 @@ export interface NL2CMDResponse {
   command?: string;
   warning?: string;
   error?: string;
+  errorCode?: string;
 }
 
 export interface ProviderResult {
@@ -33,6 +34,7 @@ export interface ProviderResult {
 
 export interface OpenAIChatResponse {
   choices?: Array<{
+    finish_reason?: string;
     message?: {
       content?: unknown;
       reasoning_content?: string | null;
@@ -42,6 +44,7 @@ export interface OpenAIChatResponse {
 }
 
 export interface OpenAIResponsesResponse {
+  status?: string;
   output_text?: string;
   output?: Array<{
     content?: Array<{
@@ -54,6 +57,7 @@ export interface OpenAIResponsesResponse {
 }
 
 export interface ClaudeResponse {
+  stop_reason?: string;
   content?: Array<{
     text?: string;
   }>;

@@ -60,6 +60,7 @@
       "queryTooLong": "コマンドの説明は 500 文字以内にしてください",
       "disabled": "AI が有効化または設定されていません",
       "emptyCommand": "AI が有効なコマンドを生成できませんでした。より詳しく説明してください",
+      "outputTruncated": "AI の出力が上限を超えました。要求を簡潔にするか、非推論モデルを使用してください。",
       "generateFailed": "コマンド生成に失敗しました",
       "testSuccess": "接続テストに成功しました",
       "testFailed": "接続テストに失敗しました",

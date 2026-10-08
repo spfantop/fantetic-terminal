@@ -758,6 +758,8 @@
     "totalTrafficLabel": "总流量",
     "diskCardTitle": "磁盘",
     "diskTypeLabel": "类型",
+    "diskIoUnsupported": "不支持",
+    "diskIoUnsupportedHint": "当前存储不支持可靠的读写速率统计（JFFS2/MTD）",
     "diskReadRateLabel": "读/s",
     "diskWriteRateLabel": "写/s",
     "diskMountLabel": "挂载",
@@ -1586,6 +1588,28 @@
     }
   },
   "ai": {
+    "errors": {
+      "queryRequired": "请输入命令描述",
+      "queryTooLong": "命令描述不能超过 500 个字符",
+      "disabled": "AI 功能未启用或未配置",
+      "requestBadModel": "请求参数错误，请检查模型名称是否正确",
+      "invalidApiKey": "API Key 无效或已过期，请检查配置",
+      "permissionDenied": "API Key 权限不足或账户被禁用",
+      "endpointNotFound": "请求的 API 端点或模型不存在，请检查 Base URL 和模型名称",
+      "rateLimited": "API 请求频率超限或配额已耗尽",
+      "serviceUnavailable": "AI 服务暂时不可用，请稍后重试",
+      "connectFailed": "无法连接到 AI 服务，请检查网络连接或 Base URL 配置",
+      "generateFailed": "生成命令失败",
+      "htmlResponse": "AI 服务返回了网页 HTML，不是 API JSON。使用 One API 时 Base URL 通常需要填写到 /v1，例如 https://你的域名/v1",
+      "emptyCommand": "AI 未能生成有效命令，请尝试更详细的描述",
+      "outputTruncated": "AI 输出超出长度限制，未返回完整命令，请简化需求或使用非思考模型",
+      "unsupportedProvider": "不支持的 AI Provider",
+      "baseUrlProtocolInvalid": "AI Base URL 仅支持 http 或 https",
+      "baseUrlLocalBlocked": "AI Base URL 不允许指向本机或本地域名",
+      "modelRequired": "模型不能为空",
+      "apiKeyRequired": "启用 AI 助手需要填写 API Key",
+      "timeout": "AI 请求超时，请稍后重试"
+    },
     "nl2cmd": {
       "placeholder": "描述你想执行的命令...",
       "generate": "生成命令",

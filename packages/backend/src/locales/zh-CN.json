@@ -40,6 +40,7 @@
     "queryTooLong": "命令描述不能超过 500 个字符",
     "disabled": "AI 功能未启用或未配置",
     "emptyCommand": "AI 未能生成有效命令，请尝试更详细的描述",
+    "outputTruncated": "AI 输出超出长度限制，未返回完整命令，请简化需求或使用非思考模型",
     "generateFailed": "生成命令失败",
     "testSuccess": "连接测试成功",
     "testFailed": "连接测试失败",

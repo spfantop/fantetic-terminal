@@ -27,11 +27,11 @@ const createResponse = () => {
   assert.equal(headers.get('x-request-id'), (response.body as any)?.requestId);
 }
 
-{
+for (const code of ['auth.invalidCredentials', 'ai.emptyCommand', 'ai.outputTruncated', 'ai.serviceUnavailable']) {
   const { response } = createResponse();
   normalizeLegacyApiErrorResponse({} as any, response as any, () => undefined);
-  response.status(400).json({ code: 'auth.invalidCredentials', args: [], requestId: 'already-normalized' });
-  assert.deepEqual(response.body, { code: 'auth.invalidCredentials', args: [], requestId: 'already-normalized' });
+  response.status(400).json({ code, args: [], requestId: 'already-normalized' });
+  assert.deepEqual(response.body, { code, args: [], requestId: 'already-normalized' });
 }
 
 {

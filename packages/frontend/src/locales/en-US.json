@@ -758,6 +758,8 @@
     "totalTrafficLabel": "Total",
     "diskCardTitle": "Disk",
     "diskTypeLabel": "Type",
+    "diskIoUnsupported": "Unsupported",
+    "diskIoUnsupportedHint": "This storage does not expose reliable I/O rate statistics (JFFS2/MTD)",
     "diskReadRateLabel": "Read/s",
     "diskWriteRateLabel": "Write/s",
     "diskMountLabel": "Mount",
@@ -1583,6 +1585,28 @@
     }
   },
   "ai": {
+    "errors": {
+      "queryRequired": "Please enter a command description",
+      "queryTooLong": "Command description cannot exceed 500 characters",
+      "disabled": "AI is not enabled or configured",
+      "requestBadModel": "Invalid request. Please check the model name",
+      "invalidApiKey": "API Key is invalid or expired",
+      "permissionDenied": "API Key permission is insufficient or the account is disabled",
+      "endpointNotFound": "API endpoint or model was not found. Check Base URL and model",
+      "rateLimited": "API rate limit exceeded or quota exhausted",
+      "serviceUnavailable": "AI service is temporarily unavailable. Please try again later",
+      "connectFailed": "Cannot connect to AI service. Check network or Base URL settings",
+      "generateFailed": "Failed to generate command",
+      "htmlResponse": "AI service returned an HTML page instead of API JSON. For One API, Base URL usually needs to include /v1, for example https://your-domain/v1",
+      "emptyCommand": "AI did not generate a valid command. Try describing the task in more detail",
+      "outputTruncated": "AI output exceeded the limit. Simplify the request or use a non-reasoning model.",
+      "unsupportedProvider": "Unsupported AI Provider",
+      "baseUrlProtocolInvalid": "AI Base URL only supports http or https",
+      "baseUrlLocalBlocked": "AI Base URL cannot point to localhost or local domains",
+      "modelRequired": "Model is required",
+      "apiKeyRequired": "API Key is required when AI assistant is enabled",
+      "timeout": "AI request timed out. Please try again later."
+    },
     "nl2cmd": {
       "placeholder": "Describe the command you want to run...",
       "generate": "Generate command",

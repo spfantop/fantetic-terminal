@@ -26,6 +26,7 @@ export interface ServerStatus {
     diskMountPoint?: string;
     diskFsType?: string;
     diskDevice?: string;
+    diskIoUnsupported?: boolean;
     diskReadRate?: number; // Bytes/sec
     diskWriteRate?: number; // Bytes/sec
     cpuModel?: string;

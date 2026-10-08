@@ -1,6 +1,6 @@
 import type { OpenAIEndpoint } from '../types/nl2cmd.types';
 
-export const AI_REQUEST_TIMEOUT_MS = 30000;
+export const AI_REQUEST_TIMEOUT_MS = 65000;
 export const DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com/v1';
 export const DEFAULT_CLAUDE_BASE_URL = 'https://api.anthropic.com/v1';
 

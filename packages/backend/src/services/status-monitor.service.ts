@@ -3,6 +3,7 @@ import { WebSocket } from 'ws';
 import type { ClientState } from '../websocket/types';
 import { settingsService } from '../settings/settings.service';
 import { createConnectionPollingCoordinator } from './status-monitor-polling';
+import { withProcProcessFallback, parseProcProcesses, resolveDiskMount } from './remote-linux-monitoring';
 
 interface ProcessListItem {
   pid: number;
@@ -34,6 +35,7 @@ interface ServerStatus {
   diskMountPoint?: string;
   diskFsType?: string;
   diskDevice?: string;
+  diskIoUnsupported?: boolean;
   diskReadRate?: number; // Bytes per second
   diskWriteRate?: number; // Bytes per second
   cpuModel?: string;
@@ -87,12 +89,13 @@ const BATCH_DELIMITERS = {
   PROC_NET_DEV: '__END_PROC_NET_DEV__',
   PROC_STAT: '__END_PROC_STAT__',
   PROC_DISKSTATS: '__END_PROC_DISKSTATS__',
+  PROC_MOUNTS: '__END_PROC_MOUNTS__',
   PROCESS_SUMMARY: '__END_PROCESS_SUMMARY__',
   PROCESS_TOP: '__END_PROCESS_TOP__',
 } as const;
 
 const PROCESS_SUMMARY_COMMAND = `ps -eo state= 2>/dev/null | awk 'BEGIN{total=0;running=0;sleeping=0} {state=substr($1,1,1); total++; if(state=="R") running++; if(state=="S" || state=="D" || state=="I") sleeping++;} END{printf "%d\\t%d\\t%d", total, running, sleeping}' || true`;
-const PROCESS_TOP_COMMAND = 'ps -eo pid=,user=,state=,pcpu=,pmem=,rss=,lstart=,comm= --sort=-pcpu 2>/dev/null | head -n 5 || true';
+const PROCESS_TOP_COMMAND = withProcProcessFallback('ps -eo pid=,user=,state=,pcpu=,pmem=,rss=,lstart=,comm= --sort=-pcpu', 'head -n 5');
 
 const BATCH_STAT_COMMAND = [
   'cat /etc/os-release 2>/dev/null || true',
@@ -113,6 +116,8 @@ const BATCH_STAT_COMMAND = [
   `echo "${BATCH_DELIMITERS.PROC_STAT}"`,
   'cat /proc/diskstats 2>/dev/null || echo DISKSTATS_FAIL',
   `echo "${BATCH_DELIMITERS.PROC_DISKSTATS}"`,
+  'cat /proc/mounts 2>/dev/null || true',
+  `echo "${BATCH_DELIMITERS.PROC_MOUNTS}"`,
   PROCESS_SUMMARY_COMMAND,
   `echo "${BATCH_DELIMITERS.PROCESS_SUMMARY}"`,
   PROCESS_TOP_COMMAND,
@@ -941,8 +946,10 @@ export class StatusMonitorService {
         }
       }
 
+      const mountsRaw = sections.get('PROC_MOUNTS');
+      if (mountsRaw) Object.assign(status, resolveDiskMount(mountsRaw));
       const diskStatsRaw = sections.get('PROC_DISKSTATS');
-      if (diskStatsRaw && !diskStatsRaw.includes('DISKSTATS_FAIL') && status.diskDevice) {
+      if (diskStatsRaw && !diskStatsRaw.includes('DISKSTATS_FAIL') && status.diskDevice && !status.diskIoUnsupported) {
         const diskStats = collector.parseProcDiskStatsFromString(diskStatsRaw);
         const deviceStats = diskStats?.[status.diskDevice];
         if (deviceStats) {
@@ -960,10 +967,15 @@ export class StatusMonitorService {
       }
 
       const processSummaryRaw = sections.get('PROCESS_SUMMARY');
-      if (processSummaryRaw) Object.assign(status, collector.parseProcessSummary(processSummaryRaw));
-
       const processTopRaw = sections.get('PROCESS_TOP');
-      if (processTopRaw) status.topProcesses = collector.parseTopProcesses(processTopRaw);
+      if (processTopRaw?.startsWith('__PROC__')) {
+        const snapshot = parseProcProcesses(processTopRaw, sshClient);
+        status.topProcesses = snapshot.processes.slice(0, 5);
+        Object.assign(status, { processTotal: snapshot.summary.total, processRunning: snapshot.summary.running, processSleeping: snapshot.summary.sleeping });
+      } else {
+        if (processSummaryRaw) Object.assign(status, collector.parseProcessSummary(processSummaryRaw));
+        if (processTopRaw) status.topProcesses = collector.parseTopProcesses(processTopRaw);
+      }
     } catch (error) {
       console.warn('[StatusMonitor] 批量采集失败，降级到逐项采集:', getErrorMessage(error));
       return this.fetchServerStatusLegacy(sshClient, sessionId);
@@ -1030,7 +1042,13 @@ export class StatusMonitorService {
       }
     }
 
-    if (procDiskStats.status === 'fulfilled' && procDiskStats.value && status.diskDevice) {
+    try {
+      Object.assign(status, resolveDiskMount(await collector.executeSshCommand(sshClient, 'cat /proc/mounts')));
+    } catch {
+      // Missing mount metadata leaves disk throughput unavailable rather than guessing an overlay device.
+    }
+
+    if (procDiskStats.status === 'fulfilled' && procDiskStats.value && status.diskDevice && !status.diskIoUnsupported) {
       const deviceStats = procDiskStats.value[status.diskDevice];
       if (deviceStats) {
         Object.assign(
@@ -1051,8 +1069,14 @@ export class StatusMonitorService {
         collector.executeSshCommand(sshClient, PROCESS_SUMMARY_COMMAND),
         collector.executeSshCommand(sshClient, PROCESS_TOP_COMMAND),
       ]);
-      Object.assign(status, collector.parseProcessSummary(processSummaryRaw));
-      status.topProcesses = collector.parseTopProcesses(processTopRaw);
+      if (processTopRaw.startsWith('__PROC__')) {
+        const snapshot = parseProcProcesses(processTopRaw, sshClient);
+        status.topProcesses = snapshot.processes.slice(0, 5);
+        Object.assign(status, { processTotal: snapshot.summary.total, processRunning: snapshot.summary.running, processSleeping: snapshot.summary.sleeping });
+      } else {
+        Object.assign(status, collector.parseProcessSummary(processSummaryRaw));
+        status.topProcesses = collector.parseTopProcesses(processTopRaw);
+      }
     } catch {
       // Process preview is best-effort and should never block status display.
     }

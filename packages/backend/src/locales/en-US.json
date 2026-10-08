@@ -60,6 +60,7 @@
     "queryTooLong": "Command description cannot exceed 500 characters",
     "disabled": "AI is not enabled or configured",
     "emptyCommand": "AI did not generate a valid command. Try describing the task in more detail",
+    "outputTruncated": "AI output exceeded the limit. Simplify the request or use a non-reasoning model.",
     "generateFailed": "Failed to generate command",
     "testSuccess": "Connection test succeeded",
     "testFailed": "Connection test failed",

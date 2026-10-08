@@ -126,3 +126,9 @@ export const resolveSetupErrorKey = (error: unknown): string => (
   setupErrorKeyByCode[readApiErrorEnvelope(error)?.code ?? '']
     ?? 'setup.error.generic'
 );
+
+export const resolveAIErrorKey = (error: unknown): string => {
+  const code = readApiErrorEnvelope(error)?.code;
+  const supported = ['queryRequired', 'queryTooLong', 'disabled', 'requestBadModel', 'invalidApiKey', 'permissionDenied', 'endpointNotFound', 'rateLimited', 'serviceUnavailable', 'connectFailed', 'generateFailed', 'htmlResponse', 'emptyCommand', 'outputTruncated', 'unsupportedProvider', 'baseUrlProtocolInvalid', 'baseUrlLocalBlocked', 'modelRequired', 'apiKeyRequired', 'timeout'];
+  return code?.startsWith('ai.') && supported.includes(code.slice(3)) ? `ai.errors.${code.slice(3)}` : 'ai.nl2cmd.generateFailed';
+};

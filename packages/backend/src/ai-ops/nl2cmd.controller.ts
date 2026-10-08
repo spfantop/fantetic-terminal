@@ -1,3 +1,4 @@
+import { sendApiError } from '../security/api-error-envelope';
 import { Request, Response } from 'express';
 import * as NL2CMDService from './nl2cmd.service';
 import { aiMessage, translateAIError } from './nl2cmd.service';
@@ -25,17 +26,21 @@ export async function saveAISettings(req: Request, res: Response): Promise<void>
 export async function generateCommand(req: Request, res: Response): Promise<void> {
   const body = req.body as NL2CMDRequest;
   if (!body || typeof body.query !== 'string' || !body.query.trim()) {
-    res.status(400).json({ success: false, error: aiMessage('queryRequired') });
+    sendApiError(res, 400, 'ai.queryRequired');
     return;
   }
 
   if (body.query.length > 500) {
-    res.status(400).json({ success: false, error: aiMessage('queryTooLong') });
+    sendApiError(res, 400, 'ai.queryTooLong');
     return;
   }
 
   const result = await NL2CMDService.generateCommand(body);
-  res.status(result.success ? 200 : 400).json(result);
+  if (!result.success) {
+    sendApiError(res, 400, result.errorCode || 'ai.generateFailed');
+    return;
+  }
+  res.json(result);
 }
 
 export async function testAIConnection(req: Request, res: Response): Promise<void> {

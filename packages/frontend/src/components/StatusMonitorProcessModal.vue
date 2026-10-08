@@ -4,6 +4,7 @@ import { storeToRefs } from 'pinia';
 import { useI18n } from 'vue-i18n';
 import { useSessionStore } from '../stores/session.store';
 import { useUiNotificationsStore } from '../stores/uiNotifications.store';
+import { resolveProcessErrorMessage } from '../utils/processError';
 import type { ProcessListItem } from '../types/server.types';
 import type { ProcessListResponsePayload, ProcessSignalResponsePayload, WebSocketMessage } from '../types/websocket.types';
 
@@ -331,7 +332,7 @@ const attachHandlers = () => {
     }
 
     isLoading.value = false;
-    processError.value = payload?.message || t('statusMonitor.processManager.loadFailed');
+    processError.value = resolveProcessErrorMessage(payload?.message, t('statusMonitor.processManager.loadFailed'));
   });
 
   unregisterSignalResponse = currentWsManager.value.onMessage('process:signal:response', (payload: ProcessSignalResponsePayload, message?: WebSocketMessage) => {
