@@ -56,20 +56,28 @@ export async function callOpenAI(config: AISettings, prompt: string): Promise<Pr
   };
 
   if (endpointUrl.includes('/responses')) {
+    let maxOutputTokens: number = NL2CMD_CONFIG.MAX_OUTPUT_TOKENS;
     return retryWithBackoff(async (timeout) => {
       const response = await axios.post<OpenAIResponsesResponse>(
         endpointUrl,
         {
           model: config.model,
           input: prompt,
-          max_output_tokens: NL2CMD_CONFIG.MAX_OUTPUT_TOKENS,
+          max_output_tokens: maxOutputTokens,
           temperature: NL2CMD_CONFIG.TEMPERATURE,
         },
         { headers, timeout },
       );
       assertProviderJsonResponse(response.data, response.headers['content-type']);
 
-      if (response.data.status === 'incomplete') throw new Error('ai.outputTruncated');
+      if (response.data.status === 'incomplete') {
+        // Responses 的预算也包含思考 token；明确耗尽时只扩大一次并重新生成完整命令。
+        if (response.data.incomplete_details?.reason === 'max_output_tokens' && maxOutputTokens === NL2CMD_CONFIG.MAX_OUTPUT_TOKENS) {
+          maxOutputTokens = NL2CMD_CONFIG.REASONING_OUTPUT_TOKENS;
+          throw new ReasoningBudgetExceeded('ai.outputTruncated');
+        }
+        throw new Error('ai.outputTruncated');
+      }
       if (response.data.status && response.data.status !== 'completed') throw new Error('ai.serviceUnavailable');
       return { command: readCommand(response.data), usage: response.data.usage };
     });

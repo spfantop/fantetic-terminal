@@ -12,7 +12,25 @@ let responseBody: unknown;
 let retryAfter: string | undefined;
 let hang = false;
 let reasoningMode = false;
+let responsesBudgetMode: 'recover' | 'exhausted' | 'content_filter' | undefined;
+const responseBudgets: number[] = [];
 const server = createServer((req, res) => {
+  if (responsesBudgetMode) {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      const input = JSON.parse(body);
+      responseBudgets.push(input.max_output_tokens);
+      const completed = responsesBudgetMode === 'recover' && input.max_output_tokens > 500;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({
+        status: completed ? 'completed' : 'incomplete', error: null,
+        incomplete_details: completed ? null : { reason: responsesBudgetMode === 'content_filter' ? 'content_filter' : 'max_output_tokens' },
+        output: [{ type: 'message', content: [{ type: 'output_text', text: completed ? 'pwd' : 'rm -r' }] }],
+      }));
+    });
+    return;
+  }
   if (reasoningMode) {
     let body = '';
     req.on('data', chunk => { body += chunk; });
@@ -88,6 +106,18 @@ async function run() {
     await assert.rejects(callOpenAI({ ...settings, openaiEndpoint: '/responses' }, 'directory'), /ai\.emptyCommand/);
     responseBody = { status: 'incomplete', error: null, output_text: 'rm -r' };
     await assert.rejects(callOpenAI({ ...settings, openaiEndpoint: '/responses' }, 'directory'), /ai\.outputTruncated/);
+    responsesBudgetMode = 'recover';
+    assert.equal((await callOpenAI({ ...settings, openaiEndpoint: '/responses' }, 'directory')).command, 'pwd', 'Responses token exhaustion must recover without returning the partial command');
+    assert.deepEqual(responseBudgets, [500, 8192]);
+    responseBudgets.length = 0;
+    responsesBudgetMode = 'exhausted';
+    await assert.rejects(callOpenAI({ ...settings, openaiEndpoint: '/responses' }, 'directory'), /ai\.outputTruncated/);
+    assert.deepEqual(responseBudgets, [500, 8192], 'exhaustion at the expanded budget must stop');
+    responseBudgets.length = 0;
+    responsesBudgetMode = 'content_filter';
+    await assert.rejects(callOpenAI({ ...settings, openaiEndpoint: '/responses' }, 'directory'), /ai\.outputTruncated/);
+    assert.deepEqual(responseBudgets, [500], 'non-budget incomplete responses must not retry');
+    responsesBudgetMode = undefined;
     responseBody = { stop_reason: 'max_tokens', content: [{ text: 'rm -r' }] };
     await assert.rejects(callClaude(settings, 'directory'), /ai\.outputTruncated/);
     responseBody = null;

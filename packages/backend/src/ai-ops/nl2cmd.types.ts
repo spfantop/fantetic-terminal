@@ -44,6 +44,7 @@ export interface OpenAIChatResponse {
 }
 
 export interface OpenAIResponsesResponse {
+  incomplete_details?: { reason?: string } | null;
   status?: string;
   output_text?: string;
   output?: Array<{
