@@ -26,6 +26,9 @@ assert.deepEqual(GuacdClient.summarizeInstructionNames('4.args,1.a;5.ready,1.b;'
 });
 const gatewaySource = readFileSync(resolve('src/server.ts'), 'utf8');
 assert.match(gatewaySource, /log:\s*\{\s*level:\s*'ERRORS'/);
+const guacdClientSource = readFileSync(resolve('node_modules/guacamole-lite/lib/GuacdClient.js'), 'utf8');
+assert.match(guacdClientSource, /Outbound Guacamole keep-alives count as activity/);
+assert.match(guacdClientSource, /this\.lastActivity = Date\.now\(\);/);
 
 const key = Buffer.alloc(32, 9);
 const claims = { expiresAt: 20_000, nonce: 'nonce-guacamole-123' };

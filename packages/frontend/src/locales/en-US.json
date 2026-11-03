@@ -1562,7 +1562,8 @@
       "balanced": "Balanced",
       "sharp": "Sharp"
     },
-    "reconnectTooltip": "Reconnect to the remote desktop"
+    "reconnectTooltip": "Reconnect to the remote desktop",
+    "refreshDisplay": "Refresh remote display"
   },
   "vncModal": {
     "title": "VNC Session",

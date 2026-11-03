@@ -1565,7 +1565,8 @@
       "balanced": "均衡",
       "sharp": "清晰"
     },
-    "reconnectTooltip": "重新连接到远程桌面"
+    "reconnectTooltip": "重新连接到远程桌面",
+    "refreshDisplay": "刷新远程画面"
   },
   "vncModal": {
     "title": "VNC 会话",

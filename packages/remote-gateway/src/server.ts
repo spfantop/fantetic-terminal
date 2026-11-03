@@ -107,7 +107,7 @@ const logRemoteDesktopSettingsSnapshot = (
     requestId?: string,
 ) => {
     const safeKeys = protocol === 'rdp'
-        ? ['width', 'height', 'dpi', 'security', 'ignore-cert', 'color-depth', 'force-lossless', 'resize-method', 'disable-gfx', 'enable-wallpaper']
+        ? ['width', 'height', 'dpi', 'security', 'ignore-cert', 'color-depth', 'force-lossless', 'resize-method', 'disable-gfx', 'enable-wallpaper', 'enable-theming', 'enable-font-smoothing', 'enable-full-window-drag', 'enable-desktop-composition', 'enable-menu-animations']
         : ['width', 'height', 'color-depth', 'force-lossless'];
     const snapshot = safeKeys.reduce<Record<string, unknown>>((acc, key) => {
         acc[key] = Object.prototype.hasOwnProperty.call(settings, key) ? settings[key] : '(omitted)';
@@ -218,7 +218,9 @@ app.post('/api/remote-desktop/token', requireBackendAuthentication, (req: Reques
         settings.security = security || 'any'; // RDP 特有，使用默认值 'any'
         settings['ignore-cert'] = readConfigValue(connectionConfig, 'ignoreCert', 'ignore-cert') || 'true'; // RDP 特有
         settings.dpi = String(dpi || '96'); // RDP 特有
-        settings['color-depth'] = readConfigValue(connectionConfig, 'colorDepth', 'color-depth') || '24';
+        // 16-bit colour and disabled desktop effects reduce bandwidth while
+        // keeping the session interactive on high-latency links.
+        settings['color-depth'] = readConfigValue(connectionConfig, 'colorDepth', 'color-depth') || '16';
         settings['force-lossless'] = readConfigValue(connectionConfig, 'forceLossless', 'force-lossless') || 'false';
         const resizeMethod = readConfigValue(connectionConfig, 'resizeMethod', 'resize-method');
         if (resizeMethod) {
@@ -226,6 +228,11 @@ app.post('/api/remote-desktop/token', requireBackendAuthentication, (req: Reques
         }
         settings['disable-gfx'] = readConfigValue(connectionConfig, 'disableGfx', 'disable-gfx') || 'true';
         settings['enable-wallpaper'] = readConfigValue(connectionConfig, 'enableWallpaper', 'enable-wallpaper') || 'false';
+        settings['enable-theming'] = readConfigValue(connectionConfig, 'enableTheming', 'enable-theming') || 'false';
+        settings['enable-font-smoothing'] = readConfigValue(connectionConfig, 'enableFontSmoothing', 'enable-font-smoothing') || 'false';
+        settings['enable-full-window-drag'] = readConfigValue(connectionConfig, 'enableFullWindowDrag', 'enable-full-window-drag') || 'false';
+        settings['enable-desktop-composition'] = readConfigValue(connectionConfig, 'enableDesktopComposition', 'enable-desktop-composition') || 'false';
+        settings['enable-menu-animations'] = readConfigValue(connectionConfig, 'enableMenuAnimations', 'enable-menu-animations') || 'false';
     } else if (protocol === 'vnc') {
         if (typeof password === 'undefined') {
             res.status(400).json({ error: 'VNC 连接缺少 password' });
@@ -235,7 +242,7 @@ app.post('/api/remote-desktop/token', requireBackendAuthentication, (req: Reques
         if (username) { // VNC 可选 username
             settings.username = username as string;
         }
-        settings['color-depth'] = readConfigValue(connectionConfig, 'colorDepth', 'color-depth') || '24';
+        settings['color-depth'] = readConfigValue(connectionConfig, 'colorDepth', 'color-depth') || '16';
         settings['force-lossless'] = readConfigValue(connectionConfig, 'forceLossless', 'force-lossless') || 'false';
     }
 

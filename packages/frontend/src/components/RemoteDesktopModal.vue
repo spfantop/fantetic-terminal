@@ -33,6 +33,10 @@ const maxAllowedHeight = computed(() => window.innerHeight - MODAL_CONTAINER_PAD
 const rdpDisplayRef = ref<HTMLDivElement | null>(null);
 const rdpContainerRef = ref<HTMLDivElement | null>(null);
 const guacClient = ref<any | null>(null);
+const isDisplayRefreshNeeded = ref(false);
+const reconnectButtonRef = ref<HTMLButtonElement | null>(null);
+let displayResizeObserver: ResizeObserver | null = null;
+let lastRemoteDisplaySize: { width: number; height: number } | null = null;
 const connectionStatus = ref<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
 const isResizing = ref(false);
 const resizeStartX = ref(0);
@@ -155,6 +159,8 @@ const handleConnection = async () => {
             if (displayEl && typeof displayEl.focus === 'function') {
               displayEl.focus();
             }
+            syncRemoteDisplaySize();
+            setupDisplayResizeObserver();
           });
           break;
         case 4: // DISCONNECTING
@@ -167,7 +173,10 @@ const handleConnection = async () => {
           break;
       }
       statusMessage.value = t(`remoteDesktopModal.status.${i18nKeyPart}`, { state });
-      if (currentStatus) connectionStatus.value = currentStatus as 'disconnected' | 'connecting' | 'connected' | 'error';
+      if (currentStatus) {
+        connectionStatus.value = currentStatus as 'disconnected' | 'connecting' | 'connected' | 'error';
+        if (currentStatus === 'disconnected' || currentStatus === 'error') focusReconnectButton();
+      }
     };
 
     guacClient.value.onerror = () => {
@@ -211,6 +220,60 @@ const waitForInitialRdpDisplaySize = async () => {
   }
 
   return normalizeRdpDisplaySize(measureRdpDisplaySize());
+};
+
+const readRemoteDisplaySize = () => ({
+  width: Math.floor(rdpContainerRef.value?.clientWidth ?? 0),
+  height: Math.floor(rdpContainerRef.value?.clientHeight ?? 0),
+});
+
+const syncRemoteDisplaySize = () => {
+  if (!guacClient.value || connectionStatus.value !== 'connected') return;
+  const { width, height } = readRemoteDisplaySize();
+  if (width <= 0 || height <= 0) return;
+  guacClient.value.sendSize(width, height);
+  lastRemoteDisplaySize = { width, height };
+  isDisplayRefreshNeeded.value = false;
+};
+
+const markRemoteDisplayResizeNeeded = () => {
+  if (connectionStatus.value !== 'connected') return;
+  const { width, height } = readRemoteDisplaySize();
+  if (width > 0 && height > 0 && (!lastRemoteDisplaySize || width !== lastRemoteDisplaySize.width || height !== lastRemoteDisplaySize.height)) {
+    isDisplayRefreshNeeded.value = true;
+  }
+};
+
+const setupDisplayResizeObserver = () => {
+  displayResizeObserver?.disconnect();
+  const ResizeObserverConstructor = rdpContainerRef.value?.ownerDocument.defaultView?.ResizeObserver ?? ResizeObserver;
+  if (!rdpContainerRef.value || !ResizeObserverConstructor) return;
+  displayResizeObserver = new ResizeObserverConstructor(markRemoteDisplayResizeNeeded);
+  displayResizeObserver.observe(rdpContainerRef.value);
+};
+
+const refreshRemoteDisplay = () => {
+  if (connectionStatus.value === 'connected') {
+    syncRemoteDisplaySize();
+    return;
+  }
+  void handleConnection();
+};
+
+const focusReconnectButton = () => {
+  nextTick(() => reconnectButtonRef.value?.focus());
+};
+
+const handleRemoteDesktopKeydown = (event: KeyboardEvent) => {
+  const target = event.target as HTMLElement | null;
+  if ((connectionStatus.value === 'disconnected' || connectionStatus.value === 'error')
+      && (event.key === 'Enter' || event.key === ' ')
+      && target?.tagName !== 'INPUT'
+      && target?.tagName !== 'TEXTAREA'
+      && target?.tagName !== 'BUTTON') {
+    event.preventDefault();
+    void handleConnection();
+  }
 };
 
 const trySyncClipboardOnDisplayFocus = async () => {
@@ -287,7 +350,8 @@ const setupInputListeners = () => {
         };
 
         // @ts-ignore
-        keyboard.value = new Guacamole.Keyboard(displayEl); // 将监听器附加到 RDP 显示元素
+        // 监听容器而非仅监听 canvas，避免选中文本或焦点转移后快捷键丢失。
+        keyboard.value = new Guacamole.Keyboard(rdpContainerRef.value ?? displayEl);
 
         keyboard.value.onkeydown = (keysym: number) => {
             // 仅当输入框未聚焦时发送按键事件
@@ -449,6 +513,10 @@ const handleClickRestoreButton = () => {
 };
 
 const disconnectGuacamole = () => {
+  displayResizeObserver?.disconnect();
+  displayResizeObserver = null;
+  lastRemoteDisplaySize = null;
+  isDisplayRefreshNeeded.value = false;
   removeInputListeners();
   isKeyboardDisabledForInput.value = false; // 确保状态重置
   if (guacClient.value) {
@@ -598,22 +666,7 @@ const computedModalStyle = computed(() => {
   };
 });
 
-// Watch for modal size changes to update Guacamole client
-watchEffect(() => {
-  const currentStyle = computedModalStyle.value; // Dependency
-  if (guacClient.value && connectionStatus.value === 'connected' && rdpContainerRef.value) {
-    nextTick(() => {
-      if (rdpContainerRef.value && guacClient.value) {
-        const displayWidth = rdpContainerRef.value.offsetWidth;
-        const displayHeight = rdpContainerRef.value.offsetHeight;
-        if (displayWidth > 0 && displayHeight > 0) {
-          // debugLog(`[RDP Modal] Resizing Guacamole display to: ${displayWidth}x${displayHeight} due to style change.`);
-          guacClient.value.sendSize(displayWidth, displayHeight);
-        }
-      }
-    });
-  }
-});
+// 尺寸变化只提示用户，避免切换终端时远端桌面自动重排。
 
 const initResize = (event: MouseEvent) => {
   isResizing.value = true;
@@ -655,6 +708,8 @@ const stopResize = () => {
 </script>
 <template>
   <div
+    tabindex="-1"
+    @keydown.enter.capture="handleRemoteDesktopKeydown"
     :class="[
       'fixed inset-0 z-50 flex items-center justify-center p-4',
       isMinimized ? '' : 'bg-overlay',
@@ -712,6 +767,15 @@ const stopResize = () => {
       <div ref="rdpContainerRef" class="relative bg-black overflow-hidden flex-1">
         <div ref="rdpDisplayRef" class="rdp-display-container w-full h-full">
         </div>
+         <div v-if="connectionStatus === 'connected' && isDisplayRefreshNeeded"
+              class="absolute bottom-3 left-1/2 -translate-x-1/2 z-10">
+           <button
+             @click="refreshRemoteDisplay"
+             class="px-3 py-1 bg-primary text-white rounded text-xs shadow hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary"
+           >
+             {{ t('remoteDesktopModal.refreshDisplay') }}
+           </button>
+         </div>
          <div v-if="connectionStatus === 'connecting' || connectionStatus === 'error'"
               class="absolute inset-0 flex items-center justify-center bg-black bg-opacity-75 text-white p-4 z-10">
             <div class="text-center">
@@ -719,7 +783,8 @@ const stopResize = () => {
               <i v-else class="fas fa-exclamation-triangle fa-2x mb-3 text-red-400"></i>
               <p class="text-sm">{{ statusMessage }}</p>
                <button v-if="connectionStatus === 'error'"
-                       @click="() => handleConnection()"
+                       ref="reconnectButtonRef"
+                       @click="refreshRemoteDisplay"
                        class="mt-4 px-3 py-1 bg-primary text-white rounded text-xs hover:bg-primary-dark">
                  {{ t('common.retry') }}
                </button>
@@ -751,7 +816,7 @@ const stopResize = () => {
             />
              <!-- 添加重新连接按钮 -->
              <button
-               @click="handleConnection"
+               @click="refreshRemoteDisplay"
                :disabled="connectionStatus === 'connecting'"
                class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 ease-in-out"
                :title="t('remoteDesktopModal.reconnectTooltip')"

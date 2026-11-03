@@ -90,11 +90,13 @@ diff --git a/node_modules/guacamole-lite/lib/GuacdClient.js b/node_modules/guaca
          if (this.state === this.STATE_CLOSED) {
              return;
          }
-@@ -94,7 +96,7 @@ class GuacdClient extends EventEmitter {
+@@ -94,7 +96,10 @@ class GuacdClient extends EventEmitter {
              return;
          }
  
 -        this.logger.log(LOGLEVEL.DEBUG, '[     # >>> ]    Sending to guacd: ```' + data + '```');
++        // Outbound Guacamole keep-alives count as activity even when guacd does not reply.
++        this.lastActivity = Date.now();
 +        this.logger.log(LOGLEVEL.DEBUG, '[     # >>> ]    Sending to guacd: ```' + logData + '```');
          this.guacdConnection.write(data, (error) => {
  

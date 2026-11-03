@@ -32,6 +32,10 @@ const maxAllowedHeight = computed(() => window.innerHeight - MODAL_CONTAINER_PAD
 const vncDisplayRef = ref<HTMLDivElement | null>(null);
 const vncContainerRef = ref<HTMLDivElement | null>(null);
 const guacClient = ref<any | null>(null);
+const isDisplayRefreshNeeded = ref(false);
+const reconnectButtonRef = ref<HTMLButtonElement | null>(null);
+let displayResizeObserver: ResizeObserver | null = null;
+let lastRemoteDisplaySize: { width: number; height: number } | null = null;
 let inputListenerCleanupList: Array<() => void> = [];
 const connectionStatus = ref<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
 const isResizing = ref(false);
@@ -180,15 +184,21 @@ const handleConnection = async () => {
               if (displayWidth > 0 && displayHeight > 0) {
                 debugLog(`[VncModal] Initial resize on connect: ${displayWidth}x${displayHeight}`);
                 guacClient.value.sendSize(displayWidth, displayHeight);
+                lastRemoteDisplaySize = { width: displayWidth, height: displayHeight };
+                isDisplayRefreshNeeded.value = false;
               }
             }
+            setupDisplayResizeObserver();
           });
           break;
         case 4: i18nKeyPart = 'disconnecting'; currentStatus = 'disconnected'; break;
         case 5: i18nKeyPart = 'disconnected'; currentStatus = 'disconnected'; break;
       }
       statusMessage.value = t(`remoteDesktopModal.status.${i18nKeyPart}`, { state });
-      if (currentStatus) connectionStatus.value = currentStatus as 'disconnected' | 'connecting' | 'connected' | 'error';
+      if (currentStatus) {
+        connectionStatus.value = currentStatus as 'disconnected' | 'connecting' | 'connected' | 'error';
+        if (currentStatus === 'disconnected' || currentStatus === 'error') focusReconnectButton();
+      }
     };
 
     guacClient.value.onerror = () => {
@@ -203,6 +213,60 @@ const handleConnection = async () => {
     statusMessage.value = t('remoteDesktopModal.errors.connectionFailed');
     connectionStatus.value = 'error';
     disconnectGuacamole();
+  }
+};
+
+const readRemoteDisplaySize = () => ({
+  width: Math.floor(vncContainerRef.value?.clientWidth ?? 0),
+  height: Math.floor(vncContainerRef.value?.clientHeight ?? 0),
+});
+
+const syncRemoteDisplaySize = () => {
+  if (!guacClient.value || connectionStatus.value !== 'connected') return;
+  const { width, height } = readRemoteDisplaySize();
+  if (width <= 0 || height <= 0) return;
+  guacClient.value.sendSize(width, height);
+  lastRemoteDisplaySize = { width, height };
+  isDisplayRefreshNeeded.value = false;
+};
+
+const markRemoteDisplayResizeNeeded = () => {
+  if (connectionStatus.value !== 'connected') return;
+  const { width, height } = readRemoteDisplaySize();
+  if (width > 0 && height > 0 && (!lastRemoteDisplaySize || width !== lastRemoteDisplaySize.width || height !== lastRemoteDisplaySize.height)) {
+    isDisplayRefreshNeeded.value = true;
+  }
+};
+
+const setupDisplayResizeObserver = () => {
+  displayResizeObserver?.disconnect();
+  const ResizeObserverConstructor = vncContainerRef.value?.ownerDocument.defaultView?.ResizeObserver ?? ResizeObserver;
+  if (!vncContainerRef.value || !ResizeObserverConstructor) return;
+  displayResizeObserver = new ResizeObserverConstructor(markRemoteDisplayResizeNeeded);
+  displayResizeObserver.observe(vncContainerRef.value);
+};
+
+const refreshRemoteDisplay = () => {
+  if (connectionStatus.value === 'connected') {
+    syncRemoteDisplaySize();
+    return;
+  }
+  void handleConnection();
+};
+
+const focusReconnectButton = () => {
+  nextTick(() => reconnectButtonRef.value?.focus());
+};
+
+const handleRemoteDesktopKeydown = (event: KeyboardEvent) => {
+  const target = event.target as HTMLElement | null;
+  if ((connectionStatus.value === 'disconnected' || connectionStatus.value === 'error')
+      && (event.key === 'Enter' || event.key === ' ')
+      && target?.tagName !== 'INPUT'
+      && target?.tagName !== 'TEXTAREA'
+      && target?.tagName !== 'BUTTON') {
+    event.preventDefault();
+    void handleConnection();
   }
 };
 
@@ -278,7 +342,8 @@ const setupInputListeners = () => {
         };
 
         // @ts-ignore
-        keyboard.value = new Guacamole.Keyboard(displayEl);
+        // 监听容器而非仅监听 canvas，避免选中文本或焦点转移后快捷键丢失。
+        keyboard.value = new Guacamole.Keyboard(vncContainerRef.value ?? displayEl);
 
         keyboard.value.onkeydown = (keysym: number) => {
             if (guacClient.value && !isKeyboardDisabledForInput.value) {
@@ -416,6 +481,10 @@ const handleClickRestoreButton = () => {
 };
 
 const disconnectGuacamole = () => {
+  displayResizeObserver?.disconnect();
+  displayResizeObserver = null;
+  lastRemoteDisplaySize = null;
+  isDisplayRefreshNeeded.value = false;
   removeInputListeners();
   isKeyboardDisabledForInput.value = false;
   if (guacClient.value) {
@@ -530,25 +599,7 @@ const computedModalStyle = computed(() => {
   };
 });
 
-watchEffect(() => {
-  // 依赖 computedModalStyle，当其变化时此 effect 会重新运行
-  const currentStyle = computedModalStyle.value;
-
-  if (guacClient.value && connectionStatus.value === 'connected' && vncDisplayRef.value) {
-    // 使用 nextTick 确保 DOM 更新完毕，vncDisplayRef 的尺寸已根据 currentStyle 刷新
-    nextTick(() => {
-      if (vncDisplayRef.value && guacClient.value) { // 再次检查，因为 nextTick 是异步的
-        const displayWidth = vncDisplayRef.value.offsetWidth;
-        const displayHeight = vncDisplayRef.value.offsetHeight;
-
-        if (displayWidth > 0 && displayHeight > 0) {
-          debugLog(`[VncModal] Resizing VNC display to: ${displayWidth}x${displayHeight} due to style change.`);
-          guacClient.value.sendSize(displayWidth, displayHeight);
-        }
-      }
-    });
-  }
-});
+// 尺寸变化只提示用户，避免切换终端时远端桌面自动重排。
 
 const initResize = (event: MouseEvent) => {
   isResizing.value = true;
@@ -594,6 +645,8 @@ const stopResize = () => {
 </script>
 <template>
   <div
+    tabindex="-1"
+    @keydown.enter.capture="handleRemoteDesktopKeydown"
     :class="[
       'fixed inset-0 z-50 flex items-center justify-center p-4',
       isMinimized ? '' : 'bg-overlay',
@@ -651,6 +704,15 @@ const stopResize = () => {
       <div ref="vncContainerRef" class="relative bg-black overflow-hidden flex-1">
         <div ref="vncDisplayRef" class="vnc-display-container w-full h-full">
         </div>
+         <div v-if="connectionStatus === 'connected' && isDisplayRefreshNeeded"
+              class="absolute bottom-3 left-1/2 -translate-x-1/2 z-10">
+           <button
+             @click="refreshRemoteDisplay"
+             class="px-3 py-1 bg-primary text-white rounded text-xs shadow hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary"
+           >
+             {{ t('remoteDesktopModal.refreshDisplay') }}
+           </button>
+         </div>
          <div v-if="connectionStatus === 'connecting' || connectionStatus === 'error'"
               class="absolute inset-0 flex items-center justify-center bg-black bg-opacity-75 text-white p-4 z-10">
             <div class="text-center">
@@ -658,7 +720,8 @@ const stopResize = () => {
               <i v-else class="fas fa-exclamation-triangle fa-2x mb-3 text-red-400"></i>
               <p class="text-sm">{{ statusMessage }}</p>
                <button v-if="connectionStatus === 'error'"
-                       @click="() => handleConnection()"
+                       ref="reconnectButtonRef"
+                       @click="refreshRemoteDisplay"
                        class="mt-4 px-3 py-1 bg-primary text-white rounded text-xs hover:bg-primary-dark">
                  {{ t('common.retry') }}
                </button>
@@ -712,7 +775,7 @@ const stopResize = () => {
               @blur="handleHeightInputBlur"
             />
              <button
-               @click="handleConnection"
+               @click="refreshRemoteDisplay"
                :disabled="connectionStatus === 'connecting'"
                class="px-4 py-2 bg-button text-button-text rounded-md shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition duration-150 ease-in-out"
                :title="t('remoteDesktopModal.reconnectTooltip')"
