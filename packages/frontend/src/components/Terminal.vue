@@ -105,6 +105,11 @@ let terminalSearchPositions: TerminalBufferSearchResult['positions'] = [];
 let terminalSearchPositionIndex = -1;
 let terminalSearchPositionTerm = '';
 const terminalSearchRunning = ref(false);
+let terminalSearchRefreshTimer: number | null = null;
+const terminalScrollbarVisible = ref(false);
+let terminalScrollbarHideTimer: number | null = null;
+let terminalViewportElement: HTMLElement | null = null;
+let terminalPointerInsideViewport = false;
 const terminalSearchResultCurrent = computed(() => (
   terminalSearchResultIndex.value >= 0
     ? terminalSearchResultIndex.value + 1
@@ -345,10 +350,20 @@ const proposeDimensionsFromCachedMetrics = (pixelSize: TerminalPixelSize, forceR
   };
 };
 
+const scheduleTerminalSearchRefresh = () => {
+  terminalSearchGeneration += 1;
+  terminalSearchAbortController?.abort();
+  terminalSearchAbortController = null;
+  if (!terminalSearchTerm.value) return;
+  if (terminalSearchRefreshTimer !== null) window.clearTimeout(terminalSearchRefreshTimer);
+  terminalSearchRefreshTimer = window.setTimeout(() => { terminalSearchRefreshTimer = null; updateTerminalSearch(); }, 0);
+};
+
 const resizeTerminalToDimensions = (dimensions: TerminalDimensions) => {
   if (!terminal || isNaN(dimensions.cols) || isNaN(dimensions.rows)) return;
 
   terminal.resize(dimensions.cols, dimensions.rows);
+  scheduleTerminalSearchRefresh();
 };
 
 const updateSingleLineContentWidth = () => {
@@ -596,7 +611,8 @@ const clearTerminalSearchActiveDecoration = () => {
 const decorateTerminalSearchPosition = (position: TerminalBufferSearchResult['positions'][number]) => {
   if (!terminal) return;
   clearTerminalSearchActiveDecoration();
-  const marker = terminal.registerMarker(-terminal.buffer.active.baseY - terminal.buffer.active.cursorY + position.row);
+  // registerMarker uses a viewport-relative row; ydisp is the current viewport origin.
+  const marker = terminal.registerMarker(position.row - terminal.buffer.active.viewportY);
   if (!marker) return;
   const decoration = terminal.registerDecoration({
     marker,
@@ -630,7 +646,8 @@ const resetTerminalSearchResults = () => {
 const selectTerminalSearchPosition = (position: TerminalBufferSearchResult['positions'][number]) => {
   if (!terminal) return false;
   terminal.select(position.col, position.row, position.length);
-  terminal.scrollToLine(position.row);
+  const searchScrollMargin = Math.min(3, Math.max(1, terminal.rows - 1));
+  terminal.scrollToLine(Math.max(0, position.row - searchScrollMargin));
   decorateTerminalSearchPosition(position);
   return true;
 };
@@ -751,6 +768,13 @@ const runTerminalSearchNext = (term: string) => { void runTerminalSearch(term, '
 const terminalSearchScheduler = createTerminalSearchScheduler<string>({
   onSearch: runTerminalSearchNext,
 });
+
+const hideTerminalScrollbar = () => { if (terminalPointerInsideViewport) return; terminalScrollbarVisible.value = false; terminalScrollbarHideTimer = null; };
+const showTerminalScrollbar = () => { terminalScrollbarVisible.value = true; if (terminalScrollbarHideTimer !== null) window.clearTimeout(terminalScrollbarHideTimer); if (!terminalPointerInsideViewport) terminalScrollbarHideTimer = window.setTimeout(hideTerminalScrollbar, 900); };
+const handleTerminalViewportEnter = () => { terminalPointerInsideViewport = true; showTerminalScrollbar(); };
+const handleTerminalViewportLeave = () => { terminalPointerInsideViewport = false; hideTerminalScrollbar(); };
+const bindTerminalViewportInteractions = () => { const viewport = terminal?.element?.querySelector<HTMLElement>('.xterm-viewport'); if (!viewport || viewport === terminalViewportElement) return; terminalViewportElement = viewport; viewport.addEventListener('mouseenter', handleTerminalViewportEnter); viewport.addEventListener('mouseleave', handleTerminalViewportLeave); viewport.addEventListener('wheel', showTerminalScrollbar, { passive: true }); };
+const unbindTerminalViewportInteractions = () => { terminalViewportElement?.removeEventListener('mouseenter', handleTerminalViewportEnter); terminalViewportElement?.removeEventListener('mouseleave', handleTerminalViewportLeave); terminalViewportElement?.removeEventListener('wheel', showTerminalScrollbar); terminalViewportElement = null; terminalPointerInsideViewport = false; if (terminalScrollbarHideTimer !== null) window.clearTimeout(terminalScrollbarHideTimer); terminalScrollbarHideTimer = null; terminalScrollbarVisible.value = false; };
 
 const openTerminalSearch = () => {
   terminalSearchVisible.value = true;
@@ -1139,6 +1163,7 @@ onMounted(() => {
 
     // 将终端附加到 DOM
     terminal.open(terminalRef.value);
+    bindTerminalViewportInteractions();
     // terminal.open() 同步执行完毕后，可以认为 Xterm 已尝试附加到 DOM
     isTerminalDomReady.value = true; // +++ 直接在此处设置 DOM 准备就绪状态 +++
     debugLog(`[Terminal ${props.sessionId}] Xterm open() called, considering DOM ready for initial style checks.`);
@@ -1368,6 +1393,7 @@ onMounted(() => {
 
     // 鼠标滚轮缩放功能添加到内部容器 terminalRef
     if (terminalRef.value) {
+      terminalRef.value.addEventListener('wheel', showTerminalScrollbar, { capture: true, passive: true });
       terminalRef.value.addEventListener('wheel', handleTerminalWheel, { passive: false });
     }
 
@@ -1449,6 +1475,7 @@ onBeforeUnmount(() => {
     removeTerminalClipboardKeydownListener();
 
     if (terminalRef.value) {
+      terminalRef.value.removeEventListener('wheel', showTerminalScrollbar, { capture: true });
       terminalRef.value.removeEventListener('wheel', handleTerminalWheel);
     }
 
@@ -1546,7 +1573,7 @@ const terminalInnerStyle = computed(() => (
     <!-- xterm 实际挂载点 -->
     <div
       ref="terminalRef"
-      :class="['terminal-inner-container', { 'single-line-output': props.singleLineOutput }]"
+      :class="['terminal-inner-container', { 'single-line-output': props.singleLineOutput, 'scrollbar-visible': terminalScrollbarVisible }]"
       :style="terminalInnerStyle"
     ></div>
     <form
@@ -1642,15 +1669,11 @@ const terminalInnerStyle = computed(() => (
   height: 100%;
 }
 
-.terminal-inner-container :deep(.xterm-viewport) {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-.terminal-inner-container :deep(.xterm-viewport)::-webkit-scrollbar {
-  width: 0;
-  height: 0;
-}
+.terminal-inner-container :deep(.xterm-viewport) { scrollbar-width: none; -ms-overflow-style: none; }
+.terminal-inner-container :deep(.xterm-viewport)::-webkit-scrollbar { width: 0; height: 0; }
+.terminal-inner-container.scrollbar-visible :deep(.xterm-viewport) { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--text-color) 42%, transparent) transparent; }
+.terminal-inner-container.scrollbar-visible :deep(.xterm-viewport)::-webkit-scrollbar { width: 8px; height: 8px; }
+.terminal-inner-container.scrollbar-visible :deep(.xterm-viewport)::-webkit-scrollbar-thumb { border-radius: 8px; background: color-mix(in srgb, var(--text-color) 42%, transparent); }
 
 .terminal-inner-container.single-line-output {
   min-width: 100%;
