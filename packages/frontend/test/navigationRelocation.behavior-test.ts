@@ -164,14 +164,14 @@ assert.ok(
 
 assert.match(
   terminalVue,
-  /\.terminal-inner-container\s+:deep\(\.xterm-viewport\)\s*\{[\s\S]*scrollbar-width:\s*none;[\s\S]*-ms-overflow-style:\s*none;/,
-  'the terminal content viewport should hide its scrollbar while preserving terminal scrollback',
+  /\.terminal-inner-container\s+:deep\(\.xterm-viewport\)\s*\{[\s\S]*scrollbar-width:\s*thin;[\s\S]*scrollbar-color:\s*transparent\s+transparent;/,
+  'the terminal content viewport should preserve its scrollbar track while hiding the thumb',
 );
 
 assert.match(
   terminalVue,
-  /\.terminal-inner-container\s+:deep\(\.xterm-viewport\)::-webkit-scrollbar\s*\{[\s\S]*width:\s*0;[\s\S]*height:\s*0;/,
-  'the terminal content viewport should hide WebKit scrollbars',
+  /\.terminal-inner-container\s+:deep\(\.xterm-viewport\)::-webkit-scrollbar\s*\{[\s\S]*width:\s*8px;[\s\S]*height:\s*8px;/,
+  'the terminal content viewport should reserve a stable WebKit scrollbar track',
 );
 
 assert.match(

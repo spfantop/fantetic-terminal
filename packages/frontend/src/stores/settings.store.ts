@@ -318,7 +318,7 @@ export const useSettingsStore = defineStore('settings', () => {
       }
       //  Remote desktop session defaults
       if (settings.value.rdpDefaultFixedResolution === undefined) {
-          settings.value.rdpDefaultFixedResolution = 'false';
+          settings.value.rdpDefaultFixedResolution = 'true';
       }
       if (settings.value.rdpDefaultWidth === undefined) {
           settings.value.rdpDefaultWidth = '1024';
@@ -330,7 +330,7 @@ export const useSettingsStore = defineStore('settings', () => {
           settings.value.rdpDefaultQuality = 'balanced';
       }
       if (settings.value.vncDefaultFixedResolution === undefined) {
-          settings.value.vncDefaultFixedResolution = 'false';
+          settings.value.vncDefaultFixedResolution = 'true';
       }
       if (settings.value.vncDefaultWidth === undefined) {
           settings.value.vncDefaultWidth = '1024';

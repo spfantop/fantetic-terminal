@@ -47,6 +47,7 @@ const keyboard = ref<any | null>(null);
 const mouse = ref<any | null>(null);
 const touchpad = ref<any | null>(null);
 const isKeyboardDisabledForInput = ref(false);
+const isDisplayRefreshNeeded = ref(false);
 let resizeObserver: ResizeObserver | null = null;
 let resizeObserverWindow: Window | null = null;
 let resizeFrameId: number | null = null;
@@ -165,7 +166,8 @@ const applyRemoteDesktopDefaults = (connection: ConnectionInfo) => {
   const prefix = connection.type === 'VNC' ? 'vnc' : 'rdp';
   const currentSettings = applicationSettings.value;
 
-  isManualResolutionEnabled.value = currentSettings[`${prefix}DefaultFixedResolution`] === 'true';
+  // 默认采用手动刷新，避免侧栏或布局变化时远程桌面突然重连/缩放。
+  isManualResolutionEnabled.value = currentSettings[`${prefix}DefaultFixedResolution`] !== 'false';
   manualResolutionWidth.value = normalizeResolutionValue(
     currentSettings[`${prefix}DefaultWidth`],
     MIN_REMOTE_DESKTOP_WIDTH,
@@ -295,6 +297,7 @@ const sendDisplaySizeNow = (size: RemoteDesktopSize) => {
   lastSentSize = normalizedSize;
   lastResizeSentAt = getDisplayWindow().performance.now();
   updateActiveResolution(normalizedSize);
+  isDisplayRefreshNeeded.value = false;
 };
 
 const flushPendingDisplaySize = () => {
@@ -388,7 +391,10 @@ const scheduleStableCurrentSize = () => {
 
 const handleResizeSignal = () => {
   if (!props.isActive) return;
-  if (isManualResolutionEnabled.value) return;
+  if (isManualResolutionEnabled.value) {
+    isDisplayRefreshNeeded.value = true;
+    return;
+  }
   if (getDisplayWindow().performance.now() < suppressAutoResizeUntil) {
     scheduleStableCurrentSize();
     return;
@@ -433,6 +439,15 @@ const applyManualResolution = () => {
   updateActiveResolution(normalizedSize);
   sendCurrentSize({ force: true });
   focusDisplay();
+};
+
+const captureRemoteKeyboard = (event: KeyboardEvent) => {
+  const target = event.target as HTMLElement | null;
+  if (target?.closest('[data-remote-resolution-input], button, select')) return;
+  // Guacamole receives the event on the display first; stop it while bubbling so
+  // the host workspace cannot execute the same shortcut locally.
+  event.preventDefault();
+  event.stopPropagation();
 };
 
 const handleManualResolutionModeChange = () => {
@@ -536,7 +551,8 @@ const setupInputListeners = () => {
     }
 
     mouse.value.onmousemove = mouse.value.onmousedown = mouse.value.onmouseup = (mouseState: RemotePointerState) => {
-      guacClient.value?.sendMouseState(mouseState);
+      // 让 Guacamole 按显示层的实际缩放换算坐标，避免选中/拖动后本机与远程位置漂移。
+      guacClient.value?.sendMouseState(mouseState, true);
     };
 
     // @ts-ignore
@@ -796,9 +812,20 @@ onUnmounted(() => {
     class="remote-desktop-session h-full w-full overflow-hidden bg-black"
     :data-terminal-session-id="props.sessionId"
     tabindex="0"
+    @keydown="captureRemoteKeyboard"
+    @keyup="captureRemoteKeyboard"
   >
     <div ref="rdpContainerRef" class="relative h-full w-full overflow-hidden bg-black">
       <div ref="rdpDisplayRef" class="rdp-display-container h-full w-full"></div>
+      <button
+        v-if="isDisplayRefreshNeeded && connectionStatus === 'connected'"
+        type="button"
+        class="absolute left-1/2 top-3 z-[1200] -translate-x-1/2 rounded bg-primary px-3 py-1.5 text-xs font-medium text-white shadow-lg hover:bg-primary-dark"
+        @mousedown.stop
+        @click.stop="sendCurrentSize({ force: true }); focusDisplay()"
+      >
+        {{ t('remoteDesktopModal.refreshDisplay') }}
+      </button>
       <div
         :class="[
           'resolution-control-anchor absolute bottom-1 right-1 z-[1200] h-12 w-12',
@@ -925,6 +952,11 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.remote-desktop-session {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 .resolution-control-anchor::before {
   content: "";
   position: absolute;

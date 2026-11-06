@@ -334,11 +334,11 @@ export function useWorkspaceSettings() {
   };
 
   // --- Remote Desktop Defaults ---
-  const rdpDefaultFixedResolutionLocal = ref(false);
+  const rdpDefaultFixedResolutionLocal = ref(true);
   const rdpDefaultWidthLocal = ref(DEFAULT_REMOTE_DESKTOP_WIDTH);
   const rdpDefaultHeightLocal = ref(DEFAULT_REMOTE_DESKTOP_HEIGHT);
   const rdpDefaultQualityLocal = ref<RemoteDesktopQualityProfile>('balanced');
-  const vncDefaultFixedResolutionLocal = ref(false);
+  const vncDefaultFixedResolutionLocal = ref(true);
   const vncDefaultWidthLocal = ref(DEFAULT_REMOTE_DESKTOP_WIDTH);
   const vncDefaultHeightLocal = ref(DEFAULT_REMOTE_DESKTOP_HEIGHT);
   const vncDefaultQualityLocal = ref<RemoteDesktopQualityProfile>('balanced');

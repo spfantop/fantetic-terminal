@@ -338,7 +338,7 @@ const setupInputListeners = () => {
         }
 
         mouse.value.onmousemove = mouse.value.onmousedown = mouse.value.onmouseup = (mouseState: RemotePointerState) => {
-          guacClient.value?.sendMouseState(mouseState);
+          guacClient.value?.sendMouseState(mouseState, true);
         };
 
         // @ts-ignore

@@ -73,7 +73,7 @@ for (const componentPath of [
   assert.doesNotMatch(source, /createRemotePointerScheduler/, `${componentPath} must not add a frame of pointer latency`);
   assert.match(
     source,
-    /mouse\.value\.onmousemove\s*=\s*mouse\.value\.onmousedown\s*=\s*mouse\.value\.onmouseup\s*=\s*\(mouseState[^)]*\)\s*=>\s*\{\s*guacClient\.value\?\.sendMouseState\(mouseState\)/,
+    /mouse\.value\.onmousemove\s*=\s*mouse\.value\.onmousedown\s*=\s*mouse\.value\.onmouseup\s*=\s*\(mouseState[^)]*\)\s*=>\s*\{[\s\S]*?guacClient\.value\?\.sendMouseState\(mouseState(?:,\s*true)?\)/,
     `${componentPath} must forward every pointer state immediately`,
   );
   assert.match(source, /new Guacamole\.Mouse\.Touchpad\(displayEl\)/, `${componentPath} must support touchpad input`);

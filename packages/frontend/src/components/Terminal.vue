@@ -31,7 +31,6 @@ import {
   type TerminalBufferSearchResult,
   TERMINAL_SEARCH_ACTIVE_BACKGROUND,
 } from '../utils/terminalSearch';
-import { calculateCenteredTerminalHorizontalPadding } from '../utils/terminalLayout';
 import {
   hasTerminalBufferWrappedLines,
   resolveTerminalSingleLineOutputCols,
@@ -289,18 +288,10 @@ const synchronizeTerminalHorizontalPadding = (dimensions: TerminalDimensions, me
   const terminalElement = terminal?.element;
   if (!terminalElement) return;
 
-  if (props.singleLineOutput) {
-    terminalElement.style.removeProperty('--terminal-horizontal-padding');
-    return;
-  }
-
-  const horizontalPadding = calculateCenteredTerminalHorizontalPadding(
-    terminalElement.clientWidth,
-    metrics.scrollbarWidth,
-    dimensions.cols,
-    metrics.cellWidth,
-  );
-  terminalElement.style.setProperty('--terminal-horizontal-padding', `${horizontalPadding}px`);
+  // xterm 的选择坐标以渲染时的 padding 为基准。运行中改变 padding 会让
+  // 画布视觉位置和鼠标命中网格短暂不同步，尤其在拖选历史输出时更明显。
+  // 保持全局样式中的固定内边距，尺寸变化只通过 terminal.resize() 完成。
+  terminalElement.style.removeProperty('--terminal-horizontal-padding');
 };
 
 const readTerminalDocument = () => terminalRef.value?.ownerDocument ?? document;
@@ -1669,11 +1660,12 @@ const terminalInnerStyle = computed(() => (
   height: 100%;
 }
 
-.terminal-inner-container :deep(.xterm-viewport) { scrollbar-width: none; -ms-overflow-style: none; }
-.terminal-inner-container :deep(.xterm-viewport)::-webkit-scrollbar { width: 0; height: 0; }
-.terminal-inner-container.scrollbar-visible :deep(.xterm-viewport) { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--text-color) 42%, transparent) transparent; }
-.terminal-inner-container.scrollbar-visible :deep(.xterm-viewport)::-webkit-scrollbar { width: 8px; height: 8px; }
-.terminal-inner-container.scrollbar-visible :deep(.xterm-viewport)::-webkit-scrollbar-thumb { border-radius: 8px; background: color-mix(in srgb, var(--text-color) 42%, transparent); }
+/* 固定滚动条轨道宽度，显隐时不改变 xterm 网格坐标，避免鼠标选区漂移。 */
+.terminal-inner-container :deep(.xterm-viewport) { scrollbar-width: thin; scrollbar-color: transparent transparent; -ms-overflow-style: auto; }
+.terminal-inner-container :deep(.xterm-viewport)::-webkit-scrollbar { width: 8px; height: 8px; }
+.terminal-inner-container :deep(.xterm-viewport)::-webkit-scrollbar-thumb { border-radius: 8px; background: transparent; }
+.terminal-inner-container.scrollbar-visible :deep(.xterm-viewport) { scrollbar-color: color-mix(in srgb, var(--text-color) 42%, transparent) transparent; }
+.terminal-inner-container.scrollbar-visible :deep(.xterm-viewport)::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--text-color) 42%, transparent); }
 
 .terminal-inner-container.single-line-output {
   min-width: 100%;

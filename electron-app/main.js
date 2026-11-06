@@ -59,6 +59,9 @@ const installWindowTrustSeam = (browserWindow, frontendUrl, { allowAboutBlank = 
     return {
       action: 'allow',
       overrideBrowserWindowOptions: {
+        frame: false,
+        titleBarStyle: 'hidden',
+        autoHideMenuBar: true,
         webPreferences: {
           nodeIntegration: false,
           contextIsolation: true,
