@@ -1653,7 +1653,7 @@ const closeFileManagerModal = () => {
           :workspace-split-active="isWorkspaceSplitActive"
           :batch-terminal-input-active="isBatchTerminalInputActive"
           :batch-terminal-input-available="isBatchTerminalInputAvailable"
-          :show-layout-actions="!isVisibleActiveSessionRemoteDesktop"
+          :show-layout-actions="true"
           :show-split-action="true"
           @update:sessions="handleWorkspaceSessionOrderUpdate"
           @toggle-batch-terminal-input="toggleBatchTerminalInput"
@@ -1690,7 +1690,7 @@ const closeFileManagerModal = () => {
         :active-session-id="visibleActiveSessionId"
         :is-mobile="isMobile"
         :split-workspace-available="false"
-        :show-layout-actions="!isVisibleActiveSessionRemoteDesktop"
+        :show-layout-actions="true"
       />
       <div class="mobile-content-area">
           <LayoutRenderer
