@@ -175,7 +175,7 @@ const handlePopupConnect = (connectionId: number) => {
   }
 
   debugLog(`[TabBar] Popup connect request for ID: ${connectionId}. Calling sessionStore.handleConnectRequest.`);
-  sessionStore.handleConnectRequest(connectionInfo);
+  sessionStore.handleConnectRequest(connectionInfo, { navigateToWorkspace: false });
   showConnectionListPopup.value = false; // 关闭弹出窗口
 };
 
@@ -196,7 +196,12 @@ const handleRequestEditFromPopup = (connection: ConnectionInfo) => { // 假设 W
 
 const handleWorkspaceConnectionConnect = (payload: { connectionId: number }) => {
   debugLog('[TabBar] Received connection:connect event:', payload);
-  handlePopupConnect(payload.connectionId);
+  // WorkspaceConnectionList 通过全局事件发起连接；工作区负责创建会话，
+  // 标签栏只负责收起仍然打开的服务器选择弹窗，避免连接成功后产生误导。
+  showConnectionListPopup.value = false;
+  if (props.listenWorkspaceConnectionEvents) {
+    handlePopupConnect(payload.connectionId);
+  }
 };
 
 const handleOpenTransferProgressModal = () => {
@@ -382,9 +387,7 @@ onMounted(() => {
     debugLog('[TabBar] Mounted on /workspace route. Header toggle button is now active.');
   }
   window.addEventListener(SERVER_PANEL_COLLAPSED_EVENT, handleServerPanelCollapsedEvent);
-  if (props.listenWorkspaceConnectionEvents) {
-    onWorkspaceEvent('connection:connect', handleWorkspaceConnectionConnect);
-  }
+  onWorkspaceEvent('connection:connect', handleWorkspaceConnectionConnect);
   onWorkspaceEvent('ui:openTransferProgressModal', handleOpenTransferProgressModal);
 });
 
@@ -393,9 +396,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
     document.removeEventListener('click', closeContextMenuOnClickOutside, { capture: true });
     window.removeEventListener(SERVER_PANEL_COLLAPSED_EVENT, handleServerPanelCollapsedEvent);
-    if (props.listenWorkspaceConnectionEvents) {
-      offWorkspaceEvent('connection:connect', handleWorkspaceConnectionConnect);
-    }
+    offWorkspaceEvent('connection:connect', handleWorkspaceConnectionConnect);
     offWorkspaceEvent('ui:openTransferProgressModal', handleOpenTransferProgressModal);
 });
 

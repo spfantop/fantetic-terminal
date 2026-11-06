@@ -1315,7 +1315,16 @@ const toggleBatchEditMode = () => {
 };
 
 const handleConnectionClick = (connId: number) => {
-  if (!isBatchEditMode.value) return;
+  if (!isBatchEditMode.value) {
+    // 远程桌面会话占据主工作区时，单击 SSH 连接应立即切换到 SSH，
+    // 避免用户必须双击且看不到任何反馈。
+    const activeKind = sessionStore.activeSession?.kind;
+    if (activeKind === 'rdp' || activeKind === 'vnc') {
+      const connection = connectionsStore.connections.find(item => item.id === connId);
+      if (connection) connectTo(connection);
+    }
+    return;
+  }
   if (selectedConnectionIdsForBatch.value.has(connId)) {
     selectedConnectionIdsForBatch.value.delete(connId);
   } else {
