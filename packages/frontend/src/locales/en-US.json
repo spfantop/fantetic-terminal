@@ -1407,6 +1407,8 @@
     "sortDescending": "Descending",
     "restore": "Restore",
     "minimize": "Minimize",
+    "maximize": "Maximize or restore",
+    "windowControls": "Window controls",
     "send":"Send",
     "updateSuccess":"Update successful",
     "copied": "Copied to clipboard",

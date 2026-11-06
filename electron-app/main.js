@@ -96,6 +96,10 @@ const createMainWindow = async () => {
     x: lastWindowState.x,
     y: lastWindowState.y,
     show: false,
+    frame: false,
+    titleBarStyle: 'hidden',
+    autoHideMenuBar: true,
+    backgroundColor: '#111111',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,

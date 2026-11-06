@@ -1403,6 +1403,8 @@
     "sortDescending": "降序",
     "restore": "还原",
     "minimize": "最小化",
+    "maximize": "最大化或还原",
+    "windowControls": "窗口控制栏",
     "send":"发送",
     "copied": "已复制到剪贴板",
     "ok":"确认",

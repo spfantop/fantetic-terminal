@@ -76,7 +76,7 @@ const props = defineProps({
   },
   listenWorkspaceConnectionEvents: {
     type: Boolean,
-    default: true,
+    default: false,
   },
   showLayoutActions: {
     type: Boolean,

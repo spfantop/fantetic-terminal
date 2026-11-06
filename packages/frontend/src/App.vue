@@ -12,6 +12,7 @@ import ConfirmDialog from './components/common/ConfirmDialog.vue';
 import { useDialogStore } from './stores/dialog.store';
 import { debugLog } from './composables/useDebugLog';
 import { isRemoteDesktopFeatureAvailable, readRuntimeConfigEnv } from './utils/runtimeConfig';
+import ElectronWindowControls from './components/ElectronWindowControls.vue';
 
 const { t } = useI18n();
 const remoteDesktopFeatureAvailable = isRemoteDesktopFeatureAvailable();
@@ -73,6 +74,7 @@ const closeAdminCenterOverlay = () => {
 <template>
   
   <div id="app-container">
+    <ElectronWindowControls />
     <main>
       <!-- 使用 KeepAlive 包裹 RouterView，并指定缓存 WorkspaceView -->
       <RouterView v-slot="{ Component }">
@@ -134,6 +136,7 @@ const closeAdminCenterOverlay = () => {
 #app-container {
   position: relative;
   display: flex;
+  flex-direction: column;
   min-height: 100dvh;
   height: 100dvh;
   width: 100vw;
@@ -142,10 +145,10 @@ const closeAdminCenterOverlay = () => {
 }
 
 main {
-  flex-grow: 1;
+  flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
-  height: 100%;
+  height: auto;
   overflow: auto;
 }
 

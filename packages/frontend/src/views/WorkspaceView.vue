@@ -105,7 +105,6 @@ const visibleActiveSession = computed(() => (
 ));
 const isRemoteDesktopSessionKind = (kind?: string) => kind === 'rdp' || kind === 'vnc';
 const isTerminalShellSessionKind = (kind?: string) => kind === 'ssh' || kind === 'telnet';
-const isVisibleActiveSessionRemoteDesktop = computed(() => isRemoteDesktopSessionKind(visibleActiveSession.value?.kind));
 const fullscreenSessionId = ref<string | null>(null);
 const isSessionFullscreenActive = computed(() => fullscreenSessionId.value !== null);
 const lastVisibleLayoutActiveSessionId = ref<string | null>(null);
@@ -115,7 +114,8 @@ const layoutActiveSessionId = computed(() => resolveWorkspaceLayoutActiveSession
   previousLayoutActiveSessionId: lastVisibleLayoutActiveSessionId.value,
   fullscreenSessionId: fullscreenSessionId.value,
 }));
-const isTerminalOnlyMode = computed(() => isVisibleActiveSessionRemoteDesktop.value || isSessionFullscreenActive.value);
+// 普通 RDP/VNC 会话仍保留服务器列表、加号和布局操作区；只有真正全屏时才切换终端专用布局。
+const isTerminalOnlyMode = computed(() => isSessionFullscreenActive.value);
 const FULLSCREEN_ESC_PRESS_THRESHOLD = 3;
 const FULLSCREEN_ESC_SEQUENCE_TIMEOUT_MS = 1200;
 const fullscreenEscPressCount = ref(0);
@@ -1085,8 +1085,8 @@ onMounted(() => {
   subscribeToWorkspaceEvents('editor:closeTabsToLeft', (payload) => handleCloseEditorTabsToLeft(payload.tabId));
   subscribeToWorkspaceEvents('editor:updateScrollPosition', handleEditorScrollPositionUpdate); // +++ 订阅滚动位置更新事件 +++
  
-  // 移除对 connection:connect 事件的监听，以避免重复创建会话
-  // subscribeToWorkspaceEvents('connection:connect', (payload) => handleConnectRequest(payload.connectionId));
+  // 由工作区统一处理连接事件，避免远程桌面会话激活后标签栏事件链失效。
+  subscribeToWorkspaceEvents('connection:connect', (payload) => handleConnectRequest(payload.connectionId));
   subscribeToWorkspaceEvents('connection:openNewSession', (payload) => handleOpenNewSession(payload.connectionId));
   subscribeToWorkspaceEvents('connection:requestAdd', handleRequestAddConnection);
   subscribeToWorkspaceEvents('connection:requestEdit', (payload) => handleRequestEditConnection(payload.connectionInfo));

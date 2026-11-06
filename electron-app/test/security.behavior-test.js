@@ -39,6 +39,7 @@ assert.deepEqual(
 const mainSource = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
 assert.match(mainSource, /sandbox:\s*true/);
 assert.match(mainSource, /setWindowOpenHandler/);
+assert.match(mainSource, /mainWindow = new BrowserWindow\([\s\S]*?frame:\s*false/);
 assert.match(mainSource, /will-navigate/);
 assert.match(mainSource, /onBeforeSendHeaders/);
 assert.match(mainSource, /Menu\.setApplicationMenu\(null\)/);
