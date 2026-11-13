@@ -16,6 +16,7 @@ import {
   normalizeServerIconKey,
 } from '../utils/serverIcons';
 import { appendSelectedTagId } from '../utils/tagSelection';
+import { buildConnectionTestRequest } from '../features/connections/connection-test-request';
 
 type ConnectionType = 'SSH' | 'RDP' | 'VNC' | 'TELNET';
 const normalizeConnectionUsername = (username?: string | null): string => username?.trim() ?? '';
@@ -876,32 +877,36 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
     testLatency.value = null;
 
     try {
-      let response;
-      if (isEditMode.value && connectionToEdit.value) {
-        response = await apiClient.post(`/connections/${connectionToEdit.value.id}/test`);
-      } else {
-        const dataToSend = {
-            type: formData.type,
-            host: formData.host,
-            port: formData.port,
-            username: normalizeConnectionUsername(formData.username),
-            auth_method: formData.auth_method,
-            password: formData.auth_method === 'password' ? formData.password : undefined,
-            proxy_id: formData.proxy_id || null,
-            ssh_key_id: formData.auth_method === 'key' ? formData.selected_ssh_key_id : undefined,
-        };
+      // 编辑态凭证字段为空时由后端沿用已保存凭证，但主机和用户名必须使用当前表单值。
+      const { endpoint, data: dataToSend } = buildConnectionTestRequest(
+        {
+          type: formData.type,
+          host: formData.host,
+          port: formData.port,
+          username: normalizeConnectionUsername(formData.username),
+          auth_method: formData.auth_method,
+          password: formData.auth_method === 'password' ? formData.password : undefined,
+          private_key: formData.auth_method === 'key' ? formData.private_key : undefined,
+          passphrase: formData.auth_method === 'key' ? formData.passphrase : undefined,
+          proxy_id: formData.proxy_id || null,
+          selected_ssh_key_id: formData.auth_method === 'key' ? formData.selected_ssh_key_id : undefined,
+        },
+        isEditMode.value && connectionToEdit.value ? connectionToEdit.value.id : null,
+      );
 
-        if (!dataToSend.host || !dataToSend.port || (formData.type === 'SSH' && (!dataToSend.username || !dataToSend.auth_method))) {
-          throw new Error(t('connections.test.errorMissingFields'));
-        }
-        if (formData.type === 'SSH' && dataToSend.auth_method === 'password' && !formData.password) {
-           throw new Error(t('connections.form.errorPasswordRequired'));
-       }
-       if (formData.type === 'SSH' && dataToSend.auth_method === 'key' && !dataToSend.ssh_key_id) {
-          throw new Error(t('connections.form.errorSshKeyRequired'));
-       }
-        response = await apiClient.post('/connections/test-unsaved', dataToSend);
+      if (!dataToSend.host || !dataToSend.port || (formData.type === 'SSH' && (!dataToSend.username || !dataToSend.auth_method))) {
+        throw new Error(t('connections.test.errorMissingFields'));
       }
+      const canReuseSavedPassword = isEditMode.value && connectionToEdit.value?.auth_method === 'password';
+      const canReuseSavedKey = isEditMode.value && connectionToEdit.value?.auth_method === 'key';
+      if (formData.type === 'SSH' && dataToSend.auth_method === 'password' && !dataToSend.password && !canReuseSavedPassword) {
+        throw new Error(t('connections.form.errorPasswordRequired'));
+      }
+      if (formData.type === 'SSH' && dataToSend.auth_method === 'key' && !dataToSend.ssh_key_id && !canReuseSavedKey) {
+        throw new Error(t('connections.form.errorSshKeyRequired'));
+      }
+
+      const response = await apiClient.post(endpoint, dataToSend);
 
       if (response.data.success) {
         testStatus.value = 'success';

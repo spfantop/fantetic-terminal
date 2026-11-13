@@ -1,9 +1,14 @@
 import * as net from 'net';
 import * as ConnectionRepository from '../connections/connection.repository';
 import * as SshService from './ssh.service';
+import type { SshTestConnectionOverrides } from './connection-test-overrides';
 
 const TEST_TIMEOUT = 10000;
 type TestableConnectionType = 'SSH' | 'TELNET' | 'RDP' | 'VNC';
+
+export interface ConnectionTestOverrides extends SshTestConnectionOverrides {
+    type?: TestableConnectionType;
+}
 
 const testTcpPort = (host: string, port: number, timeout = TEST_TIMEOUT): Promise<{ latency: number }> => {
     return new Promise((resolve, reject) => {
@@ -32,21 +37,36 @@ const testTcpPort = (host: string, port: number, timeout = TEST_TIMEOUT): Promis
     });
 };
 
-export const testConnection = async (connectionId: number): Promise<{ latency: number }> => {
+export const testConnection = async (
+    connectionId: number,
+    overrides?: ConnectionTestOverrides,
+): Promise<{ latency: number }> => {
     const connection = await ConnectionRepository.findConnectionByIdWithTags(connectionId);
     if (!connection) {
         throw new Error(`连接 ID ${connectionId} 未找到。`);
     }
 
+    const connectionType = overrides?.type ?? connection.type;
     if (connection.type === 'SSH') {
-        return SshService.testConnection(connectionId);
+        if (connectionType === 'SSH') {
+            return SshService.testConnection(connectionId, overrides);
+        }
     }
 
     if (connection.type === 'TELNET' || connection.type === 'RDP' || connection.type === 'VNC') {
-        return testTcpPort(connection.host, connection.port);
+        if (connectionType === connection.type) {
+            return testTcpPort(overrides?.host ?? connection.host, overrides?.port ?? connection.port);
+        }
     }
 
-    throw new Error(`连接类型 ${connection.type as string} 暂不支持测试。`);
+    if (connectionType === 'SSH') {
+        return SshService.testConnection(connectionId, overrides);
+    }
+    if (connectionType === 'TELNET' || connectionType === 'RDP' || connectionType === 'VNC') {
+        return testTcpPort(overrides?.host ?? connection.host, overrides?.port ?? connection.port);
+    }
+
+    throw new Error(`连接类型 ${connectionType as string} 暂不支持测试。`);
 };
 
 export const testUnsavedConnection = async (connectionConfig: {

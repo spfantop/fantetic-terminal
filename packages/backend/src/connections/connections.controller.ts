@@ -226,7 +226,35 @@ export const testConnection = async (req: Request, res: Response): Promise<void>
             return;
         }
 
-        const { latency } = await ProtocolTestService.testConnection(connectionId);
+        const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body)
+            ? req.body as Record<string, unknown>
+            : {};
+        const testOverrides: ProtocolTestService.ConnectionTestOverrides = {};
+
+        if (body.type === 'SSH' || body.type === 'TELNET' || body.type === 'RDP' || body.type === 'VNC') {
+            testOverrides.type = body.type;
+        }
+        if (typeof body.host === 'string') testOverrides.host = body.host;
+        if (typeof body.port === 'number' && Number.isInteger(body.port) && body.port > 0 && body.port <= 65535) {
+            testOverrides.port = body.port;
+        }
+        if (typeof body.username === 'string') testOverrides.username = body.username;
+        if (body.auth_method === 'password' || body.auth_method === 'key') {
+            testOverrides.auth_method = body.auth_method;
+        }
+        if (typeof body.password === 'string') testOverrides.password = body.password;
+        if (typeof body.private_key === 'string') testOverrides.private_key = body.private_key;
+        if (typeof body.passphrase === 'string') testOverrides.passphrase = body.passphrase;
+        if (body.ssh_key_id === null || (typeof body.ssh_key_id === 'number' && Number.isInteger(body.ssh_key_id) && body.ssh_key_id > 0)) {
+            testOverrides.ssh_key_id = body.ssh_key_id;
+        }
+        if (body.proxy_id === null || (typeof body.proxy_id === 'number' && Number.isInteger(body.proxy_id) && body.proxy_id > 0)) {
+            testOverrides.proxy_id = body.proxy_id;
+        }
+
+        const { latency } = Object.keys(testOverrides).length > 0
+            ? await ProtocolTestService.testConnection(connectionId, testOverrides)
+            : await ProtocolTestService.testConnection(connectionId);
 
         res.status(200).json({ success: true, message: '连接测试成功。', latency }); // 返回延迟
 

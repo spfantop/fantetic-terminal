@@ -6,6 +6,10 @@ import * as ConnectionRepository from '../connections/connection.repository';
 import *   as ProxyRepository from '../proxies/proxy.repository';
 import { decrypt } from '../utils/crypto';
 import * as SshKeyService from '../ssh_keys/ssh_key.service';
+import {
+    mergeSshTestConnectionDetails,
+    type SshTestConnectionOverrides,
+} from './connection-test-overrides';
 
 const CONNECT_TIMEOUT = 20000; // 连接超时时间 (毫秒)
 const TEST_TIMEOUT = 15000; // 测试连接超时时间 (毫秒)
@@ -368,6 +372,39 @@ const _connectViaHttpProxy = (
     });
 };
 
+const _getDecryptedProxyDetails = async (
+    proxyId: number,
+): Promise<NonNullable<DecryptedConnectionDetails['proxy']>> => {
+    const rawProxyInfo = await ProxyRepository.findProxyById(proxyId);
+    if (!rawProxyInfo) {
+        throw new Error(`代理 ID ${proxyId} 未找到。`);
+    }
+
+    try {
+        const proxyName = rawProxyInfo.name ?? (() => { throw new Error(`Proxy ID ${proxyId} has null name.`); })();
+        const proxyType = rawProxyInfo.type ?? (() => { throw new Error(`Proxy ID ${proxyId} has null type.`); })();
+        const proxyHost = rawProxyInfo.host ?? (() => { throw new Error(`Proxy ID ${proxyId} has null host.`); })();
+        const proxyPort = rawProxyInfo.port ?? (() => { throw new Error(`Proxy ID ${proxyId} has null port.`); })();
+
+        if (proxyType !== 'SOCKS5' && proxyType !== 'HTTP') {
+            throw new Error(`Proxy ID ${proxyId} has invalid type: ${proxyType}`);
+        }
+
+        return {
+            id: rawProxyInfo.id,
+            name: proxyName,
+            type: proxyType,
+            host: proxyHost,
+            port: proxyPort,
+            username: rawProxyInfo.username || undefined,
+            password: rawProxyInfo.encrypted_password ? decrypt(rawProxyInfo.encrypted_password) : undefined,
+        };
+    } catch (decryptError: any) {
+        console.error(`SshService: 处理代理 ${proxyId} 凭证失败:`, decryptError);
+        throw new Error(`处理代理凭证失败: ${decryptError.message}`);
+    }
+};
+
 const _establishProxyConnection = async (
     connDetails: DecryptedConnectionDetails,
     timeout: number
@@ -644,15 +681,44 @@ export const openShell = (sshClient: Client): Promise<ClientChannel> => {
 /**
  * 测试给定 ID 的 SSH 连接（包括代理）
  * @param connectionId 连接 ID
+ * @param overrides 编辑态表单的覆盖字段；未提供的凭证字段沿用已保存凭证
  * @returns Promise<{ latency: number }> - 如果连接成功则 resolve 包含延迟的对象，否则 reject
  * @throws Error 如果连接失败或配置错误
  */
-export const testConnection = async (connectionId: number): Promise<{ latency: number }> => {
+export const testConnection = async (
+    connectionId: number,
+    overrides?: SshTestConnectionOverrides,
+): Promise<{ latency: number }> => {
     console.log(`SshService: 测试连接 ${connectionId}...`);
     let sshClient: Client | null = null;
     const startTime = Date.now();
     try {
-        const connDetails = await getConnectionDetails(connectionId);
+        const savedConnDetails = await getConnectionDetails(connectionId);
+        const connDetails: DecryptedConnectionDetails = {
+            ...savedConnDetails,
+            ...mergeSshTestConnectionDetails(savedConnDetails, overrides),
+        };
+
+        if (overrides && Object.prototype.hasOwnProperty.call(overrides, 'ssh_key_id') && overrides.ssh_key_id) {
+            const storedKeyDetails = await SshKeyService.getDecryptedSshKeyById(overrides.ssh_key_id);
+            if (!storedKeyDetails) {
+                throw new Error(`选择的 SSH 密钥 (ID: ${overrides.ssh_key_id}) 未找到。`);
+            }
+            connDetails.privateKey = storedKeyDetails.privateKey;
+            connDetails.passphrase = storedKeyDetails.passphrase;
+            connDetails.password = undefined;
+        }
+
+        if (overrides && Object.prototype.hasOwnProperty.call(overrides, 'proxy_id')) {
+            if (overrides.proxy_id) {
+                connDetails.proxy = await _getDecryptedProxyDetails(overrides.proxy_id);
+                connDetails.connection_proxy_setting = 'proxy';
+            } else if (connDetails.connection_proxy_setting === 'proxy') {
+                connDetails.proxy = null;
+                connDetails.connection_proxy_setting = null;
+            }
+        }
+
         sshClient = await establishSshConnection(connDetails, TEST_TIMEOUT);
         const endTime = Date.now();
         const latency = endTime - startTime;
@@ -724,35 +790,9 @@ export const testUnsavedConnection = async (connectionConfig: {
 
         if (connectionConfig.proxy_id) {
             console.log(`SshService: 测试连接需要获取代理 ${connectionConfig.proxy_id} 的信息...`);
-            const rawProxyInfo = await ProxyRepository.findProxyById(connectionConfig.proxy_id);
-            if (!rawProxyInfo) {
-                throw new Error(`代理 ID ${connectionConfig.proxy_id} 未找到。`);
-            }
-            try {
-                 const proxyName = rawProxyInfo.name ?? (() => { throw new Error(`Proxy ID ${connectionConfig.proxy_id} has null name.`); })();
-                 const proxyType = rawProxyInfo.type ?? (() => { throw new Error(`Proxy ID ${connectionConfig.proxy_id} has null type.`); })();
-                 const proxyHost = rawProxyInfo.host ?? (() => { throw new Error(`Proxy ID ${connectionConfig.proxy_id} has null host.`); })();
-                 const proxyPort = rawProxyInfo.port ?? (() => { throw new Error(`Proxy ID ${connectionConfig.proxy_id} has null port.`); })();
-
-                 if (proxyType !== 'SOCKS5' && proxyType !== 'HTTP') {
-                    throw new Error(`Proxy ID ${connectionConfig.proxy_id} has invalid type: ${proxyType}`);
-                 }
-
-                tempConnDetails.proxy = {
-                    id: rawProxyInfo.id,
-                    name: proxyName,
-                    type: proxyType,
-                    host: proxyHost,
-                    port: proxyPort,
-                    username: rawProxyInfo.username || undefined,
-                    password: rawProxyInfo.encrypted_password ? decrypt(rawProxyInfo.encrypted_password) : undefined,
-                };
-                tempConnDetails.connection_proxy_setting = 'proxy'; // Ensure this is set
-                console.log(`SshService: 代理 ${connectionConfig.proxy_id} 信息获取并解密成功。`);
-            } catch (decryptError: any) {
-                console.error(`SshService: 处理代理 ${connectionConfig.proxy_id} 凭证失败:`, decryptError);
-                throw new Error(`处理代理凭证失败: ${decryptError.message}`);
-            }
+            tempConnDetails.proxy = await _getDecryptedProxyDetails(connectionConfig.proxy_id);
+            tempConnDetails.connection_proxy_setting = 'proxy'; // Ensure this is set
+            console.log(`SshService: 代理 ${connectionConfig.proxy_id} 信息获取并解密成功。`);
         } else {
             tempConnDetails.connection_proxy_setting = null; // Explicitly no proxy
         }
