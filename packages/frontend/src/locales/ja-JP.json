@@ -1,4 +1,13 @@
 {
+  "sshAuth": {
+    "title": "SSH 認証",
+    "response": "応答",
+    "ephemeral": "入力内容は今回の接続のみに使用され、保存されません。2 分以内に応答してください。",
+    "askOnConnect": "接続時にパスワードを入力（保存時に既存のパスワードを削除）",
+    "editHint": "空欄の場合は既存のパスワードを保持します。削除するには上の項目を選択してください。",
+    "emptyHint": "パスワードは省略できます。接続時にサーバーの指示に従ってパスワードや確認コードを入力してください。",
+    "saveFirst": "接続を保存してからターミナルを開き、対話型認証を完了してください。"
+  },
 
     "appName": "Fantetic Terminal",
     "adminDateRange": { "range": "日付範囲", "start": "開始日", "end": "終了日", "selectDate": "日付を選択", "calendar": "カレンダー", "previousMonth": "前月", "nextMonth": "翌月", "quickSelect": "日付範囲のクイック選択", "today": "今日", "last7Days": "過去7日間", "last30Days": "過去30日間", "invalidRange": "終了日は開始日より前に設定できません。" },

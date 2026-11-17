@@ -4,6 +4,8 @@
    "private": true,
    "main": "dist/index.js",
    "scripts": {
+      "test:ssh-optional-password": "esbuild src/test/sshOptionalPassword.behavior-test.ts --bundle --platform=node --format=cjs --packages=external --outfile=node_modules/.cache/sshOptionalPassword.cjs && node node_modules/.cache/sshOptionalPassword.cjs",
+      "test:ssh-auth-transport": "esbuild src/test/sshAuthTransport.behavior-test.ts --bundle --platform=node --format=cjs --packages=external --outfile=node_modules/.cache/sshAuthTransport.cjs && node node_modules/.cache/sshAuthTransport.cjs",
       "build": "tsc && copyfiles -u 1 \"src/locales/**/*.json\" dist && node src/test/packagedRuntimeLocales.behavior-test.js",
       "typecheck": "tsc -p tsconfig.test.json",
       "verify:audit-chain": "node dist/audit/audit-chain-verify.js",
@@ -14,6 +16,7 @@
       "test:ai-provider": "esbuild src/test/aiProvider.behavior-test.ts --bundle --platform=node --format=esm --packages=external --outfile=../../.vite-codex-cache/aiProvider.behavior-test.mjs && node ../../.vite-codex-cache/aiProvider.behavior-test.mjs",
       "test:ai-nl2cmd": "esbuild src/test/aiNl2cmd.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/aiNl2cmd.behavior-test.mjs && node ../../.vite-codex-cache/aiNl2cmd.behavior-test.mjs",
       "test:connection-import": "esbuild src/test/connectionImport.behavior-test.ts --bundle --platform=node --format=cjs --outfile=../../.vite-codex-cache/backend-connectionImport.behavior-test.cjs && node ../../.vite-codex-cache/backend-connectionImport.behavior-test.cjs",
+      "test:ssh-interactive-auth": "esbuild src/test/sshInteractiveAuth.behavior-test.ts --bundle --platform=node --format=cjs --packages=external --outfile=node_modules/.cache/sshInteractiveAuth.cjs && node node_modules/.cache/sshInteractiveAuth.cjs",
       "test:ssh-keyboard-authentication": "esbuild src/test/sshKeyboardAuthentication.behavior-test.ts --bundle --platform=node --format=cjs --packages=external --outfile=node_modules/.cache/sshKeyboardAuthentication.cjs && node node_modules/.cache/sshKeyboardAuthentication.cjs",
       "test:connection-test-overrides": "esbuild src/test/connectionTestOverrides.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/backend-connectionTestOverrides.behavior-test.mjs && node ../../.vite-codex-cache/backend-connectionTestOverrides.behavior-test.mjs",
       "test:layout-panes": "esbuild src/test/layoutPanes.behavior-test.ts --bundle --platform=node --format=esm --outfile=../../.vite-codex-cache/backend-layoutPanes.behavior-test.mjs && node ../../.vite-codex-cache/backend-layoutPanes.behavior-test.mjs",

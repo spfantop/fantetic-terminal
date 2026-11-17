@@ -14,13 +14,15 @@ export const useDialogFocus = ({
   dialogRef,
   initialFocusRef,
   onEscape,
+  ownerDocument = document,
 }: {
   isOpen: Readonly<Ref<boolean>>;
   dialogRef: Readonly<Ref<HTMLElement | null | undefined>>;
   initialFocusRef?: Readonly<Ref<HTMLElement | null | undefined>>;
   onEscape: () => void;
+  ownerDocument?: Document;
 }) => {
-  let restoreFocusElement: HTMLElement | null = null;
+  let restoreFocusElement: Element | null = null;
 
   const readFocusableElements = (): HTMLElement[] => (
     dialogRef.value
@@ -44,19 +46,19 @@ export const useDialogFocus = ({
     }
     const first = focusableElements[0];
     const last = focusableElements[focusableElements.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
+    if (event.shiftKey && ownerDocument.activeElement === first) {
       event.preventDefault();
       last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
+    } else if (!event.shiftKey && ownerDocument.activeElement === last) {
       event.preventDefault();
       first.focus();
     }
   };
   const deactivate = (): void => {
-    document.removeEventListener('keydown', handleKeydown);
+    ownerDocument.removeEventListener('keydown', handleKeydown);
     const target = restoreFocusElement;
     restoreFocusElement = null;
-    target?.focus();
+    if (target && 'focus' in target && typeof target.focus === 'function') target.focus();
   };
 
   watch(isOpen, async open => {
@@ -64,8 +66,8 @@ export const useDialogFocus = ({
       deactivate();
       return;
     }
-    restoreFocusElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    document.addEventListener('keydown', handleKeydown);
+    restoreFocusElement = ownerDocument.activeElement;
+    ownerDocument.addEventListener('keydown', handleKeydown);
     await nextTick();
     initialFocusRef?.value?.focus();
     if (!initialFocusRef?.value) readFocusableElements()[0]?.focus();

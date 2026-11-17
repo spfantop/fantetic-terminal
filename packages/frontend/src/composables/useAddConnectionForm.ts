@@ -62,6 +62,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
     username: '',
     auth_method: 'password' as 'password' | 'key',
     password: '',
+    prompt_for_password: false,
     private_key: '',
     passphrase: '',
     selected_ssh_key_id: null as number | null,
@@ -154,6 +155,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
           }
 
           formData.password = '';
+          formData.prompt_for_password = false;
           formData.private_key = '';
           formData.passphrase = '';
           if (newVal.type !== 'VNC') {
@@ -635,19 +637,11 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
 
     if (formData.type === 'SSH') {
         if (!isEditMode.value) {
-            if (formData.auth_method === 'password' && !formData.password && !formData.host.includes('~')) {
-                uiNotificationsStore.showError(t('connections.form.errorPasswordRequired'));
-                return;
-            }
             if (formData.auth_method === 'key' && !formData.selected_ssh_key_id && !formData.host.includes('~')) {
                 uiNotificationsStore.showError(t('connections.form.errorSshKeyRequired'));
                 return;
             }
         } else {
-            if (formData.auth_method === 'password' && !formData.password && connectionToEdit.value?.auth_method !== 'password') {
-                uiNotificationsStore.showError(t('connections.form.errorPasswordRequiredOnSwitch'));
-                return;
-            }
             if (formData.auth_method === 'key' && !formData.selected_ssh_key_id && connectionToEdit.value?.auth_method !== 'key') {
                  uiNotificationsStore.showError(t('connections.form.errorSshKeyRequiredOnSwitch'));
                  return;
@@ -672,10 +666,6 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
             const ips = parsedIpsResult;
             if (formData.type === 'SSH' && formData.auth_method === 'key' && !formData.selected_ssh_key_id) {
                 uiNotificationsStore.showError(t('connections.form.errorSshKeyRequiredForBatch', '批量添加 SSH (密钥认证) 连接时，必须选择一个 SSH 密钥。'));
-                return;
-            }
-            if (formData.type === 'SSH' && formData.auth_method === 'password' && !formData.password) {
-                uiNotificationsStore.showError(t('connections.form.errorPasswordRequiredForBatchSSH', '批量添加 SSH (密码认证) 连接时，必须提供密码。'));
                 return;
             }
             if (formData.type === 'RDP' && !formData.password) {
@@ -712,7 +702,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
                 if (formData.type === 'SSH') {
                     dataForThisIp.auth_method = formData.auth_method;
                     if (formData.auth_method === 'password') {
-                        dataForThisIp.password = formData.password;
+                        dataForThisIp.password = formData.prompt_for_password ? '' : formData.password;
                     } else if (formData.auth_method === 'key') {
                         dataForThisIp.ssh_key_id = formData.selected_ssh_key_id;
                     }
@@ -783,7 +773,8 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
     if (formData.type === 'SSH') {
         dataToSend.auth_method = formData.auth_method;
         if (formData.auth_method === 'password') {
-            if (formData.password) dataToSend.password = formData.password;
+            if (formData.prompt_for_password) dataToSend.password = '';
+            else if (formData.password) dataToSend.password = formData.password;
         } else if (formData.auth_method === 'key') {
             if (formData.selected_ssh_key_id) {
                 dataToSend.ssh_key_id = formData.selected_ssh_key_id;
@@ -872,6 +863,11 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
 
   // 处理测试连接
   const handleTestConnection = async () => {
+    if (formData.type === 'SSH' && formData.auth_method === 'password'
+        && (formData.prompt_for_password || (!formData.password && !isEditMode.value))) {
+      uiNotificationsStore.showError(t('sshAuth.saveFirst'));
+      return;
+    }
     testStatus.value = 'testing';
     testResult.value = null;
     testLatency.value = null;

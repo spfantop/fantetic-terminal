@@ -1,3 +1,17 @@
+export interface SshAuthChallenge {
+  requestId: string;
+  name: string;
+  instructions: string;
+  username: string;
+  prompts: Array<{ prompt: string; echo: boolean }>;
+}
+
+export interface SshAuthResponse {
+  requestId: string;
+  answers?: string[];
+  cancelled?: boolean;
+}
+
 export type SessionRecordingProtocol = 'SSH' | 'TELNET' | 'RDP' | 'VNC';
 export type SessionRecordingStatus = 'active' | 'completed' | 'incomplete' | 'failed';
 

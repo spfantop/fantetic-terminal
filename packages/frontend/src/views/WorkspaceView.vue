@@ -7,6 +7,7 @@ import { useDeviceDetection } from '../composables/useDeviceDetection';
 import { useConnectionsStore, type ConnectionInfo } from '../stores/connections.store';
 import LazyConnectionForm from '../components/LazyConnectionForm.vue';
 import TerminalTabBar from '../components/TerminalTabBar.vue';
+import SshAuthenticationDialog from '../components/SshAuthenticationDialog.vue';
 import LayoutRenderer from '../components/LayoutRenderer.vue';
 import LayoutConfigurator from '../components/LayoutConfigurator.vue';
 import FileEditorOverlay from '../components/FileEditorOverlay.vue';
@@ -96,6 +97,10 @@ const visibleSessionTabsWithStatus = computed(() => (
   sessionTabsWithStatus.value.filter(tab => !poppedOutSessionIdSet.value.has(tab.sessionId))
 ));
 const visibleSessionIds = computed(() => visibleSessionTabsWithStatus.value.map(tab => tab.sessionId));
+const authenticatingSession = computed(() => {
+  const candidates = visibleSessionIds.value.map(id => sessionStore.sessions.get(id));
+  return candidates.find(session => session?.wsManager.authChallenge.value) ?? null;
+});
 const visibleActiveSessionId = computed(() => resolveVisibleActiveSessionId({
   activeSessionId: activeSessionId.value,
   visibleSessionIds: visibleSessionIds.value,
@@ -860,8 +865,16 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
       setup() {
         const sessionEditorTabs = computed(() => getEditorTabsForSession(sessionId));
         const sessionActiveEditorTabId = computed(() => getActiveEditorTabIdForSession(sessionId));
+        const authSession = computed(() => sessionStore.sessions.get(sessionId));
 
         return () => h('div', { class: 'popout-workspace-root' }, [
+          authSession.value?.wsManager.authChallenge.value ? h(SshAuthenticationDialog, {
+            key: authSession.value.wsManager.authChallenge.value.requestId,
+            challenge: authSession.value.wsManager.authChallenge.value,
+            connectionName: authSession.value.connectionName,
+            ownerDocument: popup.document,
+            onAnswer: (id: string, answers: string[] | null) => authSession.value?.wsManager.respondToAuth(id, answers),
+          }) : null,
           h(LayoutRenderer, {
             isRootRenderer: !isRemoteDesktopPopout,
             layoutNode: popoutLayoutTree,
@@ -1640,6 +1653,11 @@ const closeFileManagerModal = () => {
 <template>
   <!-- *** 动态 class 绑定，添加 is-mobile 类 *** -->
   <div ref="workspaceRootRef" :class="['workspace-view', { 'with-header': isHeaderVisible, 'is-mobile': isMobile, 'is-session-popout-active': isSessionPopoutActive, 'is-session-fullscreen-active': isSessionFullscreenActive }]">
+    <SshAuthenticationDialog v-if="authenticatingSession?.wsManager.authChallenge.value"
+      :key="authenticatingSession.wsManager.authChallenge.value.requestId"
+      :challenge="authenticatingSession.wsManager.authChallenge.value"
+      :connection-name="authenticatingSession.connectionName"
+      @answer="(id, answers) => authenticatingSession?.wsManager.respondToAuth(id, answers)" />
     <!-- --- 桌面端布局 --- -->
     <template v-if="!isMobile">
       <div class="workspace-panel">

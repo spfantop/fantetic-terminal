@@ -1,4 +1,6 @@
-import { ref, shallowRef, computed, readonly } from 'vue';
+import { ref, shallowRef, shallowReadonly, computed, readonly } from 'vue';
+import type { SshAuthChallenge } from '@fantetic-terminal/contracts';
+import { readSshAuthChallenge } from '../websocket/ssh-auth-challenge';
 import { useI18n } from 'vue-i18n'; // +++ Add import for useI18n +++
 import type {
     LatencyPingMessage,
@@ -38,6 +40,7 @@ export function createWebSocketConnectionManager(
     // --- Instance State ---
     // 每个实例拥有独立的 WebSocket 对象、状态和消息处理器
     const ws = shallowRef<WebSocket | null>(null); // WebSocket 实例
+    const authChallenge = shallowRef<SshAuthChallenge | null>(null);
     const isResumeFlow = options?.isResumeFlow ?? false; // 获取恢复流程标志
     const connectionProtocol = options?.protocol ?? 'ssh';
     const connectionStatus = ref<WsConnectionStatus>('disconnected'); // 连接状态 (使用导出的类型)
@@ -391,12 +394,18 @@ export function createWebSocketConnectionManager(
                         return;
                     }
                     const message = decodedMessage.message;
+                    if (message.type === 'ssh:auth-prompt') {
+                        authChallenge.value = readSshAuthChallenge(message.payload);
+                        if (!authChallenge.value) disconnect();
+                        return;
+                    }
                     if (decodedMessage.kind === 'latency-pong') {
                         handleAppLatencyPong(decodedMessage.message.payload);
                     }
 
                     // --- 更新此实例的连接状态 ---
                     if (decodedMessage.kind === 'terminal-connected') {
+                        authChallenge.value = null;
                         reconnectAttempts = 0;
                         connectionDiagnostics.value.reconnectAttempts = 0;
                         serverSupportsSshBinaryInput = decodedMessage.message.payload.serverCapabilities.sshBinaryInput;
@@ -411,6 +420,8 @@ export function createWebSocketConnectionManager(
                             isSftpReady.value = false; // SSH 断开，SFTP 也应不可用
                         }
                     } else if (decodedMessage.kind === 'legacy' && (message.type === 'ssh:error' || message.type === 'telnet:error' || message.type === 'error')) {
+                        authChallenge.value = null;
+                        if (connectionStatus.value === 'connecting') intentionalDisconnect = true;
                         if (connectionStatus.value !== 'disconnected' && connectionStatus.value !== 'error') {
                             connectionStatus.value = 'error';
                             const rawError = message.payload;
@@ -437,6 +448,7 @@ export function createWebSocketConnectionManager(
 
             currentSocket.onerror = (event) => {
                 if (!isCurrentConnection(currentSocket, connectionGeneration)) return;
+                authChallenge.value = null;
                 if (connectionStatus.value !== 'disconnected' && connectionStatus.value !== 'error') { // Don't override if already explicitly disconnected
                     connectionStatus.value = 'error';
                     statusMessage.value = getStatusText('wsError');
@@ -448,6 +460,7 @@ export function createWebSocketConnectionManager(
 
             currentSocket.onclose = (event) => {
                 if (!isCurrentConnection(currentSocket, connectionGeneration)) return;
+                authChallenge.value = null;
                 connectionDiagnostics.value.lastCloseCode = event.code;
                 // 只有在非错误状态下才更新为 disconnected
                 if (connectionStatus.value !== 'error' && connectionStatus.value !== 'disconnected') { // Avoid redundant sets or overriding 'error'
@@ -485,6 +498,7 @@ export function createWebSocketConnectionManager(
      * 手动断开此 WebSocket 连接
      */
     const disconnect = () => {
+        authChallenge.value = null;
         intentionalDisconnect = true; // 标记为主动断开
         activeConnectionGeneration += 1;
         if (reconnectTimeoutId) {
@@ -784,8 +798,21 @@ export function createWebSocketConnectionManager(
     // 注意：没有在此处使用 onUnmounted。
     // disconnect 方法需要由外部调用者 (例如 WorkspaceView) 在会话关闭时显式调用。
 
+    const respondToAuth = (requestId: string, answers: string[] | null): void => {
+        if (authChallenge.value?.requestId !== requestId) return;
+        if (answers === null) { disconnect(); return; }
+        if (!ws.value || ws.value.readyState !== WebSocket.OPEN) { disconnect(); return; }
+        try {
+            // Authentication answers must never enter the generic sender's error logging.
+            ws.value.send(JSON.stringify({ type: 'ssh:auth-response', payload: { requestId, answers } }));
+            authChallenge.value = null;
+        } catch { disconnect(); }
+    };
+
     // 返回此实例的状态和方法
     return {
+        authChallenge: shallowReadonly(authChallenge),
+        respondToAuth,
         // 状态 (只读引用)
         isConnected: computed(() => connectionStatus.value === 'connected'),
         isSftpReady: readonly(isSftpReady),

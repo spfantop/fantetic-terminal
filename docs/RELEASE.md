@@ -1,5 +1,11 @@
 # Release Guide
 
+## Interactive SSH login in 2.1.21
+
+SSH connections can be saved without a password. Open a terminal to respond to the server's password, verification-code or other keyboard-interactive prompts. Each prompt is scoped to its WebSocket and request ID; answers are used for that connection only and are not saved or recorded as terminal input. Empty challenge rounds are acknowledged automatically. Cancelling or closing the connection discards pending answers. Each prompt expires after two minutes; each SSH handshake has a three-minute overall limit.
+
+When editing, leaving the password field blank preserves the existing password. Select **Enter password on connection** to remove the stored password when saving. Connection tests remain noninteractive: save and open the connection to test an interactive login. Terminal authentication covers direct, proxy and jump-host connections; standalone background transfer connections still require stored credentials.
+
 ## SSH authentication in 2.1.20
 
 SSH tests and terminal connections now fall back to keyboard-interactive password authentication, including proxy and jump-host connections. A single hidden `Password:` prompt can use the configured password; an empty follow-up prompt is acknowledged. OTP, password-change and multiple-prompt challenges require interactive input and are not filled with the stored password. Public-key authentication remains unchanged.

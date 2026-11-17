@@ -1,5 +1,6 @@
 import { Client, ClientChannel, ConnectConfig } from 'ssh2';
 import { enableKeyboardPasswordAuth } from './ssh-keyboard-auth';
+import type { SshAuthInteraction } from './ssh-interactive-auth';
 import { SocksClient, SocksClientOptions } from 'socks';
 import http from 'http';
 import net from 'net';
@@ -61,6 +62,7 @@ export interface JumpHostDetail {
 }
 
 export interface DecryptedConnectionDetails {
+    authentication?: SshAuthInteraction;
     id: number;
     name: string;
     host: string;
@@ -216,7 +218,8 @@ const _setupSshClientListenersAndConnect = (
     config: ConnectConfig,
     isFinalClient: boolean,
     connectionIdForUpdate: number | null,
-    connNameForLog: string
+    connNameForLog: string,
+    authentication?: SshAuthInteraction,
 ): Promise<Client> => {
     return new Promise((resolve, reject) => {
         const logPrefix = `SshService: Client for ${connNameForLog} (ID: ${connectionIdForUpdate ?? 'N/A'}, ${isFinalClient ? 'Final' : 'Intermediate'}) -`;
@@ -250,6 +253,7 @@ const _setupSshClientListenersAndConnect = (
                 client.removeListener('error', eventHandlers.error);
                 client.removeListener('close', eventHandlers.close);
                 console.warn(`${logPrefix} SSH connection closed.`);
+                reject(new Error('SSH connection closed before authentication completed'));
             }
         };
 
@@ -258,7 +262,7 @@ const _setupSshClientListenersAndConnect = (
         client.on('close', eventHandlers.close);
 
         console.log(`${logPrefix} Attempting to connect... Config: host=${config.host}, port=${config.port}, user=${config.username}, sock=${!!config.sock}`);
-        enableKeyboardPasswordAuth(client, config);
+        enableKeyboardPasswordAuth(client, config, authentication);
         client.connect(config);
     });
 };
@@ -285,7 +289,8 @@ const _establishDirectSshConnection = (
         connectConfig,
         true, // isFinalClient
         connDetails.id,
-        connDetails.name
+        connDetails.name,
+        connDetails.authentication,
     );
 };
 
@@ -446,7 +451,8 @@ const _establishProxyConnection = async (
             connectConfigWithSocket,
             true, // isFinalClient
             connDetails.id,
-            connDetails.name
+            connDetails.name,
+            connDetails.authentication,
         );
 
     } catch (proxyError: any) {
@@ -537,7 +543,8 @@ async function _establishConnectionViaJumpChainRecursive(
                 finalConnectConfig,
                 true, // isFinalClient
                 finalTargetDetails.id,
-                finalTargetDetails.name
+                finalTargetDetails.name,
+                finalTargetDetails.authentication,
             )
             .then(client => {
                 resolveOuter(client); // Successfully connected to final target
@@ -598,6 +605,7 @@ async function _establishConnectionViaJumpChainRecursive(
                 currentHopClient.removeListener('ready', currentHopHandlers.ready); // 'ready' is once
                 currentHopClient.removeListener('error', currentHopHandlers.error);
                 console.warn(`${currentHopLogPrefix}Connection closed unexpectedly.`);
+                cleanupAndReject(new Error('SSH jump connection closed before authentication completed'), currentHopClient);
                 // This might indicate the hop dropped. If the promise for this hop hasn't settled,
                 // it should be an error. cleanupAndReject will handle this if it's called.
                 // To be safe, if the outer promise hasn't been settled, reject it.
@@ -612,7 +620,7 @@ async function _establishConnectionViaJumpChainRecursive(
         currentHopClient.on('close', currentHopHandlers.close);
 
         console.log(`${currentHopLogPrefix}Attempting to connect. Config: host=${connectConfigForThisHop.host}, port=${connectConfigForThisHop.port}, user=${connectConfigForThisHop.username}, sock=${!!connectConfigForThisHop.sock}`);
-        enableKeyboardPasswordAuth(currentHopClient, connectConfigForThisHop);
+        enableKeyboardPasswordAuth(currentHopClient, connectConfigForThisHop, finalTargetDetails.authentication);
         currentHopClient.connect(connectConfigForThisHop);
     });
 }

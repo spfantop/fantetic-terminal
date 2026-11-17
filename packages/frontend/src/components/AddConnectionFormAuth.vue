@@ -9,6 +9,7 @@ const props = defineProps<{
     username: string;
     auth_method: 'password' | 'key'; // SSH specific
     password?: string; // Optional because it might not be set or sent
+    prompt_for_password: boolean;
     selected_ssh_key_id: number | null; // SSH specific
     vncPassword?: string; // VNC specific, optional for the same reasons as password
   };
@@ -54,9 +55,15 @@ const { t } = useI18n();
 
       <div v-if="props.formData.auth_method === 'password'">
         <label for="conn-password" class="block text-sm font-medium text-text-secondary mb-1">{{ t('connections.form.password') }}</label>
-        <input type="password" id="conn-password" v-model="props.formData.password" :required="props.formData.auth_method === 'password' && !isEditMode" autocomplete="new-password"
+        <input type="password" id="conn-password" v-model="props.formData.password" :disabled="props.formData.prompt_for_password" autocomplete="new-password"
                class="w-full px-3 py-2 border border-border rounded-md shadow-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary" />
       </div>
+
+      <label v-if="props.formData.auth_method === 'password'" class="flex items-start gap-2 text-sm">
+        <input v-model="props.formData.prompt_for_password" type="checkbox" />
+        <span>{{ t('sshAuth.askOnConnect') }}</span>
+      </label>
+      <p v-if="props.formData.auth_method === 'password'" class="text-sm text-text-secondary">{{ isEditMode ? t('sshAuth.editHint') : t('sshAuth.emptyHint') }}</p>
 
       <div v-if="props.formData.auth_method === 'key'" class="space-y-4">
         <div>

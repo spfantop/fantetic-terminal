@@ -1,4 +1,13 @@
 {
+  "sshAuth": {
+    "title": "SSH authentication",
+    "response": "Response",
+    "ephemeral": "Used only for this connection and never saved. Respond within two minutes.",
+    "askOnConnect": "Enter password on connection (remove stored password when saving)",
+    "editHint": "Leave blank to keep the stored password, or select the option above to remove it.",
+    "emptyHint": "Password is optional. Enter passwords or verification codes when the server prompts during connection.",
+    "saveFirst": "Save the connection, then open a terminal to complete interactive authentication."
+  },
   "appName": "Fantetic Terminal",
   "projectName": "Fantetic Terminal",
   "slogan":"A focused terminal for every remote workflow.",

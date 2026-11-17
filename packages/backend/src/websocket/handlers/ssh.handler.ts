@@ -1,4 +1,5 @@
 import { Request } from 'express';
+import { createSshAuthInteraction } from '../ssh-authentication';
 import { v4 as uuidv4 } from 'uuid';
 import { AuthenticatedWebSocket, ClientState } from '../types';
 import { clientStates, sftpService, statusMonitorService, auditLogService, notificationService } from '../state';
@@ -64,7 +65,14 @@ export async function handleSshConnect(
         connInfo = await SshService.getConnectionDetails(dbConnectionId);
 
         if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ssh:status', payload: `正在连接到 ${connInfo.host}...` }));
-        const sshClient = await SshService.establishSshConnection(connInfo);
+        const authentication = createSshAuthInteraction(ws);
+        connInfo.authentication = authentication;
+        const sshClient = await SshService.establishSshConnection(connInfo, 180_000)
+            .finally(authentication.dispose);
+        if (ws.readyState !== WebSocket.OPEN) {
+            sshClient.destroy();
+            return;
+        }
 
         const newSessionId = uuidv4();
         ws.sessionId = newSessionId; // Assign new sessionId to the WebSocket

@@ -1,4 +1,13 @@
 {
+  "sshAuth": {
+    "title": "SSH 身份验证",
+    "response": "请输入应答",
+    "ephemeral": "输入仅用于当前连接，不会保存。请在两分钟内完成。",
+    "askOnConnect": "连接时输入密码（保存时移除已保存密码）",
+    "editHint": "密码留空保留原密码；勾选“连接时输入密码”可移除原密码。",
+    "emptyHint": "密码可以留空，连接时根据服务器提示输入密码或验证码。",
+    "saveFirst": "请先保存连接，再打开终端完成交互认证。"
+  },
   "appName": "Fantetic Terminal",
   "projectName": "Fantetic Terminal",
   "slogan": "一站式 Web 端终端解决方案.",

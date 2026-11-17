@@ -1,4 +1,5 @@
 import WebSocket, { WebSocketServer, RawData } from 'ws';
+import { handleSshAuthResponse } from './ssh-authentication';
 import { Request } from 'express';
 import {
     AuthenticatedWebSocket,
@@ -166,6 +167,14 @@ export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendServ
                 }
 
                 const { type, payload, requestId } = parsedMessage;
+                if (type === 'ssh:auth-response') {
+                    handleSshAuthResponse(ws, payload);
+                    return;
+                }
+                if (type === 'client:ping') {
+                    if (ws.readyState === WebSocket.OPEN) ws.send(encodeCoreServerMessage(createLatencyPongMessage(parsedMessage)));
+                    return;
+                }
                 const sessionId = ws.sessionId; // Get current WebSocket's session ID
 
                 // It's crucial to get the state associated with the current ws.sessionId
