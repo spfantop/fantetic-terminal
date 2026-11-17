@@ -1,4 +1,5 @@
 import { Client, ClientChannel, ConnectConfig } from 'ssh2';
+import { enableKeyboardPasswordAuth } from './ssh-keyboard-auth';
 import { SocksClient, SocksClientOptions } from 'socks';
 import http from 'http';
 import net from 'net';
@@ -257,6 +258,7 @@ const _setupSshClientListenersAndConnect = (
         client.on('close', eventHandlers.close);
 
         console.log(`${logPrefix} Attempting to connect... Config: host=${config.host}, port=${config.port}, user=${config.username}, sock=${!!config.sock}`);
+        enableKeyboardPasswordAuth(client, config);
         client.connect(config);
     });
 };
@@ -610,6 +612,7 @@ async function _establishConnectionViaJumpChainRecursive(
         currentHopClient.on('close', currentHopHandlers.close);
 
         console.log(`${currentHopLogPrefix}Attempting to connect. Config: host=${connectConfigForThisHop.host}, port=${connectConfigForThisHop.port}, user=${connectConfigForThisHop.username}, sock=${!!connectConfigForThisHop.sock}`);
+        enableKeyboardPasswordAuth(currentHopClient, connectConfigForThisHop);
         currentHopClient.connect(connectConfigForThisHop);
     });
 }

@@ -1,5 +1,9 @@
 # Release Guide
 
+## SSH authentication in 2.1.20
+
+SSH tests and terminal connections now fall back to keyboard-interactive password authentication, including proxy and jump-host connections. A single hidden `Password:` prompt can use the configured password; an empty follow-up prompt is acknowledged. OTP, password-change and multiple-prompt challenges require interactive input and are not filled with the stored password. Public-key authentication remains unchanged.
+
 ## Release Assets
 
 The desktop release workflow publishes the following assets for each `v${version}` tag:
