@@ -1,6 +1,7 @@
 <template>
   <div ref="statusMonitorRootRef" class="status-monitor" :class="{ 'status-monitor--inactive': !activeSessionId }">
-    <div v-if="!activeSessionId" class="status-state">
+    <div v-if="currentSessionState?.wsManager.isNativeSsh" class="status-state">{{ t('sshAuth.nativeLimitations') }}</div>
+    <div v-else-if="!activeSessionId" class="status-state">
       <i class="fas fa-plug status-state__icon"></i>
       <span class="status-state__title">{{ t('layout.noActiveSession.title') }}</span>
     </div>

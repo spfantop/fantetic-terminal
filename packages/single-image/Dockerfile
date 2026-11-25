@@ -59,7 +59,7 @@ COPY packages/remote-gateway/patches ./packages/remote-gateway/patches
 # glibc version. The image keeps one Node runtime for both application services.
 RUN apt-get update \
     && apt-get upgrade -y \
-    && apt-get install -y --no-install-recommends nginx tini python3 make g++ \
+    && apt-get install -y --no-install-recommends nginx tini python3 make g++ openssh-client \
     && npm_config_build_from_source=true npm ci --omit=dev --workspace=@fantetic-terminal/backend --workspace=@fantetic-terminal/remote-gateway \
     && npm cache clean --force \
     && apt-get purge -y --auto-remove python3 make g++ \

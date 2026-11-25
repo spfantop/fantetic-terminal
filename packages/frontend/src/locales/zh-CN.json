@@ -1,5 +1,13 @@
 {
   "sshAuth": {
+    "recordingRequired": "管理员启用了会话录像，无法使用不支持录像的 OpenSSH 模式。",
+    "unsupportedConnection": "OpenSSH 模式仅支持直连密码登录，不支持私钥、代理或跳板。",
+    "unavailable": "无法启动系统 OpenSSH，请检查服务器是否安装 ssh。",
+
+    "nativeMode": "使用 OpenSSH 连接新终端",
+    "nativeLimitations": "仅支持直连密码登录。全程不录像，不支持文件管理、监控和会话挂起。",
+    "nativeReady": "OpenSSH 终端已启动，请在终端完成登录",
+
     "title": "SSH 身份验证",
     "response": "请输入应答",
     "ephemeral": "输入仅用于当前连接，不会保存。请在两分钟内完成。",

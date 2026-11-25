@@ -60,7 +60,8 @@ const viewContainerLogs = (containerId: string) => {
 <template>
   <div class="docker-manager flex flex-col h-full overflow-hidden bg-background text-foreground">
      <!-- Case 1: Docker manager disabled -->
-     <div v-if="!dockerManagerEnabledBoolean" class="flex flex-col justify-center items-center text-center flex-grow text-text-secondary p-4">
+     <div v-if="activeSshSession?.wsManager.isNativeSsh" class="p-4 text-text-secondary">{{ t('sshAuth.nativeLimitations') }}</div>
+     <div v-else-if="!dockerManagerEnabledBoolean" class="flex flex-col justify-center items-center text-center flex-grow text-text-secondary p-4">
         <i class="fab fa-docker text-4xl mb-3"></i>
         <p class="mt-2 mb-1 font-medium">{{ t('dockerManager.disabled') }}</p>
         <small class="text-xs max-w-[80%] text-text-disabled">{{ t('dockerManager.disabledHint') }}</small>

@@ -1,5 +1,13 @@
 {
   "sshAuth": {
+    "recordingRequired": "管理者がセッション録画を有効にしています。OpenSSH モードは録画に対応していません。",
+    "unsupportedConnection": "OpenSSH モードは直接接続のパスワード認証のみです。鍵、プロキシ、踏み台には非対応です。",
+    "unavailable": "OpenSSH を起動できません。サーバーに ssh がインストールされているか確認してください。",
+
+    "nativeMode": "新しい端末に OpenSSH を使用",
+    "nativeLimitations": "直接接続のパスワード認証のみ。録画、ファイル管理、監視、セッションの中断には非対応です。",
+    "nativeReady": "OpenSSH 端末を起動しました。端末でログインしてください",
+
     "title": "SSH 認証",
     "response": "応答",
     "ephemeral": "入力内容は今回の接続のみに使用され、保存されません。2 分以内に応答してください。",

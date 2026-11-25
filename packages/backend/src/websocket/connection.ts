@@ -147,6 +147,10 @@ export function initializeConnectionHandler(wss: WebSocketServer, sshSuspendServ
                 }
                 if (fastSshInput !== null && ws.sessionId) {
                     const state = clientStates.get(ws.sessionId);
+                    if (state?.openSshTerminal) {
+                        handleSshInput(ws, { data: fastSshInput });
+                        return;
+                    }
                     if (state?.sshShellStream && state.isShellReady) {
                         writeSshInput(state, fastSshInput);
                     } else if (!state?.sshShellStream) {

@@ -17,6 +17,7 @@ export interface AuthenticatedWebSocket extends WebSocket {
 
 // 中心化的客户端状态接口 (统一版本)
 export interface ClientState { // 导出以便 Service 可以导入
+    openSshTerminal?: import('node-pty').IPty;
     ws: AuthenticatedWebSocket;
     sshClient?: Client;
     sshShellStream?: ClientChannel;

@@ -7,7 +7,6 @@ import { useDeviceDetection } from '../composables/useDeviceDetection';
 import { useConnectionsStore, type ConnectionInfo } from '../stores/connections.store';
 import LazyConnectionForm from '../components/LazyConnectionForm.vue';
 import TerminalTabBar from '../components/TerminalTabBar.vue';
-import SshAuthenticationDialog from '../components/SshAuthenticationDialog.vue';
 import LayoutRenderer from '../components/LayoutRenderer.vue';
 import LayoutConfigurator from '../components/LayoutConfigurator.vue';
 import FileEditorOverlay from '../components/FileEditorOverlay.vue';
@@ -97,10 +96,6 @@ const visibleSessionTabsWithStatus = computed(() => (
   sessionTabsWithStatus.value.filter(tab => !poppedOutSessionIdSet.value.has(tab.sessionId))
 ));
 const visibleSessionIds = computed(() => visibleSessionTabsWithStatus.value.map(tab => tab.sessionId));
-const authenticatingSession = computed(() => {
-  const candidates = visibleSessionIds.value.map(id => sessionStore.sessions.get(id));
-  return candidates.find(session => session?.wsManager.authChallenge.value) ?? null;
-});
 const visibleActiveSessionId = computed(() => resolveVisibleActiveSessionId({
   activeSessionId: activeSessionId.value,
   visibleSessionIds: visibleSessionIds.value,
@@ -865,16 +860,8 @@ const handlePopOutSession = async ({ sessionId, windowRef }: { sessionId: string
       setup() {
         const sessionEditorTabs = computed(() => getEditorTabsForSession(sessionId));
         const sessionActiveEditorTabId = computed(() => getActiveEditorTabIdForSession(sessionId));
-        const authSession = computed(() => sessionStore.sessions.get(sessionId));
 
         return () => h('div', { class: 'popout-workspace-root' }, [
-          authSession.value?.wsManager.authChallenge.value ? h(SshAuthenticationDialog, {
-            key: authSession.value.wsManager.authChallenge.value.requestId,
-            challenge: authSession.value.wsManager.authChallenge.value,
-            connectionName: authSession.value.connectionName,
-            ownerDocument: popup.document,
-            onAnswer: (id: string, answers: string[] | null) => authSession.value?.wsManager.respondToAuth(id, answers),
-          }) : null,
           h(LayoutRenderer, {
             isRootRenderer: !isRemoteDesktopPopout,
             layoutNode: popoutLayoutTree,
@@ -1182,7 +1169,9 @@ const subscribeToWorkspaceEvents = workspaceEventSubscriptions.subscribe;
    }
    const terminalManager = sessionToCommand.terminalManager as (SshTerminalInstance | undefined);
 
+   if (sessionToCommand.wsManager.authChallenge.value) return;
    if (terminalManager?.isSshConnected && !terminalManager.isSshConnected.value && command.trim() === '') {
+     if (sessionToCommand.wsManager.isNativeSsh) return;
      debugLog(`[WorkspaceView] Command bar Enter detected in disconnected session ${sessionToCommand.sessionId}, attempting reconnect...`);
      if (terminalManager.terminalInstance?.value) {
          terminalManager.terminalInstance.value.writeln(`\r\n\x1b[33m${t('workspace.terminal.reconnectingMsg')}\x1b[0m`);
@@ -1198,7 +1187,9 @@ const subscribeToWorkspaceEvents = workspaceEventSubscriptions.subscribe;
 
    if (terminalManager && typeof terminalManager.sendData === 'function') {
      const commandToSend = command.trim(); // Keep trimmed for history
-     debugLogLazy(() => [`[WorkspaceView] Sending command/data to session ${sessionToCommand.sessionId}: ${JSON.stringify(command)}`]);
+     if (!sessionToCommand.wsManager.isNativeSsh) {
+       debugLogLazy(() => [`[WorkspaceView] Sending command/data to session ${sessionToCommand.sessionId}: ${JSON.stringify(command)}`]);
+     }
      // Only append '\r' for regular commands, not for control characters like Ctrl+C (\x03)
      // Send the raw command as received by the function for control characters
      const dataToSend = command === '\x03' ? command : command + '\r';
@@ -1206,7 +1197,7 @@ const subscribeToWorkspaceEvents = workspaceEventSubscriptions.subscribe;
 
      // Add to history only if it's a user-typed command (not just Enter or control chars)
      // And only if the command is being sent to the active session (to avoid polluting history from "send to all")
-     if (commandToSend.length > 0 && command !== '\x03' && sessionToCommand.sessionId === activeSessionId.value) {
+     if (!sessionToCommand.wsManager.isNativeSsh && commandToSend.length > 0 && command !== '\x03' && sessionToCommand.sessionId === activeSessionId.value) {
        commandHistoryStore.addCommand(commandToSend);
      }
    } else {
@@ -1249,6 +1240,17 @@ const subscribeToWorkspaceEvents = workspaceEventSubscriptions.subscribe;
  // 处理终端输入 (用于 Terminal)
  // 注意：LayoutRenderer 内部的 Terminal 组件需要 emit('terminal-input', sessionId, data)
  const handleTerminalInputData = (sessionId: string, data: string, batched?: boolean) => {
+   const source = sessionStore.sessions.get(sessionId);
+   if (source?.wsManager.authChallenge.value) {
+     readTerminalInputManager(sessionId)?.handleTerminalData(data, { localEcho: false });
+     return;
+   }
+   // OpenSSH can request credentials at any time; never broadcast these keystrokes.
+   if (sessionStore.sessions.get(sessionId)?.wsManager.isNativeSsh) {
+     const manager = readTerminalInputManager(sessionId);
+     if (manager?.isSshConnected.value) manager.handleTerminalData(data, { batched, localEcho: false });
+     return;
+   }
    const targetSessionIds = resolveTerminalBatchInputTargetIds({
      sourceSessionId: sessionId,
      batchEnabled: isBatchTerminalInputActive.value,
@@ -1262,7 +1264,10 @@ const subscribeToWorkspaceEvents = workspaceEventSubscriptions.subscribe;
      return;
    }
 
-    targetSessionIds.forEach(targetSessionId => {
+    targetSessionIds.filter(targetSessionId => {
+      const ws = sessionStore.sessions.get(targetSessionId)?.wsManager;
+      return ws && !ws.isNativeSsh && !ws.authChallenge.value;
+    }).forEach(targetSessionId => {
       handleSingleTerminalInputData(targetSessionId, data, true, targetSessionId === sessionId);
     });
  };
@@ -1653,11 +1658,6 @@ const closeFileManagerModal = () => {
 <template>
   <!-- *** 动态 class 绑定，添加 is-mobile 类 *** -->
   <div ref="workspaceRootRef" :class="['workspace-view', { 'with-header': isHeaderVisible, 'is-mobile': isMobile, 'is-session-popout-active': isSessionPopoutActive, 'is-session-fullscreen-active': isSessionFullscreenActive }]">
-    <SshAuthenticationDialog v-if="authenticatingSession?.wsManager.authChallenge.value"
-      :key="authenticatingSession.wsManager.authChallenge.value.requestId"
-      :challenge="authenticatingSession.wsManager.authChallenge.value"
-      :connection-name="authenticatingSession.connectionName"
-      @answer="(id, answers) => authenticatingSession?.wsManager.respondToAuth(id, answers)" />
     <!-- --- 桌面端布局 --- -->
     <template v-if="!isMobile">
       <div class="workspace-panel">

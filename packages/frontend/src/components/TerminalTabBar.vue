@@ -538,7 +538,7 @@ const handleTouchStart = (event: TouchEvent, sessionId: string) => {
     touchTimeout = window.setTimeout(() => {
       if (touchedSessionId === sessionId) {
         const sessionState = sessionStore.sessions.get(sessionId);
-        if (sessionState?.kind !== 'ssh') {
+        if (sessionState?.kind !== 'ssh' || sessionState.wsManager.isNativeSsh) {
           return;
         }
         if (sessionState.isMarkedForSuspend) {
@@ -638,12 +638,13 @@ onBeforeUnmount(() => {
             @touchstart="handleTouchStart($event, session.sessionId)"
             @touchend="handleTouchEnd($event)"
             @dragstart="handleDragStart"
-            :title="session.connectionName"
+            :title="session.status === 'native-authenticated' ? session.connectionName + ' · ' + t('dashboard.sessionStatus.connected') : session.status === 'terminal-ready' ? `${session.connectionName} · ${t('sshAuth.nativeReady')}` : session.connectionName"
         >
           <!-- Status dot -->
           <span :class="['w-2 h-2 rounded-full mr-2 flex-shrink-0',
                          session.isMarkedForSuspend ? 'bg-blue-500' : // +++ 如果已标记待挂起，则为蓝色 +++
-                         session.status === 'connected' ? 'bg-green-500' :
+                         (session.status === 'connected' || session.status === 'native-authenticated') ? 'bg-green-500' :
+                         session.status === 'terminal-ready' ? 'bg-primary' :
                          session.status === 'connecting' ? 'bg-yellow-500 animate-pulse' :
                          session.status === 'disconnected' ? 'bg-red-500' : 'bg-gray-400']"></span>
           <span class="truncate text-sm" style="transform: translateY(-1px);">{{ session.connectionName }}</span>

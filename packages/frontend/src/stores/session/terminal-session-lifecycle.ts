@@ -1,3 +1,4 @@
+import { useNativeSsh } from '../../composables/useSshEngine';
 import { ref } from 'vue';
 import type { ComposerTranslation } from 'vue-i18n';
 
@@ -233,6 +234,7 @@ export const createTerminalSessionLifecycle = (
     let currentSessionId = sessionId;
     const connectionId = String(connection.id);
     const protocol = connection.type === 'TELNET' ? 'telnet' : 'ssh';
+    const engine = protocol === 'ssh' && !options?.isResumeFlow && useNativeSsh.value ? 'openssh' as const : undefined;
     const partialSession: Omit<
       SshSessionState,
       'wsManager' | 'sftpManagers' | 'terminalManager' | 'statusMonitorManager' | 'dockerManager'
@@ -253,15 +255,17 @@ export const createTerminalSessionLifecycle = (
       isResumeFlow: options?.isResumeFlow ?? false,
       getIsMarkedForSuspend: () => Boolean(sessions.value.get(currentSessionId)?.isMarkedForSuspend),
       protocol,
+      engine,
     });
 
     const terminalDependencies: SshTerminalDependencies = {
+      authentication: { challenge: wsManager.authChallenge, respond: wsManager.respondToAuth },
       sendMessage: wsManager.sendMessage,
       sendSshInput: wsManager.sendSshInput,
       sendTelnetInput: wsManager.sendTelnetInput,
       onMessage: wsManager.onMessage,
       onSshOutput: wsManager.onSshOutput,
-      isConnected: wsManager.isConnected,
+      isConnected: wsManager.isTerminalReady,
     };
     const statusMonitorDependencies: StatusMonitorDependencies = {
       onMessage: wsManager.onMessage,
@@ -277,7 +281,7 @@ export const createTerminalSessionLifecycle = (
       ...partialSession,
       wsManager,
       sftpManagers: new Map<string, SftpManagerInstance>(),
-      terminalManager: createSshTerminalManager(sessionId, terminalDependencies, t, { protocol }),
+      terminalManager: createSshTerminalManager(sessionId, terminalDependencies, t, { protocol, engine }),
       statusMonitorManager: createStatusMonitorManager(sessionId, statusMonitorDependencies),
       dockerManager: createDockerManager(sessionId, dockerDependencies, { t }),
     };
@@ -287,7 +291,7 @@ export const createTerminalSessionLifecycle = (
 
     const initialSessionId = sessionId;
     session.disposables?.push(wsManager.onMessage(
-      protocol === 'telnet' ? 'telnet:connected' : 'ssh:connected',
+      protocol === 'telnet' ? 'telnet:connected' : engine === 'openssh' ? 'ssh:terminal-ready' : 'ssh:connected',
       (payload: MessagePayload) => {
         if (!payload || typeof payload !== 'object') return;
         const result = payload as { sessionId?: unknown; connectionId?: unknown };

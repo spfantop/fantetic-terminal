@@ -91,6 +91,10 @@ const sessionStore = useSessionStore(); // 实例化 Session Store
 const currentSftpManager = shallowRef<SftpManagerInstance | null>(null);
 
 const initializeSftpManager = (sessionId: string, instanceId: string) => {
+    if (sessionStore.sessions.get(sessionId)?.wsManager.isNativeSsh) {
+        currentSftpManager.value = null;
+        return;
+    }
     const manager = sessionStore.getOrCreateSftpManager(sessionId, instanceId);
     if (!manager) {
         // 抛出错误或显示错误消息，阻止组件进一步渲染
@@ -1582,7 +1586,8 @@ const handleOpenEditorClick = () => {
  </script>
 
 <template>
-  <div class="flex flex-col h-full overflow-hidden bg-background text-foreground text-sm font-sans">
+  <div v-if="sessionStore.sessions.get(sessionId)?.wsManager.isNativeSsh" class="p-4 text-text-secondary">{{ t('sshAuth.nativeLimitations') }}</div>
+  <div v-else class="flex flex-col h-full overflow-hidden bg-background text-foreground text-sm font-sans">
     <div class="flex items-center justify-between flex-wrap gap-2 p-2 bg-header  flex-shrink-0">
         <!-- Wrapper for Path Actions and Path Bar -->
         <div class="flex items-center gap-2 flex-grow min-w-0"> <!-- Added gap-2, flex-grow, min-w-0 -->

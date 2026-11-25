@@ -1,5 +1,13 @@
 {
   "sshAuth": {
+    "recordingRequired": "Session recording is enabled by the administrator. OpenSSH mode cannot record sessions.",
+    "unsupportedConnection": "OpenSSH mode requires a direct password connection; keys, proxies and jump hosts are unsupported.",
+    "unavailable": "Cannot start system OpenSSH. Check that ssh is installed on the server.",
+
+    "nativeMode": "Use OpenSSH for new terminals",
+    "nativeLimitations": "Direct password login only. No session recording, file management, monitoring or suspension.",
+    "nativeReady": "OpenSSH terminal started; complete login in the terminal",
+
     "title": "SSH authentication",
     "response": "Response",
     "ephemeral": "Used only for this connection and never saved. Respond within two minutes.",

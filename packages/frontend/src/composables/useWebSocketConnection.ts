@@ -1,3 +1,4 @@
+import { readOpenSshErrorKey } from '../utils/openSshErrors';
 import { ref, shallowRef, shallowReadonly, computed, readonly } from 'vue';
 import type { SshAuthChallenge } from '@fantetic-terminal/contracts';
 import { readSshAuthChallenge } from '../websocket/ssh-auth-challenge';
@@ -35,11 +36,12 @@ export function createWebSocketConnectionManager(
     sessionId: string,
     dbConnectionId: string,
     t: ReturnType<typeof useI18n>['t'],
-    options?: { isResumeFlow?: boolean; getIsMarkedForSuspend?: () => boolean; protocol?: 'ssh' | 'telnet' }
+    options?: { isResumeFlow?: boolean; getIsMarkedForSuspend?: () => boolean; protocol?: 'ssh' | 'telnet'; engine?: 'openssh' }
 ) {
     // --- Instance State ---
     // 每个实例拥有独立的 WebSocket 对象、状态和消息处理器
     const ws = shallowRef<WebSocket | null>(null); // WebSocket 实例
+    const nativeTerminalReady = ref(false);
     const authChallenge = shallowRef<SshAuthChallenge | null>(null);
     const isResumeFlow = options?.isResumeFlow ?? false; // 获取恢复流程标志
     const connectionProtocol = options?.protocol ?? 'ssh';
@@ -250,7 +252,7 @@ export function createWebSocketConnectionManager(
      * 安排 WebSocket 重连尝试
      */
     const scheduleReconnect = () => {
-        if (intentionalDisconnect) {
+        if (intentionalDisconnect || options?.engine === 'openssh') {
             return; // 如果是主动断开，则不重连
         }
 
@@ -299,7 +301,7 @@ export function createWebSocketConnectionManager(
         // 并且我们自己维护的状态也是 connected 或 connecting 时，才阻止连接。
         if (ws.value &&
             (ws.value.readyState === WebSocket.OPEN || ws.value.readyState === WebSocket.CONNECTING) &&
-            (connectionStatus.value === 'connected' || connectionStatus.value === 'connecting')
+            (connectionStatus.value === 'connected' || connectionStatus.value === 'connecting' || nativeTerminalReady.value)
            ) {
             console.warn(`[WebSocket ${instanceSessionId}] 连接已打开或正在连接中 (readyState: ${ws.value.readyState}, status: ${connectionStatus.value})。 阻止重复连接。`);
             return;
@@ -351,6 +353,7 @@ export function createWebSocketConnectionManager(
             }
             // --- 使用调整后的 URL ---
             const currentSocket = new WebSocket(secureUrl);
+            let nativeSessionId: string | undefined;
             const connectionGeneration = ++activeConnectionGeneration;
             ws.value = currentSocket;
             currentSocket.binaryType = 'arraybuffer';
@@ -371,6 +374,7 @@ export function createWebSocketConnectionManager(
                         type: `${connectionProtocol}:connect`,
                         payload: {
                             connectionId: instanceDbConnectionId,
+                            ...(options?.engine === 'openssh' ? { engine: 'openssh' } : {}),
                             frontendSessionId: instanceSessionId,
                             clientCapabilities: { sshBinaryOutput: true, sshBinaryInput: connectionProtocol === 'ssh' },
                         },
@@ -394,6 +398,26 @@ export function createWebSocketConnectionManager(
                         return;
                     }
                     const message = decodedMessage.message;
+                    if (message.type === 'ssh:authenticated') {
+                        const payload = message.payload;
+                        if (nativeSessionId && connectionStatus.value === 'terminal-ready' && payload
+                            && typeof payload === 'object' && 'sessionId' in payload && payload.sessionId === nativeSessionId
+                            && 'connectionId' in payload && String(payload.connectionId) === instanceDbConnectionId) {
+                            connectionStatus.value = 'native-authenticated';
+                            statusMessage.value = t('dashboard.sessionStatus.connected');
+                        }
+                        return;
+                    }
+                    if (message.type === 'ssh:terminal-ready' && nativeSessionId) return;
+                    if (message.type === 'ssh:terminal-ready' && options?.engine === 'openssh'
+                        && message.payload && typeof message.payload === 'object'
+                        && 'connectionId' in message.payload && String(message.payload.connectionId) === instanceDbConnectionId
+                        && 'sessionId' in message.payload && typeof message.payload.sessionId === 'string') {
+                        nativeSessionId = message.payload.sessionId;
+                        nativeTerminalReady.value = true;
+                        connectionStatus.value = 'terminal-ready';
+                        statusMessage.value = t('sshAuth.nativeReady');
+                    }
                     if (message.type === 'ssh:auth-prompt') {
                         authChallenge.value = readSshAuthChallenge(message.payload);
                         if (!authChallenge.value) disconnect();
@@ -406,6 +430,7 @@ export function createWebSocketConnectionManager(
                     // --- 更新此实例的连接状态 ---
                     if (decodedMessage.kind === 'terminal-connected') {
                         authChallenge.value = null;
+                        nativeTerminalReady.value = false;
                         reconnectAttempts = 0;
                         connectionDiagnostics.value.reconnectAttempts = 0;
                         serverSupportsSshBinaryInput = decodedMessage.message.payload.serverCapabilities.sshBinaryInput;
@@ -414,6 +439,7 @@ export function createWebSocketConnectionManager(
                             statusMessage.value = getStatusText('connected');
                         }
                     } else if (decodedMessage.kind === 'legacy' && (message.type === 'ssh:disconnected' || message.type === 'telnet:disconnected')) {
+                        nativeTerminalReady.value = false;
                         if (connectionStatus.value !== 'disconnected') {
                             connectionStatus.value = 'disconnected';
                             statusMessage.value = getStatusText('disconnected', { reason: message.payload || '未知原因' });
@@ -421,11 +447,13 @@ export function createWebSocketConnectionManager(
                         }
                     } else if (decodedMessage.kind === 'legacy' && (message.type === 'ssh:error' || message.type === 'telnet:error' || message.type === 'error')) {
                         authChallenge.value = null;
+                        nativeTerminalReady.value = false;
                         if (connectionStatus.value === 'connecting') intentionalDisconnect = true;
                         if (connectionStatus.value !== 'disconnected' && connectionStatus.value !== 'error') {
                             connectionStatus.value = 'error';
                             const rawError = message.payload;
-                            const errorMsg = rawError && typeof rawError === 'object' && 'message' in rawError
+                            const nativeErrorKey = readOpenSshErrorKey(rawError);
+                            const errorMsg = nativeErrorKey ? t(nativeErrorKey) : rawError && typeof rawError === 'object' && 'message' in rawError
                                 ? String(rawError.message)
                                 : String(rawError || '未知错误');
                             statusMessage.value = getStatusText('error', { message: errorMsg });
@@ -449,6 +477,7 @@ export function createWebSocketConnectionManager(
             currentSocket.onerror = (event) => {
                 if (!isCurrentConnection(currentSocket, connectionGeneration)) return;
                 authChallenge.value = null;
+                nativeTerminalReady.value = false;
                 if (connectionStatus.value !== 'disconnected' && connectionStatus.value !== 'error') { // Don't override if already explicitly disconnected
                     connectionStatus.value = 'error';
                     statusMessage.value = getStatusText('wsError');
@@ -461,6 +490,7 @@ export function createWebSocketConnectionManager(
             currentSocket.onclose = (event) => {
                 if (!isCurrentConnection(currentSocket, connectionGeneration)) return;
                 authChallenge.value = null;
+                nativeTerminalReady.value = false;
                 connectionDiagnostics.value.lastCloseCode = event.code;
                 // 只有在非错误状态下才更新为 disconnected
                 if (connectionStatus.value !== 'error' && connectionStatus.value !== 'disconnected') { // Avoid redundant sets or overriding 'error'
@@ -499,6 +529,7 @@ export function createWebSocketConnectionManager(
      */
     const disconnect = () => {
         authChallenge.value = null;
+        nativeTerminalReady.value = false;
         intentionalDisconnect = true; // 标记为主动断开
         activeConnectionGeneration += 1;
         if (reconnectTimeoutId) {
@@ -806,6 +837,7 @@ export function createWebSocketConnectionManager(
             // Authentication answers must never enter the generic sender's error logging.
             ws.value.send(JSON.stringify({ type: 'ssh:auth-response', payload: { requestId, answers } }));
             authChallenge.value = null;
+            nativeTerminalReady.value = false;
         } catch { disconnect(); }
     };
 
@@ -814,6 +846,8 @@ export function createWebSocketConnectionManager(
         authChallenge: shallowReadonly(authChallenge),
         respondToAuth,
         // 状态 (只读引用)
+        isNativeSsh: options?.engine === 'openssh',
+        isTerminalReady: computed(() => nativeTerminalReady.value || connectionStatus.value === 'connected'),
         isConnected: computed(() => connectionStatus.value === 'connected'),
         isSftpReady: readonly(isSftpReady),
         connectionStatus: readonly(connectionStatus),

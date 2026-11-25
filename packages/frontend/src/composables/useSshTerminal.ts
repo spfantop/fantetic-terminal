@@ -1,3 +1,6 @@
+import { createTerminalAuthInput } from './terminalAuthInput';
+import type { SshAuthChallenge } from '@fantetic-terminal/contracts';
+import { readOpenSshErrorKey } from '../utils/openSshErrors';
 import { computed, ref, readonly, watch, type Ref, ComputedRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
@@ -26,6 +29,7 @@ import {
 
 // 定义与 WebSocket 相关的依赖接口
 export interface SshTerminalDependencies {
+    authentication?: { challenge: Readonly<Ref<SshAuthChallenge | null>>; respond: (id: string, answers: string[] | null) => void };
     sendMessage: (message: WebSocketMessage) => void;
     sendSshInput?: (targetSessionId: string, data: string) => void;
     sendTelnetInput?: (targetSessionId: string, data: string) => void;
@@ -41,10 +45,11 @@ export interface SshTerminalDependencies {
  * @param t i18n 翻译函数，从父组件传入
  * @returns SSH 终端管理器实例
  */
-export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalDependencies, t: ReturnType<typeof useI18n>['t'], options: { protocol?: 'ssh' | 'telnet' } = {}) { // +++ Update type of t +++
+export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalDependencies, t: ReturnType<typeof useI18n>['t'], options: { protocol?: 'ssh' | 'telnet'; engine?: 'openssh' } = {}) { // +++ Update type of t +++
     // 使用依赖注入的 WebSocket 函数
     const { sendMessage, sendSshInput, sendTelnetInput, onMessage, onSshOutput, isConnected } = wsDeps;
     const protocol = options.protocol ?? 'ssh';
+    const nativeMode = options.engine === 'openssh';
     const settingsStore = useSettingsStore();
     const appearanceStore = useAppearanceStore();
     const uiNotificationsStore = useUiNotificationsStore();
@@ -125,6 +130,8 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
     };
 
     const readTerminalMessageText = (payload: MessagePayload, fallback: string): string => {
+        const nativeErrorKey = readOpenSshErrorKey(payload);
+        if (nativeErrorKey) return t(nativeErrorKey);
         if (typeof payload === 'string') return payload;
         if (payload && typeof payload === 'object') {
             const payloadRecord = payload as Record<string, unknown>;
@@ -245,8 +252,21 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         }
     };
 
+    let abandonOutputWrite: (() => void) | null = null;
+
     const writeOutputBatch = (term: Terminal, chunkList: (string | Uint8Array)[]) => new Promise<void>(resolve => {
         if (chunkList.length === 0) return resolve();
+        let settled = false;
+        abandonOutputWrite = () => {
+            if (settled) return;
+            settled = true;
+            abandonOutputWrite = null;
+            // A disposed xterm can discard its write callback. Replay the unacknowledged
+            // batch in the replacement terminal, including cursor-position queries.
+            pendingOutputBuffer.splice(pendingOutputHeadIndex, 0, ...chunkList);
+            pendingOutputBytes += chunkList.reduce((total, chunk) => total + getOutputLength(chunk), 0);
+            resolve();
+        };
         const startedAt = performance.now();
         const writtenBytes = chunkList.reduce((total, chunk) => total + getOutputLength(chunk), 0);
         // Queue multiple medium chunks synchronously. xterm's WriteBuffer then
@@ -254,6 +274,9 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         // every chunk here used to force one redundant viewport render per 8KB.
         chunkList.forEach((chunk, index) => {
             writeTerminalOutput(term, chunk, index === chunkList.length - 1 ? () => {
+                if (settled) return;
+                settled = true;
+                abandonOutputWrite = null;
                 const durationMs = performance.now() - startedAt;
                 terminalPerformanceStats.outputWriteCount += chunkList.length;
                 terminalPerformanceStats.lastOutputWriteMs = durationMs;
@@ -391,7 +414,6 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
             isOutputWriteInProgress = false;
         }
 
-        if (terminalInstance.value !== term) return;
         if (getPendingOutputChunkCount() > 0) {
             scheduleOutputFrameFlush();
         }
@@ -603,6 +625,13 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
     const handleTerminalReady = (payload: { terminal: Terminal }) => {
         const { terminal: term } = payload;
         debugLog(`[会话 ${sessionId}][SSH终端模块] 终端实例已就绪。`);
+        if (terminalInstance.value !== term) {
+            if (outputFlushFrame !== null && terminalInstance.value) {
+                getTerminalWindow(terminalInstance.value).cancelAnimationFrame(outputFlushFrame);
+                outputFlushFrame = null;
+            }
+            abandonOutputWrite?.();
+        }
         terminalInstance.value = term;
         syncTerminalRenderHighlighter(term);
         terminalWriteParsedDisposable?.dispose();
@@ -646,9 +675,20 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
         // term.focus(); // 也许在 ssh:connected 时聚焦更好
     };
 
+    const authentication = wsDeps.authentication;
+    const editor = authentication && createTerminalAuthInput(scheduleTerminalOutput, authentication.respond);
+    const stopAuth = authentication && watch(authentication.challenge, challenge => {
+        if (challenge) editor?.start(challenge);
+        else editor?.reset();
+    }, { flush: 'sync', immediate: true });
+
     const handleTerminalData = (data: string, options: { batched?: boolean; localEcho?: boolean } = {}) => {
         // console.debug(`[会话 ${sessionId}][SSH终端模块] 接收到终端输入:`, data);
-        if (options.localEcho !== false) {
+        if (authentication?.challenge.value) {
+            editor?.input(data);
+            return;
+        }
+        if (!nativeMode && options.localEcho !== false) {
             echoLocalInputIfNeeded(data);
         }
         if (options.batched) {
@@ -851,6 +891,7 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
             unregisterHandlers.push(onMessage('ssh:output', handleSshOutput));
         }
         unregisterHandlers.push(onMessage('ssh:connected', handleSshConnected));
+        unregisterHandlers.push(onMessage('ssh:terminal-ready', handleSshConnected));
         unregisterHandlers.push(onMessage('ssh:disconnected', handleSshDisconnected));
         unregisterHandlers.push(onMessage('ssh:error', handleSshError));
         unregisterHandlers.push(onMessage('ssh:status', handleSshStatus));
@@ -874,6 +915,9 @@ export function createSshTerminalManager(sessionId: string, wsDeps: SshTerminalD
 
     // --- 清理函数 ---
     const cleanup = () => {
+        stopAuth?.();
+        editor?.reset();
+        abandonOutputWrite?.();
         unregisterAllSshHandlers();
         cancelScheduledOutputDecode();
         outputDecodeMicrotaskScheduled = false;

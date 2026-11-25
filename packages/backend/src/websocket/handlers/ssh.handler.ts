@@ -1,4 +1,5 @@
 import { Request } from 'express';
+import { startOpenSshTerminal } from './openssh.handler';
 import { createSshAuthInteraction } from '../ssh-authentication';
 import { v4 as uuidv4 } from 'uuid';
 import { AuthenticatedWebSocket, ClientState } from '../types';
@@ -63,6 +64,10 @@ export async function handleSshConnect(
     try {
         if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ssh:status', payload: '正在获取连接信息...' }));
         connInfo = await SshService.getConnectionDetails(dbConnectionId);
+        if (payload?.engine === 'openssh') {
+            await startOpenSshTerminal(ws, connInfo, payload?.cols, payload?.rows);
+            return;
+        }
 
         if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ssh:status', payload: `正在连接到 ${connInfo.host}...` }));
         const authentication = createSshAuthInteraction(ws);
@@ -277,6 +282,10 @@ export async function handleSshConnect(
 export function handleSshInput(ws: AuthenticatedWebSocket, payload: any): void {
     const sessionId = ws.sessionId;
     const state = sessionId ? clientStates.get(sessionId) : undefined;
+    if (state?.openSshTerminal) {
+        if (typeof payload?.data === 'string' && Buffer.byteLength(payload.data) <= 65536) state.openSshTerminal.write(payload.data);
+        return;
+    }
 
     if (!state || !state.sshShellStream) {
         logger.warn('收到 SSH 输入但无活动 Shell', { userId: ws.userId, sessionId });
@@ -293,6 +302,11 @@ export function handleSshInput(ws: AuthenticatedWebSocket, payload: any): void {
 export function handleSshResize(ws: AuthenticatedWebSocket, payload: any): void {
     const sessionId = ws.sessionId;
     const state = sessionId ? clientStates.get(sessionId) : undefined;
+    if (state?.openSshTerminal) {
+        const { cols, rows } = payload ?? {};
+        if (Number.isInteger(cols) && Number.isInteger(rows) && cols > 0 && rows > 0 && cols <= 1000 && rows <= 1000) state.openSshTerminal.resize(cols, rows);
+        return;
+    }
 
     if (!state || !state.sshClient) { // sshClient is enough, stream might not be ready for resize yet
         logger.warn('收到终端调整大小请求但无有效 SSH 会话', { userId: ws.userId, sessionId });

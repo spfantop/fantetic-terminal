@@ -88,6 +88,8 @@ const cleanupClientConnectionImpl = async (sessionId: string | undefined) => { /
             cleanupSftp: () => sftpService.cleanupSftpSession(sessionId),
             disconnectTelnet: () => state.telnetService?.disconnect(),
             resolveSshOwnership: async () => {
+                state.openSshTerminal?.kill();
+                state.openSshTerminal = undefined;
                 const ownershipResult = await resolveSshSessionOwnership({
                     sessionId,
                     userId: state.ws.userId,

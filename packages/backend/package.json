@@ -4,6 +4,9 @@
    "private": true,
    "main": "dist/index.js",
    "scripts": {
+      "test:openssh-handler": "esbuild src/test/openSshHandler.behavior-test.ts --bundle --platform=node --format=cjs --packages=external --outfile=node_modules/.cache/openSshHandler.cjs && node -e \"require('node:fs').cpSync('src/locales','node_modules/.cache/locales',{recursive:true})\" && node node_modules/.cache/openSshHandler.cjs",
+      "test:openssh-pty": "esbuild src/test/openSshPty.behavior-test.ts --bundle --platform=node --format=cjs --packages=external --outfile=../../.vite-codex-cache/openSshPty-test.cjs && node ../../.vite-codex-cache/openSshPty-test.cjs",
+      "test:openssh": "esbuild src/test/openSsh.behavior-test.ts --bundle --platform=node --format=cjs --packages=external --outfile=../../.vite-codex-cache/openSsh-test.cjs && node ../../.vite-codex-cache/openSsh-test.cjs",
       "test:ssh-optional-password": "esbuild src/test/sshOptionalPassword.behavior-test.ts --bundle --platform=node --format=cjs --packages=external --outfile=node_modules/.cache/sshOptionalPassword.cjs && node node_modules/.cache/sshOptionalPassword.cjs",
       "test:ssh-auth-transport": "esbuild src/test/sshAuthTransport.behavior-test.ts --bundle --platform=node --format=cjs --packages=external --outfile=node_modules/.cache/sshAuthTransport.cjs && node node_modules/.cache/sshAuthTransport.cjs",
       "build": "tsc && copyfiles -u 1 \"src/locales/**/*.json\" dist && node src/test/packagedRuntimeLocales.behavior-test.js",
@@ -126,6 +129,7 @@
       "ipaddr.js": "^1.9.1",
       "jschardet": "^3.1.4",
       "multer": "^2.4.0",
+      "node-pty": "1.1.0",
       "nodemailer": "^10.0.16",
       "qrcode": "^1.5.4",
       "sanitize-filename": "^1.6.3",

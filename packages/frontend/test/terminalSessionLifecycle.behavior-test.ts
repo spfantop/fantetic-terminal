@@ -185,6 +185,27 @@ const main = async () => {
   assert.equal(sessions.value.get(telnetSessionId)?.isMarkedForSuspend, false);
   assert.equal(lifecycle.close(telnetSessionId), true);
 
+  const remountId = lifecycle.open(7);
+  assert.ok(remountId);
+  const remountManager = sessions.value.get(remountId)!.terminalManager;
+  const output: string[] = [];
+  let abandonedCallback: (() => void) | undefined;
+  const oldTerminal = { onWriteParsed: () => ({ dispose() {} }), write(_data: string | Uint8Array, done?: () => void) { abandonedCallback = done; } };
+  const newTerminal = { onWriteParsed: () => ({ dispose() {} }), write(data: string | Uint8Array, done?: () => void) { output.push(String(data)); done?.(); } };
+  remountManager.handleTerminalReady({ terminal: oldTerminal as never });
+  remountManager.writeOutput('first pending output');
+  await new Promise(resolve => setTimeout(resolve, 10));
+  // Disposed xterm instances do not invoke callbacks for abandoned writes.
+  remountManager.handleTerminalReady({ terminal: newTerminal as never });
+  remountManager.writeOutput('Password:');
+  await new Promise(resolve => setTimeout(resolve, 50));
+  assert.deepEqual(output, ['first pending output', 'Password:'], 'remount must replay abandoned output in order without waiting for its callback');
+  abandonedCallback?.();
+  remountManager.writeOutput('next prompt');
+  await new Promise(resolve => setTimeout(resolve, 50));
+  assert.deepEqual(output, ['first pending output', 'Password:', 'next prompt'], 'a late old callback must not replay or duplicate output');
+  lifecycle.close(remountId);
+
   console.log('terminal session lifecycle behavior passed');
 };
 

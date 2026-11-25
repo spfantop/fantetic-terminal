@@ -1,5 +1,5 @@
 // WebSocket 连接状态类型
-export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
+export type ConnectionStatus = 'connecting' | 'terminal-ready' | 'native-authenticated' | 'connected' | 'disconnected' | 'error';
 
 // 通用消息负载类型定义
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

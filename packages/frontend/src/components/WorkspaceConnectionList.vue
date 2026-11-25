@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useNativeSsh } from '../composables/useSshEngine';
 import { ref, computed, onMounted, onBeforeUnmount, defineExpose, watch, nextTick } from 'vue';
 import { storeToRefs } from 'pinia';
 
@@ -901,6 +902,10 @@ const cancelEditingTag = () => {
 
     <!-- Main Content Area -->
     <div v-else class="flex flex-col h-full">
+      <label class="flex items-start gap-2 px-3 py-2 text-sm border-b border-border/50">
+        <input v-model="useNativeSsh" type="checkbox" class="mt-1" />
+        <span>{{ t('sshAuth.nativeMode') }}<small v-if="useNativeSsh" class="block text-text-secondary">{{ t('sshAuth.nativeLimitations') }}</small></span>
+      </label>
       <!-- Search and Add Bar -->
       <div class="flex p-2 border-b border-border/50"> <!-- Reduced padding p-3 to p-2 -->
         <input
