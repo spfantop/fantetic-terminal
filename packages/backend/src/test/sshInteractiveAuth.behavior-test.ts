@@ -6,7 +6,13 @@ import { establishSshConnection } from '../services/ssh.service';
 
 async function run() {
   const hostKey = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ type: 'pkcs1', format: 'pem' });
-  for (const method of ['keyboard-interactive', 'password'] as const) {
+  for (const { method, password, expectedPrompts } of [
+    { method: 'keyboard-interactive', password: undefined, expectedPrompts: 2 },
+    { method: 'keyboard-interactive', password: 'a*b', expectedPrompts: 1 },
+    { method: 'keyboard-interactive', password: 'outdated', expectedPrompts: 2 },
+    { method: 'password', password: undefined, expectedPrompts: 1 },
+    { method: 'password', password: 'a*b', expectedPrompts: 0 },
+  ] as const) {
     const server = new Server({ hostKeys: [hostKey] }, connection => {
       connection.on('error', () => { /* Client outcome is asserted below. */ });
       connection.on('authentication', context => {
@@ -14,8 +20,8 @@ async function run() {
           return context.password === 'a*b' ? context.accept() : context.reject(['password']);
         }
         if (method === 'keyboard-interactive' && context.method === 'keyboard-interactive') {
-          context.prompt([{ prompt: 'Password for test: ', echo: false }], answers => {
-            assert.deepEqual(answers, ['a*b']);
+          context.prompt([{ prompt: 'Password: ', echo: false }], answers => {
+            if (answers[0] !== 'a*b') return context.reject(['keyboard-interactive']);
             context.prompt([{ prompt: 'Verification code: ', echo: false }], codes => {
               assert.deepEqual(codes, ['123456']);
               context.prompt([], empty => { assert.deepEqual(empty, []); context.accept(); });
@@ -39,8 +45,8 @@ async function run() {
     };
     let client: Client | undefined;
     try {
-      client = await establishSshConnection({ id: -1, name: 'Interactive test', host: '127.0.0.1', port: address.port, username: 'test', auth_method: 'password', authentication }, 2000);
-      assert.equal(promptCount, method === 'password' ? 1 : 2);
+      client = await establishSshConnection({ id: -1, name: 'Interactive test', host: '127.0.0.1', port: address.port, username: 'test', auth_method: 'password', password, authentication }, 2000);
+      assert.equal(promptCount, expectedPrompts);
     } finally {
       client?.destroy();
       await new Promise<void>(resolve => server.close(() => resolve()));

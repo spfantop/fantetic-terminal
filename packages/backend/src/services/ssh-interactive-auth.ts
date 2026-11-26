@@ -6,6 +6,9 @@ export interface SshAuthInteraction {
     request: (challenge: Omit<SshAuthChallenge, 'requestId'>) => Promise<string[]>;
 }
 
+export const isLoginPasswordPrompt = (prompts: Prompt[]): boolean =>
+    prompts.length === 1 && prompts[0].echo === false && /^\s*(?:password|密码)\s*[:：]\s*$/i.test(prompts[0].prompt);
+
 export const configureInteractiveAuth = (client: Client, config: ConnectConfig, interaction: SshAuthInteraction): void => {
     let finished = false;
     let attempts = 0;
@@ -30,6 +33,11 @@ export const configureInteractiveAuth = (client: Client, config: ConnectConfig, 
         if (finished) return;
         if (++rounds > 12 || prompts.length > 8) { abort(); return; }
         if (prompts.length === 0) { finish([]); return; }
+        if (config.password && !savedPasswordAttempted && isLoginPasswordPrompt(prompts)) {
+            savedPasswordAttempted = true;
+            finish([config.password]);
+            return;
+        }
         void interaction.request({ name, instructions, username: config.username ?? '', prompts: prompts.map(item => ({ prompt: item.prompt, echo: item.echo === true })) })
             .then(answers => { if (!finished) finish(answers); }, abort);
     };
@@ -41,7 +49,7 @@ export const configureInteractiveAuth = (client: Client, config: ConnectConfig, 
             keyAttempted = true;
             return 'publickey';
         }
-        if (typeof config.password === 'string' && !savedPasswordAttempted && methods.includes('password')) {
+        if (config.password && !savedPasswordAttempted && methods.includes('password')) {
             savedPasswordAttempted = true;
             return 'password';
         }

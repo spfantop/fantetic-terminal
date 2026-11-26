@@ -1,5 +1,5 @@
 import type { Client, ConnectConfig, Prompt } from 'ssh2';
-import { configureInteractiveAuth, type SshAuthInteraction } from './ssh-interactive-auth';
+import { configureInteractiveAuth, isLoginPasswordPrompt, type SshAuthInteraction } from './ssh-interactive-auth';
 
 // PAM 可以在密码应答后再发送空提示；验证码和改密请求不能复用登录密码。
 export const enableKeyboardPasswordAuth = (client: Client, config: ConnectConfig, interaction?: SshAuthInteraction): void => {
@@ -15,8 +15,7 @@ export const enableKeyboardPasswordAuth = (client: Client, config: ConnectConfig
             finish([]);
             return;
         }
-        const prompt = prompts[0];
-        if (!answered && prompts.length === 1 && !prompt.echo && /^\s*(?:password|密码)\s*[:：]\s*$/i.test(prompt.prompt)) {
+        if (!answered && isLoginPasswordPrompt(prompts)) {
             answered = true;
             finish([password]);
             return;

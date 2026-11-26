@@ -62,7 +62,6 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
     username: '',
     auth_method: 'password' as 'password' | 'key',
     password: '',
-    prompt_for_password: false,
     private_key: '',
     passphrase: '',
     selected_ssh_key_id: null as number | null,
@@ -155,7 +154,6 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
           }
 
           formData.password = '';
-          formData.prompt_for_password = false;
           formData.private_key = '';
           formData.passphrase = '';
           if (newVal.type !== 'VNC') {
@@ -379,12 +377,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
     }
 
     // 5. Validation based on type
-    if (type === 'SSH') {
-      if (!password && !keyName) {
-        return { type, userHostPort: userHostPortPart, name, password, keyName, proxyName, tags, note, error: t('connections.form.scriptErrorMissingAuthForSsh') };
-      }
-      // Allow both password and key, handle precedence in handleScriptModeSubmit
-    } else if (type === 'RDP') {
+    if (type === 'RDP') {
       if (!password) {
         return { type, userHostPort: userHostPortPart, name, password, keyName, proxyName, tags, note, error: t('connections.form.scriptErrorMissingPasswordForRdp') };
       }
@@ -464,12 +457,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
       if (parsed.type === 'SSH') {
         connectionData.auth_method = parsed.keyName ? 'key' : 'password';
         if (connectionData.auth_method === 'password') {
-          if (!parsed.password) {
-            uiNotificationsStore.showError(t('connections.form.scriptErrorMissingPasswordForSsh', { line }));
-            allConnectionsValid = false;
-            break;
-          }
-          connectionData.password = parsed.password;
+          connectionData.password = parsed.password ?? '';
         } else {
           if (!parsed.keyName) {
             uiNotificationsStore.showError(t('connections.form.scriptErrorMissingKeyNameForSsh', { line }));
@@ -702,7 +690,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
                 if (formData.type === 'SSH') {
                     dataForThisIp.auth_method = formData.auth_method;
                     if (formData.auth_method === 'password') {
-                        dataForThisIp.password = formData.prompt_for_password ? '' : formData.password;
+                        dataForThisIp.password = formData.password;
                     } else if (formData.auth_method === 'key') {
                         dataForThisIp.ssh_key_id = formData.selected_ssh_key_id;
                     }
@@ -773,8 +761,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
     if (formData.type === 'SSH') {
         dataToSend.auth_method = formData.auth_method;
         if (formData.auth_method === 'password') {
-            if (formData.prompt_for_password) dataToSend.password = '';
-            else if (formData.password) dataToSend.password = formData.password;
+            dataToSend.password = formData.password;
         } else if (formData.auth_method === 'key') {
             if (formData.selected_ssh_key_id) {
                 dataToSend.ssh_key_id = formData.selected_ssh_key_id;
@@ -864,7 +851,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
   // 处理测试连接
   const handleTestConnection = async () => {
     if (formData.type === 'SSH' && formData.auth_method === 'password'
-        && (formData.prompt_for_password || (!formData.password && !isEditMode.value))) {
+        && !formData.password) {
       uiNotificationsStore.showError(t('sshAuth.saveFirst'));
       return;
     }
@@ -873,7 +860,6 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
     testLatency.value = null;
 
     try {
-      // 编辑态凭证字段为空时由后端沿用已保存凭证，但主机和用户名必须使用当前表单值。
       const { endpoint, data: dataToSend } = buildConnectionTestRequest(
         {
           type: formData.type,
@@ -893,11 +879,7 @@ export function useAddConnectionForm(props: AddConnectionFormProps, emit: AddCon
       if (!dataToSend.host || !dataToSend.port || (formData.type === 'SSH' && (!dataToSend.username || !dataToSend.auth_method))) {
         throw new Error(t('connections.test.errorMissingFields'));
       }
-      const canReuseSavedPassword = isEditMode.value && connectionToEdit.value?.auth_method === 'password';
       const canReuseSavedKey = isEditMode.value && connectionToEdit.value?.auth_method === 'key';
-      if (formData.type === 'SSH' && dataToSend.auth_method === 'password' && !dataToSend.password && !canReuseSavedPassword) {
-        throw new Error(t('connections.form.errorPasswordRequired'));
-      }
       if (formData.type === 'SSH' && dataToSend.auth_method === 'key' && !dataToSend.ssh_key_id && !canReuseSavedKey) {
         throw new Error(t('connections.form.errorSshKeyRequired'));
       }
